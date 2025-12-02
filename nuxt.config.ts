@@ -18,6 +18,12 @@ export default defineNuxtConfig({
     }
   },
 
+  runtimeConfig: {
+    public: {
+      siteUrl: process.env.NUXT_PUBLIC_SITE_URL || 'http://localhost:3099'
+    }
+  },
+
   devServer: {
     port: 3099
   }
