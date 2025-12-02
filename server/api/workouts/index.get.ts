@@ -16,7 +16,8 @@ export default defineEventHandler(async (event) => {
   const endDate = query.endDate ? new Date(query.endDate as string) : undefined
   
   const where: any = {
-    userId: (session.user as any).id
+    userId: (session.user as any).id,
+    durationSec: { gt: 0 }  // Filter out workouts without duration
   }
   
   if (startDate || endDate) {
