@@ -115,6 +115,83 @@
           </div>
         </div>
         
+        <!-- Fitness Data Table (WHOOP & Wellness) -->
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
+          <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+            <h2 class="text-xl font-semibold text-gray-900 dark:text-white">Fitness & Recovery Data</h2>
+            <p class="text-sm text-gray-600 dark:text-gray-400 mt-1">HRV, sleep, and recovery metrics from WHOOP and Intervals.icu</p>
+          </div>
+          
+          <div v-if="loading" class="p-8 text-center text-gray-600 dark:text-gray-400">
+            Loading...
+          </div>
+          
+          <div v-else-if="fitnessData.length === 0" class="p-8 text-center text-gray-600 dark:text-gray-400">
+            No fitness data found. Connect WHOOP and sync data to get started.
+          </div>
+          
+          <div v-else class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+              <thead class="bg-gray-50 dark:bg-gray-900">
+                <tr>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                    Date
+                  </th>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                    Recovery
+                  </th>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                    HRV
+                  </th>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                    Resting HR
+                  </th>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                    Sleep
+                  </th>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                    Sleep Score
+                  </th>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                    SpO2
+                  </th>
+                </tr>
+              </thead>
+              <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                <tr v-for="data in fitnessData" :key="data.id">
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
+                    {{ formatDate(data.date) }}
+                  </td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm">
+                    <span v-if="data.recoveryScore" :class="getRecoveryScoreClass(data.recoveryScore)">
+                      {{ data.recoveryScore }}%
+                    </span>
+                    <span v-else class="text-gray-400">-</span>
+                  </td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-400">
+                    {{ data.hrv ? Math.round(data.hrv) + ' ms' : '-' }}
+                  </td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-400">
+                    {{ data.restingHr ? data.restingHr + ' bpm' : '-' }}
+                  </td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-400">
+                    {{ data.sleepHours ? data.sleepHours + ' hrs' : '-' }}
+                  </td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm">
+                    <span v-if="data.sleepScore" :class="getSleepScoreClass(data.sleepScore)">
+                      {{ data.sleepScore }}%
+                    </span>
+                    <span v-else class="text-gray-400">-</span>
+                  </td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-400">
+                    {{ data.spO2 ? data.spO2 + '%' : '-' }}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
         <!-- Planned Workouts Section -->
         <div class="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
           <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
@@ -282,6 +359,7 @@ const dataSummary = ref({
 })
 const recentWorkouts = ref<any[]>([])
 const plannedWorkouts = ref<any[]>([])
+const fitnessData = ref<any[]>([])
 
 // Fetch integration status
 async function fetchStatus() {
@@ -338,6 +416,30 @@ async function fetchPlannedWorkouts() {
   }
 }
 
+// Fetch fitness data
+async function fetchFitnessData() {
+  try {
+    const wellness = await $fetch('/api/wellness', {
+      query: { limit: 90 }
+    })
+    
+    // Filter records that have at least some data (not all nulls)
+    const withData = wellness.filter((w: any) =>
+      w.hrv !== null || w.restingHr !== null || w.recoveryScore !== null ||
+      w.sleepScore !== null || w.sleepHours !== null
+    )
+    
+    // Sort by date descending and take last 14 days
+    fitnessData.value = withData
+      .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime())
+      .slice(0, 14)
+      
+    console.log(`Fetched ${wellness.length} total wellness records, ${withData.length} with data, showing ${fitnessData.value.length}`)
+  } catch (error) {
+    console.error('Error fetching fitness data:', error)
+  }
+}
+
 // Sync integration
 async function syncIntegration(provider: string) {
   syncing.value = provider
@@ -363,6 +465,7 @@ async function syncIntegration(provider: string) {
       await fetchStatus()
       await fetchDataSummary()
       await fetchRecentWorkouts()
+      await fetchFitnessData()
       await fetchPlannedWorkouts()
       
       // Show completion notification if successful
@@ -456,11 +559,26 @@ function navigateToWorkout(id: string) {
   navigateTo(`/workouts/${id}`)
 }
 
+function getRecoveryScoreClass(score: number) {
+  const baseClass = 'px-2 py-1 rounded text-xs font-semibold'
+  if (score >= 67) return `${baseClass} bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200`
+  if (score >= 34) return `${baseClass} bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200`
+  return `${baseClass} bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200`
+}
+
+function getSleepScoreClass(score: number) {
+  const baseClass = 'px-2 py-1 rounded text-xs font-semibold'
+  if (score >= 75) return `${baseClass} bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200`
+  if (score >= 50) return `${baseClass} bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200`
+  return `${baseClass} bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200`
+}
+
 // Load data on mount
 onMounted(async () => {
   await fetchStatus()
   await fetchDataSummary()
   await fetchRecentWorkouts()
+  await fetchFitnessData()
   await fetchPlannedWorkouts()
 })
 </script>
