@@ -1,0 +1,203 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// --------------------------------------
+// User & Auth (NuxtAuth / NextAuth Standard)
+// --------------------------------------
+
+model User {
+  id            String    @id @default(uuid())
+  name          String?
+  email         String    @unique
+  emailVerified DateTime?
+  image         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Settings for Coaching
+  ftp           Int?      // Functional Threshold Power (Watts)
+  maxHr         Int?      // Max Heart Rate
+  weight        Float?    // Weight in kg (for W/kg calcs)
+  dob           DateTime? // Date of birth for age-based metrics
+
+  // Relations
+  accounts      Account[]
+  sessions      Session[]
+  integrations  Integration[] // External App Connections (Whoop, Intervals)
+  workouts      Workout[]
+  dailyMetrics  DailyMetric[]
+  reports       Report[]
+}
+
+model Account {
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([provider, providerAccountId])
+}
+
+model Session {
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model VerificationToken {
+  identifier String
+  token      String
+  expires    DateTime
+
+  @@id([identifier, token])
+}
+
+// --------------------------------------
+// App Integrations (The "Senses")
+// --------------------------------------
+
+// Stores tokens for external fitness apps (Intervals.icu, Whoop, Strava)
+// Distinct from 'Account' which is for Login/SSO
+model Integration {
+  id             String    @id @default(uuid())
+  userId         String
+  provider       String    // "intervals", "whoop", "strava", "garmin"
+  
+  // Auth Data
+  accessToken    String
+  refreshToken   String?
+  expiresAt      DateTime?
+  externalUserId String?   // The user's ID in the external system
+  scope          String?   // What permissions we have
+
+  // Sync Status
+  lastSyncAt     DateTime?
+  syncStatus     String?   // "SUCCESS", "FAILED", "SYNCING"
+  errorMessage   String?
+
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, provider])
+}
+
+// --------------------------------------
+// Normalized Fitness Data
+// --------------------------------------
+
+// A unified structure for workouts from any provider
+model Workout {
+  id              String   @id @default(uuid())
+  userId          String
+  externalId      String   // ID from the source (e.g., Strava Activity ID)
+  source          String   // "intervals", "strava"
+  
+  // Core Data
+  date            DateTime
+  title           String
+  description     String?  @db.Text
+  type            String?  // "Ride", "Run", "WeightTraining"
+
+  // Performance Metrics
+  durationSec     Int
+  distanceMeters  Float?
+  elevationGain   Int?
+  
+  // Power & Heart Rate
+  averageWatts    Int?
+  maxWatts        Int?
+  normalizedPower Int?
+  averageHr       Int?
+  maxHr           Int?
+  
+  // Training Load
+  tss             Float?   // Training Stress Score
+  if              Float?   // Intensity Factor
+  kilojoules      Int?
+  
+  // Raw Data storage (optional, for re-analysis)
+  rawJson         Json?    // Store the original full payload if needed
+
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, date])
+  @@unique([userId, source, externalId]) // Prevent duplicates
+}
+
+// Normalized Daily Health Data (Recovery, Sleep)
+model DailyMetric {
+  id             String   @id @default(uuid())
+  userId         String
+  date           DateTime @db.Date // YYYY-MM-DD
+  source         String   // "whoop", "garmin", "oura"
+
+  // Heart & Recovery
+  hrv            Float?   // rMSSD (ms)
+  restingHr      Int?
+  
+  // Sleep
+  sleepScore     Int?     // 0-100
+  hoursSlept     Float?
+  
+  // Proprietary Scores (Normalized)
+  recoveryScore  Int?     // 0-100 (Whoop style)
+  strainScore    Float?   // 0-21 (Whoop style) or similar
+  
+  spO2           Float?
+
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, date])
+}
+
+// --------------------------------------
+// AI Agent Outputs
+// --------------------------------------
+
+model Report {
+  id             String   @id @default(uuid())
+  userId         String
+  type           String   // "WEEKLY_ANALYSIS", "RACE_PREP", "DAILY_SUGGESTION"
+  status         String   // "PENDING", "PROCESSING", "COMPLETED", "FAILED"
+  
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  
+  // Metadata
+  dateRangeStart DateTime
+  dateRangeEnd   DateTime
+  modelVersion   String?  // e.g., "gemini-2.5-pro"
+  
+  // Content
+  markdown       String?  @db.Text
+  latex          String?  @db.Text // If we generated a formal document
+  pdfUrl         String?  // URL to stored PDF in S3/Blob storage
+  
+  // Structured Suggestions (for the "Coach" agent)
+  suggestions    Json?    // e.g., { "action": "rest", "reason": "HRV low" }
+
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
