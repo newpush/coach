@@ -40,8 +40,8 @@ export default defineEventHandler(async (event) => {
     })
   }
   
-  // Check if already completed
-  if (workout.aiAnalysisStatus === 'COMPLETED' && workout.aiAnalysis) {
+  // Check if already completed with structured JSON
+  if (workout.aiAnalysisStatus === 'COMPLETED' && workout.aiAnalysisJson) {
     return {
       success: true,
       workoutId: id,
@@ -50,6 +50,11 @@ export default defineEventHandler(async (event) => {
       analyzedAt: workout.aiAnalyzedAt,
       message: 'Analysis already exists'
     }
+  }
+  
+  // If old analysis exists without JSON, allow re-analysis
+  if (workout.aiAnalysis && !workout.aiAnalysisJson) {
+    console.log('Re-analyzing workout to generate structured JSON')
   }
   
   // Check if already processing

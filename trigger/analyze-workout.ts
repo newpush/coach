@@ -1,6 +1,109 @@
 import { logger, task } from "@trigger.dev/sdk/v3";
-import { generateCoachAnalysis } from "../server/utils/gemini";
+import { generateCoachAnalysis, generateStructuredAnalysis } from "../server/utils/gemini";
 import { prisma } from "../server/utils/db";
+
+// Flexible analysis schema that works for workouts, reports, planning, etc.
+const analysisSchema = {
+  type: "object",
+  properties: {
+    type: {
+      type: "string",
+      description: "Type of analysis: workout, weekly_report, planning, etc.",
+      enum: ["workout", "weekly_report", "planning", "comparison"]
+    },
+    title: {
+      type: "string",
+      description: "Title of the analysis"
+    },
+    date: {
+      type: "string",
+      description: "Date or date range of the analysis"
+    },
+    executive_summary: {
+      type: "string",
+      description: "2-3 sentence high-level summary of key findings"
+    },
+    sections: {
+      type: "array",
+      description: "Analysis sections with status and points",
+      items: {
+        type: "object",
+        properties: {
+          title: {
+            type: "string",
+            description: "Section title (e.g., Pacing Strategy, Power Application)"
+          },
+          status: {
+            type: "string",
+            description: "Overall assessment",
+            enum: ["excellent", "good", "moderate", "needs_improvement", "poor"]
+          },
+          status_label: {
+            type: "string",
+            description: "Display label for status"
+          },
+          analysis_points: {
+            type: "array",
+            description: "Detailed analysis points for this section",
+            items: {
+              type: "string"
+            }
+          }
+        },
+        required: ["title", "status", "analysis_points"]
+      }
+    },
+    recommendations: {
+      type: "array",
+      description: "Actionable recommendations",
+      items: {
+        type: "object",
+        properties: {
+          title: {
+            type: "string",
+            description: "Recommendation title"
+          },
+          description: {
+            type: "string",
+            description: "Detailed recommendation"
+          },
+          priority: {
+            type: "string",
+            description: "Priority level",
+            enum: ["high", "medium", "low"]
+          }
+        },
+        required: ["title", "description"]
+      }
+    },
+    strengths: {
+      type: "array",
+      description: "Key strengths identified",
+      items: {
+        type: "string"
+      }
+    },
+    weaknesses: {
+      type: "array",
+      description: "Areas needing improvement",
+      items: {
+        type: "string"
+      }
+    },
+    metrics_summary: {
+      type: "object",
+      description: "Key metrics at a glance",
+      properties: {
+        avg_power: { type: "number" },
+        ftp: { type: "number" },
+        intensity: { type: "number" },
+        duration_minutes: { type: "number" },
+        tss: { type: "number" }
+      }
+    }
+  },
+  required: ["type", "title", "executive_summary", "sections"]
+}
 
 export const analyzeWorkoutTask = task({
   id: "analyze-workout",
@@ -38,20 +141,25 @@ export const analyzeWorkoutTask = task({
       // Generate the prompt
       const prompt = buildWorkoutAnalysisPrompt(workoutData);
       
-      logger.log("Generating analysis with Gemini Flash");
+      logger.log("Generating structured analysis with Gemini Flash");
       
-      // Generate analysis using Gemini
-      const analysis = await generateCoachAnalysis(prompt, 'flash');
+      // Generate structured JSON analysis
+      const structuredAnalysis = await generateStructuredAnalysis(prompt, analysisSchema, 'flash');
       
-      logger.log("Analysis generated successfully", { 
-        analysisLength: analysis.length 
+      // Also generate markdown for fallback/export
+      const markdownAnalysis = convertStructuredToMarkdown(structuredAnalysis);
+      
+      logger.log("Analysis generated successfully", {
+        sections: structuredAnalysis.sections?.length || 0,
+        recommendations: structuredAnalysis.recommendations?.length || 0
       });
       
-      // Save the analysis to the database
+      // Save both formats to the database
       await prisma.workout.update({
         where: { id: workoutId },
         data: {
-          aiAnalysis: analysis,
+          aiAnalysis: markdownAnalysis,
+          aiAnalysisJson: structuredAnalysis as any,
           aiAnalysisStatus: 'COMPLETED',
           aiAnalyzedAt: new Date()
         }
@@ -62,7 +170,8 @@ export const analyzeWorkoutTask = task({
       return {
         success: true,
         workoutId,
-        analysisLength: analysis.length
+        analysisLength: markdownAnalysis.length,
+        sectionsCount: structuredAnalysis.sections?.length || 0
       };
     } catch (error) {
       logger.error("Error generating workout analysis", { error });
@@ -274,16 +383,102 @@ function buildWorkoutAnalysisPrompt(workoutData: any): string {
 
 ## Analysis Request
 
-Please provide a detailed technique-focused analysis covering:
+You are a friendly, supportive cycling coach analyzing this workout. Use an encouraging, conversational tone.
 
-1. **Pacing Strategy**: Analyze power variability (VI) and identify any surging behavior or pacing issues
-2. **Pedaling Efficiency**: Evaluate cadence patterns and L/R balance if available
-3. **Power Application**: Assess consistency, fade patterns, and zone adherence
-4. **Workout Execution**: Evaluate how well target power/intensity was maintained
-5. **Technique Recommendations**: Specific drills or focuses to improve identified weaknesses
-6. **Key Takeaways**: 2-3 main insights from this workout
+Provide a structured analysis with these sections:
 
-Focus on actionable coaching advice that helps improve cycling technique and performance. Be specific and reference the metrics provided.`
+1. **Executive Summary**: Write 2-3 friendly, encouraging sentences highlighting the most important findings. Keep it conversational and positive.
+
+2. **Pacing Strategy**: Analyze power variability (VI), surging behavior, and pacing discipline
+   - Assign status: excellent/good/moderate/needs_improvement/poor
+   - Provide 3-5 separate, concise bullet points (each as a separate array item, not paragraphs)
+   - Each point should be 1-2 sentences maximum
+
+3. **Pedaling Efficiency**: Evaluate cadence patterns, L/R balance, and technique
+   - Assign status: excellent/good/moderate/needs_improvement/poor
+   - Provide 3-5 separate, concise bullet points (each as a separate array item)
+   - Each point should be 1-2 sentences maximum
+
+4. **Power Application**: Assess consistency, fade patterns, and zone adherence
+   - Assign status: excellent/good/moderate/needs_improvement/poor
+   - Provide 3-5 separate, concise bullet points (each as a separate array item)
+   - Each point should be 1-2 sentences maximum
+
+5. **Workout Execution**: Evaluate target achievement and interval quality
+   - Assign status: excellent/good/moderate/needs_improvement/poor
+   - Provide 3-5 separate, concise bullet points (each as a separate array item)
+   - Each point should be 1-2 sentences maximum
+
+6. **Recommendations**: Provide 2-4 specific, actionable recommendations with:
+   - Clear, friendly title
+   - Supportive, encouraging description (2-3 sentences)
+   - Priority level (high/medium/low)
+
+7. **Strengths & Weaknesses**:
+   - List 2-4 key strengths (short phrases or single sentences)
+   - List 2-4 areas for improvement (short phrases or single sentences, framed positively)
+
+IMPORTANT:
+- Each analysis_point must be a separate, concise item in the array
+- Use a friendly, supportive coaching tone throughout
+- Be specific with numbers but keep language conversational
+- Focus on encouragement and actionable advice`
 
   return prompt
+}
+
+// Convert structured analysis to markdown for fallback/export
+function convertStructuredToMarkdown(analysis: any): string {
+  let markdown = `# ${analysis.title}\n\n`
+  
+  if (analysis.date) {
+    markdown += `Date: ${analysis.date}\n\n`
+  }
+  
+  markdown += `## Executive Summary\n${analysis.executive_summary}\n\n`
+  
+  // Sections
+  if (analysis.sections) {
+    for (const section of analysis.sections) {
+      markdown += `## ${section.title}\n`
+      markdown += `**Status**: ${section.status_label || section.status}\n`
+      if (section.analysis_points && section.analysis_points.length > 0) {
+        for (const point of section.analysis_points) {
+          markdown += `- ${point}\n`
+        }
+      }
+      markdown += '\n'
+    }
+  }
+  
+  // Recommendations
+  if (analysis.recommendations && analysis.recommendations.length > 0) {
+    markdown += `## Recommendations\n`
+    for (const rec of analysis.recommendations) {
+      markdown += `### ${rec.title}\n`
+      markdown += `${rec.description}\n\n`
+    }
+  }
+  
+  // Strengths & Weaknesses
+  if (analysis.strengths || analysis.weaknesses) {
+    markdown += `## Strengths & Weaknesses\n`
+    
+    if (analysis.strengths && analysis.strengths.length > 0) {
+      markdown += `### Strengths\n`
+      for (const strength of analysis.strengths) {
+        markdown += `- ${strength}\n`
+      }
+      markdown += '\n'
+    }
+    
+    if (analysis.weaknesses && analysis.weaknesses.length > 0) {
+      markdown += `### Weaknesses\n`
+      for (const weakness of analysis.weaknesses) {
+        markdown += `- ${weakness}\n`
+      }
+    }
+  }
+  
+  return markdown
 }
