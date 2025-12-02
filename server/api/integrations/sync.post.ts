@@ -41,10 +41,10 @@ export default defineEventHandler(async (event) => {
   // Calculate date range
   // For Intervals: last 90 days + next 30 days (to capture future planned workouts)
   // For Whoop: last 90 days
-  // For Yazio: last 45 days (less data needed for nutrition)
+  // For Yazio: last 5 days (to avoid rate limiting - older data is kept as-is)
   const now = new Date()
   const startDate = new Date(now)
-  const daysBack = provider === 'yazio' ? 45 : 90
+  const daysBack = provider === 'yazio' ? 5 : 90
   startDate.setDate(startDate.getDate() - daysBack)
   
   const endDate = provider === 'intervals'

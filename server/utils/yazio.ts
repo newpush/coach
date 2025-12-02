@@ -31,10 +31,20 @@ export interface YazioConsumedItem {
   daytime: 'breakfast' | 'lunch' | 'dinner' | 'snack'
 }
 
+export interface YazioSimpleProduct {
+  id: string
+  date: string
+  name: string
+  type: string
+  daytime: 'breakfast' | 'lunch' | 'dinner' | 'snack'
+  nutrients?: any
+  is_ai_generated?: boolean
+}
+
 export interface YazioConsumedItemsResponse {
   products: YazioConsumedItem[]
   recipe_portions: unknown[]
-  simple_products: unknown[]
+  simple_products: YazioSimpleProduct[]
 }
 
 export async function createYazioClient(integration: Integration): Promise<Yazio> {
@@ -84,13 +94,14 @@ export function normalizeYazioData(
   console.log(`[Yazio Normalize] Date object: ${dateObj.toISOString()}`)
   
   // Group items by meal time
-  const mealGroups: Record<string, YazioConsumedItem[]> = {
+  const mealGroups: Record<string, any[]> = {
     breakfast: [],
     lunch: [],
     dinner: [],
     snacks: []
   }
   
+  // Process regular products
   for (const item of items.products) {
     const mealTime = item.daytime.toLowerCase()
     if (mealGroups[mealTime]) {
@@ -100,11 +111,34 @@ export function normalizeYazioData(
     }
   }
   
+  // Process simple products (AI-generated items with names already included)
+  for (const item of items.simple_products || []) {
+    const mealTime = item.daytime.toLowerCase()
+    // Transform simple_product to match the expected structure
+    const transformedItem = {
+      id: item.id,
+      date: item.date,
+      type: item.type,
+      daytime: item.daytime,
+      product_name: item.name, // Already has the name!
+      product_brand: null,
+      is_ai_generated: item.is_ai_generated,
+      nutrients: item.nutrients
+    }
+    if (mealGroups[mealTime]) {
+      mealGroups[mealTime].push(transformedItem)
+    } else {
+      mealGroups.snacks.push(transformedItem)
+    }
+  }
+  
   console.log(`[Yazio Normalize] Meal groups:`, {
     breakfast: mealGroups.breakfast.length,
     lunch: mealGroups.lunch.length,
     dinner: mealGroups.dinner.length,
-    snacks: mealGroups.snacks.length
+    snacks: mealGroups.snacks.length,
+    totalProducts: items.products.length,
+    totalSimpleProducts: items.simple_products?.length || 0
   })
   
   // Calculate totals from meals data
