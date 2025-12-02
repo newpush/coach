@@ -121,7 +121,8 @@ export const generateWeeklyReportTask = task({
         prisma.workout.findMany({
           where: {
             userId,
-            date: { gte: startDate, lte: endDate }
+            date: { gte: startDate, lte: endDate },
+            durationSec: { gt: 0 }  // Filter out workouts without duration
           },
           orderBy: { date: 'asc' }
         }),
@@ -186,19 +187,32 @@ Be supportive and specific. Use actual data points and metrics.`;
       
       logger.log("Structured report generated successfully");
       
-      // Save report with JSON structure
-      await prisma.report.update({
-        where: { id: reportId },
-        data: {
-          status: 'COMPLETED',
-          analysisJson: analysisJson as any,
-          modelVersion: 'gemini-2.0-flash-thinking-exp-1219',
-          dateRangeStart: startDate,
-          dateRangeEnd: endDate
-        }
+      // Save report with JSON structure and link workouts
+      await prisma.$transaction(async (tx) => {
+        // Update the report
+        await tx.report.update({
+          where: { id: reportId },
+          data: {
+            status: 'COMPLETED',
+            analysisJson: analysisJson as any,
+            modelVersion: 'gemini-2.0-flash-thinking-exp-1219',
+            dateRangeStart: startDate,
+            dateRangeEnd: endDate
+          }
+        });
+        
+        // Link the workouts to the report
+        await tx.reportWorkout.createMany({
+          data: workouts.map(workout => ({
+            reportId,
+            workoutId: workout.id
+          }))
+        });
       });
       
-      logger.log("Report saved to database");
+      logger.log("Report saved to database with workout links", {
+        workoutsLinked: workouts.length
+      });
       
       return {
         success: true,

@@ -214,7 +214,8 @@ export const analyzeLast3WorkoutsTask = task({
       const workouts = await prisma.workout.findMany({
         where: {
           userId,
-          type: { in: ['Ride', 'VirtualRide', 'Cycling'] } // Filter for cycling workouts
+          type: { in: ['Ride', 'VirtualRide', 'Cycling'] }, // Filter for cycling workouts
+          durationSec: { gt: 0 }  // Filter out workouts without duration
         },
         orderBy: { date: 'desc' },
         take: 3
@@ -255,20 +256,33 @@ export const analyzeLast3WorkoutsTask = task({
       const dateRangeStart = new Date(workouts[workouts.length - 1].date);
       const dateRangeEnd = new Date(workouts[0].date);
       
-      // Save both formats to the database
-      await prisma.report.update({
-        where: { id: reportId },
-        data: {
-          status: 'COMPLETED',
-          markdown: markdownAnalysis,
-          analysisJson: structuredAnalysis as any,
-          modelVersion: 'gemini-2.0-flash-exp',
-          dateRangeStart,
-          dateRangeEnd
-        }
+      // Save both formats to the database and link workouts
+      await prisma.$transaction(async (tx) => {
+        // Update the report
+        await tx.report.update({
+          where: { id: reportId },
+          data: {
+            status: 'COMPLETED',
+            markdown: markdownAnalysis,
+            analysisJson: structuredAnalysis as any,
+            modelVersion: 'gemini-2.0-flash-exp',
+            dateRangeStart,
+            dateRangeEnd
+          }
+        });
+        
+        // Link the workouts to the report
+        await tx.reportWorkout.createMany({
+          data: workouts.map(workout => ({
+            reportId,
+            workoutId: workout.id
+          }))
+        });
       });
       
-      logger.log("Report saved to database");
+      logger.log("Report saved to database with workout links", {
+        workoutsLinked: workouts.length
+      });
       
       return {
         success: true,
