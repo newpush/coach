@@ -1,75 +1,70 @@
 <template>
-  <div class="min-h-screen bg-gray-50">
-    <nav class="bg-white shadow">
-      <div class="container mx-auto px-4">
-        <div class="flex justify-between items-center h-16">
-          <div class="flex items-center gap-4">
-            <UButton to="/dashboard" variant="ghost" icon="i-heroicons-arrow-left" />
-            <h1 class="text-xl font-bold">Reports</h1>
-          </div>
-          <UButton color="gray" @click="signOut({ callbackUrl: '/login' })">
-            Sign Out
+  <UDashboardPanel id="reports">
+    <template #header>
+      <UDashboardNavbar title="Reports">
+        <template #leading>
+          <UDashboardSidebarCollapse />
+        </template>
+        <template #right>
+          <UButton @click="generateNewReport" :loading="generating">
+            <UIcon name="i-heroicons-sparkles" class="w-4 h-4 mr-2" />
+            Generate New Report
+          </UButton>
+        </template>
+      </UDashboardNavbar>
+    </template>
+
+    <template #body>
+      <div class="p-6 max-w-4xl mx-auto space-y-6">
+        <div>
+          <h2 class="text-2xl font-bold">Your Reports</h2>
+          <p class="text-muted mt-1">AI-generated training analysis and recommendations</p>
+        </div>
+        
+        <div v-if="pending" class="flex justify-center py-20">
+          <UIcon name="i-heroicons-arrow-path" class="w-8 h-8 animate-spin text-primary" />
+        </div>
+        
+        <div v-else-if="reports && reports.length > 0" class="space-y-4">
+          <UCard
+            v-for="report in reports"
+            :key="report.id"
+            class="cursor-pointer hover:shadow-md transition-shadow"
+            @click="navigateTo(`/reports/${report.id}`)"
+          >
+            <div class="flex items-start justify-between">
+              <div class="flex-1">
+                <div class="flex items-center gap-2 mb-2">
+                  <h3 class="font-semibold text-lg">{{ getReportTitle(report.type) }}</h3>
+                  <UBadge :color="getStatusColor(report.status) as any">
+                    {{ report.status }}
+                  </UBadge>
+                </div>
+                <p class="text-sm text-muted">
+                  {{ formatDateRange(report.dateRangeStart, report.dateRangeEnd) }}
+                </p>
+                <p class="text-xs text-muted mt-1">
+                  Created {{ formatDate(report.createdAt) }}
+                </p>
+              </div>
+              <UIcon name="i-heroicons-chevron-right" class="w-5 h-5" />
+            </div>
+          </UCard>
+        </div>
+        
+        <div v-else class="text-center py-20">
+          <UIcon name="i-heroicons-document-text" class="w-16 h-16 text-muted mx-auto mb-4" />
+          <p class="text-muted mb-4">No reports yet</p>
+          <UButton @click="generateNewReport" :loading="generating">
+            Generate Your First Report
           </UButton>
         </div>
       </div>
-    </nav>
-    
-    <div class="container mx-auto p-6 max-w-4xl">
-      <div class="mb-6 flex justify-between items-center">
-        <div>
-          <h2 class="text-2xl font-bold">Your Reports</h2>
-          <p class="text-gray-600 mt-1">AI-generated training analysis and recommendations</p>
-        </div>
-        <UButton @click="generateNewReport" :loading="generating">
-          <UIcon name="i-heroicons-sparkles" class="w-4 h-4 mr-2" />
-          Generate New Report
-        </UButton>
-      </div>
-      
-      <div v-if="pending" class="flex justify-center py-20">
-        <UIcon name="i-heroicons-arrow-path" class="w-8 h-8 animate-spin text-primary" />
-      </div>
-      
-      <div v-else-if="reports && reports.length > 0" class="space-y-4">
-        <UCard
-          v-for="report in reports"
-          :key="report.id"
-          class="cursor-pointer hover:shadow-md transition-shadow"
-          @click="navigateTo(`/reports/${report.id}`)"
-        >
-          <div class="flex items-start justify-between">
-            <div class="flex-1">
-              <div class="flex items-center gap-2 mb-2">
-                <h3 class="font-semibold text-lg">{{ getReportTitle(report.type) }}</h3>
-                <UBadge :color="getStatusColor(report.status)">
-                  {{ report.status }}
-                </UBadge>
-              </div>
-              <p class="text-sm text-gray-600">
-                {{ formatDateRange(report.dateRangeStart, report.dateRangeEnd) }}
-              </p>
-              <p class="text-xs text-gray-500 mt-1">
-                Created {{ formatDate(report.createdAt) }}
-              </p>
-            </div>
-            <UIcon name="i-heroicons-chevron-right" class="w-5 h-5 text-gray-400" />
-          </div>
-        </UCard>
-      </div>
-      
-      <div v-else class="text-center py-20">
-        <UIcon name="i-heroicons-document-text" class="w-16 h-16 text-gray-300 mx-auto mb-4" />
-        <p class="text-gray-600 mb-4">No reports yet</p>
-        <UButton @click="generateNewReport" :loading="generating">
-          Generate Your First Report
-        </UButton>
-      </div>
-    </div>
-  </div>
+    </template>
+  </UDashboardPanel>
 </template>
 
 <script setup lang="ts">
-const { data, signOut } = useAuth()
 const generating = ref(false)
 
 definePageMeta({
@@ -105,12 +100,12 @@ const getReportTitle = (type: string) => {
 
 const getStatusColor = (status: string) => {
   const colors: Record<string, string> = {
-    'PENDING': 'yellow',
-    'PROCESSING': 'blue',
-    'COMPLETED': 'green',
-    'FAILED': 'red'
+    'PENDING': 'warning',
+    'PROCESSING': 'info',
+    'COMPLETED': 'success',
+    'FAILED': 'error'
   }
-  return colors[status] || 'gray'
+  return colors[status] || 'neutral'
 }
 
 const formatDateRange = (start: string, end: string) => {
