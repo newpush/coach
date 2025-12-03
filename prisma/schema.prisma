@@ -338,6 +338,12 @@ model Nutrition {
   // Water intake
   waterMl           Int?     // Water in milliliters
   
+  // AI Analysis
+  aiAnalysis        String?  @db.Text // AI-generated nutrition analysis (markdown fallback)
+  aiAnalysisJson    Json?    // Structured analysis data for rich UI display
+  aiAnalysisStatus  String?  @default("NOT_STARTED") // NOT_STARTED, PENDING, PROCESSING, COMPLETED, FAILED
+  aiAnalyzedAt      DateTime? // When the analysis was generated
+  
   // Raw data for re-analysis
   rawJson           Json?
   
