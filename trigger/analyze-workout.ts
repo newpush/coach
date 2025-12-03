@@ -108,6 +108,9 @@ const analysisSchema = {
 export const analyzeWorkoutTask = task({
   id: "analyze-workout",
   maxDuration: 300, // 5 minutes for AI processing
+  queue: {
+    concurrencyLimit: 2, // Only run 2 analyses in parallel
+  },
   run: async (payload: { workoutId: string }) => {
     const { workoutId } = payload;
     
