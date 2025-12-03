@@ -301,8 +301,16 @@
 
         <!-- Recent Workouts Table -->
         <div class="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
-          <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+          <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
             <h2 class="text-xl font-semibold text-gray-900 dark:text-white">Recent Workouts</h2>
+            <button
+              @click="analyzeAllWorkouts"
+              :disabled="analyzingWorkouts"
+              class="bg-gray-600 hover:bg-gray-700 disabled:bg-gray-400 text-white font-medium py-2 px-3 rounded transition-colors text-sm"
+            >
+              <span v-if="analyzingWorkouts">Analyzing...</span>
+              <span v-else>Analyze All</span>
+            </button>
           </div>
       
           <div v-if="loading" class="p-8 text-center text-gray-600 dark:text-gray-400">
@@ -381,8 +389,20 @@
         <!-- Nutrition Data Table -->
         <div class="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
           <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
-            <h2 class="text-xl font-semibold text-gray-900 dark:text-white">Nutrition Data</h2>
-            <p class="text-sm text-gray-600 dark:text-gray-400 mt-1">Daily calorie and macro tracking from Yazio</p>
+            <div class="flex justify-between items-center">
+              <div>
+                <h2 class="text-xl font-semibold text-gray-900 dark:text-white">Nutrition Data</h2>
+                <p class="text-sm text-gray-600 dark:text-gray-400 mt-1">Daily calorie and macro tracking from Yazio</p>
+              </div>
+              <button
+                @click="analyzeAllNutrition"
+                :disabled="analyzingNutrition"
+                class="bg-gray-600 hover:bg-gray-700 disabled:bg-gray-400 text-white font-medium py-2 px-3 rounded transition-colors text-sm"
+              >
+                <span v-if="analyzingNutrition">Analyzing...</span>
+                <span v-else>Analyze All</span>
+              </button>
+            </div>
           </div>
           
           <div v-if="loading" class="p-8 text-center text-gray-600 dark:text-gray-400">
@@ -414,6 +434,9 @@
                   </th>
                   <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                     Water
+                  </th>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                    AI Analysis
                   </th>
                 </tr>
               </thead>
@@ -448,6 +471,11 @@
                   <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-400">
                     {{ nutrition.waterMl ? (nutrition.waterMl / 1000).toFixed(1) + 'L' : '-' }}
                   </td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm">
+                    <span :class="getAnalysisStatusBadgeClass((nutrition as any).aiAnalysisStatus)">
+                      {{ getAnalysisStatusLabel((nutrition as any).aiAnalysisStatus) }}
+                    </span>
+                  </td>
                 </tr>
               </tbody>
             </table>
@@ -466,6 +494,8 @@ definePageMeta({
 const toast = useToast()
 const syncing = ref<string | null>(null)
 const loading = ref(true)
+const analyzingWorkouts = ref(false)
+const analyzingNutrition = ref(false)
 const intervalsStatus = ref<any>(null)
 const whoopStatus = ref<any>(null)
 const yazioStatus = ref<any>(null)
@@ -723,6 +753,68 @@ function getSleepScoreClass(score: number) {
   if (score >= 75) return `${baseClass} bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200`
   if (score >= 50) return `${baseClass} bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200`
   return `${baseClass} bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200`
+}
+
+// Analyze all workouts
+async function analyzeAllWorkouts() {
+  analyzingWorkouts.value = true
+  try {
+    const response: any = await $fetch('/api/workouts/analyze-all', {
+      method: 'POST'
+    })
+    
+    toast.add({
+      title: 'Analysis Started',
+      description: response.message,
+      color: 'success',
+      icon: 'i-heroicons-check-circle'
+    })
+    
+    // Refresh the workouts list after a short delay
+    setTimeout(async () => {
+      await fetchRecentWorkouts()
+    }, 2000)
+  } catch (error: any) {
+    toast.add({
+      title: 'Analysis Failed',
+      description: error.data?.message || error.message || 'Failed to start analysis',
+      color: 'error',
+      icon: 'i-heroicons-exclamation-circle'
+    })
+  } finally {
+    analyzingWorkouts.value = false
+  }
+}
+
+// Analyze all nutrition records
+async function analyzeAllNutrition() {
+  analyzingNutrition.value = true
+  try {
+    const response: any = await $fetch('/api/nutrition/analyze-all', {
+      method: 'POST'
+    })
+    
+    toast.add({
+      title: 'Analysis Started',
+      description: response.message,
+      color: 'success',
+      icon: 'i-heroicons-check-circle'
+    })
+    
+    // Refresh the nutrition list after a short delay
+    setTimeout(async () => {
+      await fetchNutritionData()
+    }, 2000)
+  } catch (error: any) {
+    toast.add({
+      title: 'Analysis Failed',
+      description: error.data?.message || error.message || 'Failed to start analysis',
+      color: 'error',
+      icon: 'i-heroicons-exclamation-circle'
+    })
+  } finally {
+    analyzingNutrition.value = false
+  }
 }
 
 // Load data on mount
