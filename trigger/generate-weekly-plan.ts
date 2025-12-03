@@ -75,7 +75,7 @@ export const generateWeeklyPlanTask = task({
     weekEnd.setDate(weekEnd.getDate() + (daysToPlann - 1));
     
     // Fetch user data
-    const [user, availability, recentWorkouts, recentWellness, currentPlan] = await Promise.all([
+    const [user, availability, recentWorkouts, recentWellness, currentPlan, athleteProfile] = await Promise.all([
       prisma.user.findUnique({
         where: { id: userId },
         select: { ftp: true, weight: true, maxHr: true }
@@ -111,6 +111,17 @@ export const generateWeeklyPlanTask = task({
           userId,
           weekStartDate: weekStart
         }
+      }),
+      
+      // Latest athlete profile
+      prisma.report.findFirst({
+        where: {
+          userId,
+          type: 'ATHLETE_PROFILE',
+          status: 'COMPLETED'
+        },
+        orderBy: { createdAt: 'desc' },
+        select: { analysisJson: true, createdAt: true }
       })
     ]);
     
@@ -119,7 +130,8 @@ export const generateWeeklyPlanTask = task({
       availabilityDays: availability.length,
       recentWorkoutsCount: recentWorkouts.length,
       recentWellnessCount: recentWellness.length,
-      hasExistingPlan: !!currentPlan
+      hasExistingPlan: !!currentPlan,
+      hasAthleteProfile: !!athleteProfile
     });
     
     // Build availability summary
@@ -144,13 +156,51 @@ export const generateWeeklyPlanTask = task({
       ? recentWellness.reduce((sum, w) => sum + (w.recoveryScore || 50), 0) / recentWellness.length
       : 50;
     
-    // Build prompt
-    const prompt = `You are an expert cycling coach creating a personalized ${daysToPlann}-day training plan.
+    // Build athlete profile context
+    let athleteContext = '';
+    if (athleteProfile?.analysisJson) {
+      const profile = athleteProfile.analysisJson as any;
+      athleteContext = `
+ATHLETE PROFILE (Generated ${new Date(athleteProfile.createdAt).toLocaleDateString()}):
+${profile.executive_summary ? `Summary: ${profile.executive_summary}` : ''}
 
-USER PROFILE:
+Current Fitness: ${profile.current_fitness?.status_label || 'Unknown'}
+${profile.current_fitness?.key_points ? profile.current_fitness.key_points.map((p: string) => `- ${p}`).join('\n') : ''}
+
+Training Characteristics:
+${profile.training_characteristics?.training_style || 'No data'}
+Strengths: ${profile.training_characteristics?.strengths?.join(', ') || 'None listed'}
+Areas for Development: ${profile.training_characteristics?.areas_for_development?.join(', ') || 'None listed'}
+
+Recovery Profile: ${profile.recovery_profile?.recovery_pattern || 'Unknown'}
+${profile.recovery_profile?.key_observations ? profile.recovery_profile.key_observations.map((o: string) => `- ${o}`).join('\n') : ''}
+
+Recent Performance Trend: ${profile.recent_performance?.trend || 'Unknown'}
+${profile.recent_performance?.patterns ? profile.recent_performance.patterns.map((p: string) => `- ${p}`).join('\n') : ''}
+
+Planning Context:
+${profile.planning_context?.current_focus ? `Current Focus: ${profile.planning_context.current_focus}` : ''}
+${profile.planning_context?.limitations?.length ? `Limitations: ${profile.planning_context.limitations.join(', ')}` : ''}
+${profile.planning_context?.opportunities?.length ? `Opportunities: ${profile.planning_context.opportunities.join(', ')}` : ''}
+
+Recommendations Summary:
+${profile.recommendations_summary?.recurring_themes?.length ? `Themes: ${profile.recommendations_summary.recurring_themes.join('; ')}` : ''}
+${profile.recommendations_summary?.action_items?.length ? `Priority Actions:\n${profile.recommendations_summary.action_items.map((a: any) => `- [${a.priority}] ${a.action}`).join('\n')}` : ''}
+`;
+    } else {
+      athleteContext = `
+USER BASIC INFO:
 - FTP: ${user?.ftp || 'Unknown'} watts
 - Weight: ${user?.weight || 'Unknown'} kg
 - Max HR: ${user?.maxHr || 'Unknown'} bpm
+Note: No structured athlete profile available yet. Consider generating one for better personalized planning.
+`;
+    }
+    
+    // Build prompt
+    const prompt = `You are an expert cycling coach creating a personalized ${daysToPlann}-day training plan.
+
+${athleteContext}
 
 TRAINING AVAILABILITY (when user can train):
 ${availabilitySummary || 'No availability set - assume flexible schedule'}

@@ -38,7 +38,7 @@ export const dailyCoachTask = task({
     const todayDateOnly = new Date(today.getFullYear(), today.getMonth(), today.getDate());
     
     // Fetch data
-    const [yesterdayWorkout, todayMetric, user] = await Promise.all([
+    const [yesterdayWorkout, todayMetric, user, athleteProfile] = await Promise.all([
       prisma.workout.findFirst({
         where: {
           userId,
@@ -57,20 +57,53 @@ export const dailyCoachTask = task({
       }),
       prisma.user.findUnique({
         where: { id: userId },
-        select: { ftp: true }
+        select: { ftp: true, weight: true, maxHr: true }
+      }),
+      
+      // Latest athlete profile
+      prisma.report.findFirst({
+        where: {
+          userId,
+          type: 'ATHLETE_PROFILE',
+          status: 'COMPLETED'
+        },
+        orderBy: { createdAt: 'desc' },
+        select: { analysisJson: true, createdAt: true }
       })
     ]);
     
-    logger.log("Data fetched", { 
+    logger.log("Data fetched", {
       hasYesterdayWorkout: !!yesterdayWorkout,
-      hasTodayMetric: !!todayMetric
+      hasTodayMetric: !!todayMetric,
+      hasAthleteProfile: !!athleteProfile
     });
+    
+    // Build athlete profile context
+    let athleteContext = '';
+    if (athleteProfile?.analysisJson) {
+      const profile = athleteProfile.analysisJson as any;
+      athleteContext = `
+ATHLETE PROFILE (Generated ${new Date(athleteProfile.createdAt).toLocaleDateString()}):
+${profile.executive_summary ? `Summary: ${profile.executive_summary}` : ''}
+
+Current Fitness: ${profile.current_fitness?.status_label || 'Unknown'}
+Recovery Profile: ${profile.recovery_profile?.recovery_pattern || 'Unknown'}
+Recent Performance: ${profile.recent_performance?.trend || 'Unknown'}
+Current Focus: ${profile.planning_context?.current_focus || 'General training'}
+`;
+    } else {
+      athleteContext = `
+USER INFO:
+- FTP: ${user?.ftp || 'Unknown'} watts
+- Weight: ${user?.weight || 'Unknown'} kg
+- Max HR: ${user?.maxHr || 'Unknown'} bpm
+`;
+    }
     
     // Build prompt
     const prompt = `You are a cycling coach providing daily workout guidance.
 
-USER INFO:
-- FTP: ${user?.ftp || 'Unknown'} watts
+${athleteContext}
 
 YESTERDAY'S TRAINING:
 ${yesterdayWorkout 

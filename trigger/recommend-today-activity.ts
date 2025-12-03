@@ -50,8 +50,8 @@ const recommendationSchema = {
 export const recommendTodayActivityTask = task({
   id: "recommend-today-activity",
   maxDuration: 300,
-  run: async (payload: { userId: string; date: Date }) => {
-    const { userId, date } = payload;
+  run: async (payload: { userId: string; date: Date; recommendationId?: string }) => {
+    const { userId, date, recommendationId } = payload;
     
     // Set date to start of day
     const today = new Date(date);
@@ -60,7 +60,7 @@ export const recommendTodayActivityTask = task({
     logger.log("Starting today's activity recommendation", { userId, date: today });
     
     // Fetch all required data
-    const [plannedWorkout, todayMetric, recentWorkouts, user] = await Promise.all([
+    const [plannedWorkout, todayMetric, recentWorkouts, user, athleteProfile] = await Promise.all([
       // Today's planned workout
       prisma.plannedWorkout.findFirst({
         where: { userId, date: today },
@@ -86,22 +86,67 @@ export const recommendTodayActivityTask = task({
       prisma.user.findUnique({
         where: { id: userId },
         select: { ftp: true, weight: true, maxHr: true }
+      }),
+      
+      // Latest athlete profile
+      prisma.report.findFirst({
+        where: {
+          userId,
+          type: 'ATHLETE_PROFILE',
+          status: 'COMPLETED'
+        },
+        orderBy: { createdAt: 'desc' },
+        select: { analysisJson: true, createdAt: true }
       })
     ]);
     
     logger.log("Data fetched", {
       hasPlannedWorkout: !!plannedWorkout,
       hasTodayMetric: !!todayMetric,
-      recentWorkoutsCount: recentWorkouts.length
+      recentWorkoutsCount: recentWorkouts.length,
+      hasAthleteProfile: !!athleteProfile
     });
+    
+    // Build athlete profile context
+    let athleteContext = '';
+    if (athleteProfile?.analysisJson) {
+      const profile = athleteProfile.analysisJson as any;
+      athleteContext = `
+ATHLETE PROFILE (Generated ${new Date(athleteProfile.createdAt).toLocaleDateString()}):
+${profile.executive_summary ? `Summary: ${profile.executive_summary}` : ''}
+
+Current Fitness: ${profile.current_fitness?.status_label || 'Unknown'}
+${profile.current_fitness?.key_points ? profile.current_fitness.key_points.map((p: string) => `- ${p}`).join('\n') : ''}
+
+Training Characteristics:
+${profile.training_characteristics?.training_style || 'No data'}
+Strengths: ${profile.training_characteristics?.strengths?.join(', ') || 'None listed'}
+Areas for Development: ${profile.training_characteristics?.areas_for_development?.join(', ') || 'None listed'}
+
+Recovery Profile: ${profile.recovery_profile?.recovery_pattern || 'Unknown'}
+${profile.recovery_profile?.key_observations ? profile.recovery_profile.key_observations.map((o: string) => `- ${o}`).join('\n') : ''}
+
+Recent Performance Trend: ${profile.recent_performance?.trend || 'Unknown'}
+
+Planning Context:
+${profile.planning_context?.current_focus ? `Current Focus: ${profile.planning_context.current_focus}` : ''}
+${profile.planning_context?.limitations?.length ? `Limitations: ${profile.planning_context.limitations.join(', ')}` : ''}
+${profile.planning_context?.opportunities?.length ? `Opportunities: ${profile.planning_context.opportunities.join(', ')}` : ''}
+`;
+    } else {
+      athleteContext = `
+ATHLETE BASIC INFO:
+- FTP: ${user?.ftp || 'Unknown'} watts
+- Weight: ${user?.weight || 'Unknown'} kg
+- Max HR: ${user?.maxHr || 'Unknown'} bpm
+Note: No structured athlete profile available yet. Generate one for better recommendations.
+`;
+    }
     
     // Build comprehensive prompt
     const prompt = `You are an expert cycling coach analyzing today's training for your athlete.
 
-ATHLETE PROFILE:
-- FTP: ${user?.ftp || 'Unknown'} watts
-- Weight: ${user?.weight || 'Unknown'} kg
-- Max HR: ${user?.maxHr || 'Unknown'} bpm
+${athleteContext}
 
 TODAY'S PLANNED WORKOUT:
 ${plannedWorkout ? `
@@ -140,31 +185,49 @@ DECISION CRITERIA:
 
 Provide specific, actionable recommendations with clear reasoning.`;
 
-    logger.log("Generating recommendation with Gemini");
+    logger.log("Generating recommendation with Gemini Flash");
     
     // Generate recommendation
     const analysis = await generateStructuredAnalysis(
       prompt,
       recommendationSchema,
-      'pro' // Use thinking model for important decisions
+      'flash' // Use flash model for faster recommendations
     );
     
     logger.log("Analysis generated", { recommendation: analysis.recommendation });
     
-    // Save to database
-    const recommendation = await prisma.activityRecommendation.create({
-      data: {
-        userId,
-        date: today,
-        recommendation: analysis.recommendation,
-        confidence: analysis.confidence,
-        reasoning: analysis.reasoning,
-        analysisJson: analysis as any,
-        plannedWorkoutId: plannedWorkout?.id,
-        status: 'COMPLETED',
-        modelVersion: 'gemini-2.0-flash-thinking-exp-1219'
-      }
-    });
+    // Update or create the recommendation
+    let recommendation;
+    if (recommendationId) {
+      // Update the existing pending recommendation
+      recommendation = await prisma.activityRecommendation.update({
+        where: { id: recommendationId },
+        data: {
+          recommendation: analysis.recommendation,
+          confidence: analysis.confidence,
+          reasoning: analysis.reasoning,
+          analysisJson: analysis as any,
+          plannedWorkoutId: plannedWorkout?.id,
+          status: 'COMPLETED',
+          modelVersion: 'gemini-2.0-flash-exp'
+        }
+      });
+    } else {
+      // Fallback: create new recommendation if no ID provided
+      recommendation = await prisma.activityRecommendation.create({
+        data: {
+          userId,
+          date: today,
+          recommendation: analysis.recommendation,
+          confidence: analysis.confidence,
+          reasoning: analysis.reasoning,
+          analysisJson: analysis as any,
+          plannedWorkoutId: plannedWorkout?.id,
+          status: 'COMPLETED',
+          modelVersion: 'gemini-2.0-flash-exp'
+        }
+      });
+    }
     
     logger.log("Recommendation saved", {
       recommendationId: recommendation.id,
