@@ -348,6 +348,7 @@ model Nutrition {
   rawJson           Json?
   
   user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reports           ReportNutrition[]
   
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
@@ -409,6 +410,7 @@ model Report {
 
   user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   workouts       ReportWorkout[]
+  nutrition      ReportNutrition[]
 }
 
 // Many-to-many relationship between Reports and Workouts
@@ -425,6 +427,22 @@ model ReportWorkout {
   @@unique([reportId, workoutId])
   @@index([reportId])
   @@index([workoutId])
+}
+
+// Many-to-many relationship between Reports and Nutrition
+model ReportNutrition {
+  id          String   @id @default(uuid())
+  reportId    String
+  nutritionId String
+  
+  report      Report   @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  nutrition   Nutrition @relation(fields: [nutritionId], references: [id], onDelete: Cascade)
+  
+  createdAt   DateTime @default(now())
+  
+  @@unique([reportId, nutritionId])
+  @@index([reportId])
+  @@index([nutritionId])
 }
 
 // --------------------------------------
