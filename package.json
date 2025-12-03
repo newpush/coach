@@ -23,11 +23,13 @@
     "@prisma/client": "^7.0.1",
     "@sidebase/nuxt-auth": "^1.1.1",
     "@trigger.dev/sdk": "^4.1.2",
+    "chart.js": "^4.5.1",
     "marked": "^17.0.1",
     "next-auth": "4.21.1",
     "nuxt": "^4.2.1",
     "pg": "^8.16.3",
     "vue": "^3.5.25",
+    "vue-chartjs": "^5.3.3",
     "vue-router": "^4.6.3",
     "yazio": "^1.1.3"
   },
