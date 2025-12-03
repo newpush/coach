@@ -507,6 +507,7 @@ model TrainingAvailability {
   indoorOnly  Boolean  @default(false)
   outdoorOnly Boolean  @default(false)
   gymAccess   Boolean  @default(false)
+  bikeAccess  Boolean  @default(false) // Has bike or indoor trainer access
   
   // Notes
   notes       String?  @db.Text
