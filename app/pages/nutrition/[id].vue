@@ -140,6 +140,43 @@
             </div>
           </div>
 
+          <!-- Nutrition Quality Scores Section -->
+          <div v-if="nutrition.overallScore || nutrition.macroBalanceScore || nutrition.qualityScore || nutrition.adherenceScore || nutrition.hydrationScore" class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+            <h2 class="text-xl font-bold text-gray-900 dark:text-white mb-4">Nutrition Quality Scores</h2>
+            <div class="grid grid-cols-2 md:grid-cols-5 gap-4">
+              <div v-if="nutrition.overallScore" class="text-center">
+                <div :class="getScoreCircleClass(nutrition.overallScore)" class="w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-2">
+                  <span class="text-2xl font-bold">{{ nutrition.overallScore }}</span>
+                </div>
+                <div class="text-xs font-medium text-gray-600 dark:text-gray-400">Overall</div>
+              </div>
+              <div v-if="nutrition.macroBalanceScore" class="text-center">
+                <div :class="getScoreCircleClass(nutrition.macroBalanceScore)" class="w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-2">
+                  <span class="text-2xl font-bold">{{ nutrition.macroBalanceScore }}</span>
+                </div>
+                <div class="text-xs font-medium text-gray-600 dark:text-gray-400">Macro Balance</div>
+              </div>
+              <div v-if="nutrition.qualityScore" class="text-center">
+                <div :class="getScoreCircleClass(nutrition.qualityScore)" class="w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-2">
+                  <span class="text-2xl font-bold">{{ nutrition.qualityScore }}</span>
+                </div>
+                <div class="text-xs font-medium text-gray-600 dark:text-gray-400">Quality</div>
+              </div>
+              <div v-if="nutrition.adherenceScore" class="text-center">
+                <div :class="getScoreCircleClass(nutrition.adherenceScore)" class="w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-2">
+                  <span class="text-2xl font-bold">{{ nutrition.adherenceScore }}</span>
+                </div>
+                <div class="text-xs font-medium text-gray-600 dark:text-gray-400">Adherence</div>
+              </div>
+              <div v-if="nutrition.hydrationScore" class="text-center">
+                <div :class="getScoreCircleClass(nutrition.hydrationScore)" class="w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-2">
+                  <span class="text-2xl font-bold">{{ nutrition.hydrationScore }}</span>
+                </div>
+                <div class="text-xs font-medium text-gray-600 dark:text-gray-400">Hydration</div>
+              </div>
+            </div>
+          </div>
+
           <!-- Water Intake -->
           <div v-if="nutrition.waterMl" class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
             <div class="flex items-center gap-2 mb-4">
@@ -673,6 +710,13 @@ function getPriorityBorderClass(priority: string) {
   if (priority === 'medium') return 'border-yellow-500'
   if (priority === 'low') return 'border-blue-500'
   return 'border-gray-300'
+}
+
+function getScoreCircleClass(score: number) {
+  if (score >= 8) return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
+  if (score >= 6) return 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
+  if (score >= 4) return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200'
+  return 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
 }
 
 // Load data on mount

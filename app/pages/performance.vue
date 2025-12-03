@@ -1,18 +1,23 @@
 <template>
-  <div class="container mx-auto p-6 space-y-6">
-    <div class="flex items-center justify-between mb-6">
-      <div>
-        <h1 class="text-3xl font-bold text-gray-900 dark:text-white">Performance Scores</h1>
-        <p class="text-gray-600 dark:text-gray-400 mt-1">Track your progress across multiple dimensions</p>
-      </div>
-      
-      <USelectMenu
-        v-model="selectedPeriod"
-        :options="periodOptions"
-        value-attribute="value"
-        option-attribute="label"
-      />
-    </div>
+  <UDashboardPanel id="performance">
+    <template #header>
+      <UDashboardNavbar title="Performance Scores">
+        <template #leading>
+          <UDashboardSidebarCollapse />
+        </template>
+        <template #right>
+          <USelectMenu
+            v-model="selectedPeriod"
+            :options="periodOptions"
+            value-attribute="value"
+            option-attribute="label"
+          />
+        </template>
+      </UDashboardNavbar>
+    </template>
+
+    <template #body>
+      <div class="p-6 space-y-6">
 
     <!-- Athlete Profile Scores -->
     <UCard>
@@ -33,34 +38,34 @@
         <ScoreCard
           title="Current Fitness"
           :score="profileData.scores?.currentFitness"
-          :explanation="profileData.scores?.currentFitnessExplanation"
+          :explanation="profileData.scores?.currentFitnessExplanationJson ? 'Click for detailed analysis' : profileData.scores?.currentFitnessExplanation"
           icon="i-heroicons-bolt"
           color="blue"
-          @click="openModal"
+          @click="(data) => openModalWithStructured(data, profileData.scores?.currentFitnessExplanationJson)"
         />
         <ScoreCard
           title="Recovery Capacity"
           :score="profileData.scores?.recoveryCapacity"
-          :explanation="profileData.scores?.recoveryCapacityExplanation"
+          :explanation="profileData.scores?.recoveryCapacityExplanationJson ? 'Click for detailed analysis' : profileData.scores?.recoveryCapacityExplanation"
           icon="i-heroicons-heart"
           color="green"
-          @click="openModal"
+          @click="(data) => openModalWithStructured(data, profileData.scores?.recoveryCapacityExplanationJson)"
         />
         <ScoreCard
           title="Nutrition Compliance"
           :score="profileData.scores?.nutritionCompliance"
-          :explanation="profileData.scores?.nutritionComplianceExplanation"
+          :explanation="profileData.scores?.nutritionComplianceExplanationJson ? 'Click for detailed analysis' : profileData.scores?.nutritionComplianceExplanation"
           icon="i-heroicons-cake"
           color="purple"
-          @click="openModal"
+          @click="(data) => openModalWithStructured(data, profileData.scores?.nutritionComplianceExplanationJson)"
         />
         <ScoreCard
           title="Training Consistency"
           :score="profileData.scores?.trainingConsistency"
-          :explanation="profileData.scores?.trainingConsistencyExplanation"
+          :explanation="profileData.scores?.trainingConsistencyExplanationJson ? 'Click for detailed analysis' : profileData.scores?.trainingConsistencyExplanation"
           icon="i-heroicons-calendar"
           color="orange"
-          @click="openModal"
+          @click="(data) => openModalWithStructured(data, profileData.scores?.trainingConsistencyExplanationJson)"
         />
       </div>
     </UCard>
@@ -158,89 +163,91 @@
       </div>
     </UCard>
 
-    <!-- Nutrition Scores -->
-    <UCard>
-      <template #header>
-        <h2 class="text-xl font-semibold">Nutrition Quality</h2>
-      </template>
-      
-      <div v-if="nutritionLoading" class="flex justify-center py-12">
-        <UIcon name="i-heroicons-arrow-path" class="w-8 h-8 animate-spin text-primary" />
-      </div>
-      
-      <div v-else-if="nutritionData" class="space-y-6">
-        <!-- Score Cards -->
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-          <ScoreCard
-            title="Overall"
-            :score="nutritionData.summary?.avgOverall"
-            icon="i-heroicons-star"
-            color="yellow"
-            compact
-            explanation="Click for AI-generated insights"
-            @click="() => nutritionData && openNutritionModal('Overall Nutrition Quality', nutritionData.summary?.avgOverall, 'yellow')"
-          />
-          <ScoreCard
-            title="Macro Balance"
-            :score="nutritionData.summary?.avgMacroBalance"
-            icon="i-heroicons-scale"
-            color="blue"
-            compact
-            explanation="Click for AI-generated insights"
-            @click="() => nutritionData && openNutritionModal('Macronutrient Balance', nutritionData.summary?.avgMacroBalance, 'blue')"
-          />
-          <ScoreCard
-            title="Quality"
-            :score="nutritionData.summary?.avgQuality"
-            icon="i-heroicons-sparkles"
-            color="green"
-            compact
-            explanation="Click for AI-generated insights"
-            @click="() => nutritionData && openNutritionModal('Food Quality', nutritionData.summary?.avgQuality, 'green')"
-          />
-          <ScoreCard
-            title="Adherence"
-            :score="nutritionData.summary?.avgAdherence"
-            icon="i-heroicons-check-badge"
-            color="purple"
-            compact
-            explanation="Click for AI-generated insights"
-            @click="() => nutritionData && openNutritionModal('Goal Adherence', nutritionData.summary?.avgAdherence, 'purple')"
-          />
-          <ScoreCard
-            title="Hydration"
-            :score="nutritionData.summary?.avgHydration"
-            icon="i-heroicons-beaker"
-            color="cyan"
-            compact
-            explanation="Click for AI-generated insights"
-            @click="() => nutritionData && openNutritionModal('Hydration Status', nutritionData.summary?.avgHydration, 'cyan')"
-          />
-        </div>
+        <!-- Nutrition Scores -->
+        <UCard>
+          <template #header>
+            <h2 class="text-xl font-semibold">Nutrition Quality</h2>
+          </template>
+          
+          <div v-if="nutritionLoading" class="flex justify-center py-12">
+            <UIcon name="i-heroicons-arrow-path" class="w-8 h-8 animate-spin text-primary" />
+          </div>
+          
+          <div v-else-if="nutritionData" class="space-y-6">
+            <!-- Score Cards -->
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+              <ScoreCard
+                title="Overall"
+                :score="nutritionData.summary?.avgOverall"
+                icon="i-heroicons-star"
+                color="yellow"
+                compact
+                explanation="Click for AI-generated insights"
+                @click="() => nutritionData && openNutritionModal('Overall Nutrition Quality', nutritionData.summary?.avgOverall, 'yellow')"
+              />
+              <ScoreCard
+                title="Macro Balance"
+                :score="nutritionData.summary?.avgMacroBalance"
+                icon="i-heroicons-scale"
+                color="blue"
+                compact
+                explanation="Click for AI-generated insights"
+                @click="() => nutritionData && openNutritionModal('Macronutrient Balance', nutritionData.summary?.avgMacroBalance, 'blue')"
+              />
+              <ScoreCard
+                title="Quality"
+                :score="nutritionData.summary?.avgQuality"
+                icon="i-heroicons-sparkles"
+                color="green"
+                compact
+                explanation="Click for AI-generated insights"
+                @click="() => nutritionData && openNutritionModal('Food Quality', nutritionData.summary?.avgQuality, 'green')"
+              />
+              <ScoreCard
+                title="Adherence"
+                :score="nutritionData.summary?.avgAdherence"
+                icon="i-heroicons-check-badge"
+                color="purple"
+                compact
+                explanation="Click for AI-generated insights"
+                @click="() => nutritionData && openNutritionModal('Goal Adherence', nutritionData.summary?.avgAdherence, 'purple')"
+              />
+              <ScoreCard
+                title="Hydration"
+                :score="nutritionData.summary?.avgHydration"
+                icon="i-heroicons-beaker"
+                color="cyan"
+                compact
+                explanation="Click for AI-generated insights"
+                @click="() => nutritionData && openNutritionModal('Hydration Status', nutritionData.summary?.avgHydration, 'cyan')"
+              />
+            </div>
 
-        <!-- Trend Chart -->
-        <div class="mt-6">
-          <h3 class="text-lg font-medium mb-4">Score Trends</h3>
-          <TrendChart :data="nutritionData.nutrition" type="nutrition" />
-        </div>
+            <!-- Trend Chart -->
+            <div class="mt-6">
+              <h3 class="text-lg font-medium mb-4">Score Trends</h3>
+              <TrendChart :data="nutritionData.nutrition" type="nutrition" />
+            </div>
 
-        <!-- Radar Chart -->
-        <div class="mt-6">
-          <h3 class="text-lg font-medium mb-4">Current Balance</h3>
-          <RadarChart 
-            :scores="{
-              overall: nutritionData.summary?.avgOverall,
-              macroBalance: nutritionData.summary?.avgMacroBalance,
-              quality: nutritionData.summary?.avgQuality,
-              adherence: nutritionData.summary?.avgAdherence,
-              hydration: nutritionData.summary?.avgHydration
-            }"
-            type="nutrition"
-          />
-        </div>
+            <!-- Radar Chart -->
+            <div class="mt-6">
+              <h3 class="text-lg font-medium mb-4">Current Balance</h3>
+              <RadarChart
+                :scores="{
+                  overall: nutritionData.summary?.avgOverall,
+                  macroBalance: nutritionData.summary?.avgMacroBalance,
+                  quality: nutritionData.summary?.avgQuality,
+                  adherence: nutritionData.summary?.avgAdherence,
+                  hydration: nutritionData.summary?.avgHydration
+                }"
+                type="nutrition"
+              />
+            </div>
+          </div>
+        </UCard>
       </div>
-    </UCard>
-  </div>
+    </template>
+  </UDashboardPanel>
 </template>
 
 <script setup lang="ts">
@@ -291,7 +298,7 @@ const modalData = ref<{
 const workoutExplanations = ref<Record<string, any>>({})
 const nutritionExplanations = ref<Record<string, any>>({})
 
-// Handle score card click
+// Handle score card click (for cards with plain text explanation)
 const openModal = (data: {
   title: string
   score?: number | null
@@ -302,6 +309,27 @@ const openModal = (data: {
     title: data.title,
     score: data.score ?? null,
     explanation: data.explanation ?? null,
+    analysisData: undefined,
+    color: data.color
+  }
+  showModal.value = true
+}
+
+// Handle score card click with structured data
+const openModalWithStructured = (
+  data: {
+    title: string
+    score?: number | null
+    explanation?: string | null
+    color?: 'gray' | 'red' | 'orange' | 'yellow' | 'green' | 'blue' | 'purple' | 'cyan'
+  },
+  structuredData?: any
+) => {
+  modalData.value = {
+    title: data.title,
+    score: data.score ?? null,
+    explanation: structuredData ? null : data.explanation ?? null,
+    analysisData: structuredData || undefined,
     color: data.color
   }
   showModal.value = true

@@ -455,6 +455,9 @@
                     Load
                   </th>
                   <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                    Score
+                  </th>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                     AI Analysis
                   </th>
                   <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
@@ -483,6 +486,12 @@
                   </td>
                   <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-400">
                     {{ workout.trainingLoad ? Math.round(workout.trainingLoad) : '-' }}
+                  </td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm">
+                    <span v-if="workout.overallScore" :class="getScoreBadgeClass(workout.overallScore)">
+                      {{ workout.overallScore }}/10
+                    </span>
+                    <span v-else class="text-gray-400">-</span>
                   </td>
                   <td class="px-6 py-4 whitespace-nowrap text-sm">
                     <span :class="getAnalysisStatusBadgeClass(workout.aiAnalysisStatus)">
@@ -590,6 +599,9 @@
                     Water
                   </th>
                   <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                    Score
+                  </th>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                     AI Analysis
                   </th>
                 </tr>
@@ -624,6 +636,12 @@
                   </td>
                   <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-400">
                     {{ nutrition.waterMl ? (nutrition.waterMl / 1000).toFixed(1) + 'L' : '-' }}
+                  </td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm">
+                    <span v-if="(nutrition as any).overallScore" :class="getScoreBadgeClass((nutrition as any).overallScore)">
+                      {{ (nutrition as any).overallScore }}/10
+                    </span>
+                    <span v-else class="text-gray-400">-</span>
                   </td>
                   <td class="px-6 py-4 whitespace-nowrap text-sm">
                     <span :class="getAnalysisStatusBadgeClass((nutrition as any).aiAnalysisStatus)">
@@ -982,6 +1000,14 @@ function getSleepScoreClass(score: number) {
   const baseClass = 'px-2 py-1 rounded text-xs font-semibold'
   if (score >= 75) return `${baseClass} bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200`
   if (score >= 50) return `${baseClass} bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200`
+  return `${baseClass} bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200`
+}
+
+function getScoreBadgeClass(score: number) {
+  const baseClass = 'px-2 py-1 rounded text-xs font-semibold'
+  if (score >= 8) return `${baseClass} bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200`
+  if (score >= 6) return `${baseClass} bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200`
+  if (score >= 4) return `${baseClass} bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200`
   return `${baseClass} bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200`
 }
 

@@ -69,6 +69,43 @@
             </div>
           </div>
 
+          <!-- Performance Scores Section -->
+          <div v-if="workout.overallScore || workout.technicalScore || workout.effortScore || workout.pacingScore || workout.executionScore" class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+            <h2 class="text-xl font-bold text-gray-900 dark:text-white mb-4">Performance Scores</h2>
+            <div class="grid grid-cols-2 md:grid-cols-5 gap-4">
+              <div v-if="workout.overallScore" class="text-center">
+                <div :class="getScoreCircleClass(workout.overallScore)" class="w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-2">
+                  <span class="text-2xl font-bold">{{ workout.overallScore }}</span>
+                </div>
+                <div class="text-xs font-medium text-gray-600 dark:text-gray-400">Overall</div>
+              </div>
+              <div v-if="workout.technicalScore" class="text-center">
+                <div :class="getScoreCircleClass(workout.technicalScore)" class="w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-2">
+                  <span class="text-2xl font-bold">{{ workout.technicalScore }}</span>
+                </div>
+                <div class="text-xs font-medium text-gray-600 dark:text-gray-400">Technical</div>
+              </div>
+              <div v-if="workout.effortScore" class="text-center">
+                <div :class="getScoreCircleClass(workout.effortScore)" class="w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-2">
+                  <span class="text-2xl font-bold">{{ workout.effortScore }}</span>
+                </div>
+                <div class="text-xs font-medium text-gray-600 dark:text-gray-400">Effort</div>
+              </div>
+              <div v-if="workout.pacingScore" class="text-center">
+                <div :class="getScoreCircleClass(workout.pacingScore)" class="w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-2">
+                  <span class="text-2xl font-bold">{{ workout.pacingScore }}</span>
+                </div>
+                <div class="text-xs font-medium text-gray-600 dark:text-gray-400">Pacing</div>
+              </div>
+              <div v-if="workout.executionScore" class="text-center">
+                <div :class="getScoreCircleClass(workout.executionScore)" class="w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-2">
+                  <span class="text-2xl font-bold">{{ workout.executionScore }}</span>
+                </div>
+                <div class="text-xs font-medium text-gray-600 dark:text-gray-400">Execution</div>
+              </div>
+            </div>
+          </div>
+
           <!-- AI Analysis Section -->
           <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
             <div class="flex items-center justify-between mb-4">
@@ -710,6 +747,13 @@ function getPriorityBorderClass(priority: string) {
   if (priority === 'medium') return 'border-yellow-500'
   if (priority === 'low') return 'border-blue-500'
   return 'border-gray-300'
+}
+
+function getScoreCircleClass(score: number) {
+  if (score >= 8) return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
+  if (score >= 6) return 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
+  if (score >= 4) return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200'
+  return 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
 }
 
 // Load data on mount
