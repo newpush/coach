@@ -15,10 +15,10 @@
           <p class="mt-2 text-muted">Your AI-powered cycling coach is ready to help you optimize your training.</p>
         </div>
       
-        <!-- Row 1: Athlete Profile / Today's Training -->
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <!-- Row 1: Athlete Profile / Today's Training / Performance Overview -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 items-stretch">
           <!-- Athlete Profile Card - shown when connected -->
-          <UCard v-if="intervalsConnected">
+          <UCard v-if="intervalsConnected" class="flex flex-col">
             <template #header>
               <div class="flex items-center gap-2">
                 <UIcon name="i-heroicons-user-circle" class="w-5 h-5" />
@@ -27,7 +27,7 @@
             </template>
             
             <!-- Loading skeleton -->
-            <div v-if="!profile" class="space-y-3 text-sm animate-pulse">
+            <div v-if="!profile" class="space-y-3 text-sm animate-pulse flex-grow">
               <div>
                 <div class="h-4 bg-gray-200 dark:bg-gray-700 rounded w-32 mb-2"></div>
                 <div class="h-3 bg-gray-200 dark:bg-gray-700 rounded w-48"></div>
@@ -49,37 +49,38 @@
             </div>
             
             <!-- Actual profile data -->
-            <div v-else class="space-y-3 text-sm">
+            <div v-else class="space-y-3 text-sm flex-grow">
               <div>
-                <p class="font-medium">{{ profile.name || 'Athlete' }}</p>
-                <p class="text-muted text-xs">
-                  <span v-if="profile.age">{{ profile.age }}y</span>
-                  <span v-if="profile.age && profile.sex"> • </span>
-                  <span v-if="profile.sex">{{ profile.sex === 'M' ? 'Male' : 'Female' }}</span>
-                  <span v-if="(profile.age || profile.sex) && profile.weight"> • </span>
-                  <span v-if="profile.weight">{{ profile.weight }}kg</span>
-                </p>
-                <p v-if="profile.location?.city" class="text-muted text-xs">
-                  {{ [profile.location.city, profile.location.country].filter(Boolean).join(', ') }}
+                <p class="font-medium text-base">{{ profile.name || 'Athlete' }}</p>
+                <p v-if="profile.age" class="text-muted text-xs mt-1">
+                  {{ profile.age }} years old
                 </p>
               </div>
               
-              <div class="pt-2 border-t space-y-2">
-                <div class="flex justify-between">
-                  <span class="text-muted">FTP</span>
-                  <span class="font-medium">{{ profile.ftp ? `${profile.ftp}W` : 'Not set' }}</span>
+              <div class="grid grid-cols-2 gap-3 pt-2 border-t">
+                <div>
+                  <p class="text-xs text-muted">FTP</p>
+                  <p class="font-semibold">{{ profile.ftp ? `${profile.ftp}W` : 'Not set' }}</p>
                 </div>
-                <div class="flex justify-between">
-                  <span class="text-muted">Resting HR</span>
-                  <span class="font-medium">{{ profile.restingHR ? `${profile.restingHR} bpm` : 'N/A' }}</span>
+                <div>
+                  <p class="text-xs text-muted">Weight</p>
+                  <p class="font-semibold">{{ profile.weight ? `${profile.weight}kg` : 'N/A' }}</p>
                 </div>
-                <div class="flex justify-between">
-                  <span class="text-muted">Recent HRV</span>
-                  <span class="font-medium">{{ profile.recentHRV ? `${Math.round(profile.recentHRV)} ms` : 'N/A' }}</span>
+                <div>
+                  <p class="text-xs text-muted">W/kg</p>
+                  <p class="font-semibold">{{ profile.ftp && profile.weight ? (profile.ftp / profile.weight).toFixed(2) : 'N/A' }}</p>
                 </div>
-                <div v-if="profile.avgRecentHRV" class="flex justify-between">
-                  <span class="text-muted text-xs">7-day HRV avg</span>
-                  <span class="font-medium text-xs">{{ Math.round(profile.avgRecentHRV) }} ms</span>
+                <div>
+                  <p class="text-xs text-muted">Resting HR</p>
+                  <p class="font-semibold">{{ profile.restingHR ? `${profile.restingHR} bpm` : 'N/A' }}</p>
+                </div>
+                <div>
+                  <p class="text-xs text-muted">Recent HRV</p>
+                  <p class="font-semibold">{{ profile.recentHRV ? `${Math.round(profile.recentHRV)} ms` : 'N/A' }}</p>
+                </div>
+                <div>
+                  <p class="text-xs text-muted">7d HRV avg</p>
+                  <p class="font-semibold">{{ profile.avgRecentHRV ? `${Math.round(profile.avgRecentHRV)} ms` : 'N/A' }}</p>
                 </div>
               </div>
             </div>
@@ -103,7 +104,7 @@
           </UCard>
           
           <!-- Today's Recommendation Card -->
-          <UCard v-if="intervalsConnected">
+          <UCard v-if="intervalsConnected" class="flex flex-col">
             <template #header>
               <div class="flex items-center justify-between">
                 <div class="flex items-center gap-2">
@@ -116,19 +117,19 @@
               </div>
             </template>
             
-            <div v-if="loadingRecommendation || generatingRecommendation" class="text-sm text-muted py-4 text-center">
+            <div v-if="loadingRecommendation || generatingRecommendation" class="text-sm text-muted py-4 text-center flex-grow">
               <UIcon name="i-heroicons-arrow-path" class="w-5 h-5 animate-spin inline" />
               <p class="mt-2">{{ generatingRecommendation ? 'Generating recommendation...' : 'Loading...' }}</p>
               <p v-if="generatingRecommendation" class="text-xs mt-1">This may take up to 60 seconds</p>
             </div>
             
-            <div v-else-if="!todayRecommendation">
+            <div v-else-if="!todayRecommendation" class="flex-grow">
               <p class="text-sm text-muted">
                 Get AI-powered guidance for today's training based on your recovery and planned workout.
               </p>
             </div>
             
-            <div v-else>
+            <div v-else class="flex-grow">
               <p class="text-sm">{{ todayRecommendation.reasoning }}</p>
               
               <div v-if="todayRecommendation.analysisJson?.suggested_modifications" class="bg-blue-50 dark:bg-blue-900/20 p-3 rounded-lg mt-3">
@@ -161,12 +162,77 @@
             </template>
           </UCard>
           
+          <!-- Performance Overview Card -->
+          <UCard v-if="intervalsConnected" class="flex flex-col">
+            <template #header>
+              <div class="flex items-center gap-2">
+                <UIcon name="i-heroicons-chart-bar" class="w-5 h-5" />
+                <h3 class="font-semibold">Performance Overview</h3>
+              </div>
+            </template>
+            
+            <!-- Loading skeleton -->
+            <div v-if="loadingScores" class="space-y-3 animate-pulse flex-grow">
+              <div v-for="i in 4" :key="i" class="flex justify-between items-center">
+                <div class="h-3 bg-gray-200 dark:bg-gray-700 rounded w-24"></div>
+                <div class="h-6 bg-gray-200 dark:bg-gray-700 rounded w-12"></div>
+              </div>
+            </div>
+            
+            <!-- Actual scores data -->
+            <div v-else-if="profileScores" class="space-y-3 flex-grow">
+              <div class="flex justify-between items-center">
+                <span class="text-sm text-muted">Current Fitness</span>
+                <UBadge :color="getScoreColor(profileScores.currentFitness)" size="lg">
+                  {{ profileScores.currentFitness || 'N/A' }}
+                </UBadge>
+              </div>
+              <div class="flex justify-between items-center">
+                <span class="text-sm text-muted">Recovery Capacity</span>
+                <UBadge :color="getScoreColor(profileScores.recoveryCapacity)" size="lg">
+                  {{ profileScores.recoveryCapacity || 'N/A' }}
+                </UBadge>
+              </div>
+              <div class="flex justify-between items-center">
+                <span class="text-sm text-muted">Nutrition Compliance</span>
+                <UBadge :color="getScoreColor(profileScores.nutritionCompliance)" size="lg">
+                  {{ profileScores.nutritionCompliance || 'N/A' }}
+                </UBadge>
+              </div>
+              <div class="flex justify-between items-center">
+                <span class="text-sm text-muted">Training Consistency</span>
+                <UBadge :color="getScoreColor(profileScores.trainingConsistency)" size="lg">
+                  {{ profileScores.trainingConsistency || 'N/A' }}
+                </UBadge>
+              </div>
+              
+              <div v-if="profileScores.lastUpdated" class="pt-2 border-t">
+                <p class="text-xs text-muted text-center">
+                  Updated {{ formatScoreDate(profileScores.lastUpdated) }}
+                </p>
+              </div>
+            </div>
+            
+            <!-- No scores yet -->
+            <div v-else class="text-center py-4 flex-grow">
+              <p class="text-sm text-muted">
+                Generate your athlete profile to see performance scores.
+              </p>
+            </div>
+            
+            <template #footer>
+              <UButton to="/performance" block variant="outline">
+                View Details
+              </UButton>
+            </template>
+          </UCard>
+          
           <!-- Getting Started Card - shown when not connected -->
-          <UCard v-if="!intervalsConnected">
+          <UCard v-if="!intervalsConnected" class="flex flex-col">
             <template #header>
               <h3 class="font-semibold">Getting Started</h3>
             </template>
-            <p class="text-sm text-muted">
+            <p class="text-sm text-muted flex-grow">
               Connect your Intervals.icu account to start analyzing your training data.
             </p>
             <template #footer>
@@ -384,8 +450,8 @@ const intervalsConnected = computed(() =>
   integrationStatus.value?.integrations?.some((i: any) => i.provider === 'intervals') ?? false
 )
 
-// Fetch athlete profile when connected
-const { data: profileData } = useFetch('/api/profile', {
+// Fetch athlete profile when connected (using fast cached endpoint)
+const { data: profileData } = useFetch('/api/profile/dashboard', {
   lazy: true,
   server: false,
   watch: [intervalsConnected]
@@ -401,6 +467,15 @@ const generatingProfile = ref(false)
 const currentRecommendationId = ref<string | null>(null) // Track the recommendation being generated
 
 const profile = computed(() => profileData.value?.profile as any || null)
+
+// Fetch athlete profile scores
+const { data: scoresData, pending: loadingScores } = useFetch('/api/scores/athlete-profile', {
+  lazy: true,
+  server: false,
+  watch: [intervalsConnected]
+})
+
+const profileScores = computed(() => scoresData.value?.scores || null)
 
 // Recent activity state
 const recentActivity = ref<any>(null)
@@ -617,6 +692,32 @@ function formatActivityDate(date: string | Date): string {
     return `${diffDays} days ago`
   } else {
     return activityDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  }
+}
+
+// Helper to get score color
+function getScoreColor(score: number | null): 'error' | 'warning' | 'success' | 'neutral' {
+  if (!score) return 'neutral'
+  if (score >= 8) return 'success'
+  if (score >= 6) return 'warning'
+  return 'error'
+}
+
+// Helper to format score date
+function formatScoreDate(date: string | Date): string {
+  const scoreDate = new Date(date)
+  const now = new Date()
+  const diffMs = now.getTime() - scoreDate.getTime()
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
+  
+  if (diffDays === 0) {
+    return 'today'
+  } else if (diffDays === 1) {
+    return 'yesterday'
+  } else if (diffDays < 7) {
+    return `${diffDays} days ago`
+  } else {
+    return scoreDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
   }
 }
 
