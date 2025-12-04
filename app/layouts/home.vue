@@ -2,7 +2,7 @@
   <div class="min-h-screen flex flex-col font-sans bg-white dark:bg-gray-950 text-gray-900 dark:text-gray-100">
     <header class="sticky top-0 z-50 bg-white/75 dark:bg-gray-950/75 backdrop-blur border-b border-gray-200 dark:border-gray-800">
       <UContainer class="h-16 flex items-center justify-between">
-        <NuxtLink to="/" class="flex items-center gap-2 font-bold text-xl hover:text-primary transition-colors">
+        <NuxtLink to="/home" class="flex items-center gap-2 font-bold text-xl hover:text-primary transition-colors">
           <UIcon name="i-lucide-zap" class="w-6 h-6 text-primary" />
           Coach Watts
         </NuxtLink>
