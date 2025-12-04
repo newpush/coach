@@ -155,7 +155,10 @@ export default defineEventHandler(async (event) => {
         wellness: wellnessCount > 0,
         workoutCount,
         nutritionCount,
-        wellnessCount
+        wellnessCount,
+        workoutProviders,
+        nutritionProviders,
+        wellnessProviders
       },
       profile: {
         name: user.name,

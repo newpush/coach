@@ -364,48 +364,63 @@
             
             <div class="space-y-3">
               <!-- Workouts -->
-              <div class="flex items-center justify-between p-3 rounded-lg bg-gray-50 dark:bg-gray-800/50">
-                <div class="flex items-center gap-2">
-                  <UIcon name="i-heroicons-bolt" class="w-4 h-4 text-primary" />
-                  <span class="text-sm font-medium">Workouts</span>
+              <div class="p-3 rounded-lg bg-gray-50 dark:bg-gray-800/50">
+                <div class="flex items-center justify-between">
+                  <div class="flex items-center gap-2">
+                    <UIcon name="i-heroicons-bolt" class="w-4 h-4 text-primary" />
+                    <span class="text-sm font-medium">Workouts</span>
+                  </div>
+                  <UBadge
+                    :color="dataSyncStatus.workouts ? 'success' : 'neutral'"
+                    variant="subtle"
+                    size="sm"
+                  >
+                    {{ dataSyncStatus.workoutCount || 0 }} synced
+                  </UBadge>
                 </div>
-                <UBadge
-                  :color="dataSyncStatus.workouts ? 'success' : 'neutral'"
-                  variant="subtle"
-                  size="sm"
-                >
-                  {{ dataSyncStatus.workoutCount || 0 }} synced
-                </UBadge>
+                <p v-if="dataSyncStatus.workoutProviders?.length" class="text-xs text-muted mt-1 ml-6">
+                  via {{ dataSyncStatus.workoutProviders.join(', ') }}
+                </p>
               </div>
               
               <!-- Nutrition -->
-              <div class="flex items-center justify-between p-3 rounded-lg bg-gray-50 dark:bg-gray-800/50">
-                <div class="flex items-center gap-2">
-                  <UIcon name="i-heroicons-cake" class="w-4 h-4 text-primary" />
-                  <span class="text-sm font-medium">Nutrition</span>
+              <div class="p-3 rounded-lg bg-gray-50 dark:bg-gray-800/50">
+                <div class="flex items-center justify-between">
+                  <div class="flex items-center gap-2">
+                    <UIcon name="i-heroicons-cake" class="w-4 h-4 text-primary" />
+                    <span class="text-sm font-medium">Nutrition</span>
+                  </div>
+                  <UBadge
+                    :color="dataSyncStatus.nutrition ? 'success' : 'neutral'"
+                    variant="subtle"
+                    size="sm"
+                  >
+                    {{ dataSyncStatus.nutritionCount || 0 }} days
+                  </UBadge>
                 </div>
-                <UBadge
-                  :color="dataSyncStatus.nutrition ? 'success' : 'neutral'"
-                  variant="subtle"
-                  size="sm"
-                >
-                  {{ dataSyncStatus.nutritionCount || 0 }} days
-                </UBadge>
+                <p v-if="dataSyncStatus.nutritionProviders?.length" class="text-xs text-muted mt-1 ml-6">
+                  via {{ dataSyncStatus.nutritionProviders.join(', ') }}
+                </p>
               </div>
               
               <!-- Wellness -->
-              <div class="flex items-center justify-between p-3 rounded-lg bg-gray-50 dark:bg-gray-800/50">
-                <div class="flex items-center gap-2">
-                  <UIcon name="i-heroicons-heart" class="w-4 h-4 text-primary" />
-                  <span class="text-sm font-medium">Wellness</span>
+              <div class="p-3 rounded-lg bg-gray-50 dark:bg-gray-800/50">
+                <div class="flex items-center justify-between">
+                  <div class="flex items-center gap-2">
+                    <UIcon name="i-heroicons-heart" class="w-4 h-4 text-primary" />
+                    <span class="text-sm font-medium">Wellness</span>
+                  </div>
+                  <UBadge
+                    :color="dataSyncStatus.wellness ? 'success' : 'neutral'"
+                    variant="subtle"
+                    size="sm"
+                  >
+                    {{ dataSyncStatus.wellnessCount || 0 }} days
+                  </UBadge>
                 </div>
-                <UBadge
-                  :color="dataSyncStatus.wellness ? 'success' : 'neutral'"
-                  variant="subtle"
-                  size="sm"
-                >
-                  {{ dataSyncStatus.wellnessCount || 0 }} days
-                </UBadge>
+                <p v-if="dataSyncStatus.wellnessProviders?.length" class="text-xs text-muted mt-1 ml-6">
+                  via {{ dataSyncStatus.wellnessProviders.join(', ') }}
+                </p>
               </div>
               
               <!-- Last Sync Info -->
@@ -539,7 +554,10 @@ const dataSyncStatus = computed(() => profileData.value?.dataSyncStatus ?? {
   wellness: false,
   workoutCount: 0,
   nutritionCount: 0,
-  wellnessCount: 0
+  wellnessCount: 0,
+  workoutProviders: [],
+  nutritionProviders: [],
+  wellnessProviders: []
 })
 
 // Calculate last sync time display
