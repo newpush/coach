@@ -10,7 +10,7 @@
         <nav class="hidden md:flex items-center gap-6 text-sm font-medium text-gray-600 dark:text-gray-300">
           <NuxtLink to="#features" class="hover:text-primary transition-colors">Features</NuxtLink>
           <NuxtLink to="#pricing" class="hover:text-primary transition-colors">Pricing</NuxtLink>
-          <NuxtLink to="#testimonials" class="hover:text-primary transition-colors">Stories</NuxtLink>
+          <NuxtLink to="/stories" class="hover:text-primary transition-colors">Stories</NuxtLink>
         </nav>
 
         <div class="flex items-center gap-2">

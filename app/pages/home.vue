@@ -54,12 +54,64 @@
 
     <!-- Integrations Section -->
     <LandingPageSection title="Works with your favorite tools" alternate>
-      <div class="flex flex-wrap justify-center gap-8 md:gap-16 opacity-75 grayscale hover:grayscale-0 transition-all duration-500">
-         <div class="flex items-center gap-2 font-bold text-2xl"><UIcon name="i-lucide-activity" class="text-orange-500" /> Strava</div>
-         <div class="flex items-center gap-2 font-bold text-2xl"><UIcon name="i-lucide-activity" class="text-blue-500" /> Intervals.icu</div>
-         <div class="flex items-center gap-2 font-bold text-2xl"><UIcon name="i-lucide-watch" class="text-blue-600" /> Garmin</div>
-         <div class="flex items-center gap-2 font-bold text-2xl"><UIcon name="i-lucide-watch" class="text-gray-500" /> Whoop</div>
+      <div class="flex flex-wrap justify-center gap-8 md:gap-16">
+        <div class="group flex flex-col items-center gap-3 p-4 rounded-xl hover:bg-white dark:hover:bg-gray-800 transition-all duration-300">
+          <div class="w-16 h-16 rounded-full bg-[#FC4C02]/10 flex items-center justify-center group-hover:scale-110 transition-transform">
+            <UIcon name="i-simple-icons-strava" class="w-8 h-8 text-[#FC4C02]" />
+          </div>
+          <span class="font-bold text-gray-700 dark:text-gray-200">Strava</span>
+        </div>
+
+        <div class="group flex flex-col items-center gap-3 p-4 rounded-xl hover:bg-white dark:hover:bg-gray-800 transition-all duration-300">
+          <div class="w-16 h-16 rounded-full bg-blue-500/10 flex items-center justify-center group-hover:scale-110 transition-transform">
+             <UIcon name="i-heroicons-chart-bar" class="w-8 h-8 text-blue-500" />
+          </div>
+          <span class="font-bold text-gray-700 dark:text-gray-200">Intervals.icu</span>
+        </div>
+
+        <div class="group flex flex-col items-center gap-3 p-4 rounded-xl hover:bg-white dark:hover:bg-gray-800 transition-all duration-300">
+          <div class="w-16 h-16 rounded-full bg-black/5 dark:bg-white/10 flex items-center justify-center group-hover:scale-110 transition-transform">
+             <UIcon name="i-simple-icons-garmin" class="w-8 h-8 text-gray-900 dark:text-white" />
+          </div>
+          <span class="font-bold text-gray-700 dark:text-gray-200">Garmin</span>
+        </div>
+
+        <div class="group flex flex-col items-center gap-3 p-4 rounded-xl hover:bg-white dark:hover:bg-gray-800 transition-all duration-300">
+          <div class="w-16 h-16 rounded-full bg-red-600/10 flex items-center justify-center group-hover:scale-110 transition-transform">
+             <UIcon name="i-heroicons-heart" class="w-8 h-8 text-red-600" />
+          </div>
+          <span class="font-bold text-gray-700 dark:text-gray-200">Whoop</span>
+        </div>
       </div>
+    </LandingPageSection>
+
+    <!-- Testimonials Preview Section -->
+    <LandingPageSection title="Trusted by Athletes" description="See how Coach Watts is changing the game for cyclists everywhere.">
+       <div class="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl mx-auto">
+          <UCard class="bg-gray-50 dark:bg-gray-900 border-none shadow-none">
+             <div class="flex gap-1 text-yellow-400 mb-3">
+                <UIcon name="i-heroicons-star-solid" v-for="i in 5" :key="i" />
+             </div>
+             <p class="text-lg italic mb-4">"I finally broke the 4 W/kg barrier after years of stagnation. The AI insights identified exactly where I was overtraining."</p>
+             <div class="flex items-center gap-3">
+                <UAvatar alt="Sarah J" class="bg-primary/20 text-primary" />
+                <div class="font-bold">Sarah Jenkins <span class="text-gray-500 font-normal text-sm">- Cat 2 Racer</span></div>
+             </div>
+          </UCard>
+          <UCard class="bg-gray-50 dark:bg-gray-900 border-none shadow-none">
+             <div class="flex gap-1 text-yellow-400 mb-3">
+                <UIcon name="i-heroicons-star-solid" v-for="i in 5" :key="i" />
+             </div>
+             <p class="text-lg italic mb-4">"The adaptive planning saved my season when work got crazy. It automatically adjusted my week so I didn't burn out."</p>
+             <div class="flex items-center gap-3">
+                <UAvatar alt="Mike C" class="bg-blue-500/20 text-blue-500" />
+                <div class="font-bold">Mike Chen <span class="text-gray-500 font-normal text-sm">- Gravel Cyclist</span></div>
+             </div>
+          </UCard>
+       </div>
+       <div class="text-center mt-12">
+          <UButton to="/stories" variant="link" color="gray">Read more success stories →</UButton>
+       </div>
     </LandingPageSection>
 
     <!-- Pricing Section -->
