@@ -6,13 +6,43 @@
           <UDashboardSidebarCollapse />
         </template>
       </UDashboardNavbar>
+
+      <UDashboardToolbar>
+        <div class="flex gap-2">
+          <UButton
+            :variant="activeTab === 'profile' ? 'solid' : 'ghost'"
+            :color="activeTab === 'profile' ? 'primary' : 'neutral'"
+            @click="navigateTo('/settings?tab=profile')"
+          >
+            <UIcon name="i-lucide-user" class="w-4 h-4 mr-2" />
+            Profile
+          </UButton>
+          <UButton
+            :variant="activeTab === 'connected-apps' ? 'solid' : 'ghost'"
+            :color="activeTab === 'connected-apps' ? 'primary' : 'neutral'"
+            @click="navigateTo('/settings?tab=connected-apps')"
+          >
+            <UIcon name="i-lucide-plug" class="w-4 h-4 mr-2" />
+            Connected Apps
+          </UButton>
+          <UButton
+            :variant="activeTab === 'danger-zone' ? 'solid' : 'ghost'"
+            :color="activeTab === 'danger-zone' ? 'primary' : 'neutral'"
+            @click="navigateTo('/settings?tab=danger-zone')"
+          >
+            <UIcon name="i-lucide-alert-triangle" class="w-4 h-4 mr-2" />
+            Danger Zone
+          </UButton>
+        </div>
+      </UDashboardToolbar>
     </template>
 
     <template #body>
       <div class="p-6 max-w-4xl mx-auto space-y-6">
-        <UCard>
+        <!-- Profile Tab -->
+        <UCard v-if="activeTab === 'profile'">
           <template #header>
-            <h2 class="text-xl font-semibold">Profile</h2>
+            <h2 class="text-xl font-semibold">Profile Settings</h2>
           </template>
           
           <div class="space-y-4">
@@ -48,8 +78,9 @@
             </UButton>
           </div>
         </UCard>
-        
-        <UCard>
+
+        <!-- Connected Apps Tab -->
+        <UCard v-if="activeTab === 'connected-apps'">
           <template #header>
             <h2 class="text-xl font-semibold">Connected Apps</h2>
           </template>
@@ -207,8 +238,9 @@
             </div>
           </div>
         </UCard>
-        
-        <UCard>
+
+        <!-- Danger Zone Tab -->
+        <UCard v-if="activeTab === 'danger-zone'">
           <template #header>
             <h2 class="text-xl font-semibold text-error">Danger Zone</h2>
           </template>
@@ -233,9 +265,20 @@ const { data } = useAuth()
 const user = computed(() => data.value?.user)
 const toast = useToast()
 const router = useRouter()
+const route = useRoute()
 
 definePageMeta({
   middleware: 'auth'
+})
+
+// Tab navigation - initialize from URL query parameter or default to 'profile'
+const activeTab = ref<string>(route.query.tab as string || 'profile')
+
+// Watch for route query changes to update active tab
+watch(() => route.query.tab, (newTab) => {
+  if (newTab && typeof newTab === 'string') {
+    activeTab.value = newTab
+  }
 })
 
 // Integration status - use lazy to avoid SSR issues
@@ -367,7 +410,10 @@ const disconnectIntegration = async (provider: string) => {
 
 // Handle OAuth callback messages
 onMounted(() => {
-  const route = useRoute()
+  // Switch to Connected Apps tab if coming from OAuth
+  if (route.query.whoop_success || route.query.strava_success || route.query.connected === 'yazio') {
+    navigateTo('/settings?tab=connected-apps', { replace: true })
+  }
   
   if (route.query.whoop_success) {
     toast.add({

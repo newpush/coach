@@ -3,10 +3,11 @@ import type { NavigationMenuItem } from '@nuxt/ui'
 
 const { data, signOut } = useAuth()
 const user = computed(() => data.value?.user)
+const route = useRoute()
 
 const open = ref(false)
 
-const links = [[{
+const links = computed<NavigationMenuItem[][]>(() => [[{
   label: 'Dashboard',
   icon: 'i-lucide-layout-dashboard',
   to: '/dashboard',
@@ -68,13 +69,38 @@ const links = [[{
   to: '/settings',
   onSelect: () => {
     open.value = false
-  }
-}]] satisfies NavigationMenuItem[][]
+  },
+  children: [{
+    label: 'Profile',
+    icon: 'i-lucide-user',
+    to: '/settings?tab=profile',
+    active: route.path === '/settings' && route.query.tab === 'profile',
+    onSelect: () => {
+      open.value = false
+    }
+  }, {
+    label: 'Connected Apps',
+    icon: 'i-lucide-plug',
+    to: '/settings?tab=connected-apps',
+    active: route.path === '/settings' && route.query.tab === 'connected-apps',
+    onSelect: () => {
+      open.value = false
+    }
+  }, {
+    label: 'Danger Zone',
+    icon: 'i-lucide-alert-triangle',
+    to: '/settings?tab=danger-zone',
+    active: route.path === '/settings' && route.query.tab === 'danger-zone',
+    onSelect: () => {
+      open.value = false
+    }
+  }]
+}]])
 
 const groups = computed(() => [{
   id: 'links',
   label: 'Go to',
-  items: links.flat()
+  items: links.value.flat()
 }])
 </script>
 
