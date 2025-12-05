@@ -94,14 +94,66 @@
       <!-- Surges Detection -->
       <div v-if="streams.surges && streams.surges.length > 0">
         <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-2">Detected Surges</h3>
-        <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">Sudden pace increases detected during the activity</p>
-        <div class="space-y-2">
-          <div v-for="(surge, index) in streams.surges" :key="index"
-               class="flex justify-between items-center p-3 bg-yellow-50 dark:bg-yellow-900/20 border-l-4 border-yellow-500 rounded">
-            <span class="font-medium text-gray-700 dark:text-gray-300">{{ formatTime(surge.time) }}</span>
-            <span class="font-semibold text-yellow-700 dark:text-yellow-400">
-              +{{ surge.increase.toFixed(2) }} m/s
-            </span>
+        <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">
+          {{ streams.surges.length }} sudden pace increase{{ streams.surges.length > 1 ? 's' : '' }} detected
+        </p>
+        
+        <!-- Visual Timeline -->
+        <div class="relative h-16 bg-gray-100 dark:bg-gray-700 rounded-lg mb-4 overflow-hidden">
+          <!-- Background gradient -->
+          <div class="absolute inset-0 bg-gradient-to-r from-green-100 via-yellow-100 to-green-100 dark:from-green-900/30 dark:via-yellow-900/30 dark:to-green-900/30"></div>
+          
+          <!-- Surge markers -->
+          <div
+            v-for="(surge, index) in streams.surges"
+            :key="index"
+            class="absolute top-0 bottom-0 w-1 bg-yellow-500 hover:w-2 transition-all cursor-pointer"
+            :style="{ left: getSurgePosition(surge.time) + '%' }"
+            :title="`${formatTime(surge.time)} - +${surge.increase.toFixed(2)} m/s`"
+          >
+            <div class="absolute -top-1 left-1/2 transform -translate-x-1/2 w-3 h-3 bg-yellow-500 rounded-full border-2 border-white dark:border-gray-800"></div>
+          </div>
+          
+          <!-- Time labels -->
+          <div class="absolute inset-x-0 bottom-1 flex justify-between px-2 text-xs text-gray-600 dark:text-gray-400">
+            <span>Start</span>
+            <span>End</span>
+          </div>
+        </div>
+        
+        <!-- Compact Summary Grid -->
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-2">
+          <div
+            v-for="(surge, index) in streams.surges.slice(0, 8)"
+            :key="index"
+            class="p-2 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded text-sm"
+          >
+            <div class="font-medium text-gray-700 dark:text-gray-300">{{ formatTime(surge.time) }}</div>
+            <div class="font-semibold text-yellow-700 dark:text-yellow-400 text-xs">
+              +{{ surge.increase.toFixed(1) }} m/s
+            </div>
+          </div>
+        </div>
+        
+        <!-- Show more button if there are many surges -->
+        <button
+          v-if="streams.surges.length > 8 && !showAllSurges"
+          @click="showAllSurges = true"
+          class="mt-3 text-sm text-primary-600 dark:text-primary-400 hover:underline"
+        >
+          Show {{ streams.surges.length - 8 }} more surge{{ streams.surges.length - 8 > 1 ? 's' : '' }}
+        </button>
+        
+        <div v-if="showAllSurges && streams.surges.length > 8" class="grid grid-cols-2 md:grid-cols-4 gap-2 mt-2">
+          <div
+            v-for="(surge, index) in streams.surges.slice(8)"
+            :key="index + 8"
+            class="p-2 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded text-sm"
+          >
+            <div class="font-medium text-gray-700 dark:text-gray-300">{{ formatTime(surge.time) }}</div>
+            <div class="font-semibold text-yellow-700 dark:text-yellow-400 text-xs">
+              +{{ surge.increase.toFixed(1) }} m/s
+            </div>
           </div>
         </div>
       </div>
@@ -127,6 +179,15 @@ const error = computed(() => {
   }
   return null
 })
+
+const showAllSurges = ref(false)
+
+// Calculate surge position as percentage of total workout time
+function getSurgePosition(surgeTime: number): number {
+  if (!streams.value?.time || streams.value.time.length === 0) return 0
+  const totalTime = streams.value.time[streams.value.time.length - 1]
+  return (surgeTime / totalTime) * 100
+}
 
 function formatPace(paceMinPerKm: number | null | undefined): string {
   if (!paceMinPerKm) return 'N/A'

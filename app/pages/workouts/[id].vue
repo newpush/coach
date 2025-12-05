@@ -13,6 +13,62 @@
           </UButton>
         </template>
       </UDashboardNavbar>
+
+      <UDashboardToolbar>
+        <div class="flex gap-2 overflow-x-auto">
+          <UButton
+            variant="ghost"
+            color="neutral"
+            @click="scrollToSection('header')"
+          >
+            <UIcon name="i-lucide-file-text" class="w-4 h-4 mr-2" />
+            Overview
+          </UButton>
+          <UButton
+            v-if="workout?.overallScore || workout?.technicalScore"
+            variant="ghost"
+            color="neutral"
+            @click="scrollToSection('scores')"
+          >
+            <UIcon name="i-lucide-award" class="w-4 h-4 mr-2" />
+            Scores
+          </UButton>
+          <UButton
+            variant="ghost"
+            color="neutral"
+            @click="scrollToSection('analysis')"
+          >
+            <UIcon name="i-lucide-sparkles" class="w-4 h-4 mr-2" />
+            AI Analysis
+          </UButton>
+          <UButton
+            v-if="shouldShowPacing(workout)"
+            variant="ghost"
+            color="neutral"
+            @click="scrollToSection('pacing')"
+          >
+            <UIcon name="i-lucide-activity" class="w-4 h-4 mr-2" />
+            Pacing
+          </UButton>
+          <UButton
+            v-if="shouldShowPacing(workout)"
+            variant="ghost"
+            color="neutral"
+            @click="scrollToSection('timeline')"
+          >
+            <UIcon name="i-lucide-chart-line" class="w-4 h-4 mr-2" />
+            Timeline
+          </UButton>
+          <UButton
+            variant="ghost"
+            color="neutral"
+            @click="scrollToSection('metrics')"
+          >
+            <UIcon name="i-lucide-bar-chart-3" class="w-4 h-4 mr-2" />
+            Metrics
+          </UButton>
+        </div>
+      </UDashboardToolbar>
     </template>
 
     <template #body>
@@ -32,6 +88,7 @@
 
         <div v-else-if="workout" class="space-y-6">
           <!-- Header Card -->
+          <div id="header" class="scroll-mt-20"></div>
           <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
             <div class="flex items-start justify-between mb-4">
               <div class="flex-1">
@@ -64,12 +121,49 @@
               </div>
             </div>
 
+            <!-- Key Stats Grid -->
+            <div class="mt-4 grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div v-if="workout.trainingLoad" class="rounded-lg p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
+                <div class="text-xs text-blue-600 dark:text-blue-400 mb-1">Training Load</div>
+                <div class="text-xl font-bold text-blue-900 dark:text-blue-100">{{ Math.round(workout.trainingLoad) }}</div>
+              </div>
+              <div v-if="workout.tss" class="rounded-lg p-3 bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800">
+                <div class="text-xs text-purple-600 dark:text-purple-400 mb-1">TSS</div>
+                <div class="text-xl font-bold text-purple-900 dark:text-purple-100">{{ Math.round(workout.tss) }}</div>
+              </div>
+              <div v-if="workout.intensity" class="rounded-lg p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800">
+                <div class="text-xs text-red-600 dark:text-red-400 mb-1">Intensity</div>
+                <div class="text-xl font-bold text-red-900 dark:text-red-100">{{ workout.intensity.toFixed(2) }}</div>
+              </div>
+              <div v-if="workout.averageHr" class="rounded-lg p-3 bg-pink-50 dark:bg-pink-900/20 border border-pink-200 dark:border-pink-800">
+                <div class="text-xs text-pink-600 dark:text-pink-400 mb-1">Avg HR</div>
+                <div class="text-xl font-bold text-pink-900 dark:text-pink-100">{{ workout.averageHr }} <span class="text-sm">bpm</span></div>
+              </div>
+              <div v-if="workout.averageWatts" class="rounded-lg p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800">
+                <div class="text-xs text-yellow-600 dark:text-yellow-400 mb-1">Avg Power</div>
+                <div class="text-xl font-bold text-yellow-900 dark:text-yellow-100">{{ workout.averageWatts }} <span class="text-sm">W</span></div>
+              </div>
+              <div v-if="workout.averageSpeed" class="rounded-lg p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800">
+                <div class="text-xs text-green-600 dark:text-green-400 mb-1">Avg Speed</div>
+                <div class="text-xl font-bold text-green-900 dark:text-green-100">{{ workout.averageSpeed.toFixed(1) }} <span class="text-sm">km/h</span></div>
+              </div>
+              <div v-if="workout.elevationGain" class="rounded-lg p-3 bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-800">
+                <div class="text-xs text-indigo-600 dark:text-indigo-400 mb-1">Elevation</div>
+                <div class="text-xl font-bold text-indigo-900 dark:text-indigo-100">{{ workout.elevationGain }} <span class="text-sm">m</span></div>
+              </div>
+              <div v-if="workout.kilojoules" class="rounded-lg p-3 bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800">
+                <div class="text-xs text-orange-600 dark:text-orange-400 mb-1">Energy</div>
+                <div class="text-xl font-bold text-orange-900 dark:text-orange-100">{{ Math.round(workout.kilojoules / 1000) }}k <span class="text-sm">kJ</span></div>
+              </div>
+            </div>
+
             <div v-if="workout.description" class="mt-4 p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
               <p class="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap">{{ workout.description }}</p>
             </div>
           </div>
 
           <!-- Performance Scores Section -->
+          <div id="scores" class="scroll-mt-20"></div>
           <div v-if="workout.overallScore || workout.technicalScore || workout.effortScore || workout.pacingScore || workout.executionScore" class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
             <h2 class="text-xl font-bold text-gray-900 dark:text-white mb-4">Performance Scores</h2>
             <div class="grid grid-cols-2 md:grid-cols-5 gap-4">
@@ -106,7 +200,16 @@
             </div>
           </div>
 
+          <!-- Personal Notes Section -->
+          <NotesEditor
+            v-model="workout.notes"
+            :notes-updated-at="workout.notesUpdatedAt"
+            :api-endpoint="`/api/workouts/${workout.id}/notes`"
+            @update:notesUpdatedAt="workout.notesUpdatedAt = $event"
+          />
+
           <!-- AI Analysis Section -->
+          <div id="analysis" class="scroll-mt-20"></div>
           <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
             <div class="flex items-center justify-between mb-4">
               <h2 class="text-xl font-bold text-gray-900 dark:text-white">AI Workout Analysis</h2>
@@ -268,189 +371,44 @@
           </div>
 
           <!-- Pacing Analysis Section (for Run/Ride/Walk/Hike activities) -->
+          <div id="pacing" class="scroll-mt-20"></div>
           <div v-if="shouldShowPacing(workout)" class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
             <h2 class="text-xl font-bold text-gray-900 dark:text-white mb-4">Pacing Analysis</h2>
             <PacingAnalysis :workout-id="workout.id" />
           </div>
 
           <!-- Timeline Visualization (for Run/Ride/Walk/Hike activities) -->
+          <div id="timeline" class="scroll-mt-20"></div>
           <div v-if="shouldShowPacing(workout)" class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
             <h2 class="text-xl font-bold text-gray-900 dark:text-white mb-4">Workout Timeline</h2>
             <WorkoutTimeline :workout-id="workout.id" />
           </div>
 
           <!-- Tabs for different data sections -->
+          <div id="metrics" class="scroll-mt-20"></div>
           <UTabs :items="tabs" v-model="selectedTab" />
           
           <!-- Tab Content -->
-          <div v-show="selectedTab === 0" class="space-y-6 py-4">
-                <!-- Key Metrics Grid -->
-                <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <div v-if="workout.trainingLoad" class="rounded-lg p-4 shadow bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
-                    <div class="flex items-center justify-between mb-2">
-                      <span class="i-heroicons-bolt w-5 h-5"></span>
-                    </div>
-                    <div class="text-2xl font-bold">{{ Math.round(workout.trainingLoad) }}</div>
-                    <div class="text-sm opacity-80">Training Load</div>
-                  </div>
-                  <div v-if="workout.tss" class="rounded-lg p-4 shadow bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200">
-                    <div class="flex items-center justify-between mb-2">
-                      <span class="i-heroicons-chart-bar w-5 h-5"></span>
-                    </div>
-                    <div class="text-2xl font-bold">{{ Math.round(workout.tss) }}</div>
-                    <div class="text-sm opacity-80">TSS</div>
-                  </div>
-                  <div v-if="workout.intensity" class="rounded-lg p-4 shadow bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200">
-                    <div class="flex items-center justify-between mb-2">
-                      <span class="i-heroicons-fire w-5 h-5"></span>
-                    </div>
-                    <div class="text-2xl font-bold">{{ workout.intensity.toFixed(2) }}</div>
-                    <div class="text-sm opacity-80">Intensity</div>
-                  </div>
-                  <div v-if="workout.kilojoules" class="rounded-lg p-4 shadow bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200">
-                    <div class="flex items-center justify-between mb-2">
-                      <span class="i-heroicons-lightning-bolt w-5 h-5"></span>
-                    </div>
-                    <div class="text-2xl font-bold">{{ Math.round(workout.kilojoules / 1000) }}k</div>
-                    <div class="text-sm opacity-80">Kilojoules</div>
-                  </div>
-                </div>
-
-                <!-- Performance Metrics -->
-                <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-                  <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Performance Metrics</h3>
-                  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div v-if="workout.averageWatts" class="flex justify-between py-2 border-b border-gray-100 dark:border-gray-700">
-                      <span class="text-sm text-gray-600 dark:text-gray-400">Average Power</span>
-                      <span class="text-sm font-medium text-gray-900 dark:text-white">{{ workout.averageWatts }}W</span>
-                    </div>
-                    <div v-if="workout.maxWatts" class="flex justify-between py-2 border-b border-gray-100 dark:border-gray-700">
-                      <span class="text-sm text-gray-600 dark:text-gray-400">Max Power</span>
-                      <span class="text-sm font-medium text-gray-900 dark:text-white">{{ workout.maxWatts }}W</span>
-                    </div>
-                    <div v-if="workout.normalizedPower" class="flex justify-between py-2 border-b border-gray-100 dark:border-gray-700">
-                      <span class="text-sm text-gray-600 dark:text-gray-400">Normalized Power</span>
-                      <span class="text-sm font-medium text-gray-900 dark:text-white">{{ workout.normalizedPower }}W</span>
-                    </div>
-                    <div v-if="workout.weightedAvgWatts" class="flex justify-between py-2 border-b border-gray-100 dark:border-gray-700">
-                      <span class="text-sm text-gray-600 dark:text-gray-400">Weighted Avg Power</span>
-                      <span class="text-sm font-medium text-gray-900 dark:text-white">{{ workout.weightedAvgWatts }}W</span>
-                    </div>
-                    <div v-if="workout.averageHr" class="flex justify-between py-2 border-b border-gray-100 dark:border-gray-700">
-                      <span class="text-sm text-gray-600 dark:text-gray-400">Average HR</span>
-                      <span class="text-sm font-medium text-gray-900 dark:text-white">{{ workout.averageHr }} bpm</span>
-                    </div>
-                    <div v-if="workout.maxHr" class="flex justify-between py-2 border-b border-gray-100 dark:border-gray-700">
-                      <span class="text-sm text-gray-600 dark:text-gray-400">Max HR</span>
-                      <span class="text-sm font-medium text-gray-900 dark:text-white">{{ workout.maxHr }} bpm</span>
-                    </div>
-                    <div v-if="workout.averageCadence" class="flex justify-between py-2 border-b border-gray-100 dark:border-gray-700">
-                      <span class="text-sm text-gray-600 dark:text-gray-400">Average Cadence</span>
-                      <span class="text-sm font-medium text-gray-900 dark:text-white">{{ workout.averageCadence }} rpm</span>
-                    </div>
-                    <div v-if="workout.maxCadence" class="flex justify-between py-2 border-b border-gray-100 dark:border-gray-700">
-                      <span class="text-sm text-gray-600 dark:text-gray-400">Max Cadence</span>
-                      <span class="text-sm font-medium text-gray-900 dark:text-white">{{ workout.maxCadence }} rpm</span>
-                    </div>
-                    <div v-if="workout.averageSpeed" class="flex justify-between py-2 border-b border-gray-100 dark:border-gray-700">
-                      <span class="text-sm text-gray-600 dark:text-gray-400">Average Speed</span>
-                      <span class="text-sm font-medium text-gray-900 dark:text-white">{{ workout.averageSpeed.toFixed(1) }} km/h</span>
-                    </div>
-                    <div v-if="workout.elevationGain" class="flex justify-between py-2 border-b border-gray-100 dark:border-gray-700">
-                      <span class="text-sm text-gray-600 dark:text-gray-400">Elevation Gain</span>
-                      <span class="text-sm font-medium text-gray-900 dark:text-white">{{ workout.elevationGain }}m</span>
+          <div v-show="selectedTab === 0" class="py-4">
+                <!-- All Metrics in Compact Grid -->
+                <div v-if="availableMetrics.length > 0" class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+                  <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Detailed Metrics</h3>
+                  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-3">
+                    <div
+                      v-for="metric in availableMetrics"
+                      :key="metric.key"
+                      class="flex justify-between py-2 border-b border-gray-100 dark:border-gray-700"
+                    >
+                      <span class="text-sm text-gray-600 dark:text-gray-400">{{ metric.label }}</span>
+                      <span class="text-sm font-medium text-gray-900 dark:text-white">{{ metric.value }}</span>
                     </div>
                   </div>
                 </div>
-
-                <!-- Advanced Metrics -->
-                <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-                  <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Advanced Metrics</h3>
-                  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div v-if="workout.variabilityIndex" class="flex justify-between py-2 border-b border-gray-100 dark:border-gray-700">
-                      <span class="text-sm text-gray-600 dark:text-gray-400">Variability Index</span>
-                      <span class="text-sm font-medium text-gray-900 dark:text-white">{{ workout.variabilityIndex.toFixed(3) }}</span>
-                    </div>
-                    <div v-if="workout.powerHrRatio" class="flex justify-between py-2 border-b border-gray-100 dark:border-gray-700">
-                      <span class="text-sm text-gray-600 dark:text-gray-400">Power/HR Ratio</span>
-                      <span class="text-sm font-medium text-gray-900 dark:text-white">{{ workout.powerHrRatio.toFixed(2) }}</span>
-                    </div>
-                    <div v-if="workout.efficiencyFactor" class="flex justify-between py-2 border-b border-gray-100 dark:border-gray-700">
-                      <span class="text-sm text-gray-600 dark:text-gray-400">Efficiency Factor</span>
-                      <span class="text-sm font-medium text-gray-900 dark:text-white">{{ workout.efficiencyFactor.toFixed(2) }}</span>
-                    </div>
-                    <div v-if="workout.decoupling" class="flex justify-between py-2 border-b border-gray-100 dark:border-gray-700">
-                      <span class="text-sm text-gray-600 dark:text-gray-400">Decoupling</span>
-                      <span class="text-sm font-medium text-gray-900 dark:text-white">{{ (workout.decoupling * 100).toFixed(1) }}%</span>
-                    </div>
-                    <div v-if="workout.polarizationIndex" class="flex justify-between py-2 border-b border-gray-100 dark:border-gray-700">
-                      <span class="text-sm text-gray-600 dark:text-gray-400">Polarization Index</span>
-                      <span class="text-sm font-medium text-gray-900 dark:text-white">{{ workout.polarizationIndex.toFixed(2) }}</span>
-                    </div>
-                    <div v-if="workout.lrBalance" class="flex justify-between py-2 border-b border-gray-100 dark:border-gray-700">
-                      <span class="text-sm text-gray-600 dark:text-gray-400">L/R Balance</span>
-                      <span class="text-sm font-medium text-gray-900 dark:text-white">{{ workout.lrBalance.toFixed(1) }}%</span>
-                    </div>
-                  </div>
+                
+                <div v-else class="bg-white dark:bg-gray-800 rounded-lg shadow p-6 text-center text-gray-500 dark:text-gray-400">
+                  <p class="text-sm">No additional metrics available for this workout</p>
                 </div>
-
-                <!-- Training Status -->
-                <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-                  <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Training Status</h3>
-                  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div v-if="workout.ctl" class="flex justify-between py-2 border-b border-gray-100 dark:border-gray-700">
-                      <span class="text-sm text-gray-600 dark:text-gray-400">CTL (Fitness)</span>
-                      <span class="text-sm font-medium text-gray-900 dark:text-white">{{ workout.ctl.toFixed(1) }}</span>
-                    </div>
-                    <div v-if="workout.atl" class="flex justify-between py-2 border-b border-gray-100 dark:border-gray-700">
-                      <span class="text-sm text-gray-600 dark:text-gray-400">ATL (Fatigue)</span>
-                      <span class="text-sm font-medium text-gray-900 dark:text-white">{{ workout.atl.toFixed(1) }}</span>
-                    </div>
-                    <div v-if="workout.ftp" class="flex justify-between py-2 border-b border-gray-100 dark:border-gray-700">
-                      <span class="text-sm text-gray-600 dark:text-gray-400">FTP at Time</span>
-                      <span class="text-sm font-medium text-gray-900 dark:text-white">{{ workout.ftp }}W</span>
-                    </div>
-                  </div>
-                </div>
-
-                <!-- Subjective Metrics -->
-                <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-                  <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Subjective Metrics</h3>
-                  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div v-if="workout.rpe" class="flex justify-between py-2 border-b border-gray-100 dark:border-gray-700">
-                      <span class="text-sm text-gray-600 dark:text-gray-400">RPE</span>
-                      <span class="text-sm font-medium text-gray-900 dark:text-white">{{ workout.rpe }}/10</span>
-                    </div>
-                    <div v-if="workout.sessionRpe" class="flex justify-between py-2 border-b border-gray-100 dark:border-gray-700">
-                      <span class="text-sm text-gray-600 dark:text-gray-400">Session RPE</span>
-                      <span class="text-sm font-medium text-gray-900 dark:text-white">{{ workout.sessionRpe }}/10</span>
-                    </div>
-                    <div v-if="workout.feel" class="flex justify-between py-2 border-b border-gray-100 dark:border-gray-700">
-                      <span class="text-sm text-gray-600 dark:text-gray-400">Feel</span>
-                      <span class="text-sm font-medium text-gray-900 dark:text-white">{{ workout.feel }}/10</span>
-                    </div>
-                    <div v-if="workout.trimp" class="flex justify-between py-2 border-b border-gray-100 dark:border-gray-700">
-                      <span class="text-sm text-gray-600 dark:text-gray-400">TRIMP</span>
-                      <span class="text-sm font-medium text-gray-900 dark:text-white">{{ workout.trimp }}</span>
-                    </div>
-                  </div>
-                </div>
-
-                <!-- Environment & Equipment -->
-                <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-                  <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Environment & Equipment</h3>
-                  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div v-if="workout.avgTemp !== null && workout.avgTemp !== undefined" class="flex justify-between py-2 border-b border-gray-100 dark:border-gray-700">
-                      <span class="text-sm text-gray-600 dark:text-gray-400">Avg Temperature</span>
-                      <span class="text-sm font-medium text-gray-900 dark:text-white">{{ workout.avgTemp.toFixed(1) }}°C</span>
-                    </div>
-                    <div v-if="workout.trainer !== null && workout.trainer !== undefined" class="flex justify-between py-2 border-b border-gray-100 dark:border-gray-700">
-                      <span class="text-sm text-gray-600 dark:text-gray-400">Indoor Trainer</span>
-                      <span class="text-sm font-medium text-gray-900 dark:text-white">{{ workout.trainer ? 'Yes' : 'No' }}</span>
-                    </div>
-                  </div>
-               </div>
-         </div>
+          </div>
 
          <!-- JSON Data Tab Content -->
           <div v-show="selectedTab === 1" class="py-4">
@@ -519,6 +477,51 @@ const selectedTab = ref(0)
 const renderedAnalysis = computed(() => {
   if (!workout.value?.aiAnalysis) return ''
   return marked(workout.value.aiAnalysis)
+})
+
+// Available metrics computed property - only shows non-null values
+const availableMetrics = computed(() => {
+  if (!workout.value) return []
+  
+  const metrics: Array<{ key: string; label: string; value: string }> = []
+  
+  // Power metrics
+  if (workout.value.averageWatts) metrics.push({ key: 'avgPower', label: 'Average Power', value: `${workout.value.averageWatts}W` })
+  if (workout.value.maxWatts) metrics.push({ key: 'maxPower', label: 'Max Power', value: `${workout.value.maxWatts}W` })
+  if (workout.value.normalizedPower) metrics.push({ key: 'np', label: 'Normalized Power', value: `${workout.value.normalizedPower}W` })
+  if (workout.value.weightedAvgWatts) metrics.push({ key: 'wap', label: 'Weighted Avg Power', value: `${workout.value.weightedAvgWatts}W` })
+  
+  // Heart rate metrics
+  if (workout.value.maxHr) metrics.push({ key: 'maxHr', label: 'Max HR', value: `${workout.value.maxHr} bpm` })
+  
+  // Cadence metrics
+  if (workout.value.averageCadence) metrics.push({ key: 'avgCad', label: 'Average Cadence', value: `${workout.value.averageCadence} rpm` })
+  if (workout.value.maxCadence) metrics.push({ key: 'maxCad', label: 'Max Cadence', value: `${workout.value.maxCadence} rpm` })
+  
+  // Advanced metrics
+  if (workout.value.variabilityIndex) metrics.push({ key: 'vi', label: 'Variability Index', value: workout.value.variabilityIndex.toFixed(3) })
+  if (workout.value.powerHrRatio) metrics.push({ key: 'phr', label: 'Power/HR Ratio', value: workout.value.powerHrRatio.toFixed(2) })
+  if (workout.value.efficiencyFactor) metrics.push({ key: 'ef', label: 'Efficiency Factor', value: workout.value.efficiencyFactor.toFixed(2) })
+  if (workout.value.decoupling) metrics.push({ key: 'dec', label: 'Decoupling', value: `${(workout.value.decoupling * 100).toFixed(1)}%` })
+  if (workout.value.polarizationIndex) metrics.push({ key: 'pi', label: 'Polarization Index', value: workout.value.polarizationIndex.toFixed(2) })
+  if (workout.value.lrBalance) metrics.push({ key: 'lr', label: 'L/R Balance', value: `${workout.value.lrBalance.toFixed(1)}%` })
+  
+  // Training status
+  if (workout.value.ctl) metrics.push({ key: 'ctl', label: 'CTL (Fitness)', value: workout.value.ctl.toFixed(1) })
+  if (workout.value.atl) metrics.push({ key: 'atl', label: 'ATL (Fatigue)', value: workout.value.atl.toFixed(1) })
+  if (workout.value.ftp) metrics.push({ key: 'ftp', label: 'FTP at Time', value: `${workout.value.ftp}W` })
+  
+  // Subjective metrics
+  if (workout.value.rpe) metrics.push({ key: 'rpe', label: 'RPE', value: `${workout.value.rpe}/10` })
+  if (workout.value.sessionRpe) metrics.push({ key: 'srpe', label: 'Session RPE', value: `${workout.value.sessionRpe}/10` })
+  if (workout.value.feel) metrics.push({ key: 'feel', label: 'Feel', value: `${workout.value.feel}/10` })
+  if (workout.value.trimp) metrics.push({ key: 'trimp', label: 'TRIMP', value: `${workout.value.trimp}` })
+  
+  // Environment
+  if (workout.value.avgTemp !== null && workout.value.avgTemp !== undefined) metrics.push({ key: 'temp', label: 'Avg Temperature', value: `${workout.value.avgTemp.toFixed(1)}°C` })
+  if (workout.value.trainer !== null && workout.value.trainer !== undefined) metrics.push({ key: 'trainer', label: 'Indoor Trainer', value: workout.value.trainer ? 'Yes' : 'No' })
+  
+  return metrics
 })
 
 // Fetch workout data
@@ -774,6 +777,14 @@ function shouldShowPacing(workout: any) {
   const supportedTypes = ['Run', 'Ride', 'VirtualRide', 'Walk', 'Hike']
   const supportedSources = ['strava', 'intervals']
   return supportedSources.includes(workout.source) && workout.type && supportedTypes.includes(workout.type)
+}
+
+// Scroll to section
+function scrollToSection(sectionId: string) {
+  const element = document.getElementById(sectionId)
+  if (element) {
+    element.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
 }
 
 // Load data on mount

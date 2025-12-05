@@ -191,6 +191,14 @@
             </div>
           </div>
 
+          <!-- Personal Notes Section -->
+          <NotesEditor
+            v-model="nutrition.notes"
+            :notes-updated-at="nutrition.notesUpdatedAt"
+            :api-endpoint="`/api/nutrition/${nutrition.id}/notes`"
+            @update:notesUpdatedAt="nutrition.notesUpdatedAt = $event"
+          />
+
           <!-- AI Analysis Section -->
           <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
             <div class="flex items-center justify-between mb-4">

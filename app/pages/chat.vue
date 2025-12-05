@@ -1,84 +1,106 @@
 <script setup lang="ts">
-import { useChat } from '@ai-sdk/vue'
+import { onMounted, ref } from 'vue'
 
 definePageMeta({
   middleware: 'auth'
 })
 
-const { messages, input, handleSubmit, status, stop, reload } = useChat({
-  api: '/api/chat/stream'
+const isClient = ref(false)
+const colorMode = useColorMode()
+const theme = computed(() => colorMode.value === 'dark' ? 'dark' : 'light')
+
+onMounted(async () => {
+  if (process.client) {
+    const { register } = await import('vue-advanced-chat')
+    register()
+    isClient.value = true
+  }
 })
 
-const copied = ref(false)
-const clipboard = useClipboard()
+const currentUserId = 'user1'
+const roomId = 'room1'
+const rooms = ref([
+  {
+    roomId: 'room1',
+    roomName: 'AI Coach',
+    avatar: '/images/logo.svg',
+    users: [
+      { _id: 'user1', username: 'Me' },
+      { _id: 'ai_coach', username: 'Coach Watts' }
+    ]
+  }
+])
+const messages = ref([])
+const messagesLoaded = ref(true)
 
-function copy(e: MouseEvent, message: any) {
-  const text = message.content
-  clipboard.copy(text)
-  copied.value = true
-  setTimeout(() => {
-    copied.value = false
-  }, 2000)
+function fetchMessages({ room, options = {} }: any) {
+  // Simulating message fetch
+  if (options.reset) {
+    messages.value = []
+  }
+}
+
+function sendMessage({ content, roomId, files, replyMessage }: any) {
+  const message = {
+    _id: Date.now().toString(),
+    content: content,
+    senderId: currentUserId,
+    timestamp: new Date().toString().substring(16, 21),
+    date: new Date().toDateString()
+  }
+  
+  messages.value = [...messages.value, message]
 }
 </script>
 
 <template>
-  <UDashboardPanel id="chat" class="relative">
+
+  <UDashboardPanel id="chat" :ui="{ body: 'p-0' }">
+
     <template #header>
-      <UDashboardNavbar>
-        <template #left>
-          <h1 class="text-xl font-semibold">AI Coach Chat</h1>
-        </template>
-      </UDashboardNavbar>
+
+      <UDashboardNavbar title="Chat with Coach Watts" />
+
     </template>
+
+    
 
     <template #body>
-      <div class="flex flex-col h-full w-full max-w-4xl mx-auto">
-        <UChatMessages
-          :messages="messages"
-          :status="status === 'streaming' ? 'streaming' : 'ready'"
-          :assistant="status !== 'streaming' ? { actions: [{ label: 'Copy', icon: copied ? 'i-lucide-copy-check' : 'i-lucide-copy', onClick: copy }] } : { actions: [] }"
-          class="flex-1 p-4"
-        >
-          <template #content="{ message }">
-            <div v-if="message.parts && message.parts.length > 0">
-              <template v-for="(part, index) in message.parts" :key="index">
-                <Reasoning
-                  v-if="part.type === 'reasoning'"
-                  :text="part.text"
-                  :is-streaming="part.state !== 'done'"
-                />
-                <MDC
-                  v-else-if="part.type === 'text'"
-                  :value="part.text"
-                  class="prose dark:prose-invert max-w-none"
-                />
-              </template>
-            </div>
-            <div v-else>
-               <MDC :value="message.content" class="prose dark:prose-invert max-w-none" />
-            </div>
-          </template>
-        </UChatMessages>
 
-        <div class="p-4 border-t border-gray-200 dark:border-gray-800">
-          <UChatPrompt
-            v-model="input"
-            variant="subtle"
-            class="[view-transition-name:chat-prompt]"
-            @submit="handleSubmit"
-          >
-            <template #footer>
-               <UChatPromptSubmit
-                :status="status"
-                color="neutral"
-                @stop="stop"
-                @reload="reload"
-              />
-            </template>
-          </UChatPrompt>
-        </div>
+      <div class="h-full">
+
+        <ClientOnly>
+
+          <vue-advanced-chat
+
+            v-if="isClient"
+
+            height="100%"
+
+            :current-user-id="currentUserId"
+
+            :rooms="JSON.stringify(rooms)"
+
+            :messages="JSON.stringify(messages)"
+
+            :room-id="roomId"
+
+            :messages-loaded="messagesLoaded"
+
+            :theme="theme"
+
+            @send-message="sendMessage($event.detail[0])"
+
+            @fetch-messages="fetchMessages($event.detail[0])"
+
+          />
+
+        </ClientOnly>
+
       </div>
+
     </template>
+
   </UDashboardPanel>
+
 </template>
