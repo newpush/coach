@@ -200,17 +200,13 @@ Always provide specific, data-driven insights when possible. Use the tools to ac
 
   const aiResponseText = response.text()
 
-  // 10. Save AI Response with metadata about tool usage
+  // 10. Save AI Response
   const aiMessage = await prisma.chatMessage.create({
     data: {
       content: aiResponseText,
       roomId,
       senderId: 'ai_agent',
-      seen: {},
-      metadata: toolCallsUsed.length > 0 ? {
-        toolsUsed: toolCallsUsed,
-        toolCallCount: toolCallsUsed.length
-      } : undefined
+      seen: {}
     }
   })
 
