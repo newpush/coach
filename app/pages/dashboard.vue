@@ -21,423 +21,426 @@
     </template>
 
     <template #body>
-      <div class="p-6 space-y-6">
-        <div>
-          <h2 class="text-2xl font-bold">Welcome to Coach Watts!</h2>
-          <p class="mt-2 text-muted">Your AI-powered cycling coach is ready to help you optimize your training.</p>
-        </div>
-      
-        <!-- Row 1: Athlete Profile / Today's Training / Performance Overview -->
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 items-stretch">
-          <!-- Athlete Profile Card - shown when connected -->
-          <UCard v-if="intervalsConnected" class="flex flex-col">
-            <template #header>
-              <div class="flex items-center gap-2">
-                <UIcon name="i-heroicons-user-circle" class="w-5 h-5" />
-                <h3 class="font-semibold">Athlete Profile</h3>
-              </div>
-            </template>
-            
-            <!-- Loading skeleton -->
-            <div v-if="!profile" class="space-y-3 text-sm animate-pulse flex-grow">
-              <div>
-                <div class="h-4 bg-gray-200 dark:bg-gray-700 rounded w-32 mb-2"></div>
-                <div class="h-3 bg-gray-200 dark:bg-gray-700 rounded w-48"></div>
-              </div>
-              <div class="pt-2 border-t space-y-2">
-                <div class="flex justify-between">
-                  <div class="h-3 bg-gray-200 dark:bg-gray-700 rounded w-16"></div>
-                  <div class="h-3 bg-gray-200 dark:bg-gray-700 rounded w-20"></div>
-                </div>
-                <div class="flex justify-between">
-                  <div class="h-3 bg-gray-200 dark:bg-gray-700 rounded w-20"></div>
-                  <div class="h-3 bg-gray-200 dark:bg-gray-700 rounded w-16"></div>
-                </div>
-                <div class="flex justify-between">
-                  <div class="h-3 bg-gray-200 dark:bg-gray-700 rounded w-24"></div>
-                  <div class="h-3 bg-gray-200 dark:bg-gray-700 rounded w-16"></div>
-                </div>
-              </div>
-            </div>
-            
-            <!-- Actual profile data -->
-            <div v-else class="space-y-3 text-sm flex-grow">
-              <div>
-                <p class="font-medium text-base">{{ profile.name || 'Athlete' }}</p>
-                <p v-if="profile.age" class="text-muted text-xs mt-1">
-                  {{ profile.age }} years old
-                </p>
-              </div>
-              
-              <div class="grid grid-cols-2 gap-3 pt-2 border-t">
-                <div>
-                  <p class="text-xs text-muted">FTP</p>
-                  <p class="font-semibold">{{ profile.ftp ? `${profile.ftp}W` : 'Not set' }}</p>
-                </div>
-                <div>
-                  <p class="text-xs text-muted">Weight</p>
-                  <p class="font-semibold">{{ profile.weight ? `${profile.weight}kg` : 'N/A' }}</p>
-                </div>
-                <div>
-                  <p class="text-xs text-muted">W/kg</p>
-                  <p class="font-semibold">{{ profile.ftp && profile.weight ? (profile.ftp / profile.weight).toFixed(2) : 'N/A' }}</p>
-                </div>
-                <div>
-                  <p class="text-xs text-muted">Resting HR</p>
-                  <p class="font-semibold">{{ profile.restingHR ? `${profile.restingHR} bpm` : 'N/A' }}</p>
-                </div>
-                <div>
-                  <p class="text-xs text-muted">Recent HRV</p>
-                  <p class="font-semibold">{{ profile.recentHRV ? `${Math.round(profile.recentHRV)} ms` : 'N/A' }}</p>
-                </div>
-                <div>
-                  <p class="text-xs text-muted">7d HRV avg</p>
-                  <p class="font-semibold">{{ profile.avgRecentHRV ? `${Math.round(profile.avgRecentHRV)} ms` : 'N/A' }}</p>
-                </div>
-              </div>
-            </div>
-            
-            <template #footer>
-              <div class="flex gap-2">
-                <UButton to="/profile/athlete" block variant="outline">
-                  View Details
-                </UButton>
-                <UButton
-                  variant="outline"
-                  @click="generateAthleteProfile"
-                  :loading="generatingProfile"
-                  :disabled="generatingProfile"
-                  icon="i-heroicons-arrow-path"
-                >
-                  Regenerate
-                </UButton>
-              </div>
-            </template>
-          </UCard>
-          
-          <!-- Today's Recommendation Card -->
-          <UCard v-if="intervalsConnected" class="flex flex-col">
-            <template #header>
-              <div class="flex items-center justify-between">
-                <div class="flex items-center gap-2">
-                  <UIcon name="i-heroicons-light-bulb" class="w-5 h-5" />
-                  <h3 class="font-semibold">Today's Training</h3>
-                </div>
-                <UBadge v-if="todayRecommendation" :color="getRecommendationColor(todayRecommendation.recommendation)">
-                  {{ getRecommendationLabel(todayRecommendation.recommendation) }}
-                </UBadge>
-              </div>
-            </template>
-            
-            <div v-if="loadingRecommendation || generatingRecommendation" class="text-sm text-muted py-4 text-center flex-grow">
-              <UIcon name="i-heroicons-arrow-path" class="w-5 h-5 animate-spin inline" />
-              <p class="mt-2">{{ generatingRecommendation ? 'Generating recommendation...' : 'Loading...' }}</p>
-              <p v-if="generatingRecommendation" class="text-xs mt-1">This may take up to 60 seconds</p>
-            </div>
-            
-            <div v-else-if="!todayRecommendation" class="flex-grow">
-              <p class="text-sm text-muted">
-                Get AI-powered guidance for today's training based on your recovery and planned workout.
-              </p>
-            </div>
-            
-            <div v-else class="flex-grow">
-              <p class="text-sm">{{ todayRecommendation.reasoning }}</p>
-              
-              <div v-if="todayRecommendation.analysisJson?.suggested_modifications" class="bg-blue-50 dark:bg-blue-900/20 p-3 rounded-lg mt-3">
-                <p class="text-sm font-medium mb-2">Suggested Modification:</p>
-                <p class="text-sm">{{ todayRecommendation.analysisJson.suggested_modifications.description }}</p>
-              </div>
-            </div>
-            
-            <template #footer>
-              <div class="flex gap-2">
-                <UButton
-                  v-if="todayRecommendation && !generatingRecommendation"
-                  variant="outline"
-                  @click="openRecommendationModal"
-                  block
-                >
-                  View Details
-                </UButton>
-                <UButton
-                  variant="outline"
-                  @click="generateTodayRecommendation"
-                  :loading="generatingRecommendation"
-                  :disabled="generatingRecommendation"
-                  :block="!todayRecommendation || generatingRecommendation"
-                  icon="i-heroicons-arrow-path"
-                >
-                  {{ generatingRecommendation ? 'Running...' : (todayRecommendation ? 'Refresh' : 'Get Recommendation') }}
-                </UButton>
-              </div>
-            </template>
-          </UCard>
-          
-          <!-- Performance Overview Card -->
-          <UCard v-if="intervalsConnected" class="flex flex-col">
-            <template #header>
-              <div class="flex items-center gap-2">
-                <UIcon name="i-heroicons-chart-bar" class="w-5 h-5" />
-                <h3 class="font-semibold">Performance Overview</h3>
-              </div>
-            </template>
-            
-            <!-- Loading skeleton -->
-            <div v-if="loadingScores" class="space-y-3 animate-pulse flex-grow">
-              <div v-for="i in 4" :key="i" class="flex justify-between items-center">
-                <div class="h-3 bg-gray-200 dark:bg-gray-700 rounded w-24"></div>
-                <div class="h-6 bg-gray-200 dark:bg-gray-700 rounded w-12"></div>
-              </div>
-            </div>
-            
-            <!-- Actual scores data -->
-            <div v-else-if="profileScores" class="space-y-3 flex-grow">
-              <div class="flex justify-between items-center">
-                <span class="text-sm text-muted">Current Fitness</span>
-                <UBadge :color="getScoreColor(profileScores.currentFitness)" size="lg">
-                  {{ profileScores.currentFitness || 'N/A' }}
-                </UBadge>
-              </div>
-              <div class="flex justify-between items-center">
-                <span class="text-sm text-muted">Recovery Capacity</span>
-                <UBadge :color="getScoreColor(profileScores.recoveryCapacity)" size="lg">
-                  {{ profileScores.recoveryCapacity || 'N/A' }}
-                </UBadge>
-              </div>
-              <div class="flex justify-between items-center">
-                <span class="text-sm text-muted">Nutrition Compliance</span>
-                <UBadge :color="getScoreColor(profileScores.nutritionCompliance)" size="lg">
-                  {{ profileScores.nutritionCompliance || 'N/A' }}
-                </UBadge>
-              </div>
-              <div class="flex justify-between items-center">
-                <span class="text-sm text-muted">Training Consistency</span>
-                <UBadge :color="getScoreColor(profileScores.trainingConsistency)" size="lg">
-                  {{ profileScores.trainingConsistency || 'N/A' }}
-                </UBadge>
-              </div>
-              
-              <div v-if="profileScores.lastUpdated" class="pt-2 border-t">
-                <p class="text-xs text-muted text-center">
-                  Updated {{ formatScoreDate(profileScores.lastUpdated) }}
-                </p>
-              </div>
-            </div>
-            
-            <!-- No scores yet -->
-            <div v-else class="text-center py-4 flex-grow">
-              <p class="text-sm text-muted">
-                Generate your athlete profile to see performance scores.
-              </p>
-            </div>
-            
-            <template #footer>
-              <UButton to="/performance" block variant="outline">
-                View Details
-              </UButton>
-            </template>
-          </UCard>
-          
-          <!-- Getting Started Card - shown when not connected -->
-          <UCard v-if="!intervalsConnected" class="flex flex-col">
-            <template #header>
-              <h3 class="font-semibold">Getting Started</h3>
-            </template>
-            <p class="text-sm text-muted flex-grow">
-              Connect your Intervals.icu account to start analyzing your training data.
-            </p>
-            <template #footer>
-              <UButton to="/settings" block>
-                Connect Intervals.icu
-              </UButton>
-            </template>
-          </UCard>
-        </div>
+      <ClientOnly>
+        <div class="p-6 space-y-6">
+          <div>
+            <h2 class="text-2xl font-bold">Welcome to Coach Watts!</h2>
+            <p class="mt-2 text-muted">Your AI-powered cycling coach is ready to help you optimize your training.</p>
+          </div>
         
-        <!-- Row 2: Recent Activity / Next Steps / Connection Status -->
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          <!-- Recent Activity Card -->
-          <UCard class="lg:col-span-2">
-            <template #header>
-              <div class="flex items-center justify-between">
-                <h3 class="font-semibold">Recent Activity</h3>
-                <UBadge v-if="recentActivity && recentActivity.items.length > 0" color="neutral" variant="subtle">
-                  Past 5 days
-                </UBadge>
-              </div>
-            </template>
-            
-            <!-- Loading state -->
-            <div v-if="loadingActivity" class="text-center py-8">
-              <UIcon name="i-heroicons-arrow-path" class="w-6 h-6 animate-spin inline text-primary" />
-              <p class="text-sm text-muted mt-2">Loading activity...</p>
-            </div>
-            
-            <!-- No connection -->
-            <div v-else-if="!intervalsConnected" class="text-center py-8">
-              <UIcon name="i-heroicons-exclamation-circle" class="w-12 h-12 mx-auto text-muted mb-3" />
-              <p class="text-sm text-muted">
-                Connect your Intervals.icu account to see your recent activity.
-              </p>
-              <UButton to="/settings" color="primary" class="mt-4">
-                Connect Now
-              </UButton>
-            </div>
-            
-            <!-- No activity -->
-            <div v-else-if="!recentActivity || recentActivity.items.length === 0" class="text-center py-8">
-              <UIcon name="i-heroicons-calendar" class="w-12 h-12 mx-auto text-muted mb-3" />
-              <p class="text-sm text-muted">
-                No recent activity found. Your data is syncing...
-              </p>
-            </div>
-            
-            <!-- Timeline -->
-            <UTimeline v-else :items="recentActivity.items" class="max-h-96 overflow-y-auto">
-              <template #default="{ item }">
-                <div class="flex items-start justify-between gap-3">
-                  <div class="flex-1 min-w-0">
-                    <NuxtLink
-                      v-if="item.link"
-                      :to="item.link"
-                      class="font-medium text-sm hover:text-primary transition-colors"
-                    >
-                      {{ item.title }}
-                    </NuxtLink>
-                    <p v-else class="font-medium text-sm">{{ item.title }}</p>
-                    
-                    <p v-if="item.description" class="text-xs text-muted mt-0.5">
-                      {{ item.description }}
-                    </p>
-                  </div>
-                  <time class="text-xs text-muted whitespace-nowrap">
-                    {{ formatActivityDate(item.date) }}
-                  </time>
+          <!-- Row 1: Athlete Profile / Today's Training / Performance Overview -->
+          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 items-stretch">
+            <!-- Athlete Profile Card - shown when connected -->
+            <UCard v-if="intervalsConnected" class="flex flex-col">
+              <template #header>
+                <div class="flex items-center gap-2">
+                  <UIcon name="i-heroicons-user-circle" class="w-5 h-5" />
+                  <h3 class="font-semibold">Athlete Profile</h3>
                 </div>
               </template>
-            </UTimeline>
-          </UCard>
-          
-          <!-- Next Steps Card - hidden when reports exist -->
-          <UCard v-if="!hasReports">
-            <template #header>
-              <h3 class="font-semibold">Next Steps</h3>
-            </template>
-            <ul class="space-y-2 text-sm text-muted">
-              <li class="flex items-center gap-2">
-                <UIcon name="i-heroicons-check-circle" class="w-5 h-5 text-success" />
-                Account created successfully
-              </li>
-              <li class="flex items-center gap-2">
-                <UIcon
-                  :name="intervalsConnected ? 'i-heroicons-check-circle' : 'i-heroicons-arrow-path'"
-                  :class="intervalsConnected ? 'w-5 h-5 text-success' : 'w-5 h-5'"
-                />
-                Connect Intervals.icu
-              </li>
-              <li class="flex items-center gap-2">
-                <UIcon
-                  :name="intervalsConnected ? 'i-heroicons-check-circle' : 'i-heroicons-arrow-path'"
-                  :class="intervalsConnected ? 'w-5 h-5 text-success' : 'w-5 h-5'"
-                />
-                Sync your training data
-              </li>
-              <li class="flex items-center gap-2">
-                <UIcon name="i-heroicons-arrow-path" class="w-5 h-5" />
-                Get your first AI coaching report
-              </li>
-            </ul>
-          </UCard>
-          
-          <!-- Connection Status Card - shown when connected -->
-          <UCard v-if="intervalsConnected">
-            <template #header>
-              <div class="flex items-center justify-between">
-                <h3 class="font-semibold">Data Sync</h3>
-                <UBadge color="success" variant="subtle">
-                  <UIcon name="i-heroicons-check-circle" class="w-3 h-3" />
-                  Connected
-                </UBadge>
+              
+              <!-- Loading skeleton -->
+              <div v-if="!profile" class="space-y-3 text-sm animate-pulse flex-grow">
+                <div>
+                  <div class="h-4 bg-gray-200 dark:bg-gray-700 rounded w-32 mb-2"></div>
+                  <div class="h-3 bg-gray-200 dark:bg-gray-700 rounded w-48"></div>
+                </div>
+                <div class="pt-2 border-t space-y-2">
+                  <div class="flex justify-between">
+                    <div class="h-3 bg-gray-200 dark:bg-gray-700 rounded w-16"></div>
+                    <div class="h-3 bg-gray-200 dark:bg-gray-700 rounded w-20"></div>
+                  </div>
+                  <div class="flex justify-between">
+                    <div class="h-3 bg-gray-200 dark:bg-gray-700 rounded w-20"></div>
+                    <div class="h-3 bg-gray-200 dark:bg-gray-700 rounded w-16"></div>
+                  </div>
+                  <div class="flex justify-between">
+                    <div class="h-3 bg-gray-200 dark:bg-gray-700 rounded w-24"></div>
+                    <div class="h-3 bg-gray-200 dark:bg-gray-700 rounded w-16"></div>
+                  </div>
+                </div>
               </div>
-            </template>
+              
+              <!-- Actual profile data -->
+              <div v-else class="space-y-3 text-sm flex-grow">
+                <div>
+                  <p class="font-medium text-base">{{ profile.name || 'Athlete' }}</p>
+                  <p v-if="profile.age" class="text-muted text-xs mt-1">
+                    {{ profile.age }} years old
+                  </p>
+                </div>
+                
+                <div class="grid grid-cols-2 gap-3 pt-2 border-t">
+                  <div>
+                    <p class="text-xs text-muted">FTP</p>
+                    <p class="font-semibold">{{ profile.ftp ? `${profile.ftp}W` : 'Not set' }}</p>
+                  </div>
+                  <div>
+                    <p class="text-xs text-muted">Weight</p>
+                    <p class="font-semibold">{{ profile.weight ? `${profile.weight}kg` : 'N/A' }}</p>
+                  </div>
+                  <div>
+                    <p class="text-xs text-muted">W/kg</p>
+                    <p class="font-semibold">{{ profile.ftp && profile.weight ? (profile.ftp / profile.weight).toFixed(2) : 'N/A' }}</p>
+                  </div>
+                  <div>
+                    <p class="text-xs text-muted">Resting HR</p>
+                    <p class="font-semibold">{{ profile.restingHR ? `${profile.restingHR} bpm` : 'N/A' }}</p>
+                  </div>
+                  <div>
+                    <p class="text-xs text-muted">Recent HRV</p>
+                    <p class="font-semibold">{{ profile.recentHRV ? `${Math.round(profile.recentHRV)} ms` : 'N/A' }}</p>
+                  </div>
+                  <div>
+                    <p class="text-xs text-muted">7d HRV avg</p>
+                    <p class="font-semibold">{{ profile.avgRecentHRV ? `${Math.round(profile.avgRecentHRV)} ms` : 'N/A' }}</p>
+                  </div>
+                </div>
+              </div>
+              
+              <template #footer>
+                <div class="flex gap-2">
+                  <UButton to="/profile/athlete" block variant="outline">
+                    View Details
+                  </UButton>
+                  <UButton
+                    variant="outline"
+                    @click="generateAthleteProfile"
+                    :loading="generatingProfile"
+                    :disabled="generatingProfile"
+                    icon="i-heroicons-arrow-path"
+                  >
+                    Regenerate
+                  </UButton>
+                </div>
+              </template>
+            </UCard>
             
-            <div class="space-y-3">
-              <!-- Workouts -->
-              <div class="p-3 rounded-lg bg-gray-50 dark:bg-gray-800/50">
+            <!-- Today's Recommendation Card -->
+            <UCard v-if="intervalsConnected" class="flex flex-col">
+              <template #header>
                 <div class="flex items-center justify-between">
                   <div class="flex items-center gap-2">
-                    <UIcon name="i-heroicons-bolt" class="w-4 h-4 text-primary" />
-                    <span class="text-sm font-medium">Workouts</span>
+                    <UIcon name="i-heroicons-light-bulb" class="w-5 h-5" />
+                    <h3 class="font-semibold">Today's Training</h3>
                   </div>
-                  <UBadge
-                    :color="dataSyncStatus.workouts ? 'success' : 'neutral'"
-                    variant="subtle"
-                    size="sm"
-                  >
-                    {{ dataSyncStatus.workoutCount || 0 }} synced
+                  <UBadge v-if="todayRecommendation" :color="getRecommendationColor(todayRecommendation.recommendation)">
+                    {{ getRecommendationLabel(todayRecommendation.recommendation) }}
                   </UBadge>
                 </div>
-                <p v-if="dataSyncStatus.workoutProviders?.length" class="text-xs text-muted mt-1 ml-6">
-                  via {{ dataSyncStatus.workoutProviders.join(', ') }}
+              </template>
+              
+              <div v-if="loadingRecommendation || generatingRecommendation" class="text-sm text-muted py-4 text-center flex-grow">
+                <UIcon name="i-heroicons-arrow-path" class="w-5 h-5 animate-spin inline" />
+                <p class="mt-2">{{ generatingRecommendation ? 'Generating recommendation...' : 'Loading...' }}</p>
+                <p v-if="generatingRecommendation" class="text-xs mt-1">This may take up to 60 seconds</p>
+              </div>
+              
+              <div v-else-if="!todayRecommendation" class="flex-grow">
+                <p class="text-sm text-muted">
+                  Get AI-powered guidance for today's training based on your recovery and planned workout.
                 </p>
               </div>
               
-              <!-- Nutrition -->
-              <div class="p-3 rounded-lg bg-gray-50 dark:bg-gray-800/50">
-                <div class="flex items-center justify-between">
-                  <div class="flex items-center gap-2">
-                    <UIcon name="i-heroicons-cake" class="w-4 h-4 text-primary" />
-                    <span class="text-sm font-medium">Nutrition</span>
-                  </div>
-                  <UBadge
-                    :color="dataSyncStatus.nutrition ? 'success' : 'neutral'"
-                    variant="subtle"
-                    size="sm"
-                  >
-                    {{ dataSyncStatus.nutritionCount || 0 }} days
-                  </UBadge>
+              <div v-else class="flex-grow">
+                <p class="text-sm">{{ todayRecommendation.reasoning }}</p>
+                
+                <div v-if="todayRecommendation.analysisJson?.suggested_modifications" class="bg-blue-50 dark:bg-blue-900/20 p-3 rounded-lg mt-3">
+                  <p class="text-sm font-medium mb-2">Suggested Modification:</p>
+                  <p class="text-sm">{{ todayRecommendation.analysisJson.suggested_modifications.description }}</p>
                 </div>
-                <p v-if="dataSyncStatus.nutritionProviders?.length" class="text-xs text-muted mt-1 ml-6">
-                  via {{ dataSyncStatus.nutritionProviders.join(', ') }}
-                </p>
               </div>
               
-              <!-- Wellness -->
-              <div class="p-3 rounded-lg bg-gray-50 dark:bg-gray-800/50">
-                <div class="flex items-center justify-between">
-                  <div class="flex items-center gap-2">
-                    <UIcon name="i-heroicons-heart" class="w-4 h-4 text-primary" />
-                    <span class="text-sm font-medium">Wellness</span>
-                  </div>
-                  <UBadge
-                    :color="dataSyncStatus.wellness ? 'success' : 'neutral'"
-                    variant="subtle"
-                    size="sm"
+              <template #footer>
+                <div class="flex gap-2">
+                  <UButton
+                    v-if="todayRecommendation && !generatingRecommendation"
+                    variant="outline"
+                    @click="openRecommendationModal"
+                    block
                   >
-                    {{ dataSyncStatus.wellnessCount || 0 }} days
-                  </UBadge>
+                    View Details
+                  </UButton>
+                  <UButton
+                    variant="outline"
+                    @click="generateTodayRecommendation"
+                    :loading="generatingRecommendation"
+                    :disabled="generatingRecommendation"
+                    :block="!todayRecommendation || generatingRecommendation"
+                    icon="i-heroicons-arrow-path"
+                  >
+                    {{ generatingRecommendation ? 'Running...' : (todayRecommendation ? 'Refresh' : 'Get Recommendation') }}
+                  </UButton>
                 </div>
-                <p v-if="dataSyncStatus.wellnessProviders?.length" class="text-xs text-muted mt-1 ml-6">
-                  via {{ dataSyncStatus.wellnessProviders.join(', ') }}
-                </p>
-              </div>
-              
-              <!-- Last Sync Info -->
-              <div v-if="lastSyncTime" class="text-xs text-muted text-center pt-2 border-t">
-                Last synced {{ lastSyncTime }}
-              </div>
-            </div>
+              </template>
+            </UCard>
             
-            <template #footer>
-              <UButton to="/settings" block variant="outline" size="sm">
-                Manage Connections
-              </UButton>
-            </template>
-          </UCard>
+            <!-- Performance Overview Card -->
+            <UCard v-if="intervalsConnected" class="flex flex-col">
+              <template #header>
+                <div class="flex items-center gap-2">
+                  <UIcon name="i-heroicons-chart-bar" class="w-5 h-5" />
+                  <h3 class="font-semibold">Performance Overview</h3>
+                </div>
+              </template>
+              
+              <!-- Loading skeleton -->
+              <div v-if="loadingScores" class="space-y-3 animate-pulse flex-grow">
+                <div v-for="i in 4" :key="i" class="flex justify-between items-center">
+                  <div class="h-3 bg-gray-200 dark:bg-gray-700 rounded w-24"></div>
+                  <div class="h-6 bg-gray-200 dark:bg-gray-700 rounded w-12"></div>
+                </div>
+              </div>
+              
+              <!-- Actual scores data -->
+              <div v-else-if="profileScores" class="space-y-3 flex-grow">
+                <div class="flex justify-between items-center">
+                  <span class="text-sm text-muted">Current Fitness</span>
+                  <UBadge :color="getScoreColor(profileScores.currentFitness)" size="lg">
+                    {{ profileScores.currentFitness || 'N/A' }}
+                  </UBadge>
+                </div>
+                <div class="flex justify-between items-center">
+                  <span class="text-sm text-muted">Recovery Capacity</span>
+                  <UBadge :color="getScoreColor(profileScores.recoveryCapacity)" size="lg">
+                    {{ profileScores.recoveryCapacity || 'N/A' }}
+                  </UBadge>
+                </div>
+                <div class="flex justify-between items-center">
+                  <span class="text-sm text-muted">Nutrition Compliance</span>
+                  <UBadge :color="getScoreColor(profileScores.nutritionCompliance)" size="lg">
+                    {{ profileScores.nutritionCompliance || 'N/A' }}
+                  </UBadge>
+                </div>
+                <div class="flex justify-between items-center">
+                  <span class="text-sm text-muted">Training Consistency</span>
+                  <UBadge :color="getScoreColor(profileScores.trainingConsistency)" size="lg">
+                    {{ profileScores.trainingConsistency || 'N/A' }}
+                  </UBadge>
+                </div>
+                
+                <div v-if="profileScores.lastUpdated" class="pt-2 border-t">
+                  <p class="text-xs text-muted text-center">
+                    Updated {{ formatScoreDate(profileScores.lastUpdated) }}
+                  </p>
+                </div>
+              </div>
+              
+              <!-- No scores yet -->
+              <div v-else class="text-center py-4 flex-grow">
+                <p class="text-sm text-muted">
+                  Generate your athlete profile to see performance scores.
+                </p>
+              </div>
+              
+              <template #footer>
+                <UButton to="/performance" block variant="outline">
+                  View Details
+                </UButton>
+              </template>
+            </UCard>
+            
+            <!-- Getting Started Card - shown when not connected -->
+            <UCard v-if="!intervalsConnected" class="flex flex-col">
+              <template #header>
+                <h3 class="font-semibold">Getting Started</h3>
+              </template>
+              <p class="text-sm text-muted flex-grow">
+                Connect your Intervals.icu account to start analyzing your training data.
+              </p>
+              <template #footer>
+                <UButton to="/settings" block>
+                  Connect Intervals.icu
+                </UButton>
+              </template>
+            </UCard>
+          </div>
+          
+          <!-- Row 2: Recent Activity / Next Steps / Connection Status -->
+          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <!-- Recent Activity Card -->
+            <UCard class="lg:col-span-2">
+              <template #header>
+                <div class="flex items-center justify-between">
+                  <h3 class="font-semibold">Recent Activity</h3>
+                  <UBadge v-if="recentActivity && recentActivity.items.length > 0" color="neutral" variant="subtle">
+                    Past 5 days
+                  </UBadge>
+                </div>
+              </template>
+              
+              <!-- Loading state -->
+              <div v-if="loadingActivity" class="text-center py-8">
+                <UIcon name="i-heroicons-arrow-path" class="w-6 h-6 animate-spin inline text-primary" />
+                <p class="text-sm text-muted mt-2">Loading activity...</p>
+              </div>
+              
+              <!-- No connection -->
+              <div v-else-if="!intervalsConnected" class="text-center py-8">
+                <UIcon name="i-heroicons-exclamation-circle" class="w-12 h-12 mx-auto text-muted mb-3" />
+                <p class="text-sm text-muted">
+                  Connect your Intervals.icu account to see your recent activity.
+                </p>
+                <UButton to="/settings" color="primary" class="mt-4">
+                  Connect Now
+                </UButton>
+              </div>
+              
+              <!-- No activity -->
+              <div v-else-if="!recentActivity || recentActivity.items.length === 0" class="text-center py-8">
+                <UIcon name="i-heroicons-calendar" class="w-12 h-12 mx-auto text-muted mb-3" />
+                <p class="text-sm text-muted">
+                  No recent activity found. Your data is syncing...
+                </p>
+              </div>
+              
+              <!-- Timeline -->
+              <UTimeline v-else :items="recentActivity.items" class="max-h-96 overflow-y-auto">
+                <template #default="{ item }">
+                  <div class="flex items-start justify-between gap-3">
+                    <div class="flex-1 min-w-0">
+                      <NuxtLink
+                        v-if="item.link"
+                        :to="item.link"
+                        class="font-medium text-sm hover:text-primary transition-colors"
+                      >
+                        {{ item.title }}
+                      </NuxtLink>
+                      <p v-else class="font-medium text-sm">{{ item.title }}</p>
+                      
+                      <p v-if="item.description" class="text-xs text-muted mt-0.5">
+                        {{ item.description }}
+                      </p>
+                    </div>
+                    <time class="text-xs text-muted whitespace-nowrap">
+                      {{ formatActivityDate(item.date) }}
+                    </time>
+                  </div>
+                </template>
+              </UTimeline>
+            </UCard>
+            
+            <!-- Next Steps Card - hidden when reports exist -->
+            <UCard v-if="!hasReports">
+              <template #header>
+                <h3 class="font-semibold">Next Steps</h3>
+              </template>
+              <ul class="space-y-2 text-sm text-muted">
+                <li class="flex items-center gap-2">
+                  <UIcon name="i-heroicons-check-circle" class="w-5 h-5 text-success" />
+                  Account created successfully
+                </li>
+                <li class="flex items-center gap-2">
+                  <UIcon
+                    :name="intervalsConnected ? 'i-heroicons-check-circle' : 'i-heroicons-arrow-path'"
+                    :class="intervalsConnected ? 'w-5 h-5 text-success' : 'w-5 h-5'"
+                  />
+                  Connect Intervals.icu
+                </li>
+                <li class="flex items-center gap-2">
+                  <UIcon
+                    :name="intervalsConnected ? 'i-heroicons-check-circle' : 'i-heroicons-arrow-path'"
+                    :class="intervalsConnected ? 'w-5 h-5 text-success' : 'w-5 h-5'"
+                  />
+                  Sync your training data
+                </li>
+                <li class="flex items-center gap-2">
+                  <UIcon name="i-heroicons-arrow-path" class="w-5 h-5" />
+                  Get your first AI coaching report
+                </li>
+              </ul>
+            </UCard>
+            
+            <!-- Connection Status Card - shown when connected -->
+            <UCard v-if="intervalsConnected">
+              <template #header>
+                <div class="flex items-center justify-between">
+                  <h3 class="font-semibold">Data Sync</h3>
+                  <UBadge color="success" variant="subtle">
+                    <UIcon name="i-heroicons-check-circle" class="w-3 h-3" />
+                    Connected
+                  </UBadge>
+                </div>
+              </template>
+              
+              <div class="space-y-3">
+                <!-- Workouts -->
+                <div class="p-3 rounded-lg bg-gray-50 dark:bg-gray-800/50">
+                  <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                      <UIcon name="i-heroicons-bolt" class="w-4 h-4 text-primary" />
+                      <span class="text-sm font-medium">Workouts</span>
+                    </div>
+                    <UBadge
+                      :color="dataSyncStatus.workouts ? 'success' : 'neutral'"
+                      variant="subtle"
+                      size="sm"
+                    >
+                      {{ dataSyncStatus.workoutCount || 0 }} synced
+                    </UBadge>
+                  </div>
+                  <p v-if="dataSyncStatus.workoutProviders?.length" class="text-xs text-muted mt-1 ml-6">
+                    via {{ dataSyncStatus.workoutProviders.join(', ') }}
+                  </p>
+                </div>
+                
+                <!-- Nutrition -->
+                <div class="p-3 rounded-lg bg-gray-50 dark:bg-gray-800/50">
+                  <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                      <UIcon name="i-heroicons-cake" class="w-4 h-4 text-primary" />
+                      <span class="text-sm font-medium">Nutrition</span>
+                    </div>
+                    <UBadge
+                      :color="dataSyncStatus.nutrition ? 'success' : 'neutral'"
+                      variant="subtle"
+                      size="sm"
+                    >
+                      {{ dataSyncStatus.nutritionCount || 0 }} days
+                    </UBadge>
+                  </div>
+                  <p v-if="dataSyncStatus.nutritionProviders?.length" class="text-xs text-muted mt-1 ml-6">
+                    via {{ dataSyncStatus.nutritionProviders.join(', ') }}
+                  </p>
+                </div>
+                
+                <!-- Wellness -->
+                <div class="p-3 rounded-lg bg-gray-50 dark:bg-gray-800/50">
+                  <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                      <UIcon name="i-heroicons-heart" class="w-4 h-4 text-primary" />
+                      <span class="text-sm font-medium">Wellness</span>
+                    </div>
+                    <UBadge
+                      :color="dataSyncStatus.wellness ? 'success' : 'neutral'"
+                      variant="subtle"
+                      size="sm"
+                    >
+                      {{ dataSyncStatus.wellnessCount || 0 }} days
+                    </UBadge>
+                  </div>
+                  <p v-if="dataSyncStatus.wellnessProviders?.length" class="text-xs text-muted mt-1 ml-6">
+                    via {{ dataSyncStatus.wellnessProviders.join(', ') }}
+                  </p>
+                </div>
+                
+                <!-- Last Sync Info -->
+                <div v-if="lastSyncTime" class="text-xs text-muted text-center pt-2 border-t">
+                  Last synced {{ lastSyncTime }}
+                </div>
+              </div>
+              
+              <template #footer>
+                <UButton to="/settings" block variant="outline" size="sm">
+                  Manage Connections
+                </UButton>
+              </template>
+            </UCard>
+          </div>
         </div>
-      </div>
+      </ClientOnly>
     </template>
+
   </UDashboardPanel>
   
   <!-- Recommendation Modal -->

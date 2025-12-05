@@ -267,6 +267,18 @@
             </div>
           </div>
 
+          <!-- Pacing Analysis Section (for Run/Ride/Walk/Hike activities) -->
+          <div v-if="shouldShowPacing(workout)" class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+            <h2 class="text-xl font-bold text-gray-900 dark:text-white mb-4">Pacing Analysis</h2>
+            <PacingAnalysis :workout-id="workout.id" />
+          </div>
+
+          <!-- Timeline Visualization (for Run/Ride/Walk/Hike activities) -->
+          <div v-if="shouldShowPacing(workout)" class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+            <h2 class="text-xl font-bold text-gray-900 dark:text-white mb-4">Workout Timeline</h2>
+            <WorkoutTimeline :workout-id="workout.id" />
+          </div>
+
           <!-- Tabs for different data sections -->
           <UTabs :items="tabs" v-model="selectedTab" />
           
@@ -754,6 +766,14 @@ function getScoreCircleClass(score: number) {
   if (score >= 6) return 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
   if (score >= 4) return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200'
   return 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
+}
+
+function shouldShowPacing(workout: any) {
+  if (!workout) return false
+  // Show for Strava and Intervals.icu workouts with supported activity types
+  const supportedTypes = ['Run', 'Ride', 'VirtualRide', 'Walk', 'Hike']
+  const supportedSources = ['strava', 'intervals']
+  return supportedSources.includes(workout.source) && workout.type && supportedTypes.includes(workout.type)
 }
 
 // Load data on mount

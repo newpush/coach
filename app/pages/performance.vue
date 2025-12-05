@@ -6,20 +6,16 @@
           <UDashboardSidebarCollapse />
         </template>
         <template #right>
-          <div class="flex gap-2">
-            <button
-              @click="generateExplanations"
-              :disabled="generatingExplanations"
-              class="bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-medium py-2 px-4 rounded-lg transition-colors text-sm"
-            >
-              <span v-if="generatingExplanations">Generating...</span>
-              <span v-else>Generate Insights</span>
-            </button>
-            <USelect
-              v-model="selectedPeriod"
-              :items="periodOptions"
-            />
-          </div>
+          <button
+            @click="generateExplanations"
+            :disabled="generatingExplanations"
+            class="bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-medium py-2 px-4 rounded-lg transition-colors text-sm flex items-center gap-2"
+          >
+            <UIcon v-if="generatingExplanations" name="i-heroicons-arrow-path" class="animate-spin" />
+            <UIcon v-else name="i-heroicons-sparkles" />
+            <span v-if="generatingExplanations">Generating...</span>
+            <span v-else>Generate Insights</span>
+          </button>
         </template>
       </UDashboardNavbar>
     </template>
@@ -34,56 +30,54 @@
           </p>
         </div>
 
-    <!-- Athlete Profile Scores -->
-    <UCard>
-      <template #header>
-        <div class="flex items-center justify-between">
-          <h2 class="text-xl font-semibold">Athlete Profile</h2>
-          <UBadge v-if="profileData?.scores?.lastUpdated" color="neutral" variant="subtle">
-            Updated {{ formatDate(profileData.scores.lastUpdated) }}
-          </UBadge>
+        <!-- Athlete Profile Scores -->
+        <div class="space-y-6">
+          <div class="flex items-center justify-between">
+            <h2 class="text-xl font-semibold text-gray-900 dark:text-white">Athlete Profile</h2>
+            <UBadge v-if="profileData?.scores?.lastUpdated" color="neutral" variant="subtle">
+              Updated {{ formatDate(profileData.scores.lastUpdated) }}
+            </UBadge>
+          </div>
+          
+          <div v-if="profileLoading" class="flex justify-center py-12">
+            <UIcon name="i-heroicons-arrow-path" class="w-8 h-8 animate-spin text-primary" />
+          </div>
+          
+          <div v-else-if="profileData" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <ScoreCard
+              title="Current Fitness"
+              :score="profileData.scores?.currentFitness"
+              :explanation="profileData.scores?.currentFitnessExplanationJson ? 'Click for detailed analysis' : profileData.scores?.currentFitnessExplanation"
+              icon="i-heroicons-bolt"
+              color="blue"
+              @click="(data) => openModalWithStructured(data, profileData.scores?.currentFitnessExplanationJson)"
+            />
+            <ScoreCard
+              title="Recovery Capacity"
+              :score="profileData.scores?.recoveryCapacity"
+              :explanation="profileData.scores?.recoveryCapacityExplanationJson ? 'Click for detailed analysis' : profileData.scores?.recoveryCapacityExplanation"
+              icon="i-heroicons-heart"
+              color="green"
+              @click="(data) => openModalWithStructured(data, profileData.scores?.recoveryCapacityExplanationJson)"
+            />
+            <ScoreCard
+              title="Nutrition Compliance"
+              :score="profileData.scores?.nutritionCompliance"
+              :explanation="profileData.scores?.nutritionComplianceExplanationJson ? 'Click for detailed analysis' : profileData.scores?.nutritionComplianceExplanation"
+              icon="i-heroicons-cake"
+              color="purple"
+              @click="(data) => openModalWithStructured(data, profileData.scores?.nutritionComplianceExplanationJson)"
+            />
+            <ScoreCard
+              title="Training Consistency"
+              :score="profileData.scores?.trainingConsistency"
+              :explanation="profileData.scores?.trainingConsistencyExplanationJson ? 'Click for detailed analysis' : profileData.scores?.trainingConsistencyExplanation"
+              icon="i-heroicons-calendar"
+              color="orange"
+              @click="(data) => openModalWithStructured(data, profileData.scores?.trainingConsistencyExplanationJson)"
+            />
+          </div>
         </div>
-      </template>
-      
-      <div v-if="profileLoading" class="flex justify-center py-12">
-        <UIcon name="i-heroicons-arrow-path" class="w-8 h-8 animate-spin text-primary" />
-      </div>
-      
-      <div v-else-if="profileData" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <ScoreCard
-          title="Current Fitness"
-          :score="profileData.scores?.currentFitness"
-          :explanation="profileData.scores?.currentFitnessExplanationJson ? 'Click for detailed analysis' : profileData.scores?.currentFitnessExplanation"
-          icon="i-heroicons-bolt"
-          color="blue"
-          @click="(data) => openModalWithStructured(data, profileData.scores?.currentFitnessExplanationJson)"
-        />
-        <ScoreCard
-          title="Recovery Capacity"
-          :score="profileData.scores?.recoveryCapacity"
-          :explanation="profileData.scores?.recoveryCapacityExplanationJson ? 'Click for detailed analysis' : profileData.scores?.recoveryCapacityExplanation"
-          icon="i-heroicons-heart"
-          color="green"
-          @click="(data) => openModalWithStructured(data, profileData.scores?.recoveryCapacityExplanationJson)"
-        />
-        <ScoreCard
-          title="Nutrition Compliance"
-          :score="profileData.scores?.nutritionCompliance"
-          :explanation="profileData.scores?.nutritionComplianceExplanationJson ? 'Click for detailed analysis' : profileData.scores?.nutritionComplianceExplanation"
-          icon="i-heroicons-cake"
-          color="purple"
-          @click="(data) => openModalWithStructured(data, profileData.scores?.nutritionComplianceExplanationJson)"
-        />
-        <ScoreCard
-          title="Training Consistency"
-          :score="profileData.scores?.trainingConsistency"
-          :explanation="profileData.scores?.trainingConsistencyExplanationJson ? 'Click for detailed analysis' : profileData.scores?.trainingConsistencyExplanation"
-          icon="i-heroicons-calendar"
-          color="orange"
-          @click="(data) => openModalWithStructured(data, profileData.scores?.trainingConsistencyExplanationJson)"
-        />
-      </div>
-    </UCard>
 
     <!-- Score Detail Modal -->
     <ScoreDetailModal
@@ -95,94 +89,99 @@
       :color="modalData.color"
     />
 
-    <!-- Workout Scores -->
-    <UCard>
-      <template #header>
-        <h2 class="text-xl font-semibold">Workout Performance</h2>
-      </template>
-      
-      <div v-if="workoutLoading" class="flex justify-center py-12">
-        <UIcon name="i-heroicons-arrow-path" class="w-8 h-8 animate-spin text-primary" />
-      </div>
-      
-      <div v-else-if="workoutData" class="space-y-6">
-        <!-- Score Cards -->
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-          <ScoreCard
-            title="Overall"
-            :score="workoutData.summary?.avgOverall"
-            icon="i-heroicons-star"
-            color="yellow"
-            compact
-            explanation="Click for AI-generated insights"
-            @click="() => workoutData && openWorkoutModal('Overall Workout Performance', workoutData.summary?.avgOverall, 'yellow')"
-          />
-          <ScoreCard
-            title="Technical"
-            :score="workoutData.summary?.avgTechnical"
-            icon="i-heroicons-cog"
-            color="blue"
-            compact
-            explanation="Click for AI-generated insights"
-            @click="() => workoutData && openWorkoutModal('Technical Execution', workoutData.summary?.avgTechnical, 'blue')"
-          />
-          <ScoreCard
-            title="Effort"
-            :score="workoutData.summary?.avgEffort"
-            icon="i-heroicons-fire"
-            color="red"
-            compact
-            explanation="Click for AI-generated insights"
-            @click="() => workoutData && openWorkoutModal('Effort Management', workoutData.summary?.avgEffort, 'red')"
-          />
-          <ScoreCard
-            title="Pacing"
-            :score="workoutData.summary?.avgPacing"
-            icon="i-heroicons-chart-bar"
-            color="green"
-            compact
-            explanation="Click for AI-generated insights"
-            @click="() => workoutData && openWorkoutModal('Pacing Strategy', workoutData.summary?.avgPacing, 'green')"
-          />
-          <ScoreCard
-            title="Execution"
-            :score="workoutData.summary?.avgExecution"
-            icon="i-heroicons-check-circle"
-            color="purple"
-            compact
-            explanation="Click for AI-generated insights"
-            @click="() => workoutData && openWorkoutModal('Workout Execution', workoutData.summary?.avgExecution, 'purple')"
-          />
-        </div>
+        <!-- Workout Scores -->
+        <div class="space-y-6">
+          <div class="flex items-center justify-between">
+            <h2 class="text-xl font-semibold text-gray-900 dark:text-white">Workout Performance</h2>
+            <USelect
+              v-model="selectedPeriod"
+              :items="periodOptions"
+            />
+          </div>
+          
+          <div v-if="workoutLoading" class="flex justify-center py-12">
+            <UIcon name="i-heroicons-arrow-path" class="w-8 h-8 animate-spin text-primary" />
+          </div>
+          
+          <div v-else-if="workoutData" class="space-y-6">
+            <!-- Score Cards -->
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+              <ScoreCard
+                title="Overall"
+                :score="workoutData.summary?.avgOverall"
+                icon="i-heroicons-star"
+                color="yellow"
+                compact
+                explanation="Click for AI-generated insights"
+                @click="() => workoutData && openWorkoutModal('Overall Workout Performance', workoutData.summary?.avgOverall, 'yellow')"
+              />
+              <ScoreCard
+                title="Technical"
+                :score="workoutData.summary?.avgTechnical"
+                icon="i-heroicons-cog"
+                color="blue"
+                compact
+                explanation="Click for AI-generated insights"
+                @click="() => workoutData && openWorkoutModal('Technical Execution', workoutData.summary?.avgTechnical, 'blue')"
+              />
+              <ScoreCard
+                title="Effort"
+                :score="workoutData.summary?.avgEffort"
+                icon="i-heroicons-fire"
+                color="red"
+                compact
+                explanation="Click for AI-generated insights"
+                @click="() => workoutData && openWorkoutModal('Effort Management', workoutData.summary?.avgEffort, 'red')"
+              />
+              <ScoreCard
+                title="Pacing"
+                :score="workoutData.summary?.avgPacing"
+                icon="i-heroicons-chart-bar"
+                color="green"
+                compact
+                explanation="Click for AI-generated insights"
+                @click="() => workoutData && openWorkoutModal('Pacing Strategy', workoutData.summary?.avgPacing, 'green')"
+              />
+              <ScoreCard
+                title="Execution"
+                :score="workoutData.summary?.avgExecution"
+                icon="i-heroicons-check-circle"
+                color="purple"
+                compact
+                explanation="Click for AI-generated insights"
+                @click="() => workoutData && openWorkoutModal('Workout Execution', workoutData.summary?.avgExecution, 'purple')"
+              />
+            </div>
 
-        <!-- Trend Chart -->
-        <div class="mt-6">
-          <h3 class="text-lg font-medium mb-4">Score Trends</h3>
-          <TrendChart :data="workoutData.workouts" type="workout" />
-        </div>
+            <!-- Trend Chart and Radar Chart Side by Side -->
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              <!-- Score Trends (2/3 width) -->
+              <div class="lg:col-span-2">
+                <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Score Trends</h3>
+                <TrendChart :data="workoutData.workouts" type="workout" />
+              </div>
 
-        <!-- Radar Chart -->
-        <div class="mt-6">
-          <h3 class="text-lg font-medium mb-4">Current Balance</h3>
-          <RadarChart 
-            :scores="{
-              overall: workoutData.summary?.avgOverall,
-              technical: workoutData.summary?.avgTechnical,
-              effort: workoutData.summary?.avgEffort,
-              pacing: workoutData.summary?.avgPacing,
-              execution: workoutData.summary?.avgExecution
-            }"
-            type="workout"
-          />
+              <!-- Current Balance (1/3 width) -->
+              <div class="lg:col-span-1">
+                <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Current Balance</h3>
+                <RadarChart
+                  :scores="{
+                    overall: workoutData.summary?.avgOverall,
+                    technical: workoutData.summary?.avgTechnical,
+                    effort: workoutData.summary?.avgEffort,
+                    pacing: workoutData.summary?.avgPacing,
+                    execution: workoutData.summary?.avgExecution
+                  }"
+                  type="workout"
+                />
+              </div>
+            </div>
+          </div>
         </div>
-      </div>
-    </UCard>
 
         <!-- Nutrition Scores -->
-        <UCard>
-          <template #header>
-            <h2 class="text-xl font-semibold">Nutrition Quality</h2>
-          </template>
+        <div class="space-y-6">
+          <h2 class="text-xl font-semibold text-gray-900 dark:text-white">Nutrition Quality</h2>
           
           <div v-if="nutritionLoading" class="flex justify-center py-12">
             <UIcon name="i-heroicons-arrow-path" class="w-8 h-8 animate-spin text-primary" />
@@ -238,28 +237,31 @@
               />
             </div>
 
-            <!-- Trend Chart -->
-            <div class="mt-6">
-              <h3 class="text-lg font-medium mb-4">Score Trends</h3>
-              <TrendChart :data="nutritionData.nutrition" type="nutrition" />
-            </div>
+            <!-- Trend Chart and Radar Chart Side by Side -->
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              <!-- Score Trends (2/3 width) -->
+              <div class="lg:col-span-2">
+                <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Score Trends</h3>
+                <TrendChart :data="nutritionData.nutrition" type="nutrition" />
+              </div>
 
-            <!-- Radar Chart -->
-            <div class="mt-6">
-              <h3 class="text-lg font-medium mb-4">Current Balance</h3>
-              <RadarChart
-                :scores="{
-                  overall: nutritionData.summary?.avgOverall,
-                  macroBalance: nutritionData.summary?.avgMacroBalance,
-                  quality: nutritionData.summary?.avgQuality,
-                  adherence: nutritionData.summary?.avgAdherence,
-                  hydration: nutritionData.summary?.avgHydration
-                }"
-                type="nutrition"
-              />
+              <!-- Current Balance (1/3 width) -->
+              <div class="lg:col-span-1">
+                <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Current Balance</h3>
+                <RadarChart
+                  :scores="{
+                    overall: nutritionData.summary?.avgOverall,
+                    macroBalance: nutritionData.summary?.avgMacroBalance,
+                    quality: nutritionData.summary?.avgQuality,
+                    adherence: nutritionData.summary?.avgAdherence,
+                    hydration: nutritionData.summary?.avgHydration
+                  }"
+                  type="nutrition"
+                />
+              </div>
             </div>
           </div>
-        </UCard>
+        </div>
       </div>
     </template>
   </UDashboardPanel>
