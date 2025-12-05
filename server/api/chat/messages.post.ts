@@ -146,20 +146,30 @@ Always provide specific, data-driven insights when possible. Use the tools to ac
   // Maximum 5 tool calls to prevent infinite loops
   let toolCallCount = 0
   const MAX_TOOL_CALLS = 5
+  const toolCallsUsed: Array<{ name: string; args: any }> = []
 
-  const functionCalls = response.functionCalls?.()
-  
-  while (functionCalls && functionCalls.length > 0 && toolCallCount < MAX_TOOL_CALLS) {
-    toolCallCount++
+  while (toolCallCount < MAX_TOOL_CALLS) {
+    const functionCalls = response.functionCalls?.()
     
+    if (!functionCalls || functionCalls.length === 0) {
+      break
+    }
+    
+    toolCallCount++
     const functionCall = functionCalls[0]
-    console.log(`Tool call ${toolCallCount}: ${functionCall.name}`, functionCall.args)
+    toolCallsUsed.push({ name: functionCall.name, args: functionCall.args })
+    
+    console.log(`[Tool Call ${toolCallCount}/${MAX_TOOL_CALLS}] ${functionCall.name}`, functionCall.args)
     
     try {
       const toolResult = await executeToolCall(
         functionCall.name,
         functionCall.args,
         userId
+      )
+      
+      console.log(`[Tool Result ${toolCallCount}] ${functionCall.name}:`,
+        typeof toolResult === 'object' ? JSON.stringify(toolResult).substring(0, 200) + '...' : toolResult
       )
       
       result = await chat.sendMessage([{
@@ -171,7 +181,7 @@ Always provide specific, data-driven insights when possible. Use the tools to ac
       
       response = result.response
     } catch (error: any) {
-      console.error(`Tool execution error for ${functionCall.name}:`, error)
+      console.error(`[Tool Error ${toolCallCount}] ${functionCall.name}:`, error?.message || error)
       
       result = await chat.sendMessage([{
         functionResponse: {
@@ -181,14 +191,11 @@ Always provide specific, data-driven insights when possible. Use the tools to ac
       }])
       
       response = result.response
-      
-      const newFunctionCalls = response.functionCalls?.()
-      if (newFunctionCalls && newFunctionCalls.length > 0) {
-        continue
-      } else {
-        break
-      }
     }
+  }
+  
+  if (toolCallCount >= MAX_TOOL_CALLS) {
+    console.warn(`Reached maximum tool calls (${MAX_TOOL_CALLS}). Tools used:`, toolCallsUsed)
   }
 
   const aiResponseText = response.text()
