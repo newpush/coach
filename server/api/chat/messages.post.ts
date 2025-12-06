@@ -149,59 +149,65 @@ Always provide specific, data-driven insights when possible. Use the tools to ac
   let result = await chat.sendMessage(content)
   let response = result.response
   
-  // Maximum 5 tool calls to prevent infinite loops
-  let toolCallCount = 0
-  const MAX_TOOL_CALLS = 5
+  // Maximum 5 rounds of tool calls to prevent infinite loops
+  let roundCount = 0
+  const MAX_ROUNDS = 5
   const toolCallsUsed: Array<{ name: string; args: any }> = []
 
-  while (toolCallCount < MAX_TOOL_CALLS) {
+  while (roundCount < MAX_ROUNDS) {
     const functionCalls = response.functionCalls?.()
     
     if (!functionCalls || functionCalls.length === 0) {
       break
     }
     
-    toolCallCount++
-    const functionCall = functionCalls[0]
-    toolCallsUsed.push({ name: functionCall.name, args: functionCall.args })
+    roundCount++
+    console.log(`[Tool Call Round ${roundCount}/${MAX_ROUNDS}] Processing ${functionCalls.length} function call(s)`)
     
-    console.log(`[Tool Call ${toolCallCount}/${MAX_TOOL_CALLS}] ${functionCall.name}`, functionCall.args)
+    // Process ALL function calls and build responses array
+    const functionResponses = await Promise.all(
+      functionCalls.map(async (functionCall, index) => {
+        toolCallsUsed.push({ name: functionCall.name, args: functionCall.args })
+        
+        console.log(`[Tool Call ${roundCount}.${index + 1}] ${functionCall.name}`, functionCall.args)
+        
+        try {
+          const toolResult = await executeToolCall(
+            functionCall.name,
+            functionCall.args,
+            userId
+          )
+          
+          console.log(`[Tool Result ${roundCount}.${index + 1}] ${functionCall.name}:`,
+            typeof toolResult === 'object' ? JSON.stringify(toolResult).substring(0, 200) + '...' : toolResult
+          )
+          
+          return {
+            functionResponse: {
+              name: functionCall.name,
+              response: toolResult
+            }
+          }
+        } catch (error: any) {
+          console.error(`[Tool Error ${roundCount}.${index + 1}] ${functionCall.name}:`, error?.message || error)
+          
+          return {
+            functionResponse: {
+              name: functionCall.name,
+              response: { error: `Failed to execute tool: ${error?.message || 'Unknown error'}` }
+            }
+          }
+        }
+      })
+    )
     
-    try {
-      const toolResult = await executeToolCall(
-        functionCall.name,
-        functionCall.args,
-        userId
-      )
-      
-      console.log(`[Tool Result ${toolCallCount}] ${functionCall.name}:`,
-        typeof toolResult === 'object' ? JSON.stringify(toolResult).substring(0, 200) + '...' : toolResult
-      )
-      
-      result = await chat.sendMessage([{
-        functionResponse: {
-          name: functionCall.name,
-          response: toolResult
-        }
-      }])
-      
-      response = result.response
-    } catch (error: any) {
-      console.error(`[Tool Error ${toolCallCount}] ${functionCall.name}:`, error?.message || error)
-      
-      result = await chat.sendMessage([{
-        functionResponse: {
-          name: functionCall.name,
-          response: { error: `Failed to execute tool: ${error?.message || 'Unknown error'}` }
-        }
-      }])
-      
-      response = result.response
-    }
+    // Send all function responses back together
+    result = await chat.sendMessage(functionResponses)
+    response = result.response
   }
   
-  if (toolCallCount >= MAX_TOOL_CALLS) {
-    console.warn(`Reached maximum tool calls (${MAX_TOOL_CALLS}). Tools used:`, toolCallsUsed)
+  if (roundCount >= MAX_ROUNDS) {
+    console.warn(`Reached maximum tool call rounds (${MAX_ROUNDS}). Tools used:`, toolCallsUsed)
   }
 
   const aiResponseText = response.text()

@@ -126,9 +126,8 @@ async function createRoom() {
       method: 'POST'
     })
     rooms.value = [newRoom, ...rooms.value]
-    roomId.value = newRoom.roomId
-    messages.value = []
-    messagesLoaded.value = true
+    // Properly select the new room by calling fetchMessages
+    await fetchMessages({ room: newRoom, options: { reset: true } })
   } catch (error: any) {
     console.error('Error creating room:', error)
     alert('Failed to create new chat')
