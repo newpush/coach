@@ -404,17 +404,17 @@ Keep suggestions short (5-8 words), actionable, and directly related to what you
     generationConfig: {
       responseMimeType: "application/json",
       responseSchema: {
-        type: "object",
+        type: "OBJECT" as any,
         properties: {
           response: {
-            type: "string",
+            type: "STRING" as any,
             description: "The main response content to display to the user"
           },
           suggestions: {
-            type: "array",
+            type: "ARRAY" as any,
             description: "2-3 follow-up questions or actions the user might want to explore next",
             items: {
-              type: "string"
+              type: "STRING" as any
             }
           }
         },
