@@ -2,6 +2,7 @@ import type { Integration } from '@prisma/client'
 
 interface IntervalsActivity {
   id: string
+  start_date: string // UTC timestamp
   start_date_local: string
   name: string
   description?: string
@@ -131,11 +132,14 @@ export async function createIntervalsPlannedWorkout(
     sport = 'WeightTraining'
   }
   
-  // Format date as ISO datetime string (YYYY-MM-DDTHH:mm:ss)
+  // Format date as ISO datetime string (YYYY-MM-DDTHH:mm:ss) - preserving time
   const year = data.date.getFullYear()
   const month = String(data.date.getMonth() + 1).padStart(2, '0')
   const day = String(data.date.getDate()).padStart(2, '0')
-  const dateStr = `${year}-${month}-${day}T00:00:00`
+  const hour = String(data.date.getHours()).padStart(2, '0')
+  const minute = String(data.date.getMinutes()).padStart(2, '0')
+  const second = String(data.date.getSeconds()).padStart(2, '0')
+  const dateStr = `${year}-${month}-${day}T${hour}:${minute}:${second}`
   
   const eventData = {
     start_date_local: dateStr,
@@ -146,6 +150,12 @@ export async function createIntervalsPlannedWorkout(
     duration: data.durationSec,
     tss: data.tss
   }
+  
+  console.log('[createIntervalsPlannedWorkout] 📤 Sending to Intervals.icu:', {
+    athleteId,
+    url: `https://intervals.icu/api/v1/athlete/${athleteId}/events`,
+    eventData
+  })
   
   const url = `https://intervals.icu/api/v1/athlete/${athleteId}/events`
   const auth = Buffer.from(`API_KEY:${integration.accessToken}`).toString('base64')
@@ -161,10 +171,22 @@ export async function createIntervalsPlannedWorkout(
   
   if (!response.ok) {
     const errorText = await response.text()
+    console.error('[createIntervalsPlannedWorkout] ❌ Intervals.icu API error:', {
+      status: response.status,
+      statusText: response.statusText,
+      errorText,
+      eventData
+    })
     throw new Error(`Intervals API error: ${response.status} ${errorText}`)
   }
   
-  return await response.json()
+  const result = await response.json()
+  console.log('[createIntervalsPlannedWorkout] ✅ Intervals.icu response:', {
+    id: result.id,
+    name: result.name
+  })
+  
+  return result
 }
 
 export async function deleteIntervalsPlannedWorkout(
@@ -187,6 +209,63 @@ export async function deleteIntervalsPlannedWorkout(
     const errorText = await response.text()
     throw new Error(`Intervals API error: ${response.status} ${errorText}`)
   }
+}
+
+export async function updateIntervalsPlannedWorkout(
+  integration: Integration,
+  eventId: string,
+  data: {
+    date?: Date
+    title?: string
+    description?: string
+    type?: string
+    durationSec?: number
+    tss?: number
+  }
+): Promise<IntervalsPlannedWorkout> {
+  const athleteId = integration.externalUserId || 'i0'
+  
+  // Map workout types to Intervals.icu format
+  let sport = data.type
+  if (data.type === 'Gym') {
+    sport = 'WeightTraining'
+  }
+  
+  // Format date if provided
+  let dateStr: string | undefined
+  if (data.date) {
+    const year = data.date.getFullYear()
+    const month = String(data.date.getMonth() + 1).padStart(2, '0')
+    const day = String(data.date.getDate()).padStart(2, '0')
+    dateStr = `${year}-${month}-${day}T00:00:00`
+  }
+  
+  const eventData: any = {}
+  if (dateStr) eventData.start_date_local = dateStr
+  if (data.title) eventData.name = data.title
+  if (data.description !== undefined) eventData.description = data.description
+  if (sport) eventData.type = sport
+  if (data.durationSec) eventData.duration = data.durationSec
+  if (data.tss) eventData.tss = data.tss
+  
+  const url = `https://intervals.icu/api/v1/athlete/${athleteId}/events/${eventId}`
+  const auth = Buffer.from(`API_KEY:${integration.accessToken}`).toString('base64')
+    
+  const response = await fetch(url, {
+    method: 'PUT',
+    headers: {
+      'Authorization': `Basic ${auth}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(eventData)
+  })
+  
+  if (!response.ok) {
+    const errorText = await response.text()
+    throw new Error(`Intervals API error: ${response.status} ${errorText}`)
+  }
+  
+  return await response.json()
 }
 
 export async function fetchIntervalsPlannedWorkouts(
@@ -447,7 +526,8 @@ export function normalizeIntervalsWorkout(activity: IntervalsActivity, userId: s
     userId,
     externalId: activity.id,
     source: 'intervals',
-    date: new Date(activity.start_date_local),
+    // Use start_date (UTC) if available, otherwise fall back to local (which might be imprecise depending on server timezone)
+    date: new Date(activity.start_date || activity.start_date_local),
     title: activity.name || 'Unnamed Activity',
     description: activity.description || null,
     type: activity.type,

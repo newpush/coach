@@ -335,7 +335,9 @@ export function normalizeStravaActivity(activity: StravaActivity, userId: string
     userId,
     externalId: String(activity.id),
     source: 'strava',
-    date: new Date(activity.start_date_local),
+    // Use start_date (UTC) instead of start_date_local to ensure correct absolute time storage
+    // This allows for correct matching with other sources like Whoop/Intervals
+    date: new Date(activity.start_date),
     title: activity.name,
     description: enhancedDescription.trim() || null,
     type: normalizedType,

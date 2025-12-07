@@ -138,6 +138,41 @@ interface WhoopUser {
   last_name: string
 }
 
+export interface WhoopWorkout {
+  id: string
+  user_id: number
+  created_at: string
+  updated_at: string
+  start: string
+  end: string
+  timezone_offset: string
+  sport_id: number
+  score_state: string
+  score?: {
+    strain: number
+    average_heart_rate: number
+    max_heart_rate: number
+    kilojoule: number
+    percent_recorded: number
+    distance_meter: number
+    altitude_gain_meter: number
+    altitude_change_meter: number
+    zone_durations: {
+      zone_zero_milli: number
+      zone_one_milli: number
+      zone_two_milli: number
+      zone_three_milli: number
+      zone_four_milli: number
+      zone_five_milli: number
+    }
+  }
+}
+
+interface WhoopWorkoutResponse {
+  records: WhoopWorkout[]
+  next_token?: string
+}
+
 export async function fetchWhoopRecovery(
   integration: Integration,
   startDate: Date,
@@ -201,6 +236,60 @@ export async function fetchWhoopRecovery(
   }
   
   return allRecords
+}
+
+export async function fetchWhoopWorkouts(
+  integration: Integration,
+  startDate: Date,
+  endDate: Date
+): Promise<WhoopWorkout[]> {
+  // Ensure we have a valid token before making the request
+  const validIntegration = await ensureValidToken(integration)
+  
+  // Use V2 API for workouts
+  const url = new URL('https://api.prod.whoop.com/developer/v2/activity/workout')
+  url.searchParams.set('start', startDate.toISOString())
+  url.searchParams.set('end', endDate.toISOString())
+  url.searchParams.set('limit', '25')
+  
+  console.log('[Whoop] Fetching workout data:', {
+    startDate: startDate.toISOString(),
+    endDate: endDate.toISOString()
+  })
+  
+  const allWorkouts: WhoopWorkout[] = []
+  let nextToken: string | undefined
+
+  do {
+    if (nextToken) {
+      url.searchParams.set('nextToken', nextToken)
+    }
+
+    const response = await fetch(url.toString(), {
+      headers: {
+        'Authorization': `Bearer ${validIntegration.accessToken}`
+      }
+    })
+    
+    if (!response.ok) {
+      const errorText = await response.text()
+      console.error('[Whoop] Workout API Error:', {
+        status: response.status,
+        statusText: response.statusText,
+        error: errorText
+      })
+      // Don't throw here, just return what we have so far or empty array to avoid blocking recovery sync
+      return allWorkouts
+    }
+    
+    const data: WhoopWorkoutResponse = await response.json()
+    console.log(`[Whoop] Fetched ${data.records?.length || 0} workout records`)
+    
+    allWorkouts.push(...(data.records || []))
+    nextToken = data.next_token
+  } while (nextToken)
+  
+  return allWorkouts
 }
 
 export async function fetchWhoopSleep(integration: Integration, sleepId: string): Promise<WhoopSleep | null> {
@@ -316,4 +405,65 @@ export function normalizeWhoopRecovery(recovery: WhoopRecovery, userId: string, 
   }
   
   return result
+}
+
+export function normalizeWhoopWorkout(workout: WhoopWorkout, userId: string) {
+  if (!workout.score || workout.score_state !== 'SCORED') {
+    return null
+  }
+
+  // Map Whoop Sport IDs to our workout types
+  // -1: Activity, 0: Running, 1: Cycling, 29: Skiing, 44: Yoga, 45: Weightlifting, etc.
+  const sportMap: Record<number, string> = {
+    0: 'Run',
+    1: 'Ride',
+    18: 'Rowing',
+    29: 'Ski',
+    33: 'Swim',
+    44: 'Yoga',
+    45: 'WeightTraining',
+    47: 'Ski', // Cross Country Skiing
+    48: 'Crossfit', // Functional Fitness
+    52: 'Hike',
+    53: 'Ride', // Mountain Biking mapped to Ride (or could be custom type)
+    57: 'Ride', // Mountain Biking
+    63: 'Walk',
+    71: 'Other',
+    91: 'Snowboard', // Mapped to Ski or Other? Let's use Ski for snow sports broadly or custom
+  }
+
+  const type = sportMap[workout.sport_id] || 'Other'
+  
+  // Parse dates
+  const startDate = new Date(workout.start)
+  const endDate = new Date(workout.end)
+  const durationSec = Math.round((endDate.getTime() - startDate.getTime()) / 1000)
+
+  // Construct workout object
+  return {
+    userId,
+    externalId: workout.id, // Whoop UUID
+    source: 'whoop',
+    date: startDate,
+    title: `Whoop Activity`, // We don't get a user title, so generic
+    description: `Imported from Whoop. Sport ID: ${workout.sport_id}`,
+    type,
+    durationSec,
+    distanceMeters: workout.score.distance_meter || null,
+    elevationGain: workout.score.altitude_gain_meter ? Math.round(workout.score.altitude_gain_meter) : null,
+    
+    // HR Data
+    averageHr: Math.round(workout.score.average_heart_rate),
+    maxHr: Math.round(workout.score.max_heart_rate),
+    
+    // Power/Energy
+    kilojoules: workout.score.kilojoule ? Math.round(workout.score.kilojoule) : null,
+    
+    // Whoop specific metrics mapped to generic fields where possible
+    // Whoop Strain (0-21) -> Intensity Factor? Not direct map.
+    // Maybe store in rawJson and use for custom score.
+    
+    // Raw Data
+    rawJson: workout
+  }
 }
