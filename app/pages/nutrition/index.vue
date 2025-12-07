@@ -609,6 +609,16 @@ const paginatedNutrition = computed(() => {
 
 // Functions
 function formatDate(date: string | Date) {
+  // Handle date string properly to avoid timezone shifts
+  // If it's a string in YYYY-MM-DD format, parse it as local date
+  if (typeof date === 'string') {
+    const [year, month, day] = date.split('-').map(Number)
+    return new Date(year, month - 1, day).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric'
+    })
+  }
   return new Date(date).toLocaleDateString('en-US', {
     year: 'numeric',
     month: 'short',

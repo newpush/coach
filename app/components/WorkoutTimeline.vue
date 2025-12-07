@@ -100,7 +100,7 @@ const props = defineProps<Props>()
 const loading = ref(true)
 const error = ref<string | null>(null)
 const streamData = ref<any>(null)
-const selectedMetrics = ref<string[]>(['heartrate'])
+const selectedMetrics = ref<string[]>([])
 
 interface Metric {
   key: string
@@ -146,11 +146,16 @@ async function fetchStreamData() {
     const data = await $fetch(`/api/workouts/${props.workoutId}/streams`)
     streamData.value = data
     
-    // Auto-select first available metric if none selected
-    if (selectedMetrics.value.length === 0 && availableMetrics.value.length > 0) {
-      const firstMetric = availableMetrics.value[0]
-      if (firstMetric) {
-        selectedMetrics.value = [firstMetric.key]
+    // Auto-select appropriate metrics:
+    // 1. If HR exists, select it (most important for most workouts)
+    // 2. Otherwise, select the first 2 available metrics for variety
+    if (availableMetrics.value.length > 0) {
+      const hrMetric = availableMetrics.value.find(m => m.key === 'heartrate')
+      if (hrMetric) {
+        selectedMetrics.value = ['heartrate']
+      } else {
+        // No HR, select first 2 metrics (e.g., altitude + velocity for skiing)
+        selectedMetrics.value = availableMetrics.value.slice(0, Math.min(2, availableMetrics.value.length)).map(m => m.key)
       }
     }
   } catch (e: any) {

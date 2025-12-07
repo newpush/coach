@@ -566,6 +566,20 @@ async function fetchNutrition() {
 
 // Utility functions
 function formatDate(date: string | Date) {
+  // Handle date string properly to avoid timezone shifts
+  // If it's a string in YYYY-MM-DD format, parse it as local date
+  if (typeof date === 'string' && date.includes('-')) {
+    const parts = date.split('-').map(Number)
+    if (parts.length === 3 && parts.every(p => !isNaN(p))) {
+      const [year, month, day] = parts
+      return new Date(year, month - 1, day).toLocaleDateString('en-US', {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+      })
+    }
+  }
   return new Date(date).toLocaleDateString('en-US', {
     weekday: 'long',
     year: 'numeric',
