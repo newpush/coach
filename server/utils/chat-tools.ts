@@ -1,4 +1,15 @@
 import { SchemaType, type FunctionDeclaration } from '@google/generative-ai'
+import { prisma } from './db'
+import {
+  getPlannedWorkouts,
+  createPlannedWorkout,
+  updatePlannedWorkout,
+  deletePlannedWorkout,
+  getTrainingAvailability,
+  updateTrainingAvailability,
+  generateTrainingPlan,
+  getCurrentPlan
+} from './chat-tools/training-plan-tools'
 
 /**
  * Tool schemas for Gemini function calling
@@ -157,6 +168,205 @@ export const chatToolDeclarations: FunctionDeclaration[] = [
       },
     },
   },
+  {
+    name: 'get_planned_workouts',
+    description: 'Fetch upcoming planned workouts for the athlete. Use this when the user asks about their training schedule, upcoming workouts, or what they have planned.',
+    parameters: {
+      type: SchemaType.OBJECT,
+      properties: {
+        start_date: {
+          type: SchemaType.STRING,
+          description: 'Start date in ISO format (YYYY-MM-DD, default: today)',
+        },
+        end_date: {
+          type: SchemaType.STRING,
+          description: 'End date in ISO format (YYYY-MM-DD, default: start_date + 14 days)',
+        },
+        include_completed: {
+          type: SchemaType.BOOLEAN,
+          description: 'Include completed workouts (default: false)',
+        },
+      },
+    },
+  },
+  {
+    name: 'create_planned_workout',
+    description: 'Create a new planned workout. Use when user wants to add a workout to their schedule.',
+    parameters: {
+      type: SchemaType.OBJECT,
+      properties: {
+        date: {
+          type: SchemaType.STRING,
+          description: 'Date for the workout in ISO format (YYYY-MM-DD)',
+        },
+        time_of_day: {
+          type: SchemaType.STRING,
+          description: 'Time of day for workout: "morning" (8am), "afternoon" (2pm), "evening" (6pm). If user says "6am", "8am", "2pm", etc., extract the hour. Default to "morning" if not specified.',
+        },
+        title: {
+          type: SchemaType.STRING,
+          description: 'Workout title',
+        },
+        description: {
+          type: SchemaType.STRING,
+          description: 'Detailed workout description',
+        },
+        type: {
+          type: SchemaType.STRING,
+          description: 'Workout type: Ride, Run, Swim, Walk, Hike, Ski, Gym, Yoga, Row, or Other. Note: For recovery activities, use "Walk" or "Yoga" with low intensity.',
+        },
+        duration_minutes: {
+          type: SchemaType.NUMBER,
+          description: 'Planned duration in minutes',
+        },
+        tss: {
+          type: SchemaType.NUMBER,
+          description: 'Target Training Stress Score',
+        },
+        intensity: {
+          type: SchemaType.STRING,
+          description: 'Intensity level: recovery, easy, moderate, hard, very_hard',
+        },
+      },
+      required: ['date', 'title'],
+    },
+  },
+  {
+    name: 'update_planned_workout',
+    description: 'Modify an existing planned workout. Can change any aspect of the workout including date, title, description, type, duration, TSS, or intensity.',
+    parameters: {
+      type: SchemaType.OBJECT,
+      properties: {
+        workout_id: {
+          type: SchemaType.STRING,
+          description: 'ID of the workout to update',
+        },
+        date: {
+          type: SchemaType.STRING,
+          description: 'New date in ISO format (YYYY-MM-DD)',
+        },
+        title: {
+          type: SchemaType.STRING,
+          description: 'New title',
+        },
+        description: {
+          type: SchemaType.STRING,
+          description: 'New description',
+        },
+        type: {
+          type: SchemaType.STRING,
+          description: 'New workout type: Ride, Run, Swim, Walk, Hike, Ski, Gym, Yoga, Row, or Other',
+        },
+        duration_minutes: {
+          type: SchemaType.NUMBER,
+          description: 'New duration in minutes',
+        },
+        tss: {
+          type: SchemaType.NUMBER,
+          description: 'New TSS target',
+        },
+      },
+      required: ['workout_id'],
+    },
+  },
+  {
+    name: 'delete_planned_workout',
+    description: 'Remove a planned workout from the schedule.',
+    parameters: {
+      type: SchemaType.OBJECT,
+      properties: {
+        workout_id: {
+          type: SchemaType.STRING,
+          description: 'ID of the workout to delete',
+        },
+        reason: {
+          type: SchemaType.STRING,
+          description: 'Optional reason for deletion (for context)',
+        },
+      },
+      required: ['workout_id'],
+    },
+  },
+  {
+    name: 'get_training_availability',
+    description: 'Get user\'s training availability schedule showing when they can train each day of the week.',
+    parameters: {
+      type: SchemaType.OBJECT,
+      properties: {},
+    },
+  },
+  {
+    name: 'update_training_availability',
+    description: 'Update when the user can train during the week. Use this when user wants to change their availability.',
+    parameters: {
+      type: SchemaType.OBJECT,
+      properties: {
+        day_of_week: {
+          type: SchemaType.NUMBER,
+          description: 'Day to update (0=Sunday, 1=Monday, 2=Tuesday, 3=Wednesday, 4=Thursday, 5=Friday, 6=Saturday)',
+        },
+        morning: {
+          type: SchemaType.BOOLEAN,
+          description: 'Available in morning (5am-12pm)',
+        },
+        afternoon: {
+          type: SchemaType.BOOLEAN,
+          description: 'Available in afternoon (12pm-6pm)',
+        },
+        evening: {
+          type: SchemaType.BOOLEAN,
+          description: 'Available in evening (6pm-11pm)',
+        },
+        bike_access: {
+          type: SchemaType.BOOLEAN,
+          description: 'Has bike or trainer access',
+        },
+        gym_access: {
+          type: SchemaType.BOOLEAN,
+          description: 'Has gym access',
+        },
+        indoor_only: {
+          type: SchemaType.BOOLEAN,
+          description: 'Indoor only constraint',
+        },
+        notes: {
+          type: SchemaType.STRING,
+          description: 'Additional notes or constraints',
+        },
+      },
+      required: ['day_of_week'],
+    },
+  },
+  {
+    name: 'generate_training_plan',
+    description: 'Generate a new AI-powered training plan. ALWAYS confirm with user before calling this tool. Ask for explicit confirmation.',
+    parameters: {
+      type: SchemaType.OBJECT,
+      properties: {
+        days: {
+          type: SchemaType.NUMBER,
+          description: 'Number of days to plan (1-14, default: 7)',
+        },
+        start_date: {
+          type: SchemaType.STRING,
+          description: 'Plan start date in ISO format (YYYY-MM-DD, default: tomorrow)',
+        },
+        user_confirmed: {
+          type: SchemaType.BOOLEAN,
+          description: 'User has explicitly confirmed they want to generate a new plan',
+        },
+      },
+      required: ['user_confirmed'],
+    },
+  },
+  {
+    name: 'get_current_plan',
+    description: 'Get the current active training plan with all details including daily workouts and weekly summary.',
+    parameters: {
+      type: SchemaType.OBJECT,
+      properties: {},
+    },
+  },
 ]
 
 /**
@@ -187,6 +397,30 @@ export async function executeToolCall(
 
       case 'get_performance_metrics':
         return await getPerformanceMetrics(userId, args)
+
+      case 'get_planned_workouts':
+        return await getPlannedWorkouts(userId, args)
+
+      case 'create_planned_workout':
+        return await createPlannedWorkout(userId, args)
+
+      case 'update_planned_workout':
+        return await updatePlannedWorkout(userId, args)
+
+      case 'delete_planned_workout':
+        return await deletePlannedWorkout(userId, args)
+
+      case 'get_training_availability':
+        return await getTrainingAvailability(userId)
+
+      case 'update_training_availability':
+        return await updateTrainingAvailability(userId, args)
+
+      case 'generate_training_plan':
+        return await generateTrainingPlan(userId, args)
+
+      case 'get_current_plan':
+        return await getCurrentPlan(userId)
 
       default:
         return { error: `Unknown tool: ${toolName}` }
