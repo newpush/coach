@@ -83,13 +83,14 @@
     </div>
 
     <!-- Content Area -->
-    <div class="flex-1 overflow-auto px-4 pb-4">
+    <div class="flex-1 overflow-hidden px-4 pb-4">
       <div v-if="status === 'error'" class="p-4 text-red-500 bg-red-50 rounded-lg">
         Failed to load activities. Please try again.
       </div>
 
       <!-- Calendar View -->
-      <div v-if="viewMode === 'calendar'" class="grid grid-cols-[100px_repeat(7,1fr)] gap-px bg-gray-200 dark:bg-gray-700 border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+      <div v-if="viewMode === 'calendar'" class="overflow-x-auto overflow-y-auto h-full">
+        <div class="grid grid-cols-[80px_repeat(7,minmax(130px,1fr))] gap-px bg-gray-200 dark:bg-gray-700 border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden min-w-[1000px]">
         
         <!-- Header Row -->
         <div class="p-2 text-xs font-semibold text-center text-gray-500 bg-gray-50 dark:bg-gray-800">
@@ -143,6 +144,7 @@
             @activity-click="openActivity"
           />
         </template>
+        </div>
       </div>
 
       <!-- List View -->
