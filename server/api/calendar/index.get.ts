@@ -25,6 +25,34 @@ export default defineEventHandler(async (event) => {
   
   const userId = (session.user as any).id
   
+  // Fetch nutrition data for the date range
+  const nutrition = await prisma.nutrition.findMany({
+    where: {
+      userId,
+      date: {
+        gte: startDate,
+        lte: endDate
+      }
+    },
+    orderBy: { date: 'asc' }
+  })
+  
+  // Create a map of nutrition data by date (YYYY-MM-DD)
+  const nutritionByDate = new Map()
+  for (const n of nutrition) {
+    const dateKey = n.date.toISOString().split('T')[0]
+    nutritionByDate.set(dateKey, {
+      calories: n.calories,
+      protein: n.protein,
+      carbs: n.carbs,
+      fat: n.fat,
+      caloriesGoal: n.caloriesGoal,
+      proteinGoal: n.proteinGoal,
+      carbsGoal: n.carbsGoal,
+      fatGoal: n.fatGoal
+    })
+  }
+  
   // Fetch completed workouts
   const workouts = await prisma.workout.findMany({
     where: {
@@ -50,12 +78,16 @@ export default defineEventHandler(async (event) => {
     orderBy: { date: 'asc' }
   })
   
-  // Normalize to CalendarActivity format
-  const activities = []
+  // Group activities by date for nutrition injection
+  const activitiesByDate = new Map()
   
   // Process Completed Workouts
   for (const w of workouts) {
-    activities.push({
+    const dateKey = w.date.toISOString().split('T')[0]
+    if (!activitiesByDate.has(dateKey)) {
+      activitiesByDate.set(dateKey, [])
+    }
+    activitiesByDate.get(dateKey).push({
       id: w.id,
       title: w.title,
       date: w.date.toISOString(),
@@ -73,8 +105,14 @@ export default defineEventHandler(async (event) => {
       rpe: w.rpe,
       feel: w.feel,
       
+      // Planned workout link
+      plannedWorkoutId: w.plannedWorkoutId,
+      
       // Original IDs for linking
-      originalId: w.id
+      originalId: w.id,
+      
+      // Nutrition data for this date (will be same for all activities on the same day)
+      nutrition: nutritionByDate.get(dateKey) || null
     })
   }
   
@@ -96,7 +134,11 @@ export default defineEventHandler(async (event) => {
       status = 'missed'
     }
     
-    activities.push({
+    const dateKey = p.date.toISOString().split('T')[0]
+    if (!activitiesByDate.has(dateKey)) {
+      activitiesByDate.set(dateKey, [])
+    }
+    activitiesByDate.get(dateKey).push({
       id: p.id,
       title: p.title,
       date: p.date.toISOString(),
@@ -116,8 +158,23 @@ export default defineEventHandler(async (event) => {
       plannedTss: p.tss,
       
       // Link info
-      linkedWorkoutId: p.workoutId
+      linkedWorkoutId: p.workoutId,
+      
+      // Nutrition data for this date (will be same for all activities on the same day)
+      nutrition: nutritionByDate.get(dateKey) || null
     })
+  }
+  
+  // Flatten activities array and ensure nutrition is attached to all activities
+  const activities = []
+  for (const [dateKey, dateActivities] of activitiesByDate.entries()) {
+    const nutritionData = nutritionByDate.get(dateKey) || null
+    for (const activity of dateActivities) {
+      activities.push({
+        ...activity,
+        nutrition: nutritionData
+      })
+    }
   }
   
   return activities
