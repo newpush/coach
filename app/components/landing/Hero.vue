@@ -51,31 +51,11 @@
         <div class="max-w-3xl flex-none sm:max-w-5xl lg:max-w-none">
           <div class="-m-2 rounded-xl bg-gray-900/5 p-2 ring-1 ring-inset ring-gray-900/10 lg:-m-4 lg:rounded-2xl lg:p-4">
             <div class="relative rounded-md shadow-2xl ring-1 ring-gray-900/10 overflow-hidden bg-gray-800 border border-gray-700 tilt-card">
-               <!-- Placeholder for Dashboard UI -->
-               <div class="aspect-[16/10] w-[40rem] bg-gray-900/90 relative">
-                  <!-- Fake UI Header -->
-                  <div class="h-10 border-b border-gray-700 flex items-center px-4 space-x-2">
-                    <div class="w-3 h-3 rounded-full bg-red-500/50"></div>
-                    <div class="w-3 h-3 rounded-full bg-yellow-500/50"></div>
-                    <div class="w-3 h-3 rounded-full bg-green-500/50"></div>
-                  </div>
-                  <!-- Fake UI Content -->
-                  <div class="p-6 grid grid-cols-3 gap-4">
-                     <!-- Left Col -->
-                     <div class="col-span-1 space-y-4">
-                        <div class="h-24 bg-gray-800 rounded border border-gray-700 animate-pulse"></div>
-                        <div class="h-40 bg-gray-800 rounded border border-gray-700"></div>
-                     </div>
-                     <!-- Main Col -->
-                     <div class="col-span-2 space-y-4">
-                        <div class="h-64 bg-gray-800 rounded border border-gray-700 relative overflow-hidden">
-                           <!-- Matrix Rain Effect Placeholder -->
-                           <div class="absolute inset-0 opacity-20 bg-[url('https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExbm95MXY4Z3Y0Z3Y0Z3Y0Z3Y0Z3Y0Z3Y0Z3Y0Z3Y0Z3Y0Z3Y0/U3qYN8S0j3bpK/giphy.gif')] bg-cover mix-blend-screen"></div>
-                           <div class="absolute bottom-4 left-4 right-4 h-32 bg-gradient-to-t from-primary-500/20 to-transparent rounded"></div>
-                        </div>
-                     </div>
-                  </div>
-               </div>
+               <img
+                 src="/images/screenshots/todays_training.png"
+                 alt="Coach Watts Dashboard"
+                 class="w-[40rem] rounded-md shadow-2xl ring-1 ring-gray-900/10"
+               />
             </div>
           </div>
         </div>
