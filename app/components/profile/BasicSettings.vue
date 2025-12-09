@@ -336,7 +336,7 @@ const props = defineProps<{
   email: string
 }>()
 
-const emit = defineEmits(['update:modelValue'])
+const emit = defineEmits(['update:modelValue', 'autodetect'])
 
 const editingField = ref<string | null>(null)
 const editValue = ref<any>(null)
@@ -356,6 +356,9 @@ async function autodetectProfile() {
       // Emit updates to parent
       const newProfile = { ...props.modelValue, ...response.updates }
       emit('update:modelValue', newProfile)
+      
+      // Emit event for parent to handle other updates (like zones)
+      emit('autodetect', response.profile)
       
       toast.add({
         title: 'Profile Updated',
