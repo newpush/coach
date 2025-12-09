@@ -1,12 +1,13 @@
 <template>
   <div class="min-h-screen flex flex-col font-sans bg-white dark:bg-gray-950 text-gray-900 dark:text-gray-100">
-    <header class="sticky top-0 z-50 bg-white/75 dark:bg-gray-950/75 backdrop-blur border-b border-gray-200 dark:border-gray-800">
+    <header
+      class="sticky top-0 z-50 bg-white/75 dark:bg-gray-950/75 backdrop-blur border-b border-gray-200 dark:border-gray-800">
       <UContainer class="h-16 flex items-center justify-between">
         <NuxtLink to="/" class="flex items-center gap-2 font-bold text-xl hover:text-primary transition-colors">
           <UIcon name="i-lucide-zap" class="w-6 h-6 text-primary" />
           Coach Watts
         </NuxtLink>
-        
+
         <nav class="hidden md:flex items-center gap-6 text-sm font-medium text-gray-600 dark:text-gray-300">
           <NuxtLink to="/#how-it-works" class="hover:text-primary transition-colors">How it Works</NuxtLink>
           <NuxtLink to="/#pricing" class="hover:text-primary transition-colors">Pricing</NuxtLink>
@@ -15,7 +16,7 @@
 
         <div class="flex items-center gap-2">
           <UButton to="/login" variant="ghost" color="gray">Sign In</UButton>
-          <UButton to="/login" color="primary">Get Started</UButton>
+          <UButton to="/join" color="primary">Get Started</UButton>
           <ColorModeButton />
         </div>
       </UContainer>
@@ -40,21 +41,34 @@
           <div>
             <h3 class="font-semibold mb-4">Product</h3>
             <ul class="space-y-2 text-sm text-gray-500 dark:text-gray-400">
-              <li><NuxtLink to="/#features" class="hover:text-primary">Features</NuxtLink></li>
-              <li><NuxtLink to="/#architecture" class="hover:text-primary">Architecture</NuxtLink></li>
-              <li><NuxtLink to="/#pricing" class="hover:text-primary">Pricing</NuxtLink></li>
-              <li><NuxtLink to="/login" class="hover:text-primary">Login</NuxtLink></li>
+              <li>
+                <NuxtLink to="/#features" class="hover:text-primary">Features</NuxtLink>
+              </li>
+              <li>
+                <NuxtLink to="/#architecture" class="hover:text-primary">Architecture</NuxtLink>
+              </li>
+              <li>
+                <NuxtLink to="/#pricing" class="hover:text-primary">Pricing</NuxtLink>
+              </li>
+              <li>
+                <NuxtLink to="/login" class="hover:text-primary">Login</NuxtLink>
+              </li>
             </ul>
           </div>
           <div>
             <h3 class="font-semibold mb-4">Legal</h3>
             <ul class="space-y-2 text-sm text-gray-500 dark:text-gray-400">
-              <li><NuxtLink to="/privacy" class="hover:text-primary">Privacy</NuxtLink></li>
-              <li><NuxtLink to="/terms" class="hover:text-primary">Terms</NuxtLink></li>
+              <li>
+                <NuxtLink to="/privacy" class="hover:text-primary">Privacy</NuxtLink>
+              </li>
+              <li>
+                <NuxtLink to="/terms" class="hover:text-primary">Terms</NuxtLink>
+              </li>
             </ul>
           </div>
         </div>
-        <div class="flex flex-col md:flex-row justify-between items-center gap-4 pt-8 border-t border-gray-200 dark:border-gray-800">
+        <div
+          class="flex flex-col md:flex-row justify-between items-center gap-4 pt-8 border-t border-gray-200 dark:border-gray-800">
           <div class="text-sm text-gray-500">
             © {{ new Date().getFullYear() }} Coach Watts. All rights reserved.
           </div>
