@@ -27,6 +27,22 @@ model User {
   maxHr         Int?      // Max Heart Rate
   weight        Float?    // Weight in kg (for W/kg calcs)
   dob           DateTime? // Date of birth for age-based metrics
+
+  // User Settings
+  language      String?   @default("English")
+  weightUnits   String?   @default("Kilograms") // "Kilograms", "Pounds"
+  height        Int?      // cm
+  heightUnits   String?   @default("cm") // "cm", "ft/in"
+  distanceUnits String?   @default("Kilometers") // "Kilometers", "Miles"
+  temperatureUnits String? @default("Celsius") // "Celsius", "Fahrenheit"
+  restingHr     Int?
+  form          String?   @default("Absolute value") // "Absolute value", "Percentage"
+  visibility    String?   @default("Private") // "Private", "Public", "Followers Only"
+  sex           String?   // "Male", "Female", "Other"
+  city          String?
+  state         String?
+  country       String?
+  timezone      String?
   
   // Athlete Profile Scores (1-10 scale, updated periodically from profile generation)
   currentFitnessScore       Int?      // Current overall fitness level
