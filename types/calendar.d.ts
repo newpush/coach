@@ -31,5 +31,6 @@ export interface CalendarActivity {
     sleepScore?: number | null // Sleep score 0-100
     hoursSlept?: number | null // Hours slept
     recoveryScore?: number | null // Recovery score 0-100
+    weight?: number | null // Weight in kg
   } | null
 }
