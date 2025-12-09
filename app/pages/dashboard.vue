@@ -479,13 +479,13 @@
           </UBadge>
           <p class="text-sm text-muted mt-2">Confidence: {{ (todayRecommendation.confidence * 100).toFixed(0) }}%</p>
         </div>
-        
+
         <!-- Reasoning -->
         <div>
           <h4 class="font-medium mb-2">Why?</h4>
           <p class="text-sm text-muted">{{ todayRecommendation.reasoning }}</p>
         </div>
-        
+
         <!-- Key Factors -->
         <div v-if="todayRecommendation.analysisJson?.key_factors">
           <h4 class="font-medium mb-2">Key Factors:</h4>
@@ -496,7 +496,7 @@
             </li>
           </ul>
         </div>
-        
+
         <!-- Planned Workout -->
         <div v-if="todayRecommendation.analysisJson?.planned_workout">
           <h4 class="font-medium mb-2">Original Plan:</h4>
@@ -508,7 +508,7 @@
             </p>
           </div>
         </div>
-        
+
         <!-- Suggested Modifications -->
         <div v-if="todayRecommendation.analysisJson?.suggested_modifications">
           <h4 class="font-medium mb-2">Suggested Changes:</h4>
@@ -523,7 +523,7 @@
         </div>
       </div>
     </template>
-    
+
     <template #footer>
       <div class="flex gap-2 justify-end">
         <UButton color="neutral" variant="outline" @click="showRecommendationModal = false">
@@ -532,6 +532,16 @@
       </div>
     </template>
   </UModal>
+
+  <!-- Score Detail Modal -->
+  <ScoreDetailModal
+    v-model="showScoreModal"
+    :title="scoreModalData.title"
+    :score="scoreModalData.score"
+    :explanation="scoreModalData.explanation"
+    :analysis-data="scoreModalData.analysisData"
+    :color="scoreModalData.color"
+  />
 </template>
 
 <script setup lang="ts">
