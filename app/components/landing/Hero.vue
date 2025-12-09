@@ -14,17 +14,17 @@
                </NuxtLink>
             </div>
             <h1 class="mt-10 text-4xl font-bold tracking-tight text-white sm:text-6xl font-mono">
-               Elite Coaching. <br />
-               <span class="text-primary-500">For Everyone.</span>
+               Unlock Your True Potential. <br />
+               <span class="text-primary-500">Stop Guessing. Start Winning.</span>
             </h1>
             <p class="mt-6 text-lg leading-8 text-gray-300">
-               The first AI Endurance Coach built by cybersecurity experts. Secure, data-driven, and completely free.
-               Turn your fitness data into a gold medal strategy.
+               The only AI Endurance Coach that evolves with you every single day. Built by cybersecurity experts to be
+               secure, private, and insanely effective.
             </p>
             <div class="mt-10 flex items-center gap-x-6">
                <UButton to="/login" size="xl" color="primary" variant="solid"
                   class="px-8 py-3 text-base font-semibold shadow-sm hover:bg-primary-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-400">
-                  Start Training - Free
+                  Claim Your Digital Twin (Free)
                </UButton>
                <UButton to="#how-it-works" size="xl" color="neutral" variant="ghost"
                   class="text-sm font-semibold leading-6 text-white">
