@@ -106,6 +106,7 @@
               v-model="form.eventType"
               :items="['Race', 'Gran Fondo', 'Time Trial', 'Triathlon', 'Running Race', 'Other']"
               size="lg"
+              :ui="{ content: 'min-w-[200px]' }"
             />
             <p class="text-xs text-muted mt-1">What kind of challenge is it?</p>
           </div>
@@ -122,6 +123,7 @@
               v-model="form.metric"
               :items="['FTP (Watts)', 'VO2 Max', '5k Pace (min/km)', '10k Pace (min/km)', 'Max Heart Rate']"
               size="lg"
+              :ui="{ content: 'min-w-[250px]' }"
             />
             <p class="text-xs text-muted mt-1">What do you want to improve?</p>
           </div>
@@ -143,7 +145,13 @@
             <label class="text-sm font-medium mb-2 block">Weekly Target</label>
             <div class="flex gap-3">
               <UInputNumber v-model="form.targetValue" class="flex-1" placeholder="10" size="lg" :min="0" />
-              <USelect v-model="form.metric" :items="['Hours', 'Workouts', 'TSS']" size="lg" class="w-40" />
+              <USelect
+                v-model="form.metric"
+                :items="['Hours', 'Workouts', 'TSS']"
+                size="lg"
+                class="w-40"
+                :ui="{ content: 'min-w-[150px]' }"
+              />
             </div>
             <p class="text-xs text-muted mt-1">Commitment per week</p>
           </div>
