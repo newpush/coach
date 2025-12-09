@@ -12,6 +12,7 @@ export interface CalendarActivity {
   plannedTss?: number
   intensity?: number
   rpe?: number
+  averageHr?: number | null // Average heart rate in BPM
   status?: 'completed' | 'planned' | 'missed'
   plannedWorkoutId?: string | null // Link to planned workout if this was a planned workout
   nutrition?: {
