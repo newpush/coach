@@ -142,7 +142,9 @@
         </div>
 
         <div class="pt-4 border-t border-gray-200 dark:border-gray-800 flex justify-end">
-          <UButton size="lg" color="primary" @click="saveGoal" :loading="saving" icon="i-heroicons-check">Create Goal</UButton>
+          <UButton size="lg" color="primary" @click="saveGoal" :loading="saving" icon="i-heroicons-check">
+            {{ isEditMode ? 'Update Goal' : 'Create Goal' }}
+          </UButton>
         </div>
       </div>
     </div>
@@ -150,8 +152,13 @@
 </template>
 
 <script setup lang="ts">
-const emit = defineEmits(['close', 'created'])
+const props = defineProps<{
+  goal?: any
+}>()
 
+const emit = defineEmits(['close', 'created', 'updated'])
+
+const isEditMode = computed(() => !!props.goal)
 const step = ref(1)
 const selectedType = ref('')
 const saving = ref(false)
@@ -166,7 +173,18 @@ const selectedTypeLabel = computed(() => {
   return goalTypes.find(t => t.id === selectedType.value)?.label || ''
 })
 
-const form = reactive({
+const form = reactive<{
+  title: string
+  description: string
+  priority: string
+  startValue: number | undefined
+  targetValue: number | undefined
+  currentValue: number | undefined
+  targetDate: string | undefined
+  eventDate: string | undefined
+  eventType: string
+  metric: string
+}>({
   title: '',
   description: '',
   priority: 'MEDIUM',
@@ -177,6 +195,24 @@ const form = reactive({
   eventDate: undefined,
   eventType: 'Race',
   metric: ''
+})
+
+// Initialize form with existing goal data in edit mode
+watchEffect(() => {
+  if (props.goal) {
+    selectedType.value = props.goal.type
+    form.title = props.goal.title || ''
+    form.description = props.goal.description || ''
+    form.priority = props.goal.priority || 'MEDIUM'
+    form.startValue = props.goal.startValue
+    form.targetValue = props.goal.targetValue
+    form.currentValue = props.goal.currentValue
+    form.targetDate = props.goal.targetDate ? new Date(props.goal.targetDate).toISOString().split('T')[0] : undefined
+    form.eventDate = props.goal.eventDate ? new Date(props.goal.eventDate).toISOString().split('T')[0] : undefined
+    form.eventType = props.goal.eventType || 'Race'
+    form.metric = props.goal.metric || ''
+    step.value = 2
+  }
 })
 
 const goalTypes = [
@@ -266,18 +302,27 @@ async function saveGoal() {
     if (payload.startValue) payload.startValue = Number(payload.startValue)
     if (payload.targetValue) payload.targetValue = Number(payload.targetValue)
     if (payload.currentValue) payload.currentValue = Number(payload.currentValue)
-    else if (payload.startValue) payload.currentValue = payload.startValue // Default current to start
+    else if (payload.startValue) payload.currentValue = payload.startValue
 
-    await $fetch('/api/goals', {
-      method: 'POST',
-      body: payload
-    })
+    if (isEditMode.value && props.goal) {
+      // Update existing goal
+      await $fetch(`/api/goals/${props.goal.id}`, {
+        method: 'PATCH',
+        body: payload
+      })
+      emit('updated')
+    } else {
+      // Create new goal
+      await $fetch('/api/goals', {
+        method: 'POST',
+        body: payload
+      })
+      emit('created')
+    }
     
-    emit('created')
     emit('close')
   } catch (error) {
     console.error(error)
-    // Handle error
   } finally {
     saving.value = false
   }

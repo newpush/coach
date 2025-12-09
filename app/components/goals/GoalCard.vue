@@ -34,7 +34,7 @@
           <span>{{ goal.currentValue }}kg</span>
           <span>Target: {{ goal.targetValue }}kg</span>
         </div>
-        <UProgress :value="calculateProgress(goal.startValue, goal.currentValue, goal.targetValue)" size="sm" color="primary" />
+        <UProgress :model-value="calculateProgress(goal.startValue, goal.currentValue, goal.targetValue)" size="sm" color="primary" />
       </div>
       
       <div v-else-if="goal.type === 'EVENT'" class="text-xs text-muted">
@@ -56,7 +56,7 @@ const props = defineProps<{
   goal: any
 }>()
 
-const emit = defineEmits(['delete'])
+const emit = defineEmits(['delete', 'edit'])
 
 const typeIcon = computed(() => {
   switch (props.goal.type) {
@@ -99,6 +99,10 @@ const priorityColor = computed(() => {
 
 const actions = [
   [{
+    label: 'Edit Goal',
+    icon: 'i-heroicons-pencil',
+    click: () => emit('edit', props.goal)
+  }, {
     label: 'Delete Goal',
     icon: 'i-heroicons-trash',
     click: () => emit('delete', props.goal.id)
