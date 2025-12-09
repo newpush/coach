@@ -21,20 +21,29 @@
         </span>
         
         <!-- Wellness Metrics -->
-        <div v-if="dayWellness" class="flex items-center gap-1.5 text-[10px]">
-          <span v-if="dayWellness.hrv != null" class="flex items-center gap-0.5 text-purple-500 dark:text-purple-400" :title="`HRV: ${Math.round(dayWellness.hrv)}ms`">
+        <button
+          v-if="dayWellness"
+          @click="$emit('wellness-click', date)"
+          class="flex items-center gap-1.5 text-[10px] text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 transition-colors cursor-pointer"
+          :title="'View wellness details'"
+        >
+          <span v-if="dayWellness.hrv != null" class="flex items-center gap-0.5">
             <UIcon name="i-heroicons-heart" class="w-2.5 h-2.5" />
             <span class="font-medium">{{ Math.round(dayWellness.hrv) }}</span>
           </span>
-          <span v-if="dayWellness.hoursSlept != null" class="flex items-center gap-0.5 text-indigo-500 dark:text-indigo-400" :title="`Sleep: ${dayWellness.hoursSlept.toFixed(1)}h`">
+          <span v-if="dayWellness.hoursSlept != null" class="flex items-center gap-0.5">
             <UIcon name="i-heroicons-moon" class="w-2.5 h-2.5" />
             <span class="font-medium">{{ dayWellness.hoursSlept.toFixed(1) }}</span>
           </span>
-          <span v-if="dayWellness.restingHr != null" class="flex items-center gap-0.5 text-pink-500 dark:text-pink-400" :title="`Resting HR: ${dayWellness.restingHr} bpm`">
+          <span v-if="dayWellness.restingHr != null" class="flex items-center gap-0.5">
             <UIcon name="i-heroicons-heart-20-solid" class="w-2.5 h-2.5" />
             <span class="font-medium">{{ dayWellness.restingHr }}</span>
           </span>
-        </div>
+          <span v-if="dayWellness.weight != null" class="flex items-center gap-0.5">
+            <UIcon name="i-heroicons-scale" class="w-2.5 h-2.5" />
+            <span class="font-medium">{{ dayWellness.weight.toFixed(1) }}</span>
+          </span>
+        </button>
       </div>
     </div>
 
@@ -160,6 +169,7 @@ const props = defineProps<{
 
 defineEmits<{
   'activity-click': [activity: CalendarActivity]
+  'wellness-click': [date: Date]
 }>()
 
 const dayNumber = computed(() => format(props.date, 'd'))
