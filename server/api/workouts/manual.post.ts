@@ -1,5 +1,6 @@
 import { getServerSession } from '#auth'
 import { prisma } from '../../utils/db'
+import { calculateWorkoutStress } from '../../utils/calculate-workout-stress'
 
 export default defineEventHandler(async (event) => {
   const session = await getServerSession(event)
@@ -40,6 +41,16 @@ export default defineEventHandler(async (event) => {
         plannedWorkoutId: body.plannedWorkoutId || null
       }
     })
+    
+    // Calculate CTL/ATL for the new workout
+    try {
+      const { ctl, atl } = await calculateWorkoutStress(workout.id, userId)
+      workout.ctl = ctl
+      workout.atl = atl
+    } catch (error) {
+      console.error('Error calculating workout stress metrics:', error)
+      // Don't fail the request if stress calculation fails
+    }
     
     // If linked to a planned workout, mark it as completed
     if (body.plannedWorkoutId) {

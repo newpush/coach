@@ -150,6 +150,7 @@ export default defineEventHandler(async (event) => {
       duration: w.durationSec,
       distance: w.distanceMeters,
       tss: w.tss,
+      trimp: w.trimp,
       intensity: w.intensity,
       averageHr: w.averageHr,
       
