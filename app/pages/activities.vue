@@ -165,6 +165,13 @@
                 </div>
               </UTooltip>
             </div>
+            
+            <!-- Weekly Zone Summary -->
+            <WeeklyZoneSummary
+              :workout-ids="getWeekWorkoutIds(week)"
+              :auto-load="true"
+              @click="openWeekZoneDetail(week)"
+            />
           </div>
 
           <!-- Day Cells -->
@@ -305,6 +312,12 @@
       v-model="showWellnessModal"
       :date="selectedWellnessDate"
     />
+    
+    <!-- Weekly Zone Detail Modal -->
+    <WeeklyZoneDetailModal
+      v-model="showWeekZoneModal"
+      :week-data="selectedWeekData"
+    />
   </div>
 </template>
 
@@ -319,6 +332,8 @@ const showWorkoutModal = ref(false)
 const selectedWorkout = ref<any>(null)
 const showWellnessModal = ref(false)
 const selectedWellnessDate = ref<Date | null>(null)
+const showWeekZoneModal = ref(false)
+const selectedWeekData = ref<any>(null)
 
 const currentDate = ref(new Date())
 const viewMode = ref<'calendar' | 'list'>('calendar')
@@ -566,5 +581,42 @@ function formatDurationDetailed(seconds: number): string {
   const m = Math.floor((seconds % 3600) / 60)
   const s = seconds % 60
   return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`
+}
+
+function getWeekWorkoutIds(week: any[]): string[] {
+  const ids: string[] = []
+  week.forEach(day => {
+    day.activities.forEach((activity: CalendarActivity) => {
+      if (activity.source === 'completed') {
+        ids.push(activity.id)
+      }
+    })
+  })
+  return ids
+}
+
+function openWeekZoneDetail(week: any[]) {
+  const summary = getWeekSummary(week)
+  const completedActivities: CalendarActivity[] = []
+  
+  week.forEach(day => {
+    day.activities.forEach((activity: CalendarActivity) => {
+      if (activity.source === 'completed') {
+        completedActivities.push(activity)
+      }
+    })
+  })
+  
+  selectedWeekData.value = {
+    weekNumber: week[0] ? getWeekNumber(week[0].date) : 0,
+    completedWorkouts: completedActivities.length,
+    totalDuration: summary.duration,
+    totalDistance: summary.distance,
+    totalTSS: summary.tss,
+    workoutIds: getWeekWorkoutIds(week),
+    activities: completedActivities
+  }
+  
+  showWeekZoneModal.value = true
 }
 </script>

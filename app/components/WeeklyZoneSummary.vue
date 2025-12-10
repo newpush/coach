@@ -1,8 +1,11 @@
 <template>
   <div v-if="hasData" class="mt-2 pt-2 border-t border-gray-200 dark:border-gray-700">
     <div class="text-[10px] text-gray-500 dark:text-gray-400 mb-1">Training Zones</div>
-    <UTooltip :text="tooltipText" :popper="{ placement: 'right' }">
-      <div class="w-full h-4 flex gap-[1px] rounded overflow-hidden shadow-sm cursor-help">
+    <UTooltip text="Click for details" :popper="{ placement: 'right' }">
+      <div
+        class="w-full h-4 flex gap-[1px] rounded overflow-hidden shadow-sm cursor-pointer hover:ring-2 hover:ring-primary-500 transition-all"
+        @click="$emit('click')"
+      >
         <div
           v-for="(segment, index) in zoneSegments"
           :key="index"
@@ -10,7 +13,7 @@
             width: segment.percentage + '%',
             backgroundColor: segment.color
           }"
-          class="transition-all duration-200 hover:opacity-80 first:rounded-l last:rounded-r"
+          class="transition-all duration-200 first:rounded-l last:rounded-r"
         ></div>
       </div>
     </UTooltip>
@@ -30,6 +33,10 @@ interface Props {
 const props = withDefaults(defineProps<Props>(), {
   autoLoad: true
 })
+
+defineEmits<{
+  'click': []
+}>()
 
 // Zone colors matching the MiniZoneChart component
 const zoneColors = [
