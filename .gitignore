@@ -31,3 +31,8 @@ examples/cycling
 examples/chat
 examples/vue-advanced-chat
 examples/fitly
+
+# Database backups
+backups/
+*.dump
+*.sql.gz
