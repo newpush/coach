@@ -15,6 +15,8 @@ export interface CalendarActivity {
   averageHr?: number | null // Average heart rate in BPM
   status?: 'completed' | 'planned' | 'missed'
   plannedWorkoutId?: string | null // Link to planned workout if this was a planned workout
+  ctl?: number | null // Chronic Training Load (Fitness)
+  atl?: number | null // Acute Training Load (Fatigue)
   nutrition?: {
     calories?: number | null
     protein?: number | null
