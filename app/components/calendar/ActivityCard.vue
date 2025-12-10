@@ -56,8 +56,13 @@
       </div>
     </div>
     
+    <!-- Mini Zone Chart (for completed workouts with stream data) -->
+    <div v-if="shouldShowZoneChart" class="px-1.5 pb-1">
+      <MiniZoneChart :workout-id="activity.id" :auto-load="true" />
+    </div>
+    
     <!-- Load Bar (Visual indicator of intensity/load) -->
-    <div v-if="activity.tss || activity.plannedTss" class="absolute bottom-0 left-0 right-0 h-0.5 bg-gray-200 dark:bg-gray-700">
+    <div v-if="!shouldShowZoneChart && (activity.tss || activity.plannedTss)" class="absolute bottom-0 left-0 right-0 h-0.5 bg-gray-200 dark:bg-gray-700">
       <div
         class="h-full"
         :class="statusColors.bar"
@@ -76,6 +81,12 @@ const props = defineProps<{
 }>()
 
 const isPlanned = computed(() => props.activity.source === 'planned')
+
+// Show mini zone chart for completed workouts
+// The component will handle cases where stream data isn't available
+const shouldShowZoneChart = computed(() => {
+  return props.activity.source === 'completed'
+})
 
 // Calculate TSB (Training Stress Balance) if CTL and ATL are available
 const tsbValue = computed(() => {

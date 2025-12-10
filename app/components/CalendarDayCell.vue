@@ -141,6 +141,11 @@
                 <span class="ml-0.5">Planned</span>
               </UBadge>
             </div>
+            
+            <!-- Mini Zone Chart -->
+            <div v-if="activity.source === 'completed'" class="mt-1.5">
+              <MiniZoneChart :workout-id="activity.id" :auto-load="true" />
+            </div>
           </div>
         </div>
       </button>
