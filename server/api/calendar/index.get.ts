@@ -170,6 +170,16 @@ export default defineEventHandler(async (event) => {
       sessionRpe: w.sessionRpe,
       feel: w.feel,
       
+      // Energy & Time
+      calories: w.calories,
+      elapsedTime: w.elapsedTimeSec,
+      
+      // Device & Metadata
+      deviceName: w.deviceName,
+      commute: w.commute,
+      isPrivate: w.isPrivate,
+      gearId: w.gearId,
+      
       // Planned workout link
       plannedWorkoutId: w.plannedWorkoutId,
       
