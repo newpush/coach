@@ -48,6 +48,12 @@ model User {
   hrZones       Json?     // Array of { name, min, max }
   powerZones    Json?     // Array of { name, min, max }
 
+  // AI Coach Settings
+  aiPersona            String?  @default("Supportive") // "Analytical", "Supportive", "Drill Sergeant", "Motivational"
+  aiModelPreference    String?  @default("flash") // "flash" (faster, cheaper) or "pro" (higher quality, more expensive)
+  aiAutoAnalyzeWorkouts Boolean @default(false) // Auto-analyze workouts on sync
+  aiAutoAnalyzeNutrition Boolean @default(false) // Auto-analyze nutrition logs on sync
+
   // Athlete Profile Scores (1-10 scale, updated periodically from profile generation)
   currentFitnessScore       Int?      // Current overall fitness level
   recoveryCapacityScore     Int?      // Ability to recover from training
@@ -889,9 +895,11 @@ model LlmUsage {
   errorType       String?  // "rate_limit", "api_error", "timeout", etc.
   errorMessage    String?  @db.Text
   
-  // Request/Response Data (optional, for debugging)
-  promptPreview   String?  @db.Text // First 500 chars of prompt (for debugging)
-  responsePreview String?  @db.Text // First 500 chars of response (for debugging)
+  // Request/Response Data (for debugging)
+  promptPreview   String?  @db.Text // First 500 chars of prompt (for quick preview)
+  responsePreview String?  @db.Text // First 500 chars of response (for quick preview)
+  promptFull      String?  @db.Text // Complete prompt (for full debugging)
+  responseFull    String?  @db.Text // Complete response (for full debugging)
   
   // Relations
   user            User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
