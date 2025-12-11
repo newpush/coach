@@ -378,6 +378,56 @@ export const chatToolDeclarations: FunctionDeclaration[] = [
       properties: {},
     },
   },
+  {
+    name: 'create_chart',
+    description: 'Create an inline chart visualization in the conversation. Use when data would be better understood visually (trends, comparisons, distributions). This will render a chart directly in the chat.',
+    parameters: {
+      type: SchemaType.OBJECT,
+      properties: {
+        type: {
+          type: SchemaType.STRING,
+          description: 'Chart type: "line" for trends/time series, "bar" for comparisons, "doughnut" for proportions/distributions, "radar" for multi-metric analysis',
+        },
+        title: {
+          type: SchemaType.STRING,
+          description: 'Descriptive chart title (e.g., "TSS Trend - Last 2 Weeks", "Workout Type Distribution")',
+        },
+        labels: {
+          type: SchemaType.ARRAY,
+          description: 'X-axis labels or categories (dates, workout names, etc.). Must match the length of data arrays.',
+          items: {
+            type: SchemaType.STRING
+          }
+        },
+        datasets: {
+          type: SchemaType.ARRAY,
+          description: 'One or more data series to plot. Each dataset is a line/bar/segment.',
+          items: {
+            type: SchemaType.OBJECT,
+            properties: {
+              label: {
+                type: SchemaType.STRING,
+                description: 'Series label (e.g., "TSS", "Average Power", "Duration")',
+              },
+              data: {
+                type: SchemaType.ARRAY,
+                description: 'Numeric data points. Must match labels length exactly.',
+                items: {
+                  type: SchemaType.NUMBER
+                }
+              },
+              color: {
+                type: SchemaType.STRING,
+                description: 'Optional RGB color (e.g., "rgb(59, 130, 246)"). If not provided, auto-assigned.',
+              },
+            },
+            required: ['label', 'data']
+          }
+        },
+      },
+      required: ['type', 'title', 'labels', 'datasets'],
+    },
+  },
 ]
 
 /**
@@ -433,12 +483,68 @@ export async function executeToolCall(
       case 'get_current_plan':
         return await getCurrentPlan(userId)
 
+      case 'create_chart':
+        return await createChart(args)
+
       default:
         return { error: `Unknown tool: ${toolName}` }
     }
   } catch (error: any) {
     console.error(`Error executing tool ${toolName}:`, error)
     return { error: `Failed to execute ${toolName}: ${error?.message || 'Unknown error'}` }
+  }
+}
+
+/**
+ * Create a chart visualization
+ * This validates the chart data and returns success so the AI knows it will be displayed
+ */
+async function createChart(args: any): Promise<any> {
+  const { type, title, labels, datasets } = args
+  
+  // Validate chart type
+  const validTypes = ['line', 'bar', 'doughnut', 'radar']
+  if (!validTypes.includes(type)) {
+    return { error: `Invalid chart type '${type}'. Must be one of: ${validTypes.join(', ')}` }
+  }
+  
+  // Validate labels
+  if (!labels || labels.length === 0) {
+    return { error: 'Chart must have at least one label' }
+  }
+  
+  // Validate datasets
+  if (!datasets || datasets.length === 0) {
+    return { error: 'Chart must have at least one dataset' }
+  }
+  
+  // Validate each dataset
+  for (const dataset of datasets) {
+    if (!dataset.label) {
+      return { error: 'Each dataset must have a label' }
+    }
+    if (!dataset.data || !Array.isArray(dataset.data)) {
+      return { error: `Dataset '${dataset.label}' must have a data array` }
+    }
+    if (dataset.data.length !== labels.length) {
+      return {
+        error: `Dataset '${dataset.label}' has ${dataset.data.length} data points but there are ${labels.length} labels. They must match.`
+      }
+    }
+    // Validate all data points are numbers
+    for (let i = 0; i < dataset.data.length; i++) {
+      if (typeof dataset.data[i] !== 'number') {
+        return {
+          error: `Dataset '${dataset.label}' has non-numeric value at position ${i}: ${dataset.data[i]}`
+        }
+      }
+    }
+  }
+  
+  return {
+    success: true,
+    chartId: `chart-${Date.now()}`,
+    message: `Chart '${title}' will be displayed inline in the conversation with ${datasets.length} dataset(s) and ${labels.length} data points.`
   }
 }
 

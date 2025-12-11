@@ -17,6 +17,17 @@ const messagesLoaded = ref(false)
 const loadingRooms = ref(true)
 const debugError = ref('')
 
+// Track latest charts from the most recent AI message
+const latestCharts = computed(() => {
+  // Get the last message with charts
+  const messagesWithCharts = messages.value.filter((m: any) => m.metadata?.charts?.length > 0)
+  if (messagesWithCharts.length === 0) return []
+  
+  // Return charts from the most recent message only
+  const latestMessage = messagesWithCharts[messagesWithCharts.length - 1]
+  return latestMessage.metadata.charts || []
+})
+
 // Initialize chat
 onMounted(async () => {
   if (process.client) {
@@ -113,11 +124,26 @@ async function sendMessage({ content, roomId: rid, files, replyMessage }: any) {
       messages.value = newMessages
     }
 
+    // Response includes metadata with charts
     messages.value = [...messages.value, response]
+    
+    // Scroll to bottom after adding message with potential charts
+    await nextTick()
+    scrollToBottom()
     
   } catch (error) {
     console.error('Error sending message:', error)
   }
+}
+
+function scrollToBottom() {
+  // Wait for DOM update and scroll
+  setTimeout(() => {
+    const chatContainer = document.querySelector('.vac-container-scroll')
+    if (chatContainer) {
+      chatContainer.scrollTop = chatContainer.scrollHeight
+    }
+  }, 100)
 }
 
 async function createRoom() {
@@ -162,28 +188,48 @@ async function createRoom() {
     </template>
     
     <template #body>
-      <div class="h-full relative">
-        <div v-if="debugError" class="absolute top-0 left-0 w-full bg-red-100 text-red-700 p-2 z-50">
+      <div class="h-full flex flex-col">
+        <div v-if="debugError" class="bg-red-100 text-red-700 p-2">
           {{ debugError }}
         </div>
         
         <ClientOnly>
-          <vue-advanced-chat
-            v-if="isClient && currentUserId"
-            height="100%"
-            :current-user-id="currentUserId"
-            :rooms="JSON.stringify(rooms)"
-            :loading-rooms="loadingRooms"
-            :rooms-loaded="!loadingRooms"
-            :messages="JSON.stringify(messages)"
-            :room-id="roomId"
-            :messages-loaded="messagesLoaded"
-            :theme="theme"
-            :show-add-room="true"
-            @send-message="sendMessage($event.detail[0])"
-            @fetch-messages="fetchMessages($event.detail[0])"
-            @add-room="createRoom"
-          />
+          <div v-if="isClient && currentUserId" class="flex-1 flex flex-col overflow-hidden">
+            <!-- Chat Component -->
+            <div class="flex-1 overflow-hidden">
+              <vue-advanced-chat
+                height="100%"
+                :current-user-id="currentUserId"
+                :rooms="JSON.stringify(rooms)"
+                :loading-rooms="loadingRooms"
+                :rooms-loaded="!loadingRooms"
+                :messages="JSON.stringify(messages)"
+                :room-id="roomId"
+                :messages-loaded="messagesLoaded"
+                :theme="theme"
+                :show-add-room="true"
+                @send-message="sendMessage($event.detail[0])"
+                @fetch-messages="fetchMessages($event.detail[0])"
+                @add-room="createRoom"
+              />
+            </div>
+            
+            <!-- Charts Container - Rendered below chat when present -->
+            <div
+              v-if="latestCharts.length > 0"
+              class="border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4 max-h-[400px] overflow-y-auto"
+            >
+              <div class="max-w-4xl mx-auto space-y-4">
+                <div
+                  v-for="chart in latestCharts"
+                  :key="chart.id"
+                  class="bg-gray-50 dark:bg-gray-900 rounded-lg"
+                >
+                  <ChatChart :chart-data="chart" />
+                </div>
+              </div>
+            </div>
+          </div>
           <div v-else class="flex items-center justify-center h-full">
             <UIcon name="i-heroicons-arrow-path" class="w-8 h-8 animate-spin text-gray-400" />
           </div>
