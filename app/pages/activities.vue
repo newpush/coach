@@ -77,6 +77,22 @@
           </div>
         </div>
 
+        <UInput
+          v-if="viewMode === 'list'"
+          v-model="tableSearch"
+          icon="i-heroicons-magnifying-glass"
+          placeholder="Filter..."
+          size="sm"
+          class="w-48"
+        />
+
+        <ColumnPicker
+          v-if="viewMode === 'list'"
+          :columns="availableColumns"
+          v-model="selectedColumnIds"
+          :default-columns="defaultColumnIds"
+        />
+
         <UButton
           icon="i-heroicons-arrow-path"
           variant="ghost"
@@ -197,7 +213,7 @@
         <UTable
           v-else
           :data="sortedActivities"
-          :columns="listColumns"
+          :columns="tableColumns"
           :loading="status === 'pending'"
           class="flex-1 w-full"
           @select="openActivity"
@@ -323,6 +339,7 @@
 
 <script setup lang="ts">
 import { startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval, format, addMonths, subMonths, isSameMonth, getISOWeek } from 'date-fns'
+import { useStorage } from '@vueuse/core'
 import type { CalendarActivity } from '~/types/calendar'
 
 // Modal state
@@ -521,12 +538,26 @@ function openWellnessModal(date: Date) {
 }
 
 // List View Helpers
+const tableSearch = ref('')
+
 const sortedActivities = computed(() => {
   if (!activities.value) return []
-  return [...activities.value].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+  
+  let result = [...activities.value].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+
+  if (tableSearch.value) {
+    const q = tableSearch.value.toLowerCase()
+    result = result.filter(a => 
+      (a.title || '').toLowerCase().includes(q) ||
+      (a.type || '').toLowerCase().includes(q) ||
+      (a.status || '').toLowerCase().includes(q)
+    )
+  }
+
+  return result
 })
 
-const listColumns = [
+const availableColumns = [
   { accessorKey: 'type', header: 'Type', id: 'type' },
   { accessorKey: 'date', header: 'Date', id: 'date' },
   { accessorKey: 'title', header: 'Name', id: 'title' },
@@ -539,6 +570,17 @@ const listColumns = [
   { accessorKey: 'source', header: 'Source', id: 'source' },
   { accessorKey: 'status', header: 'Status', id: 'status' }
 ]
+
+const defaultColumnIds = availableColumns.map(c => c.id)
+
+const selectedColumnIds = useStorage<string[]>('activities-list-columns', defaultColumnIds)
+
+const tableColumns = computed(() => {
+  // Map selected IDs to column objects, maintaining order of selected IDs
+  return selectedColumnIds.value
+    .map(id => availableColumns.find(c => c.id === id))
+    .filter(Boolean) as typeof availableColumns
+})
 
 function formatDateForList(dateStr: string) {
   try {

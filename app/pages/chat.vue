@@ -147,7 +147,18 @@ async function createRoom() {
 <template>
   <UDashboardPanel id="chat" :ui="{ body: 'p-0' }">
     <template #header>
-      <UDashboardNavbar title="Chat with Coach Watts" />
+      <UDashboardNavbar title="Chat with Coach Watts">
+        <template #right>
+          <UButton
+            to="/settings/ai"
+            color="neutral"
+            variant="ghost"
+            icon="i-heroicons-cog-6-tooth"
+            aria-label="AI Settings"
+            size="sm"
+          />
+        </template>
+      </UDashboardNavbar>
     </template>
     
     <template #body>
