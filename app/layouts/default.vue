@@ -102,16 +102,24 @@ const links = computed<NavigationMenuItem[][]>(() => [[{
   }, {
     label: 'Connected Apps',
     icon: 'i-lucide-plug',
-    to: '/settings?tab=connected-apps',
-    active: route.path === '/settings' && route.query.tab === 'connected-apps',
+    to: '/settings/apps',
+    active: route.path === '/settings/apps',
+    onSelect: () => {
+      open.value = false
+    }
+  }, {
+    label: 'AI Coach',
+    icon: 'i-lucide-sparkles',
+    to: '/settings/ai',
+    active: route.path === '/settings/ai',
     onSelect: () => {
       open.value = false
     }
   }, {
     label: 'Danger Zone',
     icon: 'i-lucide-alert-triangle',
-    to: '/settings?tab=danger-zone',
-    active: route.path === '/settings' && route.query.tab === 'danger-zone',
+    to: '/settings/danger',
+    active: route.path === '/settings/danger',
     onSelect: () => {
       open.value = false
     }
