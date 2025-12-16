@@ -15,23 +15,12 @@ export default defineEventHandler(async (event) => {
   const startDate = query.startDate ? new Date(query.startDate as string) : undefined
   const endDate = query.endDate ? new Date(query.endDate as string) : undefined
   const includeDuplicates = query.includeDuplicates === 'true'
-  
-  const where: any = {
-    userId: (session.user as any).id,
-    durationSec: { gt: 0 },  // Filter out workouts without duration
-    isDuplicate: includeDuplicates ? undefined : false  // Exclude duplicates by default
-  }
-  
-  if (startDate || endDate) {
-    where.date = {}
-    if (startDate) where.date.gte = startDate
-    if (endDate) where.date.lte = endDate
-  }
-  
-  const workouts = await prisma.workout.findMany({
-    where,
-    orderBy: { date: 'desc' },
-    ...(limit && { take: limit }),
+
+  const workouts = await workoutRepository.getForUser((session.user as any).id, {
+    startDate,
+    endDate,
+    limit,
+    includeDuplicates,
     include: {
       streams: {
         select: {

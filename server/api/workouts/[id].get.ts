@@ -19,10 +19,7 @@ export default defineEventHandler(async (event) => {
     })
   }
   
-  const workout = await prisma.workout.findUnique({
-    where: {
-      id
-    },
+  const workout = await workoutRepository.getById(id, (session.user as any).id, {
     include: {
       streams: true
     }
@@ -32,14 +29,6 @@ export default defineEventHandler(async (event) => {
     throw createError({
       statusCode: 404,
       message: 'Workout not found'
-    })
-  }
-  
-  // Ensure the workout belongs to the authenticated user
-  if (workout.userId !== (session.user as any).id) {
-    throw createError({
-      statusCode: 403,
-      message: 'Forbidden: You do not have access to this workout'
     })
   }
   

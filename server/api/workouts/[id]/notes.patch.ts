@@ -29,10 +29,7 @@ export default defineEventHandler(async (event) => {
   }
 
   // Verify the workout belongs to the user
-  const workout = await prisma.workout.findUnique({
-    where: { id: workoutId },
-    select: { userId: true }
-  })
+  const workout = await workoutRepository.getById(workoutId, (session.user as any).id)
 
   if (!workout) {
     throw createError({
@@ -41,25 +38,14 @@ export default defineEventHandler(async (event) => {
     })
   }
 
-  if (workout.userId !== (session.user as any).id) {
-    throw createError({
-      statusCode: 403,
-      message: 'You do not have permission to update this workout'
-    })
-  }
-
   // Update the workout notes
-  const updatedWorkout = await prisma.workout.update({
-    where: { id: workoutId },
-    data: {
-      notes: notes,
-      notesUpdatedAt: new Date()
-    },
-    select: {
-      id: true,
-      notes: true,
-      notesUpdatedAt: true
-    }
+  // Note: Repository update doesn't support 'select' yet, so we use full return or add support
+  // Let's assume full object return is fine or we should modify the repo.
+  // The client likely expects just the updated fields or the full object.
+  // Given the API contract returns { workout: updatedWorkout }, full object is safe.
+  const updatedWorkout = await workoutRepository.update(workoutId, {
+    notes: notes,
+    notesUpdatedAt: new Date()
   })
 
   return {

@@ -25,21 +25,19 @@ export default defineEventHandler(async (event) => {
   
   try {
     // Create a manual workout entry
-    const workout = await prisma.workout.create({
-      data: {
-        userId,
-        externalId: `manual-${Date.now()}`, // Unique ID for manual entries
-        source: 'manual',
-        title: body.title,
-        description: body.description || null,
-        type: body.type || 'Activity',
-        date: new Date(body.date),
-        durationSec: parseInt(body.durationSec),
-        distanceMeters: body.distanceMeters ? parseFloat(body.distanceMeters) : null,
-        tss: body.tss ? parseFloat(body.tss) : null,
-        rpe: body.rpe ? parseInt(body.rpe) : null,
-        plannedWorkoutId: body.plannedWorkoutId || null
-      }
+    const workout = await workoutRepository.create({
+      userId,
+      externalId: `manual-${Date.now()}`, // Unique ID for manual entries
+      source: 'manual',
+      title: body.title,
+      description: body.description || null,
+      type: body.type || 'Activity',
+      date: new Date(body.date),
+      durationSec: parseInt(body.durationSec),
+      distanceMeters: body.distanceMeters ? parseFloat(body.distanceMeters) : null,
+      tss: body.tss ? parseFloat(body.tss) : null,
+      rpe: body.rpe ? parseInt(body.rpe) : null,
+      plannedWorkoutId: body.plannedWorkoutId || null
     })
     
     // Calculate CTL/ATL for the new workout

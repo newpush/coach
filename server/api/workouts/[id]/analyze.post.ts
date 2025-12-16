@@ -21,22 +21,12 @@ export default defineEventHandler(async (event) => {
   }
   
   // Fetch the workout
-  const workout = await prisma.workout.findUnique({
-    where: { id }
-  })
+  const workout = await workoutRepository.getById(id, (session.user as any).id)
   
   if (!workout) {
     throw createError({
       statusCode: 404,
       message: 'Workout not found'
-    })
-  }
-  
-  // Ensure the workout belongs to the authenticated user
-  if (workout.userId !== (session.user as any).id) {
-    throw createError({
-      statusCode: 403,
-      message: 'Forbidden: You do not have access to this workout'
     })
   }
   
@@ -52,10 +42,7 @@ export default defineEventHandler(async (event) => {
   
   try {
     // Update status to PENDING
-    await prisma.workout.update({
-      where: { id },
-      data: { aiAnalysisStatus: 'PENDING' }
-    })
+    await workoutRepository.updateStatus(id, 'PENDING')
     
     // Trigger background job with per-user concurrency
     const handle = await tasks.trigger('analyze-workout', {
@@ -73,10 +60,7 @@ export default defineEventHandler(async (event) => {
     }
   } catch (error) {
     // Update status to failed
-    await prisma.workout.update({
-      where: { id },
-      data: { aiAnalysisStatus: 'FAILED' }
-    })
+    await workoutRepository.updateStatus(id, 'FAILED')
     
     throw createError({
       statusCode: 500,

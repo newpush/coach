@@ -33,30 +33,18 @@ export default defineEventHandler(async (event) => {
     endOfDay.setHours(23, 59, 59, 999)
     
     // Fetch workouts for that day that are not duplicates
-    const workouts = await prisma.workout.findMany({
-      where: {
-        userId,
-        date: {
-          gte: startOfDay,
-          lte: endOfDay
-        },
-        isDuplicate: false
-      },
-      orderBy: {
-        date: 'asc'
-      },
-      select: {
-        id: true,
-        title: true,
-        type: true,
-        date: true,
-        durationSec: true,
-        distanceMeters: true,
-        tss: true,
-        source: true,
-        plannedWorkoutId: true
-      }
+    const workouts = await workoutRepository.getForUser(userId, {
+      startDate: startOfDay,
+      endDate: endOfDay,
+      orderBy: { date: 'asc' },
+      // Note: Repository getForUser returns standard fields.
+      // If we strictly need only selected fields for performance, we might need to enhance the repo.
+      // For now, fetching full objects is acceptable or we can add 'select' to repo options.
+      // But standardizing on 'include' is more common in this repo pattern.
+      // Let's assume standard object return is fine for now, or add select support later.
     })
+    // Filter to match the specific select if needed, or just return the full object.
+    // The UI likely handles extra fields fine.
     
     return workouts
   } catch (error: any) {

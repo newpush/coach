@@ -15,27 +15,7 @@ export default defineEventHandler(async (event) => {
   
   try {
     // Find all workouts that need analysis (excluding duplicates)
-    const workoutsToAnalyze = await prisma.workout.findMany({
-      where: {
-        userId,
-        isDuplicate: false,
-        OR: [
-          { aiAnalysisStatus: null },
-          { aiAnalysisStatus: 'NOT_STARTED' },
-          { aiAnalysisStatus: 'PENDING' },
-          { aiAnalysisStatus: 'FAILED' }
-        ]
-      },
-      select: {
-        id: true,
-        title: true,
-        date: true,
-        aiAnalysisStatus: true
-      },
-      orderBy: {
-        date: 'desc'
-      }
-    })
+    const workoutsToAnalyze = await workoutRepository.getPendingAnalysis(userId)
     
     if (workoutsToAnalyze.length === 0) {
       return {
@@ -47,14 +27,14 @@ export default defineEventHandler(async (event) => {
     }
     
     // Update all to PENDING status
-    await prisma.workout.updateMany({
-      where: {
+    await workoutRepository.updateMany(
+      {
         id: { in: workoutsToAnalyze.map(w => w.id) }
       },
-      data: {
+      {
         aiAnalysisStatus: 'PENDING'
       }
-    })
+    )
     
     // Trigger analysis jobs for each workout with per-user concurrency
     const triggerPromises = workoutsToAnalyze.map(async (workout) => {
@@ -68,10 +48,7 @@ export default defineEventHandler(async (event) => {
       } catch (error) {
         console.error(`Failed to trigger analysis for workout ${workout.id}:`, error)
         // Mark as failed if trigger fails
-        await prisma.workout.update({
-          where: { id: workout.id },
-          data: { aiAnalysisStatus: 'FAILED' }
-        })
+        await workoutRepository.updateStatus(workout.id, 'FAILED')
         return { success: false, workoutId: workout.id, error: error instanceof Error ? error.message : 'Unknown error' }
       }
     })
