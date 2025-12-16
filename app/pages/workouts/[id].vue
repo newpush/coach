@@ -34,6 +34,15 @@
             Scores
           </UButton>
           <UButton
+            v-if="hasTrainingMetrics(workout)"
+            variant="ghost"
+            color="neutral"
+            @click="scrollToSection('training-impact')"
+          >
+            <UIcon name="i-lucide-activity-square" class="w-4 h-4 mr-2" />
+            Training Impact
+          </UButton>
+          <UButton
             variant="ghost"
             color="neutral"
             @click="scrollToSection('analysis')"
@@ -181,6 +190,115 @@
                   />
                 </div>
               </div>
+            </div>
+          </div>
+
+          <!-- Training Impact Section (TSS, CTL, ATL, TSB) -->
+          <div id="training-impact" class="scroll-mt-20"></div>
+          <div v-if="hasTrainingMetrics(workout)" class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+            <h2 class="text-xl font-bold text-gray-900 dark:text-white mb-6">Training Impact & Load</h2>
+            
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+              <!-- TSS -->
+              <div class="p-4 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800">
+                <div class="flex items-center justify-between mb-2">
+                  <span class="text-sm font-medium text-blue-700 dark:text-blue-300">TSS (Load)</span>
+                  <UPopover mode="hover">
+                    <UIcon name="i-heroicons-information-circle" class="w-4 h-4 text-blue-500 cursor-help" />
+                    <template #panel>
+                      <div class="p-3 text-xs max-w-xs">
+                        Training Stress Score (TSS) measures the workload of a session based on duration and intensity relative to your threshold.
+                      </div>
+                    </template>
+                  </UPopover>
+                </div>
+                <div class="text-2xl font-bold text-blue-900 dark:text-blue-100">
+                  {{ Math.round(workout.tss || workout.trainingLoad || 0) }}
+                </div>
+              </div>
+
+              <!-- CTL (Fitness) -->
+              <div class="p-4 rounded-lg bg-green-50 dark:bg-green-900/20 border border-green-100 dark:border-green-800">
+                <div class="flex items-center justify-between mb-2">
+                  <span class="text-sm font-medium text-green-700 dark:text-green-300">Fitness (CTL)</span>
+                  <UPopover mode="hover">
+                    <UIcon name="i-heroicons-information-circle" class="w-4 h-4 text-green-500 cursor-help" />
+                    <template #panel>
+                      <div class="p-3 text-xs max-w-xs">
+                        Chronic Training Load (CTL) represents your long-term fitness, calculated as a weighted average of your daily TSS over the last 42 days.
+                      </div>
+                    </template>
+                  </UPopover>
+                </div>
+                <div class="text-2xl font-bold text-green-900 dark:text-green-100">
+                  {{ workout.ctl ? Math.round(workout.ctl) : '-' }}
+                </div>
+              </div>
+
+              <!-- ATL (Fatigue) -->
+              <div class="p-4 rounded-lg bg-orange-50 dark:bg-orange-900/20 border border-orange-100 dark:border-orange-800">
+                <div class="flex items-center justify-between mb-2">
+                  <span class="text-sm font-medium text-orange-700 dark:text-orange-300">Fatigue (ATL)</span>
+                  <UPopover mode="hover">
+                    <UIcon name="i-heroicons-information-circle" class="w-4 h-4 text-orange-500 cursor-help" />
+                    <template #panel>
+                      <div class="p-3 text-xs max-w-xs">
+                        Acute Training Load (ATL) represents your current fatigue, calculated as a weighted average of your daily TSS over the last 7 days.
+                      </div>
+                    </template>
+                  </UPopover>
+                </div>
+                <div class="text-2xl font-bold text-orange-900 dark:text-orange-100">
+                  {{ workout.atl ? Math.round(workout.atl) : '-' }}
+                </div>
+              </div>
+
+              <!-- TSB (Form) -->
+              <div class="p-4 rounded-lg" :class="getFormClass(calculateForm(workout))">
+                <div class="flex items-center justify-between mb-2">
+                  <span class="text-sm font-medium opacity-80">Form (TSB)</span>
+                  <UPopover mode="hover">
+                    <UIcon name="i-heroicons-information-circle" class="w-4 h-4 opacity-70 cursor-help" />
+                    <template #panel>
+                      <div class="p-3 text-xs max-w-xs">
+                        Training Stress Balance (TSB) is your 'Form', calculated as Fitness (CTL) minus Fatigue (ATL). Positive means you are fresh, negative means you are training hard.
+                      </div>
+                    </template>
+                  </UPopover>
+                </div>
+                <div class="text-2xl font-bold">
+                  {{ calculateForm(workout) !== null ? calculateForm(workout) : '-' }}
+                </div>
+              </div>
+            </div>
+
+            <!-- Detailed Explanation Accordion -->
+            <div class="border-t border-gray-200 dark:border-gray-700 pt-4">
+              <UAccordion
+                :items="[{ label: 'How is this calculated?', slot: 'explanation' }]"
+                color="gray"
+                variant="ghost"
+              >
+                <template #explanation>
+                  <div class="text-sm text-gray-600 dark:text-gray-400 space-y-3 pt-2">
+                    <p>
+                      <strong>Data Source:</strong>
+                      <span v-if="workout.source === 'intervals'">
+                        This data is synced directly from <a href="https://intervals.icu" target="_blank" class="text-primary-500 hover:underline">Intervals.icu</a>.
+                      </span>
+                      <span v-else>
+                        This data is calculated locally based on your workout intensity.
+                      </span>
+                    </p>
+                    <ul class="list-disc pl-5 space-y-1">
+                      <li><strong>TSS (Training Stress Score):</strong> Measures the physiological cost of a ride. It considers both duration and intensity. 100 points is roughly equivalent to 1 hour at your threshold power (FTP).</li>
+                      <li><strong>CTL (Fitness):</strong> An exponentially weighted average of your daily TSS over the last 42 days. It models how much training load you've been sustaining.</li>
+                      <li><strong>ATL (Fatigue):</strong> An exponentially weighted average of your daily TSS over the last 7 days. It reflects how tired you are right now.</li>
+                      <li><strong>TSB (Form):</strong> Simply <code>CTL - ATL</code>. A highly negative TSB means you are overloaded (high fatigue), while a positive TSB means you are tapered and fresh.</li>
+                    </ul>
+                  </div>
+                </template>
+              </UAccordion>
             </div>
           </div>
 
@@ -774,6 +892,27 @@ function hasEfficiencyMetrics(workout: any) {
          workout.powerHrRatio !== null ||
          workout.polarizationIndex !== null ||
          workout.lrBalance !== null
+}
+
+function hasTrainingMetrics(workout: any) {
+  if (!workout) return false
+  return (workout.tss !== null || workout.trainingLoad !== null) &&
+         (workout.ctl !== null || workout.atl !== null)
+}
+
+function calculateForm(workout: any) {
+  if (!workout || workout.ctl === null || workout.atl === null) return null
+  return Math.round(workout.ctl - workout.atl)
+}
+
+function getFormClass(form: number | null) {
+  if (form === null) return 'bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-500'
+  
+  if (form >= 25) return 'bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 text-blue-900 dark:text-blue-100' // Transition
+  if (form >= 5) return 'bg-green-50 dark:bg-green-900/20 border border-green-100 dark:border-green-800 text-green-900 dark:text-green-100' // Fresh
+  if (form >= -10) return 'bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white' // Grey zone / Neutral
+  if (form >= -30) return 'bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-100 dark:border-yellow-800 text-yellow-900 dark:text-yellow-100' // Optimal Training
+  return 'bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-800 text-red-900 dark:text-red-100' // High Risk
 }
 
 // Scroll to section
