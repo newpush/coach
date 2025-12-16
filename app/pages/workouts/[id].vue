@@ -411,6 +411,79 @@
               </div>
             </div>
           </div>
+
+          <!-- Duplicate Workout Section -->
+          <div id="duplicates" class="scroll-mt-20"></div>
+          <div v-if="workout.isDuplicate || (workout.duplicates && workout.duplicates.length > 0)" class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+            <h2 class="text-xl font-bold text-gray-900 dark:text-white mb-4">Duplicate Management</h2>
+            
+            <!-- Case 1: This is a duplicate -->
+            <div v-if="workout.isDuplicate" class="bg-yellow-50 dark:bg-yellow-900/20 p-4 rounded-lg border border-yellow-200 dark:border-yellow-800">
+              <div class="flex items-start gap-3">
+                <UIcon name="i-heroicons-information-circle" class="w-6 h-6 text-yellow-600 dark:text-yellow-400 flex-shrink-0" />
+                <div>
+                  <h3 class="font-semibold text-yellow-900 dark:text-yellow-100">This workout is a duplicate</h3>
+                  <p class="text-sm text-yellow-800 dark:text-yellow-200 mt-1">
+                    This workout has been identified as a duplicate of another activity.
+                    The primary version is likely from a more preferred source.
+                  </p>
+                  
+                  <div v-if="workout.canonicalWorkout" class="mt-4">
+                    <p class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Original Workout:</p>
+                    <NuxtLink
+                      :to="`/workouts/${workout.canonicalWorkout.id}`"
+                      class="block p-3 bg-white dark:bg-gray-800 rounded border border-gray-200 dark:border-gray-700 hover:border-primary-500 dark:hover:border-primary-500 transition-colors"
+                    >
+                      <div class="flex items-center justify-between">
+                        <div>
+                          <div class="font-medium text-gray-900 dark:text-white">{{ workout.canonicalWorkout.title }}</div>
+                          <div class="text-xs text-gray-500 mt-0.5">
+                            {{ formatDate(workout.canonicalWorkout.date) }} • {{ workout.canonicalWorkout.source }}
+                          </div>
+                        </div>
+                        <UIcon name="i-heroicons-arrow-right" class="w-4 h-4 text-gray-400" />
+                      </div>
+                    </NuxtLink>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Case 2: This is the original, but has duplicates -->
+            <div v-else-if="workout.duplicates && workout.duplicates.length > 0">
+               <div class="flex items-start gap-3 mb-4">
+                <UIcon name="i-heroicons-document-duplicate" class="w-6 h-6 text-blue-600 dark:text-blue-400 flex-shrink-0" />
+                <div>
+                  <h3 class="font-semibold text-gray-900 dark:text-white">Linked Duplicates</h3>
+                  <p class="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                    The following workouts have been merged into this one or identified as duplicates of this activity.
+                  </p>
+                </div>
+              </div>
+              
+              <div class="space-y-2">
+                <NuxtLink
+                  v-for="dup in workout.duplicates"
+                  :key="dup.id"
+                  :to="`/workouts/${dup.id}`"
+                  class="block p-3 bg-gray-50 dark:bg-gray-800/50 rounded border border-gray-200 dark:border-gray-700 hover:border-primary-500 dark:hover:border-primary-500 transition-colors"
+                >
+                  <div class="flex items-center justify-between">
+                    <div>
+                      <div class="font-medium text-gray-900 dark:text-white">{{ dup.title }}</div>
+                      <div class="text-xs text-gray-500 mt-0.5">
+                        {{ formatDate(dup.date) }} • {{ dup.source }}
+                      </div>
+                    </div>
+                    <div class="flex items-center gap-2">
+                      <UBadge color="yellow" variant="subtle" size="xs">Duplicate</UBadge>
+                      <UIcon name="i-heroicons-arrow-right" class="w-4 h-4 text-gray-400" />
+                    </div>
+                  </div>
+                </NuxtLink>
+              </div>
+            </div>
+          </div>
        </div>
      </div>
     </template>
