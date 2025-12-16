@@ -112,7 +112,8 @@ export default defineEventHandler(async (event) => {
         gte: startDate,
         lte: endDate
       },
-      durationSec: { gt: 0 } // Filter out empty workouts
+      durationSec: { gt: 0 }, // Filter out empty workouts
+      isDuplicate: false
     },
     orderBy: { date: 'asc' }
   })
