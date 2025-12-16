@@ -22,10 +22,14 @@
 interface Props {
   workoutId: string
   autoLoad?: boolean
+  streamData?: any
+  userZones?: any
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  autoLoad: true
+  autoLoad: true,
+  streamData: null,
+  userZones: null
 })
 
 // Zone colors matching the full ZoneChart component
@@ -123,6 +127,22 @@ const zoneSegments = computed(() => {
 
 // Fetch data
 async function fetchData() {
+  // If props provided, use them
+  if (props.streamData) {
+    streamData.value = props.streamData
+    userZones.value = props.userZones || { hrZones: getDefaultHrZones(), powerZones: getDefaultPowerZones() }
+    
+    const hasWatts = props.streamData.watts && Array.isArray(props.streamData.watts) && props.streamData.watts.length > 0
+    const hasHr = props.streamData.heartrate && Array.isArray(props.streamData.heartrate) && props.streamData.heartrate.length > 0
+    
+    if (hasWatts) {
+      zoneType.value = 'power'
+    } else if (hasHr) {
+      zoneType.value = 'hr'
+    }
+    return
+  }
+
   if (!props.autoLoad) return
   
   loading.value = true
@@ -189,12 +209,10 @@ function getDefaultPowerZones() {
   ]
 }
 
-// Load data on mount if autoLoad is true
-onMounted(() => {
-  if (props.autoLoad) {
-    fetchData()
-  }
-})
+// Load data on mount or when props change
+watch(() => [props.streamData, props.userZones], () => {
+  fetchData()
+}, { immediate: true })
 
 // Expose fetch method for manual loading
 defineExpose({

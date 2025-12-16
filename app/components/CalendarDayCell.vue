@@ -159,7 +159,12 @@
             
             <!-- Mini Zone Chart -->
             <div v-if="activity.source === 'completed'" class="mt-1.5">
-              <MiniZoneChart :workout-id="activity.id" :auto-load="true" />
+              <MiniZoneChart
+                :workout-id="activity.id"
+                :auto-load="!streams?.[activity.id]"
+                :stream-data="streams?.[activity.id]"
+                :user-zones="userZones"
+              />
             </div>
           </div>
         </div>
@@ -209,6 +214,8 @@ const props = defineProps<{
   date: Date
   activities: CalendarActivity[]
   isOtherMonth: boolean
+  streams?: Record<string, any>
+  userZones?: any
 }>()
 
 const emit = defineEmits<{

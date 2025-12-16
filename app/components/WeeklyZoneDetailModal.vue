@@ -90,6 +90,8 @@ const props = defineProps<{
     workoutIds: string[]
     activities: any[]
   } | null
+  userZones: any
+  streams?: any[]
 }>()
 
 const emit = defineEmits<{
@@ -112,13 +114,12 @@ const zoneColors = [
 
 const aggregatedZones = ref<number[]>([])
 const zoneType = ref<'hr' | 'power'>('hr')
-const userZones = ref<any>(null)
 const loading = ref(false)
 
 const zoneBreakdown = computed(() => {
-  if (!userZones.value || aggregatedZones.value.length === 0) return []
+  if (!props.userZones || aggregatedZones.value.length === 0) return []
   
-  const zones = zoneType.value === 'hr' ? userZones.value.hrZones : userZones.value.powerZones
+  const zones = zoneType.value === 'hr' ? props.userZones.hrZones : props.userZones.powerZones
   const total = aggregatedZones.value.reduce((sum, val) => sum + val, 0)
   
   if (total === 0) return []
@@ -127,7 +128,7 @@ const zoneBreakdown = computed(() => {
     name: zone.name,
     time: aggregatedZones.value[index],
     percentage: (aggregatedZones.value[index] / total) * 100,
-    color: zoneColors[index]
+    color: zoneColors[index] || '#999999'
   })).filter((z: any) => z.time > 0)
 })
 
@@ -179,20 +180,15 @@ async function fetchZoneData() {
   loading.value = true
   
   try {
-    // Fetch user profile for zones
-    const profile = await $fetch('/api/profile').catch(() => null)
+    let streams = props.streams
     
-    userZones.value = {
-      hrZones: profile?.profile?.hrZones || getDefaultHrZones(),
-      powerZones: profile?.profile?.powerZones || getDefaultPowerZones()
+    if (!streams) {
+      // Fetch stream data for all workouts in one request
+      streams = await $fetch<any[]>('/api/workouts/streams', {
+        method: 'POST',
+        body: { workoutIds: props.weekData.workoutIds }
+      }).catch(() => [])
     }
-    
-    // Fetch stream data for all workouts
-    const streams = await Promise.all(
-      props.weekData.workoutIds.map(id => 
-        $fetch(`/api/workouts/${id}/streams`).catch(() => null)
-      )
-    )
     
     // Aggregate zone data
     const hrZoneTimes = new Array(5).fill(0)
@@ -204,21 +200,21 @@ async function fetchZoneData() {
       if (!stream) return
       
       // Process HR zones
-      if ('heartrate' in stream && Array.isArray(stream.heartrate)) {
+      if ('heartrate' in stream && Array.isArray(stream.heartrate) && props.userZones?.hrZones) {
         hasHrData = true
         stream.heartrate.forEach((hr: number) => {
           if (hr === null || hr === undefined) return
-          const zoneIndex = getZoneIndex(hr, userZones.value.hrZones)
+          const zoneIndex = getZoneIndex(hr, props.userZones.hrZones)
           if (zoneIndex >= 0) hrZoneTimes[zoneIndex]++
         })
       }
       
       // Process Power zones
-      if ('watts' in stream && Array.isArray(stream.watts)) {
+      if ('watts' in stream && Array.isArray(stream.watts) && props.userZones?.powerZones) {
         hasPowerData = true
         stream.watts.forEach((watts: number) => {
           if (watts === null || watts === undefined) return
-          const zoneIndex = getZoneIndex(watts, userZones.value.powerZones)
+          const zoneIndex = getZoneIndex(watts, props.userZones.powerZones)
           if (zoneIndex >= 0) powerZoneTimes[zoneIndex]++
         })
       }
@@ -256,29 +252,9 @@ function getZoneIndex(value: number, zones: any[]): number {
   return -1
 }
 
-function getDefaultHrZones() {
-  return [
-    { name: 'Z1 Recovery', min: 60, max: 120 },
-    { name: 'Z2 Endurance', min: 121, max: 145 },
-    { name: 'Z3 Tempo', min: 146, max: 160 },
-    { name: 'Z4 Threshold', min: 161, max: 175 },
-    { name: 'Z5 Anaerobic', min: 176, max: 220 }
-  ]
-}
-
-function getDefaultPowerZones() {
-  return [
-    { name: 'Z1 Active Recovery', min: 0, max: 137 },
-    { name: 'Z2 Endurance', min: 138, max: 187 },
-    { name: 'Z3 Tempo', min: 188, max: 225 },
-    { name: 'Z4 Threshold', min: 226, max: 262 },
-    { name: 'Z5 VO2 Max', min: 263, max: 999 }
-  ]
-}
-
 // Fetch data when modal opens
-watch(() => props.modelValue, (isOpen) => {
-  if (isOpen && props.weekData) {
+watch(() => [props.modelValue, props.userZones, props.streams], ([isOpen]) => {
+  if (isOpen && props.weekData && props.userZones) {
     fetchZoneData()
   }
 })

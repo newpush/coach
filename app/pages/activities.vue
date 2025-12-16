@@ -196,6 +196,8 @@
             <WeeklyZoneSummary
               :workout-ids="getWeekWorkoutIds(week)"
               :auto-load="true"
+              :user-zones="userZones"
+              :streams="getWeekStreams(week)"
               @click="openWeekZoneDetail(week)"
             />
           </div>
@@ -207,6 +209,8 @@
             :date="day.date"
             :activities="day.activities"
             :is-other-month="day.isOtherMonth"
+            :streams="streamsMap"
+            :user-zones="userZones"
             @activity-click="openActivity"
             @wellness-click="openWellnessModal"
             @merge-activity="onMergeActivity"
@@ -447,6 +451,8 @@
     <WeeklyZoneDetailModal
       v-model="showWeekZoneModal"
       :week-data="selectedWeekData"
+      :user-zones="userZones"
+      :streams="selectedWeekStreams"
     />
     
     <!-- Merge Confirmation Modal -->
@@ -489,6 +495,7 @@ const showWellnessModal = ref(false)
 const selectedWellnessDate = ref<Date | null>(null)
 const showWeekZoneModal = ref(false)
 const selectedWeekData = ref<any>(null)
+const selectedWeekStreams = ref<any[]>([])
 const showMergeModal = ref(false)
 const mergeSource = ref<CalendarActivity | null>(null)
 const mergeTarget = ref<CalendarActivity | null>(null)
@@ -510,6 +517,70 @@ const { data: activities, status, refresh } = await useFetch<CalendarActivity[]>
   }),
   watch: [currentDate]
 })
+
+// Bulk fetch streams for visible activities
+const streamsMap = ref<Record<string, any>>({})
+const streamsLoading = ref(false)
+
+watch(activities, async (newActivities) => {
+  if (!newActivities?.length) {
+    streamsMap.value = {}
+    return
+  }
+  
+  const ids = newActivities
+    .filter(a => a.source === 'completed')
+    .map(a => a.id)
+    
+  if (ids.length === 0) return
+
+  streamsLoading.value = true
+  try {
+    const streams = await $fetch<any[]>('/api/workouts/streams', {
+        method: 'POST',
+        body: { workoutIds: ids }
+    })
+    
+    // Create map
+    const map: Record<string, any> = {}
+    streams.forEach(s => map[s.workoutId] = s)
+    streamsMap.value = map
+  } catch (e) {
+    console.error('Error fetching bulk streams:', e)
+  } finally {
+    streamsLoading.value = false
+  }
+}, { immediate: true })
+
+// User Profile for Zones
+const { data: profile } = await useFetch<any>('/api/profile')
+
+const userZones = computed(() => {
+  return {
+    hrZones: profile.value?.profile?.hrZones || getDefaultHrZones(),
+    powerZones: profile.value?.profile?.powerZones || getDefaultPowerZones()
+  }
+})
+
+function getDefaultHrZones() {
+  return [
+    { name: 'Z1', min: 60, max: 120 },
+    { name: 'Z2', min: 121, max: 145 },
+    { name: 'Z3', min: 146, max: 160 },
+    { name: 'Z4', min: 161, max: 175 },
+    { name: 'Z5', min: 176, max: 220 }
+  ]
+}
+
+function getDefaultPowerZones() {
+  return [
+    { name: 'Z1', min: 0, max: 137 },
+    { name: 'Z2', min: 138, max: 187 },
+    { name: 'Z3', min: 188, max: 225 },
+    { name: 'Z4', min: 226, max: 262 },
+    { name: 'Z5', min: 263, max: 999 }
+  ]
+}
 
 // Calendar Logic
 const calendarWeeks = computed(() => {
@@ -868,6 +939,11 @@ function getWeekWorkoutIds(week: any[]): string[] {
   return ids
 }
 
+function getWeekStreams(week: any[]): any[] {
+  const ids = getWeekWorkoutIds(week)
+  return ids.map(id => streamsMap.value[id]).filter(Boolean)
+}
+
 function openWeekZoneDetail(week: any[]) {
   const summary = getWeekSummary(week)
   const completedActivities: CalendarActivity[] = []
@@ -889,6 +965,8 @@ function openWeekZoneDetail(week: any[]) {
     workoutIds: getWeekWorkoutIds(week),
     activities: completedActivities
   }
+  
+  selectedWeekStreams.value = getWeekStreams(week)
   
   showWeekZoneModal.value = true
 }

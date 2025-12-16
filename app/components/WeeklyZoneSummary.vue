@@ -28,10 +28,14 @@
 interface Props {
   workoutIds: string[]
   autoLoad?: boolean
+  userZones: any
+  streams?: any[]
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  autoLoad: true
+  autoLoad: true,
+  userZones: null,
+  streams: null
 })
 
 defineEmits<{
@@ -50,7 +54,6 @@ const zoneColors = [
 const loading = ref(false)
 const aggregatedZones = ref<number[]>([])
 const zoneType = ref<'hr' | 'power'>('hr')
-const userZones = ref<any>(null)
 
 const hasData = computed(() => {
   return aggregatedZones.value.length > 0 && aggregatedZones.value.some(v => v > 0)
@@ -73,10 +76,10 @@ const zoneSegments = computed(() => {
 })
 
 const tooltipText = computed(() => {
-  if (!hasData.value || !userZones.value) return ''
+  if (!hasData.value || !props.userZones) return ''
   
   const type = zoneType.value === 'hr' ? 'Heart Rate' : 'Power'
-  const zones = zoneType.value === 'hr' ? userZones.value.hrZones : userZones.value.powerZones
+  const zones = zoneType.value === 'hr' ? props.userZones.hrZones : props.userZones.powerZones
   
   if (!zones || zones.length === 0) return ''
   
@@ -98,25 +101,21 @@ const tooltipText = computed(() => {
 })
 
 async function fetchData() {
-  if (!props.autoLoad || props.workoutIds.length === 0) return
+  if (!props.autoLoad && !props.streams) return
+  if (props.workoutIds.length === 0 && (!props.streams || props.streams.length === 0)) return
   
   loading.value = true
   
   try {
-    // Fetch user profile for zones
-    const profile = await $fetch('/api/profile').catch(() => null)
+    let streams = props.streams
     
-    userZones.value = {
-      hrZones: profile?.profile?.hrZones || getDefaultHrZones(),
-      powerZones: profile?.profile?.powerZones || getDefaultPowerZones()
+    if (!streams) {
+      // Fetch stream data for all workouts in one request
+      streams = await $fetch<any[]>('/api/workouts/streams', {
+        method: 'POST',
+        body: { workoutIds: props.workoutIds }
+      }).catch(() => [])
     }
-    
-    // Fetch stream data for all workouts in parallel
-    const streams = await Promise.all(
-      props.workoutIds.map(id => 
-        $fetch(`/api/workouts/${id}/streams`).catch(() => null)
-      )
-    )
     
     // Aggregate zone data
     const hrZoneTimes = new Array(5).fill(0)
@@ -128,21 +127,21 @@ async function fetchData() {
       if (!stream) return
       
       // Process HR zones
-      if ('heartrate' in stream && Array.isArray(stream.heartrate)) {
+      if ('heartrate' in stream && Array.isArray(stream.heartrate) && props.userZones?.hrZones) {
         hasHrData = true
         stream.heartrate.forEach((hr: number) => {
           if (hr === null || hr === undefined) return
-          const zoneIndex = getZoneIndex(hr, userZones.value.hrZones)
+          const zoneIndex = getZoneIndex(hr, props.userZones.hrZones)
           if (zoneIndex >= 0) hrZoneTimes[zoneIndex]++
         })
       }
       
       // Process Power zones
-      if ('watts' in stream && Array.isArray(stream.watts)) {
+      if ('watts' in stream && Array.isArray(stream.watts) && props.userZones?.powerZones) {
         hasPowerData = true
         stream.watts.forEach((watts: number) => {
           if (watts === null || watts === undefined) return
-          const zoneIndex = getZoneIndex(watts, userZones.value.powerZones)
+          const zoneIndex = getZoneIndex(watts, props.userZones.powerZones)
           if (zoneIndex >= 0) powerZoneTimes[zoneIndex]++
         })
       }
@@ -181,29 +180,9 @@ function getZoneIndex(value: number, zones: any[]): number {
   return -1
 }
 
-function getDefaultHrZones() {
-  return [
-    { name: 'Z1', min: 60, max: 120 },
-    { name: 'Z2', min: 121, max: 145 },
-    { name: 'Z3', min: 146, max: 160 },
-    { name: 'Z4', min: 161, max: 175 },
-    { name: 'Z5', min: 176, max: 220 }
-  ]
-}
-
-function getDefaultPowerZones() {
-  return [
-    { name: 'Z1', min: 0, max: 137 },
-    { name: 'Z2', min: 138, max: 187 },
-    { name: 'Z3', min: 188, max: 225 },
-    { name: 'Z4', min: 226, max: 262 },
-    { name: 'Z5', min: 263, max: 999 }
-  ]
-}
-
-// Watch for changes in workout IDs
-watch(() => props.workoutIds, () => {
-  if (props.autoLoad) {
+// Watch for changes in workout IDs or streams
+watch(() => [props.workoutIds, props.userZones, props.streams], () => {
+  if ((props.autoLoad || props.streams) && props.userZones) {
     fetchData()
   }
 }, { immediate: true })
