@@ -88,18 +88,9 @@
 
         <UDropdownMenu
           v-if="viewMode === 'list'"
-          :items="table?.tableApi?.getAllColumns().filter(column => column.getCanHide()).map(column => ({
-            label: column.id.charAt(0).toUpperCase() + column.id.slice(1),
-            type: 'checkbox' as const,
-            checked: column.getIsVisible(),
-            onUpdateChecked(checked: boolean) {
-              table?.tableApi?.getColumn(column.id)?.toggleVisibility(!!checked)
-            },
-            onSelect(e: Event) {
-              e.preventDefault()
-            }
-          }))"
+          :items="columnMenuItems"
           :content="{ align: 'end' }"
+          :disabled="columnMenuItems.length === 0"
         >
           <UButton
             label="Columns"
@@ -108,6 +99,7 @@
             trailing-icon="i-heroicons-chevron-down"
             size="sm"
             aria-label="Toggle columns"
+            :disabled="columnMenuItems.length === 0"
           />
         </UDropdownMenu>
 
@@ -224,18 +216,14 @@
 
       <!-- List View -->
       <div v-else class="bg-white dark:bg-gray-900 rounded-lg shadow overflow-x-auto h-full flex flex-col">
-        <div v-if="sortedActivities.length === 0 && status !== 'pending'" class="flex items-center justify-center h-full text-gray-500">
-          No activities found for this month
-        </div>
-        
         <UTable
-          v-else
           ref="table"
           :data="sortedActivities"
           :columns="availableColumns"
           v-model:column-visibility="columnVisibility"
           :loading="status === 'pending'"
           class="flex-1 w-full"
+          empty="No activities found for this month"
           @select="openActivity"
           :ui="{
             root: 'w-full',
@@ -664,24 +652,6 @@ function openWellnessModal(date: Date) {
 
 // List View Helpers
 const tableSearch = ref('')
-
-const sortedActivities = computed(() => {
-  if (!activities.value) return []
-  
-  let result = [...activities.value].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-
-  if (tableSearch.value) {
-    const q = tableSearch.value.toLowerCase()
-    result = result.filter(a => 
-      (a.title || '').toLowerCase().includes(q) ||
-      (a.type || '').toLowerCase().includes(q) ||
-      (a.status || '').toLowerCase().includes(q)
-    )
-  }
-
-  return result
-})
-
 const table = useTemplateRef('table')
 
 const availableColumns = [
@@ -728,6 +698,40 @@ const columnVisibility = useStorage('activities-list-columns-visibility', {
   commute: false,
   isPrivate: false,
   gearId: false
+})
+
+const columnMenuItems = computed(() => {
+  return availableColumns.map(column => ({
+    label: column.header as string,
+    type: 'checkbox' as const,
+    checked: columnVisibility.value[column.id] !== false,
+    onUpdateChecked(checked: boolean) {
+      columnVisibility.value = {
+        ...columnVisibility.value,
+        [column.id]: checked
+      }
+    },
+    onSelect(e: Event) {
+      e.preventDefault()
+    }
+  }))
+})
+
+const sortedActivities = computed(() => {
+  if (!activities.value) return []
+  
+  let result = [...activities.value].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+
+  if (tableSearch.value) {
+    const q = tableSearch.value.toLowerCase()
+    result = result.filter(a =>
+      (a.title || '').toLowerCase().includes(q) ||
+      (a.type || '').toLowerCase().includes(q) ||
+      (a.status || '').toLowerCase().includes(q)
+    )
+  }
+
+  return result
 })
 
 function formatDateForList(dateStr: string) {
