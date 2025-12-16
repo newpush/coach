@@ -1,17 +1,4 @@
 {
-  "name": "coach-wattz",
-  "type": "module",
-  "private": true,
-  "scripts": {
-    "build": "nuxt build",
-    "dev": "nuxt dev",
-    "generate": "nuxt generate",
-    "preview": "nuxt preview",
-    "postinstall": "nuxt prepare",
-    "prisma:generate": "prisma generate",
-    "dev:trigger": "pnpm prisma:generate && npx trigger.dev@latest dev",
-    "backfill-scores": "tsx scripts/backfill-scores.ts"
-  },
   "dependencies": {
     "@auth/core": "^0.34.3",
     "@google/generative-ai": "^0.24.1",
@@ -29,7 +16,7 @@
     "@tiptap/pm": "^3.13.0",
     "@tiptap/starter-kit": "^3.13.0",
     "@tiptap/vue-3": "^3.13.0",
-    "@trigger.dev/sdk": "4.2.0",
+    "@trigger.dev/sdk": "4.3.0",
     "@vueuse/core": "^11.3.0",
     "chart.js": "^4.5.1",
     "date-fns": "^4.1.0",
@@ -47,10 +34,23 @@
   "devDependencies": {
     "@iconify-json/heroicons": "^1.2.3",
     "@iconify-json/lucide": "^1.2.77",
-    "@trigger.dev/build": "4.2.0",
+    "@trigger.dev/build": "4.3.0",
     "@types/node": "^24.10.1",
     "dotenv": "^17.2.3",
     "prisma": "^7.0.1",
     "tailwindcss": "^4.0.0"
-  }
+  },
+  "name": "coach-wattz",
+  "private": true,
+  "scripts": {
+    "backfill-scores": "tsx scripts/backfill-scores.ts",
+    "build": "nuxt build",
+    "dev": "nuxt dev",
+    "dev:trigger": "pnpm prisma:generate && npx trigger.dev@latest dev",
+    "generate": "nuxt generate",
+    "postinstall": "nuxt prepare",
+    "preview": "nuxt preview",
+    "prisma:generate": "prisma generate"
+  },
+  "type": "module"
 }
