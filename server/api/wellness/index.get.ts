@@ -13,14 +13,9 @@ export default defineEventHandler(async (event) => {
   try {
     const userId = (session.user as any).id
 
-    const wellness = await prisma.wellness.findMany({
-      where: {
-        userId
-      },
-      orderBy: {
-        date: 'desc'
-      },
-      take: 90 // Last 90 days
+    const wellness = await wellnessRepository.getForUser(userId, {
+      limit: 90,
+      orderBy: { date: 'desc' }
     })
 
     return wellness

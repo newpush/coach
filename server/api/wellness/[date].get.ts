@@ -30,12 +30,7 @@ export default defineEventHandler(async (event) => {
   const userId = (session.user as any).id
   
   // Try to get wellness data first
-  const wellness = await prisma.wellness.findFirst({
-    where: {
-      userId,
-      date
-    }
-  })
+  const wellness = await wellnessRepository.findFirst(userId, { date })
   
   // Fall back to daily metrics if wellness not found
   if (!wellness) {

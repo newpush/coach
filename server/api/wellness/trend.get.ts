@@ -25,14 +25,9 @@ export default defineEventHandler(async (event) => {
   const userId = (session.user as any).id
   
   // Fetch wellness data for the date range
-  const wellness = await prisma.wellness.findMany({
-    where: {
-      userId,
-      date: {
-        gte: startDate,
-        lte: endDate
-      }
-    },
+  const wellness = await wellnessRepository.getForUser(userId, {
+    startDate,
+    endDate,
     orderBy: { date: 'asc' }
   })
   
