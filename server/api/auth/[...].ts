@@ -13,6 +13,8 @@ export default NuxtAuthHandler({
     }),
   ],
   secret: process.env.NUXT_AUTH_SECRET,
+  // Trust host header to automatically determine the callback URL at runtime
+  trustHost: true,
   callbacks: {
     async session({ session, user }) {
       if (session.user) {

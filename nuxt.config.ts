@@ -12,13 +12,14 @@ export default defineNuxtConfig({
   css: ['~/assets/css/main.css'],
 
   auth: {
-    baseURL: process.env.NUXT_AUTH_ORIGIN || 'http://localhost:3099/api/auth',
+    baseURL: '/api/auth',
     provider: {
       type: 'authjs'
     }
   },
 
   runtimeConfig: {
+    authOrigin: process.env.NUXT_AUTH_ORIGIN || 'http://localhost:3099/api/auth',
     public: {
       siteUrl: process.env.NUXT_PUBLIC_SITE_URL || 'http://localhost:3099'
     }

@@ -1,5 +1,6 @@
 export default defineNitroPlugin((nitroApp) => {
-  const authOrigin = process.env.NUXT_AUTH_ORIGIN || 'http://localhost:3099/api/auth'
+  const config = useRuntimeConfig()
+  const authOrigin = config.authOrigin
   const callbackUrl = `${authOrigin}/callback/google`
   
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
