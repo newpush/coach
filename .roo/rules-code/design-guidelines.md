@@ -162,15 +162,156 @@ Secondary action button:
 
 ## 5. Standard Data Displays
 
-### Badges
--   Scores: `variant="subtle"` with semantic colors.
--   Status: `variant="soft"` for process states (Processing, Pending).
--   Metadata: `variant="outline"` for secondary info (Source, Type).
+### Badges (using inline styles, not UBadge)
+For badges in tables and data displays, use plain `<span>` elements with utility classes instead of `UBadge` components for better consistency and simplicity:
+
+**Score Badges:**
+```vue
+<span v-if="score" :class="getScoreBadgeClass(score)">
+  {{ score }}/10
+</span>
+```
+
+```typescript
+function getScoreBadgeClass(score: number) {
+  const baseClass = 'px-2 py-1 rounded text-xs font-semibold'
+  if (score >= 8) return `${baseClass} bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200`
+  if (score >= 6) return `${baseClass} bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200`
+  if (score >= 4) return `${baseClass} bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200`
+  return `${baseClass} bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200`
+}
+```
+
+**Status Badges (for AI Analysis, etc.):**
+```vue
+<span :class="getAnalysisStatusBadgeClass(status)">
+  {{ getAnalysisStatusLabel(status) }}
+</span>
+```
+
+```typescript
+function getAnalysisStatusBadgeClass(status: string | null | undefined) {
+  const baseClass = 'px-2 py-1 rounded text-xs font-medium'
+  if (status === 'COMPLETED') return `${baseClass} bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200`
+  if (status === 'PROCESSING') return `${baseClass} bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200`
+  if (status === 'PENDING') return `${baseClass} bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200`
+  if (status === 'FAILED') return `${baseClass} bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200`
+  return `${baseClass} bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300`
+}
+```
+
+**Metadata Badges (Source, Type, etc.):**
+```typescript
+function getSourceBadgeClass(source: string) {
+  const baseClass = 'px-2 py-1 rounded text-xs font-medium'
+  if (source === 'intervals') return `${baseClass} bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200`
+  if (source === 'whoop') return `${baseClass} bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200`
+  if (source === 'strava') return `${baseClass} bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200`
+  return `${baseClass} bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300`
+}
+```
 
 ### Tables
--   Header: `text-[10px] font-bold uppercase tracking-widest text-gray-500`.
--   Row Hover: `hover:bg-gray-50/50 dark:hover:bg-gray-800/50`.
--   Cell Text: `font-medium` for default, `font-bold` for primary identifiers.
+Use plain HTML tables wrapped in a card-like div structure. **Do NOT use UCard** for data tables.
+
+**Standard Table Structure:**
+```vue
+<div class="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
+  <!-- Optional Header Section -->
+  <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+    <h2 class="text-xl font-semibold text-gray-900 dark:text-white">Table Title</h2>
+    <p class="text-sm text-gray-600 dark:text-gray-400 mt-1">Description</p>
+  </div>
+  
+  <!-- Loading State -->
+  <div v-if="loading" class="p-8 text-center text-gray-600 dark:text-gray-400">
+    Loading...
+  </div>
+  
+  <!-- Empty State -->
+  <div v-else-if="items.length === 0" class="p-8 text-center text-gray-600 dark:text-gray-400">
+    No data found. Connect integrations to get started.
+  </div>
+  
+  <!-- Table Content -->
+  <div v-else class="overflow-x-auto">
+    <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+      <thead class="bg-gray-50 dark:bg-gray-900">
+        <tr>
+          <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+            Column Name
+          </th>
+        </tr>
+      </thead>
+      <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+        <tr
+          v-for="item in items"
+          :key="item.id"
+          @click="navigateTo(item.id)"
+          class="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+        >
+          <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
+            {{ item.value }}
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  
+  <!-- Pagination -->
+  <div v-if="totalPages > 1" class="px-6 py-4 border-t border-gray-200 dark:border-gray-700">
+    <div class="flex items-center justify-between">
+      <div class="text-sm text-gray-600 dark:text-gray-400">
+        Showing {{ start }} to {{ end }} of {{ total }} entries
+      </div>
+      <div class="flex gap-2">
+        <button
+          @click="previousPage"
+          :disabled="currentPage === 1"
+          class="px-3 py-1 rounded bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+        >
+          Previous
+        </button>
+        <div class="flex gap-1">
+          <button
+            v-for="page in visiblePages"
+            :key="page"
+            @click="goToPage(page)"
+            :class="[
+              'px-3 py-1 rounded text-sm',
+              page === currentPage
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600'
+            ]"
+          >
+            {{ page }}
+          </button>
+        </div>
+        <button
+          @click="nextPage"
+          :disabled="currentPage === totalPages"
+          class="px-3 py-1 rounded bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+        >
+          Next
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+```
+
+**Table Styling Guidelines:**
+-   **Container:** Use `bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden` for the outer wrapper
+-   **Header Row:** `bg-gray-50 dark:bg-gray-900` with `text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider`
+-   **Body Rows:** `bg-white dark:bg-gray-800` with `divide-y divide-gray-200 dark:divide-gray-700`
+-   **Row Hover:** `hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors`
+-   **Cell Text:** Default `text-sm text-gray-600 dark:text-gray-400`, Primary identifiers `text-gray-900 dark:text-white`
+-   **Padding:** Consistent `px-6 py-3` for headers, `px-6 py-4` for cells
+
+**DO NOT:**
+-   Use `UCard` wrapper for data tables
+-   Use `UBadge` components in table cells - use plain `<span>` with utility classes
+-   Use complex nested structures or custom UI components for simple tabular data
 
 ## 6. Mobile & Responsive Design
 
