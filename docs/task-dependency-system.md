@@ -2,7 +2,7 @@
 
 ## Overview
 
-The Task Dependency System provides a hierarchical view of all data processing tasks in Coach Wattz, showing their dependencies and allowing users to track real-time progress during full synchronization and analysis operations.
+The Task Dependency System provides a hierarchical view of all data processing tasks in Coach Watts, showing their dependencies and allowing users to track real-time progress during full synchronization and analysis operations.
 
 ## Architecture
 

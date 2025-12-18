@@ -2,7 +2,7 @@
 
 ## Overview
 
-The Coach Wattz platform includes a comprehensive **1-10 scoring system** that evaluates various aspects of training, nutrition, recovery, and overall athlete performance. These scores are designed to track progress over time and provide actionable insights for improvement.
+The Coach Watts platform includes a comprehensive **1-10 scoring system** that evaluates various aspects of training, nutrition, recovery, and overall athlete performance. These scores are designed to track progress over time and provide actionable insights for improvement.
 
 ## Why Scoring?
 
