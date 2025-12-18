@@ -6,7 +6,8 @@ export default defineNuxtConfig({
   modules: [
     '@nuxt/ui',
     '@sidebase/nuxt-auth',
-    '@nuxtjs/mdc'
+    '@nuxtjs/mdc',
+    '@pinia/nuxt'
   ],
 
   css: ['~/assets/css/main.css'],

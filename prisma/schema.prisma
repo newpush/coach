@@ -91,6 +91,55 @@ model User {
   llmUsage LlmUsage[]
   syncQueue SyncQueue[]
   goals         Goal[]
+
+  // Coaching Relations
+  coaches    CoachingRelationship[] @relation("AthleteRelation")
+  athletes   CoachingRelationship[] @relation("CoachRelation")
+  invites    CoachingInvite[]
+}
+
+// --------------------------------------
+// Coaching System
+// --------------------------------------
+
+model CoachingRelationship {
+  id        String   @id @default(uuid())
+  coachId   String
+  athleteId String
+  
+  // Status
+  status    String   @default("ACTIVE") // ACTIVE, SUSPENDED
+  
+  // Permissions (reserved for future granular control, currently implicitly "ALL")
+  permissions Json?  // e.g. { "view_workouts": true, "edit_plans": true }
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  coach     User     @relation("CoachRelation", fields: [coachId], references: [id], onDelete: Cascade)
+  athlete   User     @relation("AthleteRelation", fields: [athleteId], references: [id], onDelete: Cascade)
+
+  @@unique([coachId, athleteId])
+  @@index([coachId])
+  @@index([athleteId])
+}
+
+model CoachingInvite {
+  id        String   @id @default(uuid())
+  athleteId String   // The user issuing the invite (The Athlete)
+  code      String   @unique // Short alphanumeric code (e.g., "TR-8821")
+  
+  expiresAt DateTime
+  
+  usedBy    String?  // ID of the Coach who used it (optional, mostly for audit)
+  status    String   @default("PENDING") // PENDING, ACCEPTED, EXPIRED
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  athlete   User     @relation(fields: [athleteId], references: [id], onDelete: Cascade)
+  
+  @@index([code])
 }
 
 model Goal {
