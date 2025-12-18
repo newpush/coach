@@ -26,6 +26,14 @@
             AI Coach
           </UButton>
           <UButton
+            :variant="isActive('/settings/coaching') ? 'solid' : 'ghost'"
+            :color="isActive('/settings/coaching') ? 'primary' : 'neutral'"
+            @click="navigateTo('/settings/coaching')"
+          >
+            <UIcon name="i-lucide-users-round" class="w-4 h-4 mr-2" />
+            Coaching
+          </UButton>
+          <UButton
             :variant="isActive('/settings/danger') ? 'solid' : 'ghost'"
             :color="isActive('/settings/danger') ? 'primary' : 'neutral'"
             @click="navigateTo('/settings/danger')"

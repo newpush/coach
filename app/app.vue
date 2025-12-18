@@ -20,6 +20,7 @@ useHead({
 
 <template>
   <UApp>
+    <CoachingBanner />
     <NuxtRouteAnnouncer />
     <NuxtLayout>
       <NuxtPage />

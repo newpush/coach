@@ -71,6 +71,13 @@ const links = computed<NavigationMenuItem[][]>(() => [[{
     open.value = false
   }
 }, {
+  label: 'Coaching',
+  icon: 'i-lucide-users',
+  to: '/coaching',
+  onSelect: () => {
+    open.value = false
+  }
+}, {
   label: 'AI Chat',
   icon: 'i-lucide-message-circle',
   to: '/chat',
