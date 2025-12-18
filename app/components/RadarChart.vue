@@ -38,7 +38,7 @@ const props = defineProps<{
   type: 'workout' | 'nutrition'
 }>()
 
-const colorMode = useColorMode()
+const theme = useTheme()
 
 const labels = computed(() => {
   if (props.type === 'workout') {
@@ -56,7 +56,7 @@ const scoreKeys = computed(() => {
   }
 })
 
-const chartColor = computed(() => props.type === 'workout' ? 'rgb(59, 130, 246)' : 'rgb(34, 197, 94)')
+const chartColor = computed(() => props.type === 'workout' ? theme.colors.value.get('blue', 500) : theme.colors.value.get('green', 500))
 
 const hasScores = computed(() => {
   return Object.values(props.scores).some(score => score != null && score !== undefined)
@@ -68,7 +68,7 @@ const chartData = computed(() => ({
     {
       label: props.type === 'workout' ? 'Workout Scores' : 'Nutrition Scores',
       data: scoreKeys.value.map(key => props.scores[key] || 0),
-      backgroundColor: props.type === 'workout' ? 'rgba(59, 130, 246, 0.2)' : 'rgba(34, 197, 94, 0.2)',
+      backgroundColor: chartColor.value + '33', // ~20% opacity
       borderColor: chartColor.value,
       borderWidth: 2,
       pointBackgroundColor: chartColor.value,
@@ -89,6 +89,12 @@ const chartOptions = computed(() => ({
       display: false
     },
     tooltip: {
+      backgroundColor: theme.isDark.value ? '#1f2937' : '#ffffff',
+      titleColor: theme.isDark.value ? '#f3f4f6' : '#111827',
+      bodyColor: theme.isDark.value ? '#d1d5db' : '#374151',
+      borderColor: theme.isDark.value ? '#374151' : '#e5e7eb',
+      borderWidth: 1,
+      padding: 12,
       callbacks: {
         label: (context: any) => {
           return `${context.label}: ${context.parsed.r.toFixed(1)}/10`
@@ -102,24 +108,24 @@ const chartOptions = computed(() => ({
       max: 10,
       ticks: {
         stepSize: 2,
-        color: colorMode.value === 'dark' ? 'rgb(156, 163, 175)' : 'rgb(107, 114, 128)',
+        color: theme.colors.value.chartText,
         backdropColor: 'transparent',
         font: {
-          size: 11
+          size: 10
         }
       },
       grid: {
-        color: colorMode.value === 'dark' ? 'rgba(75, 85, 99, 0.3)' : 'rgba(209, 213, 219, 0.5)'
+        color: theme.colors.value.chartGrid
       },
       pointLabels: {
-        color: colorMode.value === 'dark' ? 'rgb(209, 213, 219)' : 'rgb(55, 65, 81)',
+        color: theme.isDark.value ? '#d1d5db' : '#374151',
         font: {
-          size: 13,
-          weight: 500 as any
+          size: 11,
+          weight: 'bold' as const
         }
       },
       angleLines: {
-        color: colorMode.value === 'dark' ? 'rgba(75, 85, 99, 0.2)' : 'rgba(209, 213, 219, 0.4)'
+        color: theme.colors.value.chartGrid
       }
     }
   }

@@ -1,212 +1,159 @@
 <template>
-  <UModal v-model:open="isOpen" title="Wellness Overview" :description="formattedDate" :ui="{ width: 'sm:max-w-2xl' }">
+  <UModal v-model:open="isOpen" title="Wellness Overview" :description="formattedDate" class="sm:max-w-2xl">
     <template #body>
       <div v-if="loading" class="flex items-center justify-center py-12">
-        <UIcon name="i-heroicons-arrow-path" class="w-8 h-8 animate-spin text-indigo-500" />
+        <UIcon name="i-heroicons-arrow-path" class="w-8 h-8 animate-spin text-primary-500" />
       </div>
 
-      <div v-else-if="wellnessData" class="space-y-6">
+      <div v-else-if="wellnessData" class="space-y-8">
         <!-- Key Metrics Grid -->
         <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
           <!-- HRV -->
-          <div v-if="wellnessData.hrv != null" class="p-4 bg-gradient-to-br from-indigo-50 to-indigo-100 dark:from-indigo-950 dark:to-indigo-900 rounded-lg">
+          <div v-if="wellnessData.hrv != null" class="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-xl ring-1 ring-inset ring-blue-500/10">
             <div class="flex items-center gap-2 mb-2">
-              <UIcon name="i-heroicons-heart" class="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
-              <span class="text-xs font-medium text-gray-600 dark:text-gray-400">HRV</span>
+              <UIcon name="i-heroicons-heart" class="w-4 h-4 text-blue-600 dark:text-blue-400" />
+              <span class="text-xs font-bold text-blue-900 dark:text-blue-100 uppercase tracking-tight">HRV</span>
             </div>
-            <div class="text-2xl font-bold text-indigo-900 dark:text-indigo-100">{{ Math.round(wellnessData.hrv) }}</div>
-            <div class="text-xs text-gray-600 dark:text-gray-400 mt-1">ms</div>
-            <div v-if="hrvTrend" class="flex items-center gap-1 mt-2 text-xs">
+            <div class="text-2xl font-bold text-blue-900 dark:text-blue-50">{{ Math.round(wellnessData.hrv) }} <span class="text-xs font-medium opacity-70">ms</span></div>
+            <div v-if="hrvTrend" class="flex items-center gap-1 mt-2 text-xs font-bold">
               <UIcon :name="hrvTrend.icon" :class="hrvTrend.color" class="w-3 h-3" />
               <span :class="hrvTrend.color">{{ hrvTrend.text }}</span>
             </div>
           </div>
 
           <!-- Sleep -->
-          <div v-if="wellnessData.hoursSlept != null" class="p-4 bg-gradient-to-br from-indigo-50 to-indigo-100 dark:from-indigo-950 dark:to-indigo-900 rounded-lg">
+          <div v-if="wellnessData.hoursSlept != null" class="p-4 bg-purple-50 dark:bg-purple-900/20 rounded-xl ring-1 ring-inset ring-purple-500/10">
             <div class="flex items-center gap-2 mb-2">
-              <UIcon name="i-heroicons-moon" class="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
-              <span class="text-xs font-medium text-gray-600 dark:text-gray-400">Sleep</span>
+              <UIcon name="i-heroicons-moon" class="w-4 h-4 text-purple-600 dark:text-purple-400" />
+              <span class="text-xs font-bold text-purple-900 dark:text-purple-100 uppercase tracking-tight">Sleep</span>
             </div>
-            <div class="text-2xl font-bold text-indigo-900 dark:text-indigo-100">{{ wellnessData.hoursSlept.toFixed(1) }}</div>
-            <div class="text-xs text-gray-600 dark:text-gray-400 mt-1">hours</div>
-            <div v-if="wellnessData.sleepScore" class="flex items-center gap-1 mt-2 text-xs">
-              <span class="text-gray-600 dark:text-gray-400">Score: {{ wellnessData.sleepScore }}/100</span>
+            <div class="text-2xl font-bold text-purple-900 dark:text-purple-50">{{ wellnessData.hoursSlept.toFixed(1) }} <span class="text-xs font-medium opacity-70">hrs</span></div>
+            <div v-if="wellnessData.sleepScore" class="mt-2 text-[10px] font-bold text-purple-600/80 dark:text-purple-400 uppercase tracking-widest">
+              Score: {{ wellnessData.sleepScore }}
             </div>
           </div>
 
           <!-- Resting HR -->
-          <div v-if="wellnessData.restingHr != null" class="p-4 bg-gradient-to-br from-indigo-50 to-indigo-100 dark:from-indigo-950 dark:to-indigo-900 rounded-lg">
+          <div v-if="wellnessData.restingHr != null" class="p-4 bg-rose-50 dark:bg-rose-900/20 rounded-xl ring-1 ring-inset ring-rose-500/10">
             <div class="flex items-center gap-2 mb-2">
-              <UIcon name="i-heroicons-heart-20-solid" class="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
-              <span class="text-xs font-medium text-gray-600 dark:text-gray-400">Resting HR</span>
+              <UIcon name="i-heroicons-heart-20-solid" class="w-4 h-4 text-rose-600 dark:text-rose-400" />
+              <span class="text-xs font-bold text-rose-900 dark:text-rose-100 uppercase tracking-tight">RHR</span>
             </div>
-            <div class="text-2xl font-bold text-indigo-900 dark:text-indigo-100">{{ wellnessData.restingHr }}</div>
-            <div class="text-xs text-gray-600 dark:text-gray-400 mt-1">bpm</div>
-            <div v-if="restingHrTrend" class="flex items-center gap-1 mt-2 text-xs">
+            <div class="text-2xl font-bold text-rose-900 dark:text-rose-50">{{ wellnessData.restingHr }} <span class="text-xs font-medium opacity-70">bpm</span></div>
+            <div v-if="restingHrTrend" class="flex items-center gap-1 mt-2 text-xs font-bold">
               <UIcon :name="restingHrTrend.icon" :class="restingHrTrend.color" class="w-3 h-3" />
               <span :class="restingHrTrend.color">{{ restingHrTrend.text }}</span>
             </div>
           </div>
 
           <!-- Recovery Score -->
-          <div v-if="wellnessData.recoveryScore != null" class="p-4 bg-gradient-to-br from-indigo-50 to-indigo-100 dark:from-indigo-950 dark:to-indigo-900 rounded-lg">
+          <div v-if="wellnessData.recoveryScore != null" class="p-4 bg-emerald-50 dark:bg-emerald-900/20 rounded-xl ring-1 ring-inset ring-emerald-500/10">
             <div class="flex items-center gap-2 mb-2">
-              <UIcon name="i-heroicons-bolt" class="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
-              <span class="text-xs font-medium text-gray-600 dark:text-gray-400">Recovery</span>
+              <UIcon name="i-heroicons-bolt" class="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+              <span class="text-xs font-bold text-emerald-900 dark:text-emerald-100 uppercase tracking-tight">Recovery</span>
             </div>
-            <div class="text-2xl font-bold text-indigo-900 dark:text-indigo-100">{{ wellnessData.recoveryScore }}</div>
-            <div class="text-xs text-gray-600 dark:text-gray-400 mt-1">/100</div>
-            <div class="flex items-center gap-1 mt-2 text-xs">
-              <span :class="getRecoveryColor(wellnessData.recoveryScore)">{{ getRecoveryLabel(wellnessData.recoveryScore) }}</span>
+            <div class="text-2xl font-bold text-emerald-900 dark:text-emerald-50">{{ wellnessData.recoveryScore }}%</div>
+            <div class="mt-2">
+              <span class="text-[10px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded bg-white/50 dark:bg-emerald-900/40" :class="getRecoveryColor(wellnessData.recoveryScore)">
+                {{ getRecoveryLabel(wellnessData.recoveryScore) }}
+              </span>
             </div>
           </div>
         </div>
 
         <!-- Metric Explanations -->
-        <div class="space-y-3">
-          <h4 class="font-semibold text-sm text-gray-900 dark:text-gray-100">Understanding Your Metrics</h4>
+        <div class="space-y-4">
+          <h4 class="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest px-1">Insights</h4>
           
-          <div v-if="wellnessData.hrv != null" class="p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
-            <div class="flex items-start gap-2">
-              <UIcon name="i-heroicons-information-circle" class="w-4 h-4 text-indigo-500 mt-0.5 flex-shrink-0" />
-              <div class="text-sm">
-                <span class="font-medium">HRV (Heart Rate Variability)</span>
-                <p class="text-gray-600 dark:text-gray-400 mt-1">
-                  Measures the variation in time between heartbeats. Higher HRV generally indicates better recovery and readiness to train. 
-                  <span class="font-medium">{{ getHRVInterpretation(wellnessData.hrv) }}</span>
-                </p>
+          <div class="grid gap-3">
+            <div v-if="wellnessData.hrv != null" class="p-4 bg-gray-50 dark:bg-gray-800/40 rounded-xl ring-1 ring-inset ring-gray-200 dark:ring-gray-700">
+              <div class="flex items-start gap-3">
+                <UIcon name="i-heroicons-information-circle" class="w-5 h-5 text-blue-500 mt-0.5 flex-shrink-0" />
+                <div class="text-sm">
+                  <span class="font-bold text-gray-900 dark:text-white">Heart Rate Variability</span>
+                  <p class="text-gray-600 dark:text-gray-400 mt-1 leading-relaxed">
+                    {{ getHRVInterpretation(wellnessData.hrv) }}
+                  </p>
+                </div>
               </div>
             </div>
-          </div>
 
-          <div v-if="wellnessData.hoursSlept != null" class="p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
-            <div class="flex items-start gap-2">
-              <UIcon name="i-heroicons-information-circle" class="w-4 h-4 text-indigo-500 mt-0.5 flex-shrink-0" />
-              <div class="text-sm">
-                <span class="font-medium">Sleep Duration</span>
-                <p class="text-gray-600 dark:text-gray-400 mt-1">
-                  Most athletes need 7-9 hours for optimal recovery. You slept {{ wellnessData.hoursSlept.toFixed(1) }} hours. 
-                  <span class="font-medium">{{ getSleepInterpretation(wellnessData.hoursSlept) }}</span>
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <div v-if="wellnessData.restingHr != null" class="p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
-            <div class="flex items-start gap-2">
-              <UIcon name="i-heroicons-information-circle" class="w-4 h-4 text-indigo-500 mt-0.5 flex-shrink-0" />
-              <div class="text-sm">
-                <span class="font-medium">Resting Heart Rate</span>
-                <p class="text-gray-600 dark:text-gray-400 mt-1">
-                  Your baseline heart rate. Lower values typically indicate better fitness. An elevated RHR may signal stress, fatigue, or illness.
-                  <span class="font-medium" v-if="restingHrTrend">{{ restingHrTrend.description }}</span>
-                </p>
+            <div v-if="wellnessData.hoursSlept != null" class="p-4 bg-gray-50 dark:bg-gray-800/40 rounded-xl ring-1 ring-inset ring-gray-200 dark:ring-gray-700">
+              <div class="flex items-start gap-3">
+                <UIcon name="i-heroicons-moon" class="w-5 h-5 text-purple-500 mt-0.5 flex-shrink-0" />
+                <div class="text-sm">
+                  <span class="font-bold text-gray-900 dark:text-white">Sleep Quality</span>
+                  <p class="text-gray-600 dark:text-gray-400 mt-1 leading-relaxed">
+                    {{ getSleepInterpretation(wellnessData.hoursSlept) }}
+                  </p>
+                </div>
               </div>
             </div>
           </div>
         </div>
 
         <!-- 7-Day Trends -->
-        <div v-if="trendData && trendData.length > 1" class="space-y-3">
-          <h4 class="font-semibold text-sm text-gray-900 dark:text-gray-100">7-Day Trends</h4>
+        <div v-if="trendData && trendData.length > 1" class="space-y-4">
+          <h4 class="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest px-1">7-Day Trends</h4>
           
-          <!-- HRV Trend -->
-          <div v-if="trendData.some(d => d.hrv != null)" class="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
-            <div class="flex items-center justify-between mb-3">
-              <span class="text-sm font-medium text-gray-700 dark:text-gray-300">HRV Trend</span>
-              <span class="text-xs text-gray-500">Last 7 days</span>
-            </div>
-            <div class="h-24 flex items-end justify-between gap-1">
-              <div
-                v-for="(day, idx) in trendData"
-                :key="idx"
-                class="flex-1 bg-indigo-200 dark:bg-indigo-700 rounded-t hover:bg-indigo-300 dark:hover:bg-indigo-600 transition-colors relative group"
-                :style="{ height: day.hrv ? `${(day.hrv / maxHRV) * 100}%` : '4px' }"
-                :title="`${format(day.date, 'MMM dd')}: ${day.hrv ? Math.round(day.hrv) + 'ms' : 'No data'}`"
-              >
-                <div class="absolute bottom-full mb-1 left-1/2 transform -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity bg-gray-900 text-white text-xs px-2 py-1 rounded whitespace-nowrap pointer-events-none">
-                  {{ format(day.date, 'MMM dd') }}: {{ day.hrv ? Math.round(day.hrv) + 'ms' : 'N/A' }}
+          <div class="grid md:grid-cols-2 gap-6">
+            <!-- HRV Trend Chart -->
+            <div v-if="trendData.some(d => d.hrv != null)" class="space-y-3">
+              <div class="flex items-center justify-between px-1">
+                <span class="text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-tight">HRV History</span>
+              </div>
+              <div class="h-32 flex items-end justify-between gap-1.5 p-4 bg-gray-50 dark:bg-gray-800/50 rounded-xl ring-1 ring-inset ring-gray-200 dark:ring-gray-700">
+                <div
+                  v-for="(day, idx) in trendData"
+                  :key="idx"
+                  class="flex-1 bg-blue-400/30 dark:bg-blue-500/20 rounded-lg hover:bg-blue-400 dark:hover:bg-blue-500 transition-all duration-300 relative group"
+                  :style="{ height: day.hrv ? `${Math.max((day.hrv / maxHRV) * 100, 10)}%` : '4px' }"
+                >
+                  <div class="absolute bottom-full mb-2 left-1/2 transform -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity bg-gray-900 text-white text-[10px] font-bold px-2 py-1 rounded shadow-xl whitespace-nowrap pointer-events-none z-10">
+                    {{ format(day.date, 'MMM d') }}: {{ day.hrv ? Math.round(day.hrv) + 'ms' : 'N/A' }}
+                  </div>
                 </div>
               </div>
             </div>
-            <div class="flex justify-between mt-2 text-xs text-gray-500">
-              <span>{{ format(trendData[0].date, 'MMM dd') }}</span>
-              <span>{{ format(trendData[trendData.length - 1].date, 'MMM dd') }}</span>
-            </div>
-          </div>
 
-          <!-- Sleep Trend -->
-          <div v-if="trendData.some(d => d.hoursSlept != null)" class="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
-            <div class="flex items-center justify-between mb-3">
-              <span class="text-sm font-medium text-gray-700 dark:text-gray-300">Sleep Duration</span>
-              <span class="text-xs text-gray-500">Last 7 days</span>
-            </div>
-            <div class="h-24 flex items-end justify-between gap-1">
-              <div
-                v-for="(day, idx) in trendData"
-                :key="idx"
-                class="flex-1 bg-indigo-200 dark:bg-indigo-700 rounded-t hover:bg-indigo-300 dark:hover:bg-indigo-600 transition-colors relative group"
-                :style="{ height: day.hoursSlept ? `${(day.hoursSlept / 10) * 100}%` : '4px' }"
-                :title="`${format(day.date, 'MMM dd')}: ${day.hoursSlept ? day.hoursSlept.toFixed(1) + 'h' : 'No data'}`"
-              >
-                <div class="absolute bottom-full mb-1 left-1/2 transform -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity bg-gray-900 text-white text-xs px-2 py-1 rounded whitespace-nowrap pointer-events-none">
-                  {{ format(day.date, 'MMM dd') }}: {{ day.hoursSlept ? day.hoursSlept.toFixed(1) + 'h' : 'N/A' }}
+            <!-- Sleep Trend Chart -->
+            <div v-if="trendData.some(d => d.hoursSlept != null)" class="space-y-3">
+              <div class="flex items-center justify-between px-1">
+                <span class="text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-tight">Sleep Duration</span>
+              </div>
+              <div class="h-32 flex items-end justify-between gap-1.5 p-4 bg-gray-50 dark:bg-gray-800/50 rounded-xl ring-1 ring-inset ring-gray-200 dark:ring-gray-700">
+                <div
+                  v-for="(day, idx) in trendData"
+                  :key="idx"
+                  class="flex-1 bg-purple-400/30 dark:bg-purple-500/20 rounded-lg hover:bg-purple-400 dark:hover:bg-purple-500 transition-all duration-300 relative group"
+                  :style="{ height: day.hoursSlept ? `${Math.max((day.hoursSlept / 12) * 100, 10)}%` : '4px' }"
+                >
+                  <div class="absolute bottom-full mb-2 left-1/2 transform -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity bg-gray-900 text-white text-[10px] font-bold px-2 py-1 rounded shadow-xl whitespace-nowrap pointer-events-none z-10">
+                    {{ format(day.date, 'MMM d') }}: {{ day.hoursSlept ? day.hoursSlept.toFixed(1) + 'h' : 'N/A' }}
+                  </div>
                 </div>
               </div>
-            </div>
-            <div class="flex justify-between mt-2 text-xs text-gray-500">
-              <span>{{ format(trendData[0].date, 'MMM dd') }}</span>
-              <span>{{ format(trendData[trendData.length - 1].date, 'MMM dd') }}</span>
-            </div>
-          </div>
-        </div>
-
-        <!-- Subjective Metrics -->
-        <div v-if="hasSubjectiveMetrics" class="space-y-3">
-          <h4 class="font-semibold text-sm text-gray-900 dark:text-gray-100">Subjective Wellness</h4>
-          <div class="grid grid-cols-2 md:grid-cols-3 gap-3">
-            <div v-if="wellnessData.soreness != null" class="p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
-              <div class="text-xs text-gray-600 dark:text-gray-400">Soreness</div>
-              <div class="text-lg font-semibold mt-1">{{ wellnessData.soreness }}/10</div>
-            </div>
-            <div v-if="wellnessData.fatigue != null" class="p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
-              <div class="text-xs text-gray-600 dark:text-gray-400">Fatigue</div>
-              <div class="text-lg font-semibold mt-1">{{ wellnessData.fatigue }}/10</div>
-            </div>
-            <div v-if="wellnessData.stress != null" class="p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
-              <div class="text-xs text-gray-600 dark:text-gray-400">Stress</div>
-              <div class="text-lg font-semibold mt-1">{{ wellnessData.stress }}/10</div>
-            </div>
-            <div v-if="wellnessData.mood != null" class="p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
-              <div class="text-xs text-gray-600 dark:text-gray-400">Mood</div>
-              <div class="text-lg font-semibold mt-1">{{ wellnessData.mood }}/10</div>
-            </div>
-            <div v-if="wellnessData.motivation != null" class="p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
-              <div class="text-xs text-gray-600 dark:text-gray-400">Motivation</div>
-              <div class="text-lg font-semibold mt-1">{{ wellnessData.motivation }}/10</div>
-            </div>
-            <div v-if="wellnessData.readiness != null" class="p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
-              <div class="text-xs text-gray-600 dark:text-gray-400">Readiness</div>
-              <div class="text-lg font-semibold mt-1">{{ wellnessData.readiness }}/10</div>
             </div>
           </div>
         </div>
 
         <!-- Training Recommendations -->
-        <div class="p-4 bg-indigo-50 dark:bg-indigo-950 border border-indigo-200 dark:border-indigo-800 rounded-lg">
-          <div class="flex items-start gap-3">
-            <UIcon name="i-heroicons-light-bulb" class="w-5 h-5 text-indigo-600 dark:text-indigo-400 mt-0.5 flex-shrink-0" />
-            <div>
-              <h4 class="font-semibold text-sm text-indigo-900 dark:text-indigo-100 mb-2">Training Recommendation</h4>
-              <p class="text-sm text-indigo-800 dark:text-indigo-200">{{ getTrainingRecommendation() }}</p>
+        <div class="p-5 bg-primary-50 dark:bg-primary-900/10 border border-primary-100 dark:border-primary-900/20 rounded-2xl">
+          <div class="flex items-start gap-4">
+            <div class="p-2.5 rounded-xl bg-white dark:bg-gray-900 shadow-sm ring-1 ring-primary-100 dark:ring-primary-900/30">
+              <UIcon name="i-heroicons-sparkles" class="w-6 h-6 text-primary-600 dark:text-primary-400 flex-shrink-0" />
+            </div>
+            <div class="space-y-1">
+              <h4 class="font-bold text-sm text-primary-900 dark:text-primary-100">Coach Recommendation</h4>
+              <p class="text-sm text-primary-800 dark:text-primary-200 leading-relaxed font-medium">{{ getTrainingRecommendation() }}</p>
             </div>
           </div>
         </div>
       </div>
 
-      <div v-else class="py-12 text-center text-gray-500">
-        No wellness data available for this date
+      <div v-else class="py-12 text-center">
+        <UIcon name="i-heroicons-calendar-days" class="w-12 h-12 text-gray-300 mx-auto mb-4" />
+        <p class="text-gray-500 font-medium font-sans">No wellness data available for this date</p>
       </div>
     </template>
   </UModal>

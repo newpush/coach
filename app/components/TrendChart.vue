@@ -51,24 +51,24 @@ const props = defineProps<{
   type: 'workout' | 'nutrition'
 }>()
 
-const colorMode = useColorMode()
+const theme = useTheme()
 
 const metrics = computed(() => {
   if (props.type === 'workout') {
     return [
-      { key: 'overallScore', label: 'Overall', color: 'bg-yellow-500', strokeColor: 'rgb(234, 179, 8)' },
-      { key: 'technicalScore', label: 'Technical', color: 'bg-blue-500', strokeColor: 'rgb(59, 130, 246)' },
-      { key: 'effortScore', label: 'Effort', color: 'bg-red-500', strokeColor: 'rgb(239, 68, 68)' },
-      { key: 'pacingScore', label: 'Pacing', color: 'bg-green-500', strokeColor: 'rgb(34, 197, 94)' },
-      { key: 'executionScore', label: 'Execution', color: 'bg-purple-500', strokeColor: 'rgb(168, 85, 247)' }
+      { key: 'overallScore', label: 'Overall', color: 'bg-yellow-500', strokeColor: theme.colors.value.get('amber', 500) },
+      { key: 'technicalScore', label: 'Technical', color: 'bg-blue-500', strokeColor: theme.colors.value.get('blue', 500) },
+      { key: 'effortScore', label: 'Effort', color: 'bg-red-500', strokeColor: theme.colors.value.get('red', 500) },
+      { key: 'pacingScore', label: 'Pacing', color: 'bg-green-500', strokeColor: theme.colors.value.get('green', 500) },
+      { key: 'executionScore', label: 'Execution', color: 'bg-purple-500', strokeColor: theme.colors.value.get('purple', 500) }
     ]
   } else {
     return [
-      { key: 'overallScore', label: 'Overall', color: 'bg-yellow-500', strokeColor: 'rgb(234, 179, 8)' },
-      { key: 'macroBalanceScore', label: 'Macro Balance', color: 'bg-blue-500', strokeColor: 'rgb(59, 130, 246)' },
-      { key: 'qualityScore', label: 'Quality', color: 'bg-green-500', strokeColor: 'rgb(34, 197, 94)' },
-      { key: 'adherenceScore', label: 'Adherence', color: 'bg-purple-500', strokeColor: 'rgb(168, 85, 247)' },
-      { key: 'hydrationScore', label: 'Hydration', color: 'bg-cyan-500', strokeColor: 'rgb(6, 182, 212)' }
+      { key: 'overallScore', label: 'Overall', color: 'bg-yellow-500', strokeColor: theme.colors.value.get('amber', 500) },
+      { key: 'macroBalanceScore', label: 'Macro Balance', color: 'bg-blue-500', strokeColor: theme.colors.value.get('blue', 500) },
+      { key: 'qualityScore', label: 'Quality', color: 'bg-green-500', strokeColor: theme.colors.value.get('green', 500) },
+      { key: 'adherenceScore', label: 'Adherence', color: 'bg-purple-500', strokeColor: theme.colors.value.get('purple', 500) },
+      { key: 'hydrationScore', label: 'Hydration', color: 'bg-cyan-500', strokeColor: theme.colors.value.get('cyan', 500) }
     ]
   }
 })
@@ -90,7 +90,7 @@ const chartData = computed(() => {
     label: metric.label,
     data: props.data.map(item => item[metric.key] || 0),
     borderColor: metric.strokeColor,
-    backgroundColor: metric.strokeColor.replace('rgb', 'rgba').replace(')', ', 0.1)'),
+    backgroundColor: metric.strokeColor + '1A', // 1A is ~10% opacity in hex
     tension: 0.4,
     borderWidth: 2,
     pointRadius: 4,
@@ -117,10 +117,10 @@ const chartOptions = computed(() => ({
       display: false
     },
     tooltip: {
-      backgroundColor: colorMode.value === 'dark' ? 'rgb(31, 41, 55)' : 'rgb(255, 255, 255)',
-      titleColor: colorMode.value === 'dark' ? 'rgb(229, 231, 235)' : 'rgb(17, 24, 39)',
-      bodyColor: colorMode.value === 'dark' ? 'rgb(209, 213, 219)' : 'rgb(55, 65, 81)',
-      borderColor: colorMode.value === 'dark' ? 'rgb(75, 85, 99)' : 'rgb(229, 231, 235)',
+      backgroundColor: theme.isDark.value ? '#1f2937' : '#ffffff',
+      titleColor: theme.isDark.value ? '#f3f4f6' : '#111827',
+      bodyColor: theme.isDark.value ? '#d1d5db' : '#374151',
+      borderColor: theme.isDark.value ? '#374151' : '#e5e7eb',
       borderWidth: 1,
       padding: 12,
       displayColors: true,
@@ -135,18 +135,19 @@ const chartOptions = computed(() => ({
     x: {
       grid: {
         display: false,
-        color: colorMode.value === 'dark' ? 'rgba(75, 85, 99, 0.2)' : 'rgba(229, 231, 235, 0.5)'
+        color: theme.colors.value.chartGrid
       },
       ticks: {
-        color: colorMode.value === 'dark' ? 'rgb(156, 163, 175)' : 'rgb(107, 114, 128)',
+        color: theme.colors.value.chartText,
         font: {
-          size: 11
+          size: 11,
+          weight: 'bold' as const
         },
         maxRotation: 0,
         autoSkipPadding: 20
       },
       border: {
-        color: colorMode.value === 'dark' ? 'rgba(75, 85, 99, 0.3)' : 'rgba(229, 231, 235, 0.8)'
+        display: false
       }
     },
     y: {
@@ -154,16 +155,16 @@ const chartOptions = computed(() => ({
       max: 10,
       ticks: {
         stepSize: 2,
-        color: colorMode.value === 'dark' ? 'rgb(156, 163, 175)' : 'rgb(107, 114, 128)',
+        color: theme.colors.value.chartText,
         font: {
           size: 11
         }
       },
       grid: {
-        color: colorMode.value === 'dark' ? 'rgba(75, 85, 99, 0.2)' : 'rgba(229, 231, 235, 0.5)'
+        color: theme.colors.value.chartGrid
       },
       border: {
-        color: colorMode.value === 'dark' ? 'rgba(75, 85, 99, 0.3)' : 'rgba(229, 231, 235, 0.8)'
+        display: false
       }
     }
   }

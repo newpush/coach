@@ -1,140 +1,146 @@
 <template>
-  <UModal 
+  <UModal
     v-model:open="isOpen"
     :title="title"
     :description="`Score: ${displayScore}/10 - ${scoreLabel}`"
     scrollable
-    :ui="{ 
+    :ui="{
       footer: 'justify-end'
     }"
   >
     <template #body>
-      <div class="space-y-6">
-        <!-- Score Display -->
-        <div class="flex items-center gap-4">
-          <div class="flex-shrink-0">
-            <div :class="['text-5xl font-bold', scoreColorClass]">
+      <div class="space-y-8">
+        <!-- Score Display Section -->
+        <div class="flex items-center gap-6 p-4 rounded-xl bg-gray-50 dark:bg-gray-800/50 ring-1 ring-inset ring-gray-200 dark:ring-gray-700">
+          <div class="flex-shrink-0 text-center">
+            <div :class="['text-5xl font-bold font-sans tracking-tight', scoreColorClass]">
               {{ displayScore }}
             </div>
-            <div class="text-sm text-gray-500 dark:text-gray-400 text-center">
-              / 10
+            <div class="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase mt-1">
+              Out of 10
             </div>
           </div>
           
-          <div class="flex-1">
-            <div class="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-4">
-              <div 
-                :class="['h-4 rounded-full transition-all duration-300', scoreBarClass]"
-                :style="{ width: `${(score || 0) * 10}%` }"
-              ></div>
+          <div class="flex-1 space-y-3">
+            <div class="flex justify-between items-end">
+              <p class="text-sm font-bold uppercase tracking-wider" :class="scoreColorClass">
+                {{ scoreLabel }}
+              </p>
             </div>
-            <p class="mt-2 text-sm font-medium" :class="scoreColorClass">
-              {{ scoreLabel }}
-            </p>
+            <UProgress
+              :model-value="score ? score * 10 : 0"
+              size="lg"
+              :color="progressColor"
+            />
           </div>
         </div>
 
         <!-- Structured Analysis -->
-        <div v-if="analysisData" class="space-y-6">
+        <div v-if="analysisData" class="space-y-8">
           <!-- Executive Summary -->
-          <div v-if="analysisData.executive_summary" class="space-y-2">
-            <h4 class="text-sm font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wide">
-              Summary
+          <div v-if="analysisData.executive_summary" class="space-y-3">
+            <h4 class="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest">
+              Executive Summary
             </h4>
-            <p class="text-gray-700 dark:text-gray-300 leading-relaxed">
+            <p class="text-sm text-gray-700 dark:text-gray-300 leading-relaxed font-medium">
               {{ analysisData.executive_summary }}
             </p>
           </div>
 
           <!-- Analysis Sections -->
           <div v-if="analysisData.sections && analysisData.sections.length > 0" class="space-y-4">
-            <h4 class="text-sm font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wide">
-              Analysis
+            <h4 class="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest">
+              Detailed Analysis
             </h4>
-            <div v-for="(section, idx) in analysisData.sections" :key="idx" class="space-y-2">
-              <div class="flex items-center gap-2">
-                <span class="font-medium text-gray-900 dark:text-white">{{ section.title }}</span>
-                <UBadge 
-                  :color="getStatusColor(section.status)" 
-                  variant="subtle"
-                  size="xs"
-                >
-                  {{ getStatusLabel(section.status) }}
-                </UBadge>
+            <div class="grid gap-4">
+              <div v-for="(section, idx) in analysisData.sections" :key="idx" class="p-4 rounded-lg border border-gray-200 dark:border-gray-700 space-y-3">
+                <div class="flex items-center justify-between">
+                  <span class="font-bold text-gray-900 dark:text-white">{{ section.title }}</span>
+                  <UBadge
+                    :color="getStatusColor(section.status)"
+                    variant="subtle"
+                    size="xs"
+                    class="font-bold"
+                  >
+                    {{ getStatusLabel(section.status) }}
+                  </UBadge>
+                </div>
+                <ul class="space-y-2">
+                  <li
+                    v-for="(point, pIdx) in section.analysis_points"
+                    :key="pIdx"
+                    class="text-sm text-gray-600 dark:text-gray-400 flex items-start gap-2 leading-snug"
+                  >
+                    <UIcon name="i-heroicons-chevron-right" class="w-4 h-4 text-gray-400 dark:text-gray-500 mt-0.5 flex-shrink-0" />
+                    <span>{{ point }}</span>
+                  </li>
+                </ul>
               </div>
-              <ul class="space-y-1 ml-4">
-                <li 
-                  v-for="(point, pIdx) in section.analysis_points" 
-                  :key="pIdx"
-                  class="text-sm text-gray-600 dark:text-gray-400 flex items-start gap-2"
-                >
-                  <span class="text-gray-400 dark:text-gray-500 mt-1">•</span>
-                  <span>{{ point }}</span>
-                </li>
-              </ul>
             </div>
           </div>
 
           <!-- Recommendations -->
-          <div v-if="analysisData.recommendations && analysisData.recommendations.length > 0" class="space-y-3">
-            <h4 class="text-sm font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wide">
-              Recommendations
+          <div v-if="analysisData.recommendations && analysisData.recommendations.length > 0" class="space-y-4">
+            <h4 class="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest">
+              Actionable Recommendations
             </h4>
-            <ul class="space-y-3">
-              <li 
-                v-for="(rec, idx) in analysisData.recommendations" 
+            <div class="grid gap-3">
+              <div
+                v-for="(rec, idx) in analysisData.recommendations"
                 :key="idx"
-                class="flex items-start gap-3 p-3 rounded-lg bg-gray-50 dark:bg-gray-800/50"
+                class="flex items-start gap-4 p-4 rounded-xl bg-gray-50 dark:bg-gray-800/50 ring-1 ring-inset ring-gray-200 dark:ring-gray-700"
               >
-                <UIcon 
-                  :name="getPriorityIcon(rec.priority)" 
-                  :class="['w-5 h-5 flex-shrink-0 mt-0.5', getPriorityColor(rec.priority)]" 
-                />
-                <div class="flex-1 space-y-1">
-                  <div class="font-medium text-gray-900 dark:text-white">{{ rec.title }}</div>
-                  <div class="text-sm text-gray-600 dark:text-gray-400">{{ rec.description }}</div>
+                <div class="p-2 rounded-lg bg-white dark:bg-gray-900 shadow-sm ring-1 ring-gray-200 dark:ring-gray-800">
+                  <UIcon
+                    :name="getPriorityIcon(rec.priority)"
+                    :class="['w-6 h-6 flex-shrink-0', getPriorityColor(rec.priority)]"
+                  />
                 </div>
-              </li>
-            </ul>
+                <div class="flex-1 space-y-1">
+                  <div class="font-bold text-gray-900 dark:text-white">{{ rec.title }}</div>
+                  <div class="text-sm text-gray-600 dark:text-gray-400 leading-relaxed">{{ rec.description }}</div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
         <!-- Fallback: Plain text explanation -->
-        <div v-else-if="explanation" class="space-y-3">
-          <h4 class="text-sm font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wide">
-            Analysis
+        <div v-else-if="explanation" class="space-y-4">
+          <h4 class="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest">
+            Analysis Details
           </h4>
           <div class="prose prose-sm dark:prose-invert max-w-none">
-            <p class="text-gray-700 dark:text-gray-300 leading-relaxed whitespace-pre-line">
+            <p class="text-gray-700 dark:text-gray-300 leading-relaxed whitespace-pre-line font-medium">
               {{ explanation }}
             </p>
           </div>
         </div>
 
         <!-- Improvement Actions (parsed from plain text explanation) -->
-        <div v-if="!analysisData && improvementActions.length > 0" class="space-y-3">
-          <h4 class="text-sm font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wide">
-            How to Improve
+        <div v-if="!analysisData && improvementActions.length > 0" class="space-y-4">
+          <h4 class="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest">
+            Key Takeaways
           </h4>
-          <ul class="space-y-2">
-            <li 
-              v-for="(action, index) in improvementActions" 
+          <div class="grid gap-2">
+            <div
+              v-for="(action, index) in improvementActions"
               :key="index"
-              class="flex items-start gap-2"
+              class="flex items-start gap-3 p-3 rounded-lg bg-primary-50/50 dark:bg-primary-900/10 border border-primary-100 dark:border-primary-900/20"
             >
-              <UIcon 
-                name="i-heroicons-check-circle" 
-                class="w-5 h-5 text-primary flex-shrink-0 mt-0.5" 
+              <UIcon
+                name="i-heroicons-check-badge"
+                class="w-5 h-5 text-primary-600 dark:text-primary-400 flex-shrink-0"
               />
-              <span class="text-sm text-gray-700 dark:text-gray-300">{{ action }}</span>
-            </li>
-          </ul>
+              <span class="text-sm text-gray-700 dark:text-gray-200 font-medium leading-tight">{{ action }}</span>
+            </div>
+          </div>
         </div>
       </div>
     </template>
 
     <template #footer="{ close }">
-      <UButton color="neutral" variant="solid" @click="close">
+      <UButton color="neutral" variant="outline" @click="close">
         Close
       </UButton>
     </template>
@@ -188,13 +194,13 @@ const scoreColorClass = computed(() => {
   return 'text-red-600 dark:text-red-400'
 })
 
-const scoreBarClass = computed(() => {
-  if (!props.score) return 'bg-gray-400'
-  if (props.score >= 9) return 'bg-green-500'
-  if (props.score >= 7) return 'bg-blue-500'
-  if (props.score >= 5) return 'bg-yellow-500'
-  if (props.score >= 3) return 'bg-orange-500'
-  return 'bg-red-500'
+const progressColor = computed(() => {
+  if (!props.score) return 'neutral' as const
+  if (props.score >= 9) return 'success' as const
+  if (props.score >= 7) return 'primary' as const
+  if (props.score >= 5) return 'warning' as const
+  if (props.score >= 3) return 'warning' as const
+  return 'error' as const
 })
 
 const scoreLabel = computed(() => {
@@ -233,9 +239,9 @@ const getPriorityIcon = (priority: string) => {
 
 const getPriorityColor = (priority: string) => {
   const map: Record<string, string> = {
-    high: 'text-red-500',
-    medium: 'text-yellow-500',
-    low: 'text-blue-500'
+    high: 'text-red-600 dark:text-red-400',
+    medium: 'text-amber-600 dark:text-amber-400',
+    low: 'text-blue-600 dark:text-blue-400'
   }
   return map[priority] || 'text-gray-500'
 }

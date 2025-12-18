@@ -1,20 +1,20 @@
 <template>
-  <div
+  <UCard
     :class="[
-      'bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4 transition-all duration-200',
-      canClick ? 'hover:shadow-lg hover:border-gray-300 dark:hover:border-gray-600 cursor-pointer' : ''
+      canClick ? 'hover:shadow-md hover:ring-1 hover:ring-gray-300 dark:hover:ring-gray-600 cursor-pointer transition-all duration-200' : ''
     ]"
+    :ui="{ body: compact ? 'p-4' : 'p-6' }"
     @click="handleClick"
   >
     <div class="flex items-center justify-between">
       <div class="flex-1">
         <div class="flex items-center gap-2 mb-2">
-          <UIcon 
-            v-if="icon" 
-            :name="icon" 
+          <UIcon
+            v-if="icon"
+            :name="icon"
             :class="[
               'w-5 h-5',
-              colorClasses[color || 'gray']
+              iconColorClass
             ]"
           />
           <h3 class="text-sm font-medium text-gray-600 dark:text-gray-400">
@@ -23,27 +23,26 @@
         </div>
         
         <div class="flex items-baseline gap-2">
-          <div :class="['text-3xl font-bold', compact ? 'text-2xl' : 'text-3xl', scoreColorClass]">
+          <div :class="['font-bold font-sans', compact ? 'text-2xl' : 'text-3xl', scoreColorClass]">
             {{ displayScore }}
           </div>
           <div class="text-sm text-gray-500 dark:text-gray-400">/ 10</div>
         </div>
         
-        <div class="mt-2">
-          <div class="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
-            <div 
-              :class="['h-2 rounded-full transition-all duration-300', scoreBarClass]"
-              :style="{ width: `${(score || 0) * 10}%` }"
-            ></div>
-          </div>
+        <div class="mt-3">
+          <UProgress
+            :model-value="score ? score * 10 : 0"
+            size="sm"
+            :color="progressColor"
+          />
         </div>
         
-        <p v-if="!compact" class="mt-2 text-xs text-gray-500 dark:text-gray-400">
+        <p v-if="!compact" class="mt-2 text-xs font-medium text-gray-500 dark:text-gray-400">
           {{ scoreLabel }}
         </p>
       </div>
     </div>
-  </div>
+  </UCard>
 </template>
 
 <script setup lang="ts">
@@ -98,13 +97,29 @@ const scoreColorClass = computed(() => {
   return 'text-red-600 dark:text-red-400'
 })
 
-const scoreBarClass = computed(() => {
-  if (!props.score) return 'bg-gray-400'
-  if (props.score >= 9) return 'bg-green-500'
-  if (props.score >= 7) return 'bg-blue-500'
-  if (props.score >= 5) return 'bg-yellow-500'
-  if (props.score >= 3) return 'bg-orange-500'
-  return 'bg-red-500'
+const progressColor = computed(() => {
+  if (!props.score) return 'neutral' as const
+  if (props.score >= 9) return 'success' as const
+  if (props.score >= 7) return 'primary' as const
+  if (props.score >= 5) return 'warning' as const
+  if (props.score >= 3) return 'warning' as const
+  return 'error' as const
+})
+
+const iconColorClass = computed(() => {
+  // Map prop colors to semantic tailwind text colors
+  // Could be improved by using standard semantic names (success/warning/etc)
+  const map: Record<string, string> = {
+    gray: 'text-gray-500',
+    red: 'text-red-500',
+    orange: 'text-orange-500',
+    yellow: 'text-yellow-500',
+    green: 'text-green-500',
+    blue: 'text-blue-500',
+    purple: 'text-purple-500',
+    cyan: 'text-cyan-500'
+  }
+  return map[props.color || 'gray'] || 'text-gray-500'
 })
 
 const scoreLabel = computed(() => {
@@ -115,15 +130,4 @@ const scoreLabel = computed(() => {
   if (props.score >= 3) return 'Needs Work'
   return 'Poor'
 })
-
-const colorClasses = {
-  gray: 'text-gray-500',
-  red: 'text-red-500',
-  orange: 'text-orange-500',
-  yellow: 'text-yellow-500',
-  green: 'text-green-500',
-  blue: 'text-blue-500',
-  purple: 'text-purple-500',
-  cyan: 'text-cyan-500'
-}
 </script>
