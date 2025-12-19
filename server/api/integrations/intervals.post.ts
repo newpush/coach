@@ -63,7 +63,8 @@ export default defineEventHandler(async (event) => {
           accessToken: apiKey,
           externalUserId: finalAthleteId,
           lastSyncAt: new Date(),
-          syncStatus: 'SUCCESS'
+          syncStatus: 'SUCCESS',
+          // Don't reset initialSyncCompleted if it's already true
         }
       })
     } else {
@@ -75,7 +76,8 @@ export default defineEventHandler(async (event) => {
           accessToken: apiKey,
           externalUserId: finalAthleteId,
           syncStatus: 'SUCCESS',
-          lastSyncAt: new Date()
+          lastSyncAt: new Date(),
+          initialSyncCompleted: false // New integration needs initial sync
         }
       })
     }

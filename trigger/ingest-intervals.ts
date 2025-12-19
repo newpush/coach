@@ -201,7 +201,8 @@ export const ingestIntervalsTask = task({
         data: {
           syncStatus: 'SUCCESS',
           lastSyncAt: new Date(),
-          errorMessage: null
+          errorMessage: null,
+          initialSyncCompleted: true // Mark initial sync as done
         }
       });
       

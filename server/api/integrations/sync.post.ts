@@ -26,6 +26,26 @@ export default defineEventHandler(async (event) => {
   const now = new Date()
   const startDate = new Date(now)
   
+  // Check if we need a full sync for this provider (if it's the first time)
+  let isInitialSync = false;
+  
+  if (provider === 'intervals') {
+    const integration = await prisma.integration.findUnique({
+      where: {
+        userId_provider: {
+          userId: (session.user as any).id,
+          provider: 'intervals'
+        }
+      }
+    })
+    
+    // If we haven't completed an initial sync yet, or if it's explicitly marked as false
+    // @ts-ignore - property exists in db but type not updated yet
+    if (integration && integration.initialSyncCompleted === false) {
+      isInitialSync = true;
+    }
+  }
+
   if (provider === 'all') {
     // For batch sync, use a moderate 7-day window for recent data
     // This balances API rate limits across all services
@@ -36,7 +56,15 @@ export default defineEventHandler(async (event) => {
     // For Whoop: last 90 days
     // For Yazio: last 5 days (to avoid rate limiting - older data is kept as-is)
     // For Strava: last 7 days (to respect API rate limits - 200 req/15min, 2000/day)
-    const daysBack = provider === 'yazio' ? 5 : provider === 'strava' ? 7 : 90
+    let daysBack = provider === 'yazio' ? 5 : provider === 'strava' ? 7 : 90
+    
+    // Logic for Intervals.icu:
+    // If it's the first sync (initialSyncCompleted is false), fetch 90 days history
+    // Otherwise, just fetch the last 7 days to save resources
+    if (provider === 'intervals' && !isInitialSync) {
+      daysBack = 7;
+    }
+    
     startDate.setDate(startDate.getDate() - daysBack)
   }
   
