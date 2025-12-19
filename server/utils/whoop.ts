@@ -354,13 +354,6 @@ export function normalizeWhoopRecovery(recovery: WhoopRecovery, userId: string, 
   // Create date-only (removing time component) in UTC
   const dateOnly = new Date(Date.UTC(recoveryDate.getUTCFullYear(), recoveryDate.getUTCMonth(), recoveryDate.getUTCDate()))
   
-  console.log('[Whoop] Processing recovery:', {
-    created_at: recovery.created_at,
-    date_stored: dateOnly.toISOString().split('T')[0],
-    recovery_score: Math.round(recovery.score.recovery_score),
-    hrv: recovery.score.hrv_rmssd_milli,
-    has_sleep: !!sleep
-  })
   
   // Extract sleep data if available
   let sleepSecs = null

@@ -90,9 +90,6 @@ export function normalizeYazioData(
   const [year, month, day] = date.split('-').map(Number)
   const dateObj = new Date(Date.UTC(year, month - 1, day))
   
-  console.log(`[Yazio Normalize] Processing date: ${date}`)
-  console.log(`[Yazio Normalize] Date object: ${dateObj.toISOString()}`)
-  
   // Group items by meal time
   const mealGroups: Record<string, any[]> = {
     breakfast: [],
@@ -175,15 +172,6 @@ export function normalizeYazioData(
     }
   }
   
-  console.log(`[Yazio Normalize] Meal groups:`, {
-    breakfast: mealGroups.breakfast.length,
-    lunch: mealGroups.lunch.length,
-    dinner: mealGroups.dinner.length,
-    snacks: mealGroups.snacks.length,
-    totalProducts: items.products.length,
-    totalSimpleProducts: items.simple_products?.length || 0
-  })
-  
   // Calculate totals from meals data
   const meals = summary.meals || {}
   const totals = {
@@ -194,8 +182,6 @@ export function normalizeYazioData(
     fiber: 0,
     sugar: 0
   }
-  
-  console.log(`[Yazio Normalize] Summary meals:`, Object.keys(meals))
   
   // Sum up nutrients from all meals if available
   Object.entries(meals).forEach(([mealName, meal]: [string, any]) => {
@@ -209,8 +195,6 @@ export function normalizeYazioData(
         sugar: meal.nutrients['nutrient.sugar'] || 0
       }
       
-      console.log(`[Yazio Normalize] ${mealName}:`, mealNutrients)
-      
       totals.calories += mealNutrients.calories
       totals.protein += mealNutrients.protein
       totals.carbs += mealNutrients.carbs
@@ -218,14 +202,6 @@ export function normalizeYazioData(
       totals.fiber += mealNutrients.fiber
       totals.sugar += mealNutrients.sugar
     }
-  })
-  
-  console.log(`[Yazio Normalize] Totals:`, totals)
-  console.log(`[Yazio Normalize] Goals:`, {
-    calories: summary.goals?.['energy.energy'],
-    protein: summary.goals?.['nutrient.protein'],
-    carbs: summary.goals?.['nutrient.carb'],
-    fat: summary.goals?.['nutrient.fat']
   })
   
   const result = {
@@ -248,19 +224,6 @@ export function normalizeYazioData(
     snacks: mealGroups.snacks.length > 0 ? mealGroups.snacks : null,
     rawJson: { summary, items }
   }
-  
-  console.log(`[Yazio Normalize] Final result:`, {
-    userId: result.userId,
-    date: result.date,
-    calories: result.calories,
-    protein: result.protein,
-    carbs: result.carbs,
-    fat: result.fat,
-    hasBreakfast: !!result.breakfast,
-    hasLunch: !!result.lunch,
-    hasDinner: !!result.dinner,
-    hasSnacks: !!result.snacks
-  })
   
   return result
 }
