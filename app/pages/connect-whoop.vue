@@ -87,9 +87,9 @@
           <template #footer>
             <div class="flex justify-end gap-3">
               <UButton
+                to="/dashboard"
                 color="neutral"
                 variant="outline"
-                @click="goBack"
               >
                 Cancel
               </UButton>
@@ -126,7 +126,7 @@ useHead({
 const connecting = ref(false)
 
 const goBack = () => {
-  router.push('/settings')
+  router.push('/dashboard')
 }
 
 const connect = async () => {

@@ -66,11 +66,11 @@
         </form>
 
         <div class="mt-4 text-center">
-          <NuxtLink 
-            to="/settings" 
+          <NuxtLink
+            to="/dashboard"
             class="text-sm text-gray-600 hover:text-gray-900"
           >
-            ← Back to Settings
+            ← Back to Dashboard
           </NuxtLink>
         </div>
       </div>
@@ -114,7 +114,7 @@ const handleConnect = async () => {
     if (response.success) {
       success.value = true
       setTimeout(() => {
-        navigateTo('/settings?connected=yazio')
+        navigateTo('/dashboard')
       }, 2000)
     }
   } catch (e: any) {
