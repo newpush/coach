@@ -236,6 +236,7 @@ model Integration {
 
   // Sync Status
   lastSyncAt     DateTime?
+  initialSyncCompleted Boolean? @default(false) // Track if initial history has been synced
   syncStatus     String?   // "SUCCESS", "FAILED", "SYNCING"
   errorMessage   String?
 
