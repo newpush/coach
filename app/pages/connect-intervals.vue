@@ -78,9 +78,9 @@
           <template #footer>
             <div class="flex justify-end gap-3">
               <UButton
+                to="/dashboard"
                 color="neutral"
                 variant="outline"
-                @click="goBack"
               >
                 Cancel
               </UButton>
@@ -119,7 +119,7 @@ const apiKey = ref('')
 const connecting = ref(false)
 
 const goBack = () => {
-  router.push('/settings')
+  router.push('/dashboard')
 }
 
 const connect = async () => {
@@ -156,8 +156,8 @@ const connect = async () => {
       color: 'success'
     })
 
-    // Navigate back to settings
-    await router.push('/settings')
+    // Navigate back to dashboard
+    await router.push('/dashboard')
   } catch (error: any) {
     toast.add({
       title: 'Connection Failed',

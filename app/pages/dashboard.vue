@@ -25,16 +25,22 @@
 
     <template #body>
       <ClientOnly>
-        <div class="p-6 space-y-8">
+        <!-- Onboarding View (New User) -->
+        <div v-if="!integrationStore?.intervalsConnected" class="p-6 max-w-6xl mx-auto">
+          <DashboardOnboardingView />
+        </div>
+
+        <!-- Dashboard Grid (Connected User) -->
+        <div v-else class="p-6 space-y-8">
           <div>
-            <h1 class="text-3xl font-bold text-gray-900 dark:text-white tracking-tight">Welcome to Coach Watts</h1>
-            <p class="mt-1 text-sm text-gray-500 dark:text-gray-400 font-medium">Your AI-powered endurance coach is ready to help you optimize your training.</p>
+            <h1 class="text-3xl font-bold text-gray-900 dark:text-white tracking-tight">Welcome back</h1>
+            <p class="mt-1 text-sm text-gray-500 dark:text-gray-400 font-medium">Your AI-powered endurance coach is analyzing your latest data.</p>
           </div>
         
           <!-- Row 1: Athlete Profile / Today's Training / Performance Overview -->
           <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 items-stretch">
             <!-- Athlete Profile Card - shown when connected -->
-            <UCard v-if="integrationStore?.intervalsConnected" class="flex flex-col overflow-hidden">
+            <UCard class="flex flex-col overflow-hidden">
               <template #header>
                 <div class="flex items-center justify-between">
                   <div class="flex items-center gap-2">
@@ -306,20 +312,6 @@
               </template>
             </UCard>
             
-            <!-- Getting Started Card - shown when not connected -->
-            <UCard v-if="!integrationStore.intervalsConnected" class="flex flex-col">
-              <template #header>
-                <h3 class="font-semibold">Getting Started</h3>
-              </template>
-              <p class="text-sm text-muted flex-grow">
-                Connect your Intervals.icu account to start analyzing your training data.
-              </p>
-              <template #footer>
-                <UButton to="/settings" block>
-                  Connect Intervals.icu
-                </UButton>
-              </template>
-            </UCard>
           </div>
           
           <!-- Row 2: Recent Activity / Next Steps / Connection Status -->
@@ -342,17 +334,6 @@
               <div v-if="activityStore.loading" class="text-center py-8">
                 <UIcon name="i-heroicons-arrow-path" class="w-6 h-6 animate-spin inline text-primary" />
                 <p class="text-sm text-muted mt-2">Loading activity...</p>
-              </div>
-              
-              <!-- No connection -->
-              <div v-else-if="!integrationStore.intervalsConnected" class="text-center py-8">
-                <UIcon name="i-heroicons-exclamation-circle" class="w-12 h-12 mx-auto text-muted mb-3" />
-                <p class="text-sm text-muted">
-                  Connect your Intervals.icu account to see your recent activity.
-                </p>
-                <UButton to="/settings" color="primary" class="mt-4">
-                  Connect Now
-                </UButton>
               </div>
               
               <!-- No activity -->
@@ -389,42 +370,38 @@
               </UTimeline>
             </UCard>
             
-            <!-- Next Steps Card - hidden when reports exist -->
-            <UCard v-if="!hasReports" class="bg-primary-50 dark:bg-primary-900/10 ring-primary-500/20">
+            <!-- Next Steps Card - hidden when reports exist (and we're connected) -->
+            <UCard v-if="!hasReports && integrationStore.intervalsConnected" class="bg-primary-50 dark:bg-primary-900/10 ring-primary-500/20">
               <template #header>
                 <div class="flex items-center gap-2">
                   <UIcon name="i-heroicons-list-bullet" class="w-5 h-5 text-primary-600 dark:text-primary-400" />
-                  <h3 class="font-bold text-sm tracking-tight uppercase">Getting Started</h3>
+                  <h3 class="font-bold text-sm tracking-tight uppercase">Analysis Progress</h3>
                 </div>
               </template>
               <ul class="space-y-4">
                 <li class="flex items-start gap-3">
                   <UIcon name="i-heroicons-check-circle" class="w-5 h-5 text-primary-500 mt-0.5 flex-shrink-0" />
-                  <span class="text-sm font-bold text-gray-700 dark:text-gray-200">Account Ready</span>
+                  <span class="text-sm font-bold text-gray-700 dark:text-gray-200">Account Connected</span>
                 </li>
                 <li class="flex items-start gap-3">
                   <UIcon
                     :name="integrationStore.intervalsConnected ? 'i-heroicons-check-circle' : 'i-heroicons-arrow-path'"
                     :class="integrationStore.intervalsConnected ? 'text-primary-500 w-5 h-5 mt-0.5 flex-shrink-0' : 'w-5 h-5 mt-0.5 flex-shrink-0 animate-spin text-gray-400'"
                   />
-                  <span class="text-sm font-bold" :class="integrationStore.intervalsConnected ? 'text-gray-700 dark:text-gray-200' : 'text-gray-500'">Intervals.icu Sync</span>
+                  <span class="text-sm font-bold" :class="integrationStore.intervalsConnected ? 'text-gray-700 dark:text-gray-200' : 'text-gray-500'">Data Sync</span>
                 </li>
                 <li class="flex items-start gap-3">
                   <UIcon
                     :name="integrationStore.intervalsConnected ? 'i-heroicons-check-circle' : 'i-heroicons-arrow-path'"
                     :class="integrationStore.intervalsConnected ? 'text-primary-500 w-5 h-5 mt-0.5 flex-shrink-0' : 'w-5 h-5 mt-0.5 flex-shrink-0 text-gray-400'"
                   />
-                  <span class="text-sm font-bold" :class="integrationStore.intervalsConnected ? 'text-gray-700 dark:text-gray-200' : 'text-gray-500'">Analyzing History</span>
-                </li>
-                <li class="flex items-start gap-3">
-                  <UIcon name="i-heroicons-sparkles" class="w-5 h-5 text-gray-400 mt-0.5 flex-shrink-0" />
-                  <span class="text-sm font-bold text-gray-500">First AI Report</span>
+                  <span class="text-sm font-bold" :class="integrationStore.intervalsConnected ? 'text-gray-700 dark:text-gray-200' : 'text-gray-500'">Processing History</span>
                 </li>
               </ul>
             </UCard>
             
-            <!-- Connection Status Card - shown when connected -->
-            <UCard v-if="integrationStore.intervalsConnected">
+            <!-- Connection Status Card -->
+            <UCard>
               <template #header>
                 <div class="flex items-center justify-between">
                   <h3 class="font-semibold">Data Sync</h3>
