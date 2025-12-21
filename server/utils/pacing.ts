@@ -184,7 +184,12 @@ export function analyzePacingStrategy(lapSplits: any[]) {
   const avgPace = allPaces.reduce((sum, p) => sum + p, 0) / allPaces.length
   const stdDev = Math.sqrt(allPaces.reduce((sum, p) => sum + Math.pow(p - avgPace, 2), 0) / allPaces.length)
   const coefficientOfVariation = (stdDev / avgPace) * 100
-  const evennessScore = Math.max(0, 100 - coefficientOfVariation * 10) // 0-100 scale
+  // Reduced penalty multiplier from 10 to 3 to be more lenient for normal variations
+  // CV of 5% = score 85 (Excellent)
+  // CV of 10% = score 70 (Good)
+  // CV of 20% = score 40 (Fair)
+  // CV of 33% = score 0 (Poor)
+  const evennessScore = Math.max(0, 100 - coefficientOfVariation * 3) // 0-100 scale
   
   let strategy = 'even'
   let description = 'Well-paced with consistent splits'

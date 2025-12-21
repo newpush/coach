@@ -48,7 +48,28 @@ export default defineEventHandler(async (event) => {
   }).catch(() => null) // Ignore errors if table doesn't exist yet
   
   if (workoutStream) {
-    // Return actual time-series stream data
+    // If we have pacing zones but no strategy, or if we want to ensure consistency
+    // we can re-analyze here, but typically the stream ingestion handles this.
+    // However, since we just updated the formula in `analyzePacingStrategy` and that is used
+    // during ingestion (presumably), we might want to trigger a re-analysis if it's missing or old.
+    
+    // For now, let's just return the stream. The user can re-sync or we can run a backfill script
+    // if we want to update all existing streams.
+    
+    // Actually, since the `analyzePacingStrategy` utility is used to *compute* the JSON stored in DB,
+    // changing the utility doesn't automatically update the DB.
+    // But if the frontend calls this endpoint, it gets the DB record.
+    // If we want to see the new score immediately without re-ingesting, we should re-calculate it here on the fly
+    // if the necessary data (lapSplits) is present in the stream.
+    
+    if (workoutStream.lapSplits && Array.isArray(workoutStream.lapSplits)) {
+       const strategy = analyzePacingStrategy(workoutStream.lapSplits)
+       return {
+         ...workoutStream,
+         pacingStrategy: strategy
+       }
+    }
+
     return workoutStream
   }
   
@@ -94,27 +115,9 @@ export default defineEventHandler(async (event) => {
       const paceVariability = paceSeconds.length > 1
         ? Math.sqrt(paceSeconds.reduce((sum: number, p: number) => sum + Math.pow(p - avgPaceSecondsValue, 2), 0) / paceSeconds.length)
         : 0
-      
-      // Calculate first/second half for pacing strategy
-      const halfwayIndex = Math.floor(lapSplits.length / 2)
-      const firstHalf = lapSplits.slice(0, halfwayIndex)
-      const secondHalf = lapSplits.slice(halfwayIndex)
-      
-      const firstHalfPace = firstHalf.reduce((sum: number, s: any) => sum + s.paceSeconds, 0) / firstHalf.length
-      const secondHalfPace = secondHalf.reduce((sum: number, s: any) => sum + s.paceSeconds, 0) / secondHalf.length
-      const paceDifference = secondHalfPace - firstHalfPace
-      
-      let strategy = 'even'
-      let description = 'Consistent pacing throughout'
-      if (paceDifference > 10) {
-        strategy = 'positive_split'
-        description = 'Slowed down in second half'
-      } else if (paceDifference < -10) {
-        strategy = 'negative_split'
-        description = 'Sped up in second half'
-      }
-      
-      const evenness = Math.max(0, Math.min(100, 100 - (Math.abs(paceDifference) / avgPaceSecondsValue * 100)))
+        
+      // Use shared utility for consistent pacing analysis
+      const pacingStrategy = analyzePacingStrategy(lapSplits)
       
       return {
         workoutId: workout.id,
@@ -122,14 +125,7 @@ export default defineEventHandler(async (event) => {
         lapSplits,
         avgPacePerKm: avgPaceMinPerKm,
         paceVariability: paceVariability,
-        pacingStrategy: {
-          strategy,
-          description,
-          firstHalfPace: firstHalfPace,
-          secondHalfPace: secondHalfPace,
-          paceDifference: paceDifference,
-          evenness: Math.round(evenness)
-        },
+        pacingStrategy,
         createdAt: new Date(),
         updatedAt: new Date()
       }
