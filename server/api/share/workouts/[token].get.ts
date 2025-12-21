@@ -17,7 +17,9 @@ export default defineEventHandler(async (event) => {
       user: {
         select: {
           name: true,
-          image: true
+          image: true,
+          hrZones: true,
+          powerZones: true
         }
       }
     }
