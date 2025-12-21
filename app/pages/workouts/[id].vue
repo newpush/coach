@@ -193,7 +193,10 @@
                       </div>
                     </div>
                   </div>
-                  <div>
+                  <div class="flex gap-2">
+                    <span v-if="workout.deviceName" class="px-3 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200">
+                      {{ workout.deviceName }}
+                    </span>
                     <span :class="getSourceBadgeClass(workout.source)">
                       {{ workout.source }}
                     </span>
@@ -201,7 +204,7 @@
                 </div>
 
                 <!-- Key Stats Grid -->
-                <div class="mt-4 grid grid-cols-2 gap-3">
+                <div class="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-3">
                   <div v-if="workout.trainingLoad" class="rounded-lg p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
                     <div class="text-xs text-blue-600 dark:text-blue-400 mb-1">Training Load</div>
                     <div class="text-xl font-bold text-blue-900 dark:text-blue-100">{{ Math.round(workout.trainingLoad) }}</div>
@@ -209,6 +212,14 @@
                   <div v-if="workout.averageHr" class="rounded-lg p-3 bg-pink-50 dark:bg-pink-900/20 border border-pink-200 dark:border-pink-800">
                     <div class="text-xs text-pink-600 dark:text-pink-400 mb-1">Avg HR</div>
                     <div class="text-xl font-bold text-pink-900 dark:text-pink-100">{{ workout.averageHr }} <span class="text-sm">bpm</span></div>
+                  </div>
+                  <div v-if="workout.averageWatts" class="rounded-lg p-3 bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800">
+                    <div class="text-xs text-purple-600 dark:text-purple-400 mb-1">Avg Power</div>
+                    <div class="text-xl font-bold text-purple-900 dark:text-purple-100">{{ workout.averageWatts }}<span class="text-sm">W</span></div>
+                  </div>
+                  <div v-if="workout.normalizedPower" class="rounded-lg p-3 bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-800">
+                    <div class="text-xs text-indigo-600 dark:text-indigo-400 mb-1">Norm Power</div>
+                    <div class="text-xl font-bold text-indigo-900 dark:text-indigo-100">{{ workout.normalizedPower }}<span class="text-sm">W</span></div>
                   </div>
                 </div>
 
