@@ -137,6 +137,7 @@ const availableMetrics = computed<Metric[]>(() => {
   return metrics
 })
 
+
 const hasStreamData = computed(() => {
   return streamData.value && availableMetrics.value.length > 0
 })
@@ -214,24 +215,19 @@ function getChartData(metricKey: string) {
   const time = streamData.value.time || []
   const values = streamData.value[metricKey] || []
   
-  // Sample data for performance (every 10th point if more than 500 points)
-  const sampleRate = values.length > 500 ? 10 : 1
-  const sampledTime = time.filter((_: any, i: number) => i % sampleRate === 0)
-  const sampledValues = values.filter((_: any, i: number) => i % sampleRate === 0)
-  
   return {
-    labels: sampledTime.map((t: number) => formatTime(t)),
+    labels: time.map((t: number) => formatTime(t)),
     datasets: [
       {
         label: metric.label,
-        data: sampledValues,
+        data: values,
         borderColor: metric.color,
         backgroundColor: metric.color.replace('rgb', 'rgba').replace(')', ', 0.1)'),
-        borderWidth: 2,
+        borderWidth: 1.5,
         pointRadius: 0,
-        pointHoverRadius: 4,
+        pointHoverRadius: 0, // Handled by custom plugin
         fill: true,
-        tension: 0.4
+        tension: 0.2
       }
     ]
   }
@@ -244,24 +240,50 @@ function getChartOptions(metricKey: string, isLastChart: boolean = false) {
   return {
     responsive: true,
     maintainAspectRatio: false,
+    animation: false, // Disable animations for performance during sync
     interaction: {
       mode: 'index' as const,
       intersect: false
+    },
+    onHover: (event: any, elements: any, chart: any) => {
+      const xAxis = chart.scales.x
+      if (!xAxis) return
+      
+      const x = event.x
+      // Debug logging
+      // console.log('Hover X:', x, 'Chart bounds:', xAxis.left, xAxis.right)
+      
+      if (x < xAxis.left || x > xAxis.right) {
+         // console.log('Out of bounds')
+         return
+      }
+
+      const index = xAxis.getValueForPixel(x)
+      // console.log('Calculated Index:', index)
+      
+      if (index !== null && !isNaN(index)) {
+        const validIndex = Math.max(0, Math.min(Math.round(index), xAxis.max))
+        
+        if (hoverIndex.value !== validIndex) {
+          console.log('Updating hover index:', validIndex)
+          hoverIndex.value = validIndex
+          
+          chartRefs.value.forEach(ref => {
+             if (ref?.chart && ref.chart !== chart) {
+               ref.chart.update('none')
+             }
+          })
+        }
+      }
     },
     plugins: {
       legend: {
         display: false
       },
       tooltip: {
-        callbacks: {
-          title: (context: any) => {
-            return `Time: ${context[0].label}`
-          },
-          label: (context: any) => {
-            return `${metric?.label}: ${context.parsed.y.toFixed(1)} ${metric?.unit}`
-          }
-        }
-      }
+        enabled: false // Disable default tooltip in favor of Live Header
+      },
+      cursorLine: cursorLinePlugin // Register our custom plugin
     },
     scales: {
       x: {
@@ -298,10 +320,10 @@ function getChartOptions(metricKey: string, isLastChart: boolean = false) {
     },
     layout: {
       padding: {
-        left: 10,
-        right: 10,
-        top: 5,
-        bottom: isLastChart ? 5 : 0
+        left: 0,
+        right: 0,
+        top: 0,
+        bottom: isLastChart ? 0 : 0
       }
     }
   }
