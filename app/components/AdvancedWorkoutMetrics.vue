@@ -49,7 +49,10 @@
         <!-- 2. W' Balance (Anaerobic Battery) -->
         <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6 border-l-4 border-purple-500">
            <div class="flex items-center justify-between mb-2">
-            <h3 class="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Anaerobic Battery (W' Bal)</h3>
+            <div class="flex flex-col">
+              <h3 class="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Anaerobic Battery (W' Bal)</h3>
+              <div v-if="data.advanced.ftpUsed" class="text-[10px] text-gray-400 font-medium">USING {{ data.advanced.ftpUsed }}W FTP</div>
+            </div>
             <UPopover mode="hover">
               <UIcon name="i-heroicons-information-circle" class="w-4 h-4 text-gray-400 cursor-help" />
               <template #panel>
@@ -81,7 +84,10 @@
         <!-- 3. Quadrant Analysis (Pedaling Style) -->
          <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6 border-l-4 border-orange-500">
            <div class="flex items-center justify-between mb-2">
-            <h3 class="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Cadence Profile</h3>
+            <div class="flex flex-col">
+              <h3 class="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Cadence Profile</h3>
+              <div v-if="data.advanced.ftpUsed" class="text-[10px] text-gray-400 font-medium">USING {{ data.advanced.ftpUsed }}W FTP</div>
+            </div>
             <UPopover mode="hover">
               <UIcon name="i-heroicons-information-circle" class="w-4 h-4 text-gray-400 cursor-help" />
               <template #panel>
@@ -178,7 +184,10 @@
         <!-- 5. Matches Burnt -->
         <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6 border-l-4 border-red-500 md:col-span-2 xl:col-span-1">
           <div class="flex items-center justify-between mb-2">
-            <h3 class="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Matches Burnt</h3>
+            <div class="flex flex-col">
+              <h3 class="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Matches Burnt</h3>
+              <div v-if="data.advanced.ftpUsed" class="text-[10px] text-gray-400 font-medium">USING {{ data.advanced.ftpUsed }}W FTP</div>
+            </div>
              <UPopover mode="hover">
               <UIcon name="i-heroicons-information-circle" class="w-4 h-4 text-gray-400 cursor-help" />
               <template #panel>
