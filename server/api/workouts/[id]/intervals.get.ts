@@ -7,12 +7,15 @@ import {
   calculateHeartRateRecovery,
   calculateAerobicDecoupling,
   calculateCoastingStats,
-  detectSurgesAndFades
+  detectSurgesAndFades,
+  calculateRecoveryRateTrend
 } from '../../../utils/interval-detection'
 import {
   calculateWPrimeBalance,
   calculateEfficiencyFactorDecay,
-  calculateQuadrantAnalysis
+  calculateQuadrantAnalysis,
+  calculateFatigueSensitivity,
+  calculateStabilityMetrics
 } from '../../../utils/performance-metrics'
 
 export default defineEventHandler(async (event) => {
@@ -229,6 +232,23 @@ export default defineEventHandler(async (event) => {
     console.log(`[Intervals API] Skipping Quadrants: hasWatts=${hasWatts}, hasCadence=${hasCadence}, ftp=${calculationFtp}`)
   }
 
+  // 5. New Extended Advanced Metrics (Fatigue sensitivity, Stability, Recovery Trend)
+  const fatigueSensitivity = (hasWatts && hasHr)
+    ? calculateFatigueSensitivity(wattsStream!, hrStream!, time)
+    : null
+
+  const powerStability = hasWatts
+    ? calculateStabilityMetrics(wattsStream!, detectedIntervals)
+    : null
+
+  const paceStability = (velocityStream && velocityStream.length > 0)
+    ? calculateStabilityMetrics(velocityStream!, detectedIntervals)
+    : null
+
+  const recoveryTrend = hasHr
+    ? calculateRecoveryRateTrend(time, hrStream!, detectedIntervals)
+    : []
+
   // Enrich intervals with stats from other streams
   const enrichedIntervals = detectedIntervals.map(interval => {
     const startIdx = interval.start_index
@@ -295,7 +315,11 @@ export default defineEventHandler(async (event) => {
       wPrime,
       efDecay,
       quadrants,
-      ftpUsed: calculationFtp
+      ftpUsed: calculationFtp,
+      fatigueSensitivity,
+      powerStability,
+      paceStability,
+      recoveryTrend
     },
     chartData
   }
