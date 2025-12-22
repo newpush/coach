@@ -3,6 +3,67 @@ import { z } from 'zod'
 import { prisma } from '../../utils/db'
 import { athleteMetricsService } from '../../utils/athleteMetricsService'
 
+import { getServerSession } from '#auth'
+import { z } from 'zod'
+import { prisma } from '../../utils/db'
+import { athleteMetricsService } from '../../utils/athleteMetricsService'
+
+defineRouteMeta({
+  openAPI: {
+    tags: ['Profile'],
+    summary: 'Update user profile',
+    description: 'Updates the profile settings for the authenticated user.',
+    requestBody: {
+      content: {
+        'application/json': {
+          schema: {
+            type: 'object',
+            properties: {
+              name: { type: 'string', nullable: true },
+              language: { type: 'string', nullable: true },
+              weight: { type: 'number', nullable: true },
+              weightUnits: { type: 'string', nullable: true },
+              height: { type: 'number', nullable: true },
+              heightUnits: { type: 'string', nullable: true },
+              distanceUnits: { type: 'string', nullable: true },
+              temperatureUnits: { type: 'string', nullable: true },
+              restingHr: { type: 'number', nullable: true },
+              maxHr: { type: 'number', nullable: true },
+              ftp: { type: 'number', nullable: true },
+              form: { type: 'string', nullable: true },
+              visibility: { type: 'string', nullable: true },
+              sex: { type: 'string', nullable: true },
+              dob: { type: 'string', format: 'date', nullable: true },
+              city: { type: 'string', nullable: true },
+              state: { type: 'string', nullable: true },
+              country: { type: 'string', nullable: true },
+              timezone: { type: 'string', nullable: true }
+            }
+          }
+        }
+      }
+    },
+    responses: {
+      200: {
+        description: 'Success',
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                success: { type: 'boolean' },
+                profile: { type: 'object' }
+              }
+            }
+          }
+        }
+      },
+      400: { description: 'Invalid input' },
+      401: { description: 'Unauthorized' }
+    }
+  }
+})
+
 const profileSchema = z.object({
   name: z.string().nullable().optional(),
   language: z.string().nullable().optional(),

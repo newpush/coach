@@ -21,7 +21,8 @@ export default defineEventHandler(async (event) => {
         ftp: true,
         weight: true,
         maxHr: true,
-        dob: true
+        dob: true,
+        hrZones: true
       }
     })
     
@@ -106,6 +107,9 @@ export default defineEventHandler(async (event) => {
       }
       return age
     }
+
+    const age = user.dob ? calculateAge(user.dob) : null
+    const estimatedMaxHR = age ? 220 - age : null
     
     // Use the wellness data we found
     const recentRestingHR = wellnessData?.restingHr ?? null
@@ -184,10 +188,16 @@ export default defineEventHandler(async (event) => {
           break
       }
     }
+
+    // Identify missing critical fields
+    const missingFields: string[] = []
+    if (!user.ftp) missingFields.push('Functional Threshold Power (FTP)')
+    if (!user.weight) missingFields.push('Weight')
     
     const response = {
       connected: true,
       hasReports: reportCount > 0,
+      missingFields,
       dataSyncStatus: {
         workouts: workoutCount > 0,
         nutrition: nutritionCount > 0,
@@ -201,12 +211,14 @@ export default defineEventHandler(async (event) => {
       },
       profile: {
         name: user.name,
-        age: user.dob ? calculateAge(user.dob) : null,
+        age: age,
         weight: recentWeight,
         ftp: user.ftp,
         restingHR: recentRestingHR,
         maxHR: user.maxHr,
+        estimatedMaxHR,
         recentHRV,
+        lthr: Array.isArray(user.hrZones) ? (user.hrZones as any[]).find((z: any) => z.id === 'lthr')?.min || null : null,
         avgRecentHRV: avgRecentHRV ? Math.round(avgRecentHRV * 10) / 10 : null,
         recentSleep,
         recentRecoveryScore,

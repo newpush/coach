@@ -1,5 +1,43 @@
 import { getServerSession } from '#auth'
 
+defineRouteMeta({
+  openAPI: {
+    tags: ['Profile'],
+    summary: 'Get user profile',
+    description: 'Returns the full profile and settings for the authenticated user.',
+    responses: {
+      200: {
+        description: 'Success',
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                connected: { type: 'boolean' },
+                profile: {
+                  type: 'object',
+                  properties: {
+                    name: { type: 'string', nullable: true },
+                    email: { type: 'string' },
+                    ftp: { type: 'integer', nullable: true },
+                    maxHr: { type: 'integer', nullable: true },
+                    weight: { type: 'number', nullable: true },
+                    language: { type: 'string' },
+                    distanceUnits: { type: 'string' },
+                    city: { type: 'string', nullable: true },
+                    country: { type: 'string', nullable: true }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      401: { description: 'Unauthorized' }
+    }
+  }
+})
+
 export default defineEventHandler(async (event) => {
   const session = await getServerSession(event)
   

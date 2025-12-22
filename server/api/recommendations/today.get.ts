@@ -1,5 +1,35 @@
 import { getServerSession } from '#auth'
 
+defineRouteMeta({
+  openAPI: {
+    tags: ['Recommendations'],
+    summary: 'Get today\'s recommendation',
+    description: 'Returns the daily activity recommendation for the current date.',
+    responses: {
+      200: {
+        description: 'Success',
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              nullable: true,
+              properties: {
+                id: { type: 'string' },
+                date: { type: 'string', format: 'date-time' },
+                recommendation: { type: 'string' },
+                confidence: { type: 'number' },
+                reasoning: { type: 'string' },
+                status: { type: 'string' }
+              }
+            }
+          }
+        }
+      },
+      401: { description: 'Unauthorized' }
+    }
+  }
+})
+
 export default defineEventHandler(async (event) => {
   const session = await getServerSession(event)
   
