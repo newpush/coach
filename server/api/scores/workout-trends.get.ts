@@ -41,32 +41,36 @@ export default defineEventHandler(async (event) => {
   const filledWorkouts = []
   const allDays = eachDayOfInterval({ start: startDate, end: endDate })
   
-  let lastOverall = 0
-  let lastTechnical = 0
-  let lastEffort = 0
-  let lastPacing = 0
-  let lastExecution = 0
-
-  // Find initial values from the first workout or default to 0
-  if (workouts.length > 0) {
-    lastOverall = workouts[0].overallScore || 0
-    lastTechnical = workouts[0].technicalScore || 0
-    lastEffort = workouts[0].effortScore || 0
-    lastPacing = workouts[0].pacingScore || 0
-    lastExecution = workouts[0].executionScore || 0
-  }
+  // Initialize with the first available non-zero value to avoid starting at 0
+  // If no data exists in the period, it defaults to 0
+  let lastOverall = workouts.find(w => w.overallScore)?.overallScore || 0
+  let lastTechnical = workouts.find(w => w.technicalScore)?.technicalScore || 0
+  let lastEffort = workouts.find(w => w.effortScore)?.effortScore || 0
+  let lastPacing = workouts.find(w => w.pacingScore)?.pacingScore || 0
+  let lastExecution = workouts.find(w => w.executionScore)?.executionScore || 0
 
   for (const day of allDays) {
     const workoutOnDay = workouts.find(w => isSameDay(new Date(w.date), day))
     
     if (workoutOnDay) {
+      // If the workout has a score, update the running "last" value
+      // If it doesn't (null/0), keep the previous value (carry forward)
       lastOverall = workoutOnDay.overallScore || lastOverall
       lastTechnical = workoutOnDay.technicalScore || lastTechnical
       lastEffort = workoutOnDay.effortScore || lastEffort
       lastPacing = workoutOnDay.pacingScore || lastPacing
       lastExecution = workoutOnDay.executionScore || lastExecution
       
-      filledWorkouts.push(workoutOnDay)
+      // Push a new object with the potentially backfilled scores
+      // limiting to the fields we need to avoid circular refs or massive payloads
+      filledWorkouts.push({
+        ...workoutOnDay,
+        overallScore: lastOverall,
+        technicalScore: lastTechnical,
+        effortScore: lastEffort,
+        pacingScore: lastPacing,
+        executionScore: lastExecution
+      })
     } else {
       // Create a "ghost" workout entry for charting continuity
       // We only include the scores for the trend line
