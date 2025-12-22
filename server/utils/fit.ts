@@ -1,5 +1,6 @@
 // @ts-ignore
 import FitParser from 'fit-file-parser'
+import { calculateLapSplits, calculatePaceVariability, calculatePaceZones, analyzePacingStrategy, detectSurges } from './pacing'
 
 /**
  * Parsed FIT file data structure
@@ -69,6 +70,26 @@ export function normalizeFitSession(session: any, userId: string, filename: stri
 
   // Calculate decoupling if possible (needs streams usually, but check if session has it)
   // FIT file usually doesn't have decoupling pre-calculated in session
+
+  const durationSec = Math.round(session.total_timer_time || session.total_elapsed_time || 0)
+  
+  // Calculate TSS if missing and we have power data
+  let tss = session.training_stress_score || null
+  // Calculate NP if missing (simplified version if we have avg power as a proxy, or from streams later)
+  const normalizedPower = session.normalized_power ? Math.round(session.normalized_power) : null
+  
+  if (!tss && normalizedPower && durationSec) {
+    // Try to get FTP from session (sometimes embedded) or use a default/placeholder that will be updated by calculateWorkoutStress
+    // Note: Accurate TSS calculation requires user's FTP. If session doesn't have it, we calculate basic stress here
+    // and rely on calculateWorkoutStress to update it using user's profile FTP later.
+    const ftp = session.functional_threshold_power || session.threshold_power 
+    
+    if (ftp) {
+        const intensity = normalizedPower / ftp
+        tss = (durationSec * normalizedPower * intensity) / (ftp * 3600) * 100
+        tss = Math.round(tss * 10) / 10
+    }
+  }
 
   // Determine title from date and type if not provided
   const date = new Date(session.start_time)
