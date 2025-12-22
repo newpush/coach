@@ -4,6 +4,50 @@ import { prisma } from '../../utils/db'
 import crypto from 'crypto'
 import { tasks } from '@trigger.dev/sdk/v3'
 
+defineRouteMeta({
+  openAPI: {
+    tags: ['Workouts'],
+    summary: 'Upload FIT file',
+    description: 'Uploads a .fit file for processing and ingestion.',
+    requestBody: {
+      content: {
+        'multipart/form-data': {
+          schema: {
+            type: 'object',
+            properties: {
+              file: {
+                type: 'string',
+                format: 'binary',
+                description: 'The .fit file to upload'
+              }
+            }
+          }
+        }
+      }
+    },
+    responses: {
+      200: {
+        description: 'Success',
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                success: { type: 'boolean' },
+                message: { type: 'string' },
+                fitFileId: { type: 'string' },
+                duplicate: { type: 'boolean', nullable: true }
+              }
+            }
+          }
+        }
+      },
+      400: { description: 'Invalid file or missing upload' },
+      401: { description: 'Unauthorized' }
+    }
+  }
+})
+
 export default defineEventHandler(async (event) => {
   // Check authentication (using NuxtAuth session)
   const session = await getServerSession(event)

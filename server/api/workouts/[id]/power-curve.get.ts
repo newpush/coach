@@ -2,6 +2,63 @@ import { defineEventHandler, createError, getRouterParam } from 'h3'
 import { getServerSession } from '#auth'
 import { prisma } from '../../../utils/db'
 
+import { defineEventHandler, createError, getRouterParam } from 'h3'
+import { getServerSession } from '#auth'
+import { prisma } from '../../../utils/db'
+
+defineRouteMeta({
+  openAPI: {
+    tags: ['Workouts'],
+    summary: 'Get workout power curve',
+    description: 'Calculates the power curve (peak power over durations) for a specific workout.',
+    parameters: [
+      {
+        name: 'id',
+        in: 'path',
+        required: true,
+        schema: { type: 'string' }
+      }
+    ],
+    responses: {
+      200: {
+        description: 'Success',
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                hasPowerData: { type: 'boolean' },
+                powerCurve: {
+                  type: 'array',
+                  items: {
+                    type: 'object',
+                    properties: {
+                      duration: { type: 'integer' },
+                      durationLabel: { type: 'string' },
+                      power: { type: 'number' }
+                    }
+                  }
+                },
+                summary: {
+                  type: 'object',
+                  properties: {
+                    peak5s: { type: 'number' },
+                    peak20min: { type: 'number' },
+                    estimatedFTP: { type: 'number', nullable: true }
+                  }
+                },
+                message: { type: 'string', nullable: true }
+              }
+            }
+          }
+        }
+      },
+      401: { description: 'Unauthorized' },
+      404: { description: 'Workout not found' }
+    }
+  }
+})
+
 // Standard power curve durations in seconds
 const DURATIONS = [5, 10, 30, 60, 120, 300, 600, 1200, 1800, 3600]
 

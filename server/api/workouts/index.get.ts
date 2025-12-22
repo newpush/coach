@@ -2,6 +2,38 @@ import { getEffectiveUserId } from '../../utils/coaching'
 
 export default defineEventHandler({
   openAPI: {
+    $global: {
+      components: {
+        schemas: {
+          Workout: {
+            type: 'object',
+            properties: {
+              id: { type: 'string' },
+              userId: { type: 'string' },
+              externalId: { type: 'string' },
+              source: { type: 'string' },
+              date: { type: 'string', format: 'date-time' },
+              title: { type: 'string' },
+              description: { type: 'string', nullable: true },
+              type: { type: 'string', nullable: true },
+              durationSec: { type: 'integer' },
+              distanceMeters: { type: 'number', nullable: true },
+              elevationGain: { type: 'integer', nullable: true },
+              averageWatts: { type: 'integer', nullable: true },
+              maxWatts: { type: 'integer', nullable: true },
+              normalizedPower: { type: 'integer', nullable: true },
+              averageHr: { type: 'integer', nullable: true },
+              maxHr: { type: 'integer', nullable: true },
+              tss: { type: 'number', nullable: true },
+              intensity: { type: 'number', nullable: true },
+              kilojoules: { type: 'integer', nullable: true },
+              createdAt: { type: 'string', format: 'date-time' },
+              updatedAt: { type: 'string', format: 'date-time' }
+            }
+          }
+        }
+      }
+    },
     tags: ['Workouts'],
     summary: 'List workouts',
     description: 'Returns a list of workouts for the authenticated user or an athlete they coach.',

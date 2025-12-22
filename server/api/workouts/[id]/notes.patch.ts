@@ -1,5 +1,52 @@
 import { getServerSession } from '#auth'
 
+defineRouteMeta({
+  openAPI: {
+    tags: ['Workouts'],
+    summary: 'Update workout notes',
+    description: 'Updates the notes for a specific workout.',
+    parameters: [
+      {
+        name: 'id',
+        in: 'path',
+        required: true,
+        schema: { type: 'string' }
+      }
+    ],
+    requestBody: {
+      content: {
+        'application/json': {
+          schema: {
+            type: 'object',
+            properties: {
+              notes: { type: 'string', nullable: true }
+            }
+          }
+        }
+      }
+    },
+    responses: {
+      200: {
+        description: 'Success',
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                success: { type: 'boolean' },
+                workout: { $ref: '#/components/schemas/Workout' }
+              }
+            }
+          }
+        }
+      },
+      400: { description: 'Invalid input' },
+      401: { description: 'Unauthorized' },
+      404: { description: 'Workout not found' }
+    }
+  }
+})
+
 export default defineEventHandler(async (event) => {
   const session = await getServerSession(event)
   

@@ -1,6 +1,46 @@
 import { getServerSession } from '#auth'
 import { prisma } from '../../utils/db'
 
+defineRouteMeta({
+  openAPI: {
+    tags: ['Workouts'],
+    summary: 'Merge workouts',
+    description: 'Manually merges two workouts, marking one as a duplicate of the other.',
+    requestBody: {
+      content: {
+        'application/json': {
+          schema: {
+            type: 'object',
+            required: ['primaryWorkoutId', 'secondaryWorkoutId'],
+            properties: {
+              primaryWorkoutId: { type: 'string' },
+              secondaryWorkoutId: { type: 'string' }
+            }
+          }
+        }
+      }
+    },
+    responses: {
+      200: {
+        description: 'Success',
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                success: { type: 'boolean' }
+              }
+            }
+          }
+        }
+      },
+      400: { description: 'Invalid input' },
+      401: { description: 'Unauthorized' },
+      404: { description: 'Workouts not found' }
+    }
+  }
+})
+
 export default defineEventHandler(async (event) => {
   const session = await getServerSession(event)
   

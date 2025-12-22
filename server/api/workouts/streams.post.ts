@@ -1,6 +1,51 @@
 import { getServerSession } from '#auth'
 import { prisma } from '../../utils/db'
 
+defineRouteMeta({
+  openAPI: {
+    tags: ['Workouts'],
+    summary: 'Get workout streams',
+    description: 'Returns stream data (HR, power, cadence, etc.) for a list of workout IDs.',
+    requestBody: {
+      content: {
+        'application/json': {
+          schema: {
+            type: 'object',
+            required: ['workoutIds'],
+            properties: {
+              workoutIds: { type: 'array', items: { type: 'string' } }
+            }
+          }
+        }
+      }
+    },
+    responses: {
+      200: {
+        description: 'Success',
+        content: {
+          'application/json': {
+            schema: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  id: { type: 'string' },
+                  workoutId: { type: 'string' },
+                  time: { type: 'array' },
+                  watts: { type: 'array' },
+                  heartrate: { type: 'array' },
+                  cadence: { type: 'array' }
+                }
+              }
+            }
+          }
+        }
+      },
+      401: { description: 'Unauthorized' }
+    }
+  }
+})
+
 export default defineEventHandler(async (event) => {
   const session = await getServerSession(event)
   

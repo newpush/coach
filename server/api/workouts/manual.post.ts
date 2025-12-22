@@ -2,6 +2,53 @@ import { getServerSession } from '#auth'
 import { prisma } from '../../utils/db'
 import { calculateWorkoutStress } from '../../utils/calculate-workout-stress'
 
+defineRouteMeta({
+  openAPI: {
+    tags: ['Workouts'],
+    summary: 'Create manual workout',
+    description: 'Creates a manual workout entry for the user.',
+    requestBody: {
+      content: {
+        'application/json': {
+          schema: {
+            type: 'object',
+            required: ['title', 'date', 'durationSec'],
+            properties: {
+              title: { type: 'string' },
+              description: { type: 'string' },
+              type: { type: 'string' },
+              date: { type: 'string', format: 'date-time' },
+              durationSec: { type: 'integer' },
+              distanceMeters: { type: 'number' },
+              tss: { type: 'number' },
+              rpe: { type: 'integer' },
+              plannedWorkoutId: { type: 'string' }
+            }
+          }
+        }
+      }
+    },
+    responses: {
+      200: {
+        description: 'Success',
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                success: { type: 'boolean' },
+                workout: { $ref: '#/components/schemas/Workout' }
+              }
+            }
+          }
+        }
+      },
+      400: { description: 'Invalid input' },
+      401: { description: 'Unauthorized' }
+    }
+  }
+})
+
 export default defineEventHandler(async (event) => {
   const session = await getServerSession(event)
   

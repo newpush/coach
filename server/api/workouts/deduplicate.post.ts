@@ -2,6 +2,31 @@ import { defineEventHandler } from 'h3'
 import { getServerSession } from '#auth'
 import { tasks } from '@trigger.dev/sdk/v3'
 
+defineRouteMeta({
+  openAPI: {
+    tags: ['Workouts'],
+    summary: 'Deduplicate workouts',
+    description: 'Triggers a background job to identify and merge duplicate workouts.',
+    responses: {
+      200: {
+        description: 'Success',
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                success: { type: 'boolean' },
+                taskId: { type: 'string' }
+              }
+            }
+          }
+        }
+      },
+      401: { description: 'Unauthorized' }
+    }
+  }
+})
+
 export default defineEventHandler(async (event) => {
   const session = await getServerSession(event)
   

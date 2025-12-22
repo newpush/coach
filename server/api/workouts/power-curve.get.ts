@@ -3,6 +3,56 @@ import { workoutRepository } from '../../utils/repositories/workoutRepository'
 import { getServerSession } from '#auth'
 import { subDays } from 'date-fns'
 
+defineRouteMeta({
+  openAPI: {
+    tags: ['Workouts'],
+    summary: 'Get aggregate power curve',
+    description: 'Returns the power curve (current period vs all-time) for the athlete.',
+    parameters: [
+      {
+        name: 'days',
+        in: 'query',
+        schema: { type: 'integer', default: 90 }
+      }
+    ],
+    responses: {
+      200: {
+        description: 'Success',
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                current: {
+                  type: 'array',
+                  items: {
+                    type: 'object',
+                    properties: {
+                      duration: { type: 'integer' },
+                      watts: { type: 'number' }
+                    }
+                  }
+                },
+                allTime: {
+                  type: 'array',
+                  items: {
+                    type: 'object',
+                    properties: {
+                      duration: { type: 'integer' },
+                      watts: { type: 'number' }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      401: { description: 'Unauthorized' }
+    }
+  }
+})
+
 export default defineEventHandler(async (event) => {
   const session = await getServerSession(event)
   const user = session?.user as any

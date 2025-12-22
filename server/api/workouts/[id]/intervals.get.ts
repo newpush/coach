@@ -18,6 +18,46 @@ import {
   calculateStabilityMetrics
 } from '../../../utils/performance-metrics'
 
+defineRouteMeta({
+  openAPI: {
+    tags: ['Workouts'],
+    summary: 'Get workout intervals',
+    description: 'Detects and analyzes intervals within a workout based on power, pace, or heart rate.',
+    parameters: [
+      {
+        name: 'id',
+        in: 'path',
+        required: true,
+        schema: { type: 'string' }
+      }
+    ],
+    responses: {
+      200: {
+        description: 'Success',
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                hasData: { type: 'boolean' },
+                detectionMetric: { type: 'string', nullable: true },
+                intervals: { type: 'array' },
+                peaks: { type: 'object' },
+                recovery: { type: 'object', nullable: true },
+                advanced: { type: 'object' },
+                chartData: { type: 'object' },
+                message: { type: 'string', nullable: true }
+              }
+            }
+          }
+        }
+      },
+      401: { description: 'Unauthorized' },
+      404: { description: 'Workout not found' }
+    }
+  }
+})
+
 export default defineEventHandler(async (event) => {
   const session = await getServerSession(event)
   if (!session?.user?.email) {

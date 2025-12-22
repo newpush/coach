@@ -1,5 +1,44 @@
 import { getServerSession } from '#auth'
 
+defineRouteMeta({
+  openAPI: {
+    tags: ['Workouts'],
+    summary: 'Get workout stream details',
+    description: 'Returns detailed stream data (pacing, HR, power) for a specific workout.',
+    parameters: [
+      {
+        name: 'id',
+        in: 'path',
+        required: true,
+        schema: { type: 'string' }
+      }
+    ],
+    responses: {
+      200: {
+        description: 'Success',
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                workoutId: { type: 'string' },
+                time: { type: 'array', items: { type: 'number' } },
+                watts: { type: 'array', items: { type: 'number' } },
+                heartrate: { type: 'array', items: { type: 'number' } },
+                cadence: { type: 'array', items: { type: 'number' } },
+                pacingStrategy: { type: 'object' }
+              }
+            }
+          }
+        }
+      },
+      401: { description: 'Unauthorized' },
+      403: { description: 'Forbidden' },
+      404: { description: 'Workout not found or streams unavailable' }
+    }
+  }
+})
+
 export default defineEventHandler(async (event) => {
   const session = await getServerSession(event)
   

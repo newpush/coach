@@ -1,6 +1,34 @@
 import { getServerSession } from '#auth'
 import { tasks } from "@trigger.dev/sdk/v3";
 
+defineRouteMeta({
+  openAPI: {
+    tags: ['Workouts'],
+    summary: 'Analyze all workouts',
+    description: 'Triggers AI analysis for all pending workouts.',
+    responses: {
+      200: {
+        description: 'Success',
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                success: { type: 'boolean' },
+                message: { type: 'string' },
+                total: { type: 'integer' },
+                triggered: { type: 'integer' },
+                failed: { type: 'integer' }
+              }
+            }
+          }
+        }
+      },
+      401: { description: 'Unauthorized' }
+    }
+  }
+})
+
 export default defineEventHandler(async (event) => {
   const session = await getServerSession(event)
   
