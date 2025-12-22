@@ -7,14 +7,14 @@
 
     <!-- Documentation Link -->
     <UCard>
-      <div class="flex items-center justify-between">
-        <div class="flex items-center gap-3">
-          <div class="p-2 bg-primary-50 dark:bg-primary-900/20 rounded-lg">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div class="flex items-start gap-3">
+          <div class="p-2 bg-primary-50 dark:bg-primary-900/20 rounded-lg shrink-0">
             <UIcon name="i-heroicons-book-open" class="w-6 h-6 text-primary-600 dark:text-primary-400" />
           </div>
-          <div>
+          <div class="min-w-0">
             <h3 class="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-widest">API Documentation</h3>
-            <p class="text-xs text-gray-500 dark:text-gray-400">Explore our API endpoints and learn how to integrate with Coach Watts.</p>
+            <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Explore our API endpoints and learn how to integrate with Coach Watts.</p>
           </div>
         </div>
         <UButton
@@ -24,7 +24,7 @@
           variant="outline"
           icon="i-heroicons-arrow-top-right-on-square"
           size="sm"
-          class="font-bold"
+          class="font-bold shrink-0"
         >
           View Docs
         </UButton>
