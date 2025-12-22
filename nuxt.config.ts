@@ -32,6 +32,8 @@ export default defineNuxtConfig({
       openAPI: true
     },
     openAPI: {
+      production: 'runtime',
+      route: '/_openapi.json',
       meta: {
         title: 'Coach Watts API',
         description: 'AI-powered endurance coaching platform API',

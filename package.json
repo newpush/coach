@@ -17,7 +17,7 @@
     "@tiptap/pm": "^3.14.0",
     "@tiptap/starter-kit": "^3.14.0",
     "@tiptap/vue-3": "^3.14.0",
-    "@trigger.dev/sdk": "4.3.0",
+    "@trigger.dev/sdk": "4.3.1",
     "@types/uuid": "^11.0.0",
     "@vueuse/core": "^11.3.0",
     "chart.js": "^4.5.1",
@@ -44,14 +44,13 @@
     "@iconify-json/heroicons": "^1.2.3",
     "@iconify-json/lucide": "^1.2.82",
     "@release-it/conventional-changelog": "^10.0.4",
-    "@trigger.dev/build": "4.3.0",
+    "@trigger.dev/build": "4.3.1",
     "@types/node": "^24.10.4",
     "release-it": "^19.1.0",
     "release-it-pnpm": "^4.6.6",
     "tailwindcss": "^4.1.18"
   },
   "name": "coach-wattz",
-  "version": "0.2.0",
   "private": true,
   "scripts": {
     "backfill-scores": "tsx scripts/backfill-scores.ts",
@@ -63,5 +62,6 @@
     "preview": "nuxt preview",
     "prisma:generate": "prisma generate"
   },
-  "type": "module"
+  "type": "module",
+  "version": "0.2.0"
 }
