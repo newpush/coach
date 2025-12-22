@@ -31,7 +31,20 @@
           </p>
         </div>
 
-        <!-- Athlete Profile Scores -->
+        <!-- 1. Activity Highlights (Big Numbers) -->
+        <div class="space-y-4">
+          <div class="flex items-center justify-between px-1">
+            <h2 class="text-xl font-bold text-gray-900 dark:text-white uppercase tracking-tight">Activity Highlights</h2>
+            <USelect
+              v-model="highlightsPeriod"
+              :items="periodOptions"
+              size="xs"
+            />
+          </div>
+          <ActivityHighlights :period="highlightsPeriod" />
+        </div>
+
+        <!-- 2. Athlete Profile Scores -->
         <div class="space-y-4">
           <div class="flex items-center justify-between px-1">
             <h2 class="text-xl font-bold text-gray-900 dark:text-white uppercase tracking-tight">Athlete Profile</h2>
@@ -90,7 +103,7 @@
       :color="modalData.color"
     />
 
-        <!-- PMC Chart (Performance Management Chart) -->
+        <!-- 3. PMC Chart (Performance Management Chart) -->
         <div class="space-y-6">
           <div class="flex items-center justify-between">
             <h2 class="text-xl font-semibold text-gray-900 dark:text-white">Training Load & Form</h2>
@@ -103,7 +116,44 @@
           <PMCChart :days="pmcPeriod" />
         </div>
 
-        <!-- FTP Evolution Chart -->
+        <!-- 4. Power Duration Curve -->
+        <div class="space-y-6">
+          <div class="flex items-center justify-between">
+            <h2 class="text-xl font-semibold text-gray-900 dark:text-white">Power Duration Curve</h2>
+            <USelect
+              v-model="powerCurvePeriod"
+              :items="periodOptions"
+            />
+          </div>
+          <!-- Pass days to the updated component for Performance Page mode -->
+          <PowerCurveChart :days="powerCurvePeriod" />
+        </div>
+
+        <!-- 5. Efficiency & Decoupling -->
+        <div class="space-y-6">
+          <div class="flex items-center justify-between">
+            <h2 class="text-xl font-semibold text-gray-900 dark:text-white">Aerobic Efficiency Trend</h2>
+            <USelect
+              v-model="efficiencyPeriod"
+              :items="periodOptions"
+            />
+          </div>
+          <EfficiencyTrendChart :days="efficiencyPeriod" />
+        </div>
+
+        <!-- 6. Readiness vs Performance -->
+        <div class="space-y-6">
+          <div class="flex items-center justify-between">
+             <h2 class="text-xl font-semibold text-gray-900 dark:text-white">Readiness & Performance</h2>
+             <USelect
+               v-model="readinessPeriod"
+               :items="periodOptions"
+             />
+          </div>
+          <ReadinessCorrelationChart :days="readinessPeriod" />
+        </div>
+
+        <!-- 7. FTP Evolution Chart -->
         <div class="space-y-6">
           <div class="flex items-center justify-between">
             <h2 class="text-xl font-semibold text-gray-900 dark:text-white">FTP Evolution</h2>
@@ -116,7 +166,22 @@
           <FTPEvolutionChart :months="ftpPeriod" />
         </div>
 
-        <!-- Workout Scores -->
+        <!-- 8. Training Intensity Distribution -->
+        <div class="space-y-6">
+          <div class="flex items-center justify-between">
+            <h2 class="text-xl font-semibold text-gray-900 dark:text-white">Intensity Distribution</h2>
+            <USelect
+              v-model="distributionPeriod"
+              :items="distributionPeriodOptions"
+            />
+          </div>
+          
+          <UCard>
+            <WeeklyZoneChart :weeks="distributionPeriod" />
+          </UCard>
+        </div>
+
+        <!-- 9. Workout Scores -->
         <div class="space-y-6">
           <div class="flex items-center justify-between">
             <h2 class="text-xl font-semibold text-gray-900 dark:text-white">Workout Performance</h2>
@@ -206,7 +271,7 @@
           </div>
         </div>
 
-        <!-- Nutrition Scores -->
+        <!-- 10. Nutrition Scores -->
         <div class="space-y-4">
           <div class="px-1">
             <h2 class="text-xl font-bold text-gray-900 dark:text-white uppercase tracking-tight">Nutrition Quality</h2>
@@ -297,6 +362,11 @@
 </template>
 
 <script setup lang="ts">
+import ActivityHighlights from '~/components/ActivityHighlights.vue'
+import PowerCurveChart from '~/components/PowerCurveChart.vue'
+import EfficiencyTrendChart from '~/components/EfficiencyTrendChart.vue'
+import ReadinessCorrelationChart from '~/components/ReadinessCorrelationChart.vue'
+
 definePageMeta({
   middleware: 'auth',
   layout: 'default'
@@ -310,6 +380,11 @@ useHead({
 })
 
 const selectedPeriod = ref(30)
+const highlightsPeriod = ref(30)
+const efficiencyPeriod = ref(90)
+const readinessPeriod = ref(30)
+const powerCurvePeriod = ref(90)
+
 const periodOptions = [
   { label: '7 Days', value: 7 },
   { label: '14 Days', value: 14 },
@@ -331,6 +406,14 @@ const ftpPeriodOptions = [
   { label: '6 Months', value: 6 },
   { label: '12 Months', value: 12 },
   { label: '24 Months', value: 24 }
+]
+
+const distributionPeriod = ref(12)
+const distributionPeriodOptions = [
+  { label: '4 Weeks', value: 4 },
+  { label: '8 Weeks', value: 8 },
+  { label: '12 Weeks', value: 12 },
+  { label: '24 Weeks', value: 24 }
 ]
 
 // Fetch athlete profile data

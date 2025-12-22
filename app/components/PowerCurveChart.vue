@@ -4,65 +4,30 @@
       <UIcon name="i-heroicons-arrow-path" class="w-8 h-8 animate-spin text-primary" />
     </div>
     
-    <div v-else-if="!powerData?.hasPowerData" class="text-center py-12">
+    <div v-else-if="!powerData || !chartData.datasets.length" class="text-center py-12">
       <UIcon name="i-heroicons-bolt-slash" class="w-12 h-12 mx-auto mb-4 text-gray-400" />
-      <p class="text-gray-600 dark:text-gray-400">{{ powerData?.message || 'No power data available for this workout' }}</p>
+      <p class="text-gray-600 dark:text-gray-400">No power data available for this period</p>
     </div>
 
-    <div v-else-if="powerData" class="space-y-6">
-      <!-- Summary Stats -->
-      <div class="grid grid-cols-2 md:grid-cols-5 gap-3">
-        <div class="bg-gradient-to-br from-red-50 to-red-100 dark:from-red-900/20 dark:to-red-800/30 rounded-lg p-4 shadow">
-          <div class="text-xs text-red-600 dark:text-red-400 font-semibold mb-1">Peak 5s</div>
-          <div class="text-2xl font-bold text-red-900 dark:text-red-100">{{ powerData.summary.peak5s }}</div>
-          <div class="text-xs text-red-700 dark:text-red-300 mt-1">watts</div>
-        </div>
-
-        <div class="bg-gradient-to-br from-orange-50 to-orange-100 dark:from-orange-900/20 dark:to-orange-800/30 rounded-lg p-4 shadow">
-          <div class="text-xs text-orange-600 dark:text-orange-400 font-semibold mb-1">Peak 1min</div>
-          <div class="text-2xl font-bold text-orange-900 dark:text-orange-100">{{ powerData.summary.peak1min }}</div>
-          <div class="text-xs text-orange-700 dark:text-orange-300 mt-1">watts</div>
-        </div>
-
-        <div class="bg-gradient-to-br from-yellow-50 to-yellow-100 dark:from-yellow-900/20 dark:to-yellow-800/30 rounded-lg p-4 shadow">
-          <div class="text-xs text-yellow-600 dark:text-yellow-400 font-semibold mb-1">Peak 5min</div>
-          <div class="text-2xl font-bold text-yellow-900 dark:text-yellow-100">{{ powerData.summary.peak5min }}</div>
-          <div class="text-xs text-yellow-700 dark:text-yellow-300 mt-1">watts</div>
-        </div>
-
-        <div class="bg-gradient-to-br from-green-50 to-green-100 dark:from-green-900/20 dark:to-green-800/30 rounded-lg p-4 shadow">
-          <div class="text-xs text-green-600 dark:text-green-400 font-semibold mb-1">Peak 20min</div>
-          <div class="text-2xl font-bold text-green-900 dark:text-green-100">{{ powerData.summary.peak20min }}</div>
-          <div class="text-xs text-green-700 dark:text-green-300 mt-1">watts</div>
-        </div>
-
-        <div v-if="powerData.summary.estimatedFTP" class="bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-900/20 dark:to-blue-800/30 rounded-lg p-4 shadow">
-          <div class="text-xs text-blue-600 dark:text-blue-400 font-semibold mb-1">Est. FTP</div>
-          <div class="text-2xl font-bold text-blue-900 dark:text-blue-100">{{ powerData.summary.estimatedFTP }}</div>
-          <div class="text-xs text-blue-700 dark:text-blue-300 mt-1">watts</div>
-        </div>
-      </div>
-
+    <div v-else class="space-y-6">
       <!-- Chart -->
       <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
-        <h3 class="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-4">Power Duration Curve</h3>
+        <div class="flex items-center justify-between mb-4">
+          <h3 class="text-sm font-semibold text-gray-700 dark:text-gray-300">Power Duration Curve</h3>
+          <div class="flex gap-4 text-xs">
+            <div class="flex items-center gap-1">
+              <span class="w-3 h-3 rounded-full bg-emerald-500"></span>
+              <span class="text-gray-600 dark:text-gray-400">Current Period</span>
+            </div>
+            <div class="flex items-center gap-1">
+              <span class="w-3 h-3 rounded-full border border-gray-500 border-dashed"></span>
+              <span class="text-gray-600 dark:text-gray-400">All Time Best</span>
+            </div>
+          </div>
+        </div>
         <div style="height: 300px;">
           <Line :data="chartData" :options="chartOptions" />
         </div>
-      </div>
-
-      <!-- Info Section -->
-      <div class="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
-        <h4 class="text-sm font-semibold text-blue-900 dark:text-blue-100 mb-2">Understanding Power Curve</h4>
-        <p class="text-xs text-blue-800 dark:text-blue-200 mb-2">
-          Your power curve shows the maximum average power you can sustain for different durations during this workout.
-        </p>
-        <ul class="text-xs text-blue-800 dark:text-blue-200 space-y-1">
-          <li><strong>5s-1min:</strong> Anaerobic power & sprint capability</li>
-          <li><strong>5min:</strong> VO2 max power output</li>
-          <li><strong>20min:</strong> Used to estimate FTP (95% of 20min power)</li>
-          <li v-if="powerData.summary.currentFTP"><strong>Your FTP:</strong> {{ powerData.summary.currentFTP }}W</li>
-        </ul>
       </div>
     </div>
   </div>
@@ -73,6 +38,7 @@ import { Line } from 'vue-chartjs'
 import {
   Chart as ChartJS,
   CategoryScale,
+  LogarithmicScale,
   LinearScale,
   PointElement,
   LineElement,
@@ -84,6 +50,7 @@ import {
 
 ChartJS.register(
   CategoryScale,
+  LogarithmicScale,
   LinearScale,
   PointElement,
   LineElement,
@@ -94,59 +61,134 @@ ChartJS.register(
 )
 
 const props = defineProps<{
-  workoutId: string
+  // If provided, fetches data for a specific workout
+  workoutId?: string
   publicToken?: string
+  
+  // If provided, fetches aggregate data for a period (Performance Page mode)
+  days?: number
 }>()
 
 const loading = ref(true)
 const powerData = ref<any>(null)
+
+// Format duration labels (e.g., 60s -> 1m)
+const formatDurationLabel = (seconds: number) => {
+  if (seconds < 60) return `${seconds}s`
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m`
+  return `${Math.floor(seconds / 3600)}h`
+}
 
 // Fetch power curve data
 async function fetchPowerCurve() {
   loading.value = true
   
   try {
-    const endpoint = props.publicToken
-      ? `/api/share/workouts/${props.publicToken}/power-curve`
-      : `/api/workouts/${props.workoutId}/power-curve`
+    let endpoint = ''
+    let query = {}
+    
+    if (props.publicToken) {
+      endpoint = `/api/share/workouts/${props.publicToken}/power-curve`
+    } else if (props.workoutId) {
+      endpoint = `/api/workouts/${props.workoutId}/power-curve`
+    } else {
+      // Performance Page Mode
+      endpoint = `/api/workouts/power-curve`
+      query = { days: props.days || 90 }
+    }
       
-    const data = await $fetch(endpoint)
+    const data = await $fetch(endpoint, { query })
     powerData.value = data
   } catch (e: any) {
     console.error('Error fetching power curve:', e)
-    powerData.value = {
-      hasPowerData: false,
-      message: e.data?.message || e.message || 'Failed to load power curve data'
-    }
+    powerData.value = null
   } finally {
     loading.value = false
   }
 }
 
+// Watch for prop changes to refetch
+watch(() => props.days, () => {
+  if (!props.workoutId) {
+    fetchPowerCurve()
+  }
+})
+
 // Chart data computed property
 const chartData = computed(() => {
-  if (!powerData.value?.powerCurve) return { labels: [], datasets: [] }
+  if (!powerData.value) return { labels: [], datasets: [] }
   
-  const curve = powerData.value.powerCurve
-  const labels = curve.map((point: any) => point.durationLabel)
-  const powers = curve.map((point: any) => point.power)
-  
-  return {
-    labels,
-    datasets: [
-      {
-        label: 'Max Power (W)',
-        data: powers,
-        borderColor: 'rgb(59, 130, 246)',
-        backgroundColor: 'rgba(59, 130, 246, 0.1)',
-        borderWidth: 3,
-        pointRadius: 4,
-        pointHoverRadius: 6,
-        tension: 0.4,
-        fill: true
-      }
-    ]
+  // Handle Multi-Dataset Format (Performance Page)
+  if (powerData.value.current && powerData.value.allTime) {
+    // Extract unique durations from both datasets and sort
+    const allDurations = new Set([
+      ...powerData.value.current.map((p: any) => p.duration),
+      ...powerData.value.allTime.map((p: any) => p.duration)
+    ])
+    const durations = Array.from(allDurations).sort((a: any, b: any) => a - b)
+    const labels = durations.map((d: any) => formatDurationLabel(d))
+
+    // Map data to match sorted durations
+    const mapData = (sourceData: any[]) => {
+      return durations.map((d: any) => {
+        const point = sourceData.find((p: any) => p.duration === d)
+        return point ? point.watts : null
+      })
+    }
+
+    return {
+      labels,
+      datasets: [
+        {
+          label: 'Current Period',
+          data: mapData(powerData.value.current),
+          borderColor: '#10b981', // Emerald 500
+          backgroundColor: 'rgba(16, 185, 129, 0.1)',
+          borderWidth: 3,
+          pointRadius: 4,
+          tension: 0.4,
+          fill: true
+        },
+        {
+          label: 'All Time Best',
+          data: mapData(powerData.value.allTime),
+          borderColor: '#6b7280', // Gray 500
+          backgroundColor: 'transparent',
+          borderWidth: 2,
+          borderDash: [5, 5],
+          pointRadius: 0,
+          tension: 0.4,
+          fill: false
+        }
+      ]
+    }
   }
+  
+  // Handle Single Workout Format (Legacy/Detailed View)
+  if (powerData.value.powerCurve) {
+    const curve = powerData.value.powerCurve
+    const labels = curve.map((point: any) => point.durationLabel)
+    const powers = curve.map((point: any) => point.power)
+    
+    return {
+      labels,
+      datasets: [
+        {
+          label: 'Max Power (W)',
+          data: powers,
+          borderColor: 'rgb(59, 130, 246)',
+          backgroundColor: 'rgba(59, 130, 246, 0.1)',
+          borderWidth: 3,
+          pointRadius: 4,
+          pointHoverRadius: 6,
+          tension: 0.4,
+          fill: true
+        }
+      ]
+    }
+  }
+  
+  return { labels: [], datasets: [] }
 })
 
 // Chart options
@@ -155,12 +197,14 @@ const chartOptions = {
   maintainAspectRatio: false,
   plugins: {
     legend: {
-      display: false
+      display: false // We use custom legend
     },
     tooltip: {
+      mode: 'index' as const,
+      intersect: false,
       callbacks: {
         label: function(context: any) {
-          return `${context.parsed.y}W`
+          return `${context.dataset.label}: ${context.parsed.y}W`
         }
       }
     }
@@ -177,7 +221,10 @@ const chartOptions = {
         display: false
       },
       ticks: {
-        color: 'rgb(107, 114, 128)'
+        color: 'rgb(107, 114, 128)',
+        maxRotation: 0,
+        autoSkip: true,
+        maxTicksLimit: 8
       }
     },
     y: {
@@ -195,6 +242,11 @@ const chartOptions = {
       },
       beginAtZero: false
     }
+  },
+  interaction: {
+    mode: 'nearest' as const,
+    axis: 'x' as const,
+    intersect: false
   }
 }
 
