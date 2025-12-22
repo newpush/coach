@@ -562,12 +562,12 @@ export function normalizeWithingsWorkout(workout: WithingsWorkout, userId: strin
     const startDate = new Date(workout.startdate * 1000)
     // Adjust for timezone if provided
     // Withings API documentation states 'startdate' is the number of seconds since epoch.
-    // However, for some users/devices, this might be offset incorrectly or devices might report local time as UTC.
-    // If we detect a timezone offset in 'timezone', we might need to trust it, or trust the timestamp.
-    // Given the issues seen (5 hour shift matching NY timezone), it suggests Withings might be adjusting time based on timezone setting.
-    // But we should store what Withings gives us as the "start time" unless we have a reliable way to know it's wrong.
-    // For now, we proceed with the timestamp provided.
-
+    // However, we've observed cases (e.g. America/New_York) where the timestamp is shifted by the timezone offset relative to true UTC.
+    // e.g. 09:08 Local NY time -> 14:08 UTC stored by Withings.
+    // Strava stores 09:08 UTC for the same event (implying 04:08 Local NY time, OR Strava is ignoring timezone).
+    // If the user confirms Strava is correct, then Withings is +5h.
+    // We stick to the provided timestamp but rely on deduplication logic to handle these shifts.
+    
     const endDate = new Date(workout.enddate * 1000)
     let durationSec = Math.round((endDate.getTime() - startDate.getTime()) / 1000)
     
