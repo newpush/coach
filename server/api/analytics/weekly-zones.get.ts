@@ -2,7 +2,7 @@ import { defineEventHandler, getQuery, createError } from 'h3'
 import { prisma } from '../../utils/db'
 import { userRepository } from '../../utils/repositories/userRepository'
 import { calculatePowerZones, calculateHrZones } from '../../utils/zones'
-import { getServerSession } from '#auth'
+import { getServerSession } from '../../utils/session'
 
 defineRouteMeta({
   openAPI: {
