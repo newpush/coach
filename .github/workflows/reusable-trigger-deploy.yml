@@ -1,0 +1,176 @@
+name: Trigger.dev Deploy
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        description: Environment to deploy to (e.g., staging, production)
+        type: string
+        required: true
+      trigger-version:
+        description: Trigger.dev CLI version to use
+        type: string
+        default: "4.1.2"
+        required: false
+      node-version:
+        description: Node.js version to use
+        type: string
+        default: "22"
+        required: false
+      preview-branch:
+        description: Enable preview branch deployment (auto-detects from git branch)
+        type: boolean
+        default: false
+        required: false
+      branch-name:
+        description: Specific branch name for preview deployment (overrides auto-detection)
+        type: string
+        required: false
+    secrets:
+      TRIGGER_ACCESS_TOKEN:
+        description: Trigger.dev access token
+        required: true
+      TRIGGER_API_URL:
+        description: Trigger.dev API URL (required for self-hosted)
+        required: false
+      TRIGGER_PROJECT_REF:
+        description: Trigger.dev project reference
+        required: true
+
+jobs:
+  deploy:
+    name: Deploy Trigger.dev Tasks
+    runs-on: self-hosted
+    environment: ${{ inputs.environment }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.node-version }}
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: |
+          pnpm install
+
+      - name: Verify Trigger.dev configuration
+        run: |
+          echo "Verifying trigger.config.ts exists..."
+          if [ ! -f "trigger.config.ts" ]; then
+            echo "::error::trigger.config.ts not found in project root"
+            exit 1
+          fi
+
+          echo "Checking trigger.dev package versions..."
+          pnpm list @trigger.dev/sdk @trigger.dev/build || true
+
+      - name: Check Trigger.dev endpoint connectivity
+        env:
+          TRIGGER_API_URL: ${{ secrets.TRIGGER_API_URL }}
+        run: |
+          if [ -n "${TRIGGER_API_URL}" ]; then
+            # Sanitize quotes/whitespace/CR from secrets
+            API_URL="${TRIGGER_API_URL}"
+            API_URL="${API_URL%\"}"
+            API_URL="${API_URL#\"}"
+            API_URL="${API_URL%'}"
+            API_URL="${API_URL#'}"
+            API_URL=$(printf '%s' "${API_URL}" | tr -d '\r' | sed -e 's/^\s*//' -e 's/\s*$//')
+
+            # Extract host for DNS diagnostics
+            HOST=$(echo "${API_URL}" | sed -E 's#^https?://##; s#/.*$##')
+
+            echo "🌐 Checking connectivity to ${API_URL} (host: ${HOST})..."
+            echo "--- /etc/resolv.conf ---"
+            cat /etc/resolv.conf || true
+            echo "--- getent hosts ${HOST} ---"
+            getent hosts "${HOST}" || echo "(no getent entry)"
+
+            HTTP_CODE=$(curl -sS -o /dev/null -w "%{http_code}" --connect-timeout 10 -L "${API_URL}" || echo "000")
+            if [ "${HTTP_CODE}" = "000" ]; then
+              echo "::error::Cannot connect to ${API_URL}. DNS/egress/firewall issue or incorrect API URL."
+              exit 1
+            fi
+            echo "✅ Endpoint reachable (HTTP ${HTTP_CODE})"
+          else
+            echo "ℹ️  TRIGGER_API_URL not set; will use Trigger.dev Cloud default."
+          fi
+
+      # Skipping interactive login; rely on TRIGGER_ACCESS_TOKEN for non-interactive auth
+
+      - name: Deploy to Trigger.dev
+        env:
+          TRIGGER_ACCESS_TOKEN: ${{ secrets.TRIGGER_ACCESS_TOKEN }}
+          TRIGGER_PROJECT_REF: ${{ secrets.TRIGGER_PROJECT_REF }}
+          TRIGGER_API_URL: ${{ secrets.TRIGGER_API_URL }}
+        run: |
+          echo "🔎 Preflight:"
+          if [ -n "${TRIGGER_ACCESS_TOKEN}" ]; then echo "  TRIGGER_ACCESS_TOKEN: present"; else echo "  TRIGGER_ACCESS_TOKEN: MISSING"; fi
+          # Sanitize possible surrounding quotes
+          API_URL=$(echo "${TRIGGER_API_URL}" | sed -e 's/^\s*\"\?//' -e 's/\"\?\s*$//')
+          PROJECT_REF=$(echo "${TRIGGER_PROJECT_REF}" | sed -e 's/^\s*\"\?//' -e 's/\"\?\s*$//')
+          if [ -n "${API_URL}" ]; then echo "  TRIGGER_API_URL: ${API_URL}"; else echo "  TRIGGER_API_URL: not set (defaults to Trigger.dev Cloud)"; fi
+          if [ -n "${PROJECT_REF}" ]; then echo "  TRIGGER_PROJECT_REF: ${PROJECT_REF}"; else echo "  TRIGGER_PROJECT_REF: not set (will rely on config)"; fi
+
+          echo "🚀 Deploying Trigger.dev tasks to ${{ inputs.environment }}..."
+
+          # Build deployment command based on configuration
+          DEPLOY_CMD="pnpm dlx trigger.dev@${{ inputs.trigger-version }} deploy"
+
+          # Handle preview branch deployment
+          if [ "${{ inputs.preview-branch }}" = "true" ]; then
+            echo "📋 Deploying to preview branch..."
+            DEPLOY_CMD="$DEPLOY_CMD --env preview"
+
+            # Add specific branch name if provided
+            if [ "${{ inputs.branch-name }}" != "" ]; then
+              DEPLOY_CMD="$DEPLOY_CMD --branch ${{ inputs.branch-name }}"
+              echo "Using specified branch: ${{ inputs.branch-name }}"
+            else
+              echo "Auto-detecting branch from git context"
+            fi
+          else
+            # Add environment flag for regular deployment
+            DEPLOY_CMD="$DEPLOY_CMD --env ${{ inputs.environment }}"
+          fi
+
+          # Append API URL and Project Ref flags if provided
+          if [ -n "${API_URL}" ]; then
+            DEPLOY_CMD="$DEPLOY_CMD -a ${API_URL}"
+          fi
+
+          if [ -n "${PROJECT_REF}" ]; then
+            DEPLOY_CMD="$DEPLOY_CMD -p ${PROJECT_REF}"
+          fi
+
+          echo "Running: $DEPLOY_CMD"
+          eval $DEPLOY_CMD
+
+      - name: Verify deployment
+        env:
+          TRIGGER_ACCESS_TOKEN: ${{ secrets.TRIGGER_ACCESS_TOKEN }}
+          TRIGGER_PROJECT_REF: ${{ secrets.TRIGGER_PROJECT_REF }}
+          TRIGGER_API_URL: ${{ secrets.TRIGGER_API_URL }}
+        run: |
+          echo "✅ Skipping CLI verification (no deployments list cmd in v4)."
+          echo "Deployment context:"
+          echo "  Environment: ${{ inputs.environment }}"
+          echo "  Preview branch: ${{ inputs.preview-branch }} ${{ inputs.branch-name }}"
+          echo "  Trigger version: ${{ inputs.trigger-version }}"
+          echo "  API URL set: $([[ -n \"${TRIGGER_API_URL}\" ]] && echo yes || echo no)"
+          echo "  Project ref set: $([[ -n \"${TRIGGER_PROJECT_REF}\" ]] && echo yes || echo no)"
+
+          echo "🎉 Trigger.dev deployment completed successfully!"
+
+      - name: Cleanup
+        if: always()
+        run: |
+          echo "🧹 Cleaning up temporary files..."
+          # Add any cleanup steps here if needed
