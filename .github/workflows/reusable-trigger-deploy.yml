@@ -36,12 +36,17 @@ on:
       TRIGGER_PROJECT_REF:
         description: Trigger.dev project reference
         required: true
+      DATABASE_URL:
+        description: Database URL for Prisma (can be dummy value for build)
+        required: false
 
 jobs:
   deploy:
     name: Deploy Trigger.dev Tasks
     runs-on: self-hosted
     environment: ${{ inputs.environment }}
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
 
     steps:
       - name: Checkout code
