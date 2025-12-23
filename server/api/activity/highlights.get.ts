@@ -1,7 +1,7 @@
 import { defineEventHandler, getQuery, createError } from 'h3'
 import { workoutRepository } from '../../utils/repositories/workoutRepository'
 import { subDays } from 'date-fns'
-import { getServerSession } from '#auth'
+import { getServerSession } from '../../utils/session'
 
 defineRouteMeta({
   openAPI: {

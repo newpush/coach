@@ -1,5 +1,5 @@
 import { defineEventHandler, createError } from 'h3'
-import { getServerSession } from '#auth'
+import { getServerSession } from '../../utils/session'
 import { prisma } from '../../utils/db'
 
 export default defineEventHandler(async (event) => {
