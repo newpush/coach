@@ -9,6 +9,8 @@ jobs:
   build:
     name: Build Application
     runs-on: self-hosted
+    env:
+      DATABASE_URL: "postgresql://dummy:dummy@localhost:5432/dummy"
 
     steps:
       - name: Checkout code
@@ -29,15 +31,13 @@ jobs:
         run: pnpm install
 
       - name: Build application
-        env:
-          DATABASE_URL: "postgresql://dummy:dummy@localhost:5432/dummy"
         run: pnpm build
 
       - name: Build successful
         run: echo "✅ Application built successfully!"
 
   deploy:
-    name: Deploy to Preview
+    name: Deploy Trigger.dev to Preview
     needs: build
     uses: ./.github/workflows/reusable-trigger-deploy.yml
     with:
