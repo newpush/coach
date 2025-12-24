@@ -292,6 +292,9 @@ model Integration {
   syncStatus     String?   // "SUCCESS", "FAILED", "SYNCING"
   errorMessage   String?
 
+  // Settings
+  ingestWorkouts Boolean   @default(false) // Whether to ingest workouts from this provider
+
   user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, provider])
@@ -445,6 +448,8 @@ model WorkoutStream {
   moving          Json?    // Array of boolean moving indicators
   
   // Computed pacing metrics
+  hrZoneTimes     Json?    // Cached time in each heart rate zone (seconds)
+  powerZoneTimes  Json?    // Cached time in each power zone (seconds)
   avgPacePerKm    Float?   // Average pace in min/km
   paceVariability Float?   // Standard deviation of pace (consistency)
   lapSplits       Json?    // Array of lap/mile/km splits
