@@ -3,10 +3,9 @@
     <div class="mx-auto max-w-7xl px-6 lg:px-8">
       <div class="mx-auto max-w-2xl sm:text-center">
         <h2 class="text-base font-semibold leading-7 text-primary-600 dark:text-primary-400 font-mono">PRICING</h2>
-        <p class="mt-2 text-3xl font-bold tracking-tight text-gray-900 dark:text-white sm:text-4xl">Invest in Your
-          Performance</p>
+        <p class="mt-2 text-3xl font-bold tracking-tight text-gray-900 dark:text-white sm:text-4xl">Free for Early Adopters</p>
         <p class="mt-6 text-lg leading-8 text-gray-600 dark:text-gray-300">
-          Start for free, upgrade when you need advanced AI insights.
+          We're currently in early access. All features are free while we build the future of AI coaching.
         </p>
       </div>
       <div
@@ -14,7 +13,7 @@
         <div class="p-8 sm:p-10 lg:flex-auto">
           <h3 class="text-2xl font-bold tracking-tight text-gray-900 dark:text-white">Pro Athlete</h3>
           <p class="mt-6 text-base leading-7 text-gray-600 dark:text-gray-300">Advanced AI insights for serious
-            performance. Unlock the full potential of your training data with daily coaching recommendations.</p>
+            performance. Early users get full access to all features and will be rewarded with special legacy benefits.</p>
           <div class="mt-10 flex items-center gap-x-4">
             <h4 class="flex-none text-sm font-semibold leading-6 text-primary-600 dark:text-primary-400">What's included
             </h4>
@@ -38,10 +37,10 @@
                 <span class="text-5xl font-bold tracking-tight text-gray-900 dark:text-white">FREE</span>
               </p>
               <UButton to="/login" block size="xl" color="primary" class="mt-10">
-                Get access
+                Join Early Access
               </UButton>
               <p class="mt-6 text-xs leading-5 text-gray-600 dark:text-gray-400">
-                Free for our first users as an honorary thank you for being early adopters.
+                Free for early adopters. Early users will be greatly rewarded with special perks as we grow.
               </p>
             </div>
           </div>
@@ -51,8 +50,7 @@
       <!-- Free Tier Card (Smaller) -->
       <div class="mx-auto mt-10 max-w-2xl lg:text-center">
         <p class="text-sm text-gray-500">
-          Looking for the basics? <span class="font-bold text-gray-900 dark:text-white">The Starter plan is forever
-            free</span> and includes basic analytics and 1 device connection.
+          There will <span class="font-bold text-gray-900 dark:text-white">always be a free plan</span> for basic analytics and training tracking.
         </p>
       </div>
     </div>
