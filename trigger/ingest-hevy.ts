@@ -156,7 +156,7 @@ export const ingestHevy = task({
                 data: {
                   workoutExerciseId: workoutExercise.id,
                   order: hevySet.index,
-                  type: hevySet.indicator.toUpperCase(), // normal -> NORMAL
+                  type: hevySet.indicator ? hevySet.indicator.toUpperCase() : 'NORMAL', // normal -> NORMAL
                   weight: hevySet.weight_kg,
                   weightUnit: 'kg',
                   reps: hevySet.reps,
