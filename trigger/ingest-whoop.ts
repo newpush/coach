@@ -1,5 +1,5 @@
 import { logger, task } from "@trigger.dev/sdk/v3";
-import { fetchWhoopRecovery, fetchWhoopSleep, fetchWhoopWorkouts, normalizeWhoopRecovery, normalizeWhoopWorkout } from "../server/utils/whoop";
+import { fetchWhoopRecovery, fetchWhoopSleep, fetchWhoopWorkouts, normalizeWhoopRecovery, normalizeWhoopWorkout, extractWhoopHrZones } from "../server/utils/whoop";
 import { prisma } from "../server/utils/db";
 import { workoutRepository } from "../server/utils/repositories/workoutRepository";
 import { wellnessRepository } from "../server/utils/repositories/wellnessRepository";
@@ -93,10 +93,9 @@ export const ingestWhoopTask = task({
       
       logger.log(`[Whoop Ingest] Wellness Complete - Saved: ${upsertedCount}, Skipped: ${skippedCount}`);
 
-      // 2. Fetch Workout Data - DISABLED
-      // Workout ingestion from Whoop has been disabled to avoid duplicates with other sources
-      // The code below is kept for reference but will not execute
-      const WHOOP_WORKOUTS_ENABLED = false;
+      // 2. Fetch Workout Data
+      // Workout ingestion from Whoop can be toggled via settings
+      const WHOOP_WORKOUTS_ENABLED = updatedIntegration.ingestWorkouts;
       
       let workoutUpsertCount = 0;
       
@@ -134,6 +133,25 @@ export const ingestWhoopTask = task({
             normalizedWorkout
           );
           workoutUpsertCount++;
+
+          // Capture HR Zones if available
+          const hrZoneTimes = extractWhoopHrZones(whoopWorkout);
+          if (hrZoneTimes) {
+            await prisma.workoutStream.upsert({
+              where: { workoutId: upsertedWorkout.id },
+              create: {
+                workoutId: upsertedWorkout.id,
+                hrZoneTimes
+              },
+              update: {
+                hrZoneTimes
+              }
+            });
+            logger.log('[Whoop Ingest] Captured HR zones', {
+              workoutId: upsertedWorkout.id,
+              hrZoneTimes
+            });
+          }
           
           // Normalize TSS for the workout
           try {
