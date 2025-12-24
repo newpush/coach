@@ -104,6 +104,15 @@
             Advanced
           </UButton>
           <UButton
+            v-if="shouldShowMap(workout)"
+            variant="ghost"
+            color="neutral"
+            @click="scrollToSection('map')"
+          >
+            <UIcon name="i-lucide-map" class="w-4 h-4 mr-2" />
+            Map
+          </UButton>
+          <UButton
             v-if="shouldShowPacing(workout)"
             variant="ghost"
             color="neutral"
@@ -542,6 +551,13 @@
           <div v-if="shouldShowPacing(workout)" class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
             <h2 class="text-xl font-bold text-gray-900 dark:text-white mb-4">Advanced Analytics</h2>
             <AdvancedWorkoutMetrics :workout-id="workout.id" />
+          </div>
+
+          <!-- Route Map Section -->
+          <div id="map" class="scroll-mt-20"></div>
+          <div v-if="shouldShowMap(workout)" class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+            <h2 class="text-xl font-bold text-gray-900 dark:text-white mb-4">Route</h2>
+            <UiWorkoutMap :coordinates="workout.streams.latlng" :interactive="true" />
           </div>
 
           <!-- Pacing Analysis Section (for Run/Ride/Walk/Hike activities) -->
@@ -985,6 +1001,11 @@ function shouldShowPowerCurve(workout: any) {
   // Show power curve if workout has power data (watts stream)
   const supportedSources = ['strava', 'intervals', 'fit_file']
   return supportedSources.includes(workout.source) && workout.streams && (workout.averageWatts || workout.maxWatts)
+}
+
+function shouldShowMap(workout: any) {
+  if (!workout || !workout.streams) return false
+  return workout.streams.latlng && Array.isArray(workout.streams.latlng) && workout.streams.latlng.length > 0
 }
 
 function shouldShowPacing(workout: any) {
