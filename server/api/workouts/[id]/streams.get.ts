@@ -26,6 +26,8 @@ defineRouteMeta({
                 watts: { type: 'array', items: { type: 'number' } },
                 heartrate: { type: 'array', items: { type: 'number' } },
                 cadence: { type: 'array', items: { type: 'number' } },
+                hrZoneTimes: { type: 'array', items: { type: 'number' } },
+                powerZoneTimes: { type: 'array', items: { type: 'number' } },
                 pacingStrategy: { type: 'object' }
               }
             }

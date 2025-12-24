@@ -145,7 +145,9 @@ export async function calculateZoneDistribution(
     where: { workoutId: { in: workoutIds } },
     select: {
       heartrate: true,
-      watts: true
+      watts: true,
+      hrZoneTimes: true,
+      powerZoneTimes: true
     }
   })
   
@@ -158,8 +160,16 @@ export async function calculateZoneDistribution(
   let hasPowerData = false
   
   for (const stream of streams) {
-    // Process HR zones
-    if (stream.heartrate && Array.isArray(stream.heartrate)) {
+    const s = stream as any
+    // Check for cached zone times first
+    if (s.hrZoneTimes && Array.isArray(s.hrZoneTimes) && (s.hrZoneTimes as number[]).length >= 5) {
+      hasHrData = true
+      const cached = s.hrZoneTimes as number[]
+      for (let i = 0; i < 5; i++) {
+        hrZoneTimes[i] += cached[i]
+      }
+    } else if (stream.heartrate && Array.isArray(stream.heartrate)) {
+      // Process HR zones from raw stream
       hasHrData = true
       for (const hr of stream.heartrate as number[]) {
         if (hr === null || hr === undefined) continue
@@ -169,7 +179,13 @@ export async function calculateZoneDistribution(
     }
     
     // Process Power zones
-    if (stream.watts && Array.isArray(stream.watts)) {
+    if (s.powerZoneTimes && Array.isArray(s.powerZoneTimes) && (s.powerZoneTimes as number[]).length >= 5) {
+        hasPowerData = true
+        const cached = s.powerZoneTimes as number[]
+        for (let i = 0; i < 5; i++) {
+            powerZoneTimes[i] += cached[i]
+        }
+    } else if (stream.watts && Array.isArray(stream.watts)) {
       hasPowerData = true
       for (const watts of stream.watts as number[]) {
         if (watts === null || watts === undefined) continue

@@ -22,7 +22,8 @@ defineRouteMeta({
                       provider: { type: 'string' },
                       lastSyncAt: { type: 'string', format: 'date-time', nullable: true },
                       syncStatus: { type: 'string', nullable: true },
-                      externalUserId: { type: 'string', nullable: true }
+                      externalUserId: { type: 'string', nullable: true },
+                      ingestWorkouts: { type: 'boolean' }
                     }
                   }
                 }
@@ -55,7 +56,8 @@ export default defineEventHandler(async (event) => {
           provider: true,
           lastSyncAt: true,
           syncStatus: true,
-          externalUserId: true
+          externalUserId: true,
+          ingestWorkouts: true
         }
       }
     }

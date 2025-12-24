@@ -420,7 +420,7 @@ export function normalizeWhoopWorkout(workout: WhoopWorkout, userId: string) {
     externalId: workout.id, // Whoop UUID
     source: 'whoop',
     date: startDate,
-    title: `Whoop Activity`, // We don't get a user title, so generic
+    title: type === 'Other' ? `Whoop Activity` : type,
     description: `Imported from Whoop. Sport ID: ${workout.sport_id}`,
     type,
     durationSec,
@@ -441,4 +441,24 @@ export function normalizeWhoopWorkout(workout: WhoopWorkout, userId: string) {
     // Raw Data
     rawJson: workout
   }
+}
+
+/**
+ * Extracts HR zone durations from Whoop workout data and formats them for WorkoutStream
+ * Whoop zones are 0-5 (6 zones), our system typically expects 5 or 6 zones.
+ * We'll map them to a JSON object that can be stored in WorkoutStream.hrZoneTimes (if we add it)
+ * or return them as a separate object.
+ */
+export function extractWhoopHrZones(workout: WhoopWorkout) {
+  if (!workout.score?.zone_durations) return null
+
+  const zones = workout.score.zone_durations
+  // Whoop gives milliseconds, we want seconds
+  return [
+    Math.round(zones.zone_one_milli / 1000),
+    Math.round(zones.zone_two_milli / 1000),
+    Math.round(zones.zone_three_milli / 1000),
+    Math.round(zones.zone_four_milli / 1000),
+    Math.round(zones.zone_five_milli / 1000)
+  ]
 }
