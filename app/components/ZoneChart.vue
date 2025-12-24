@@ -42,21 +42,19 @@
 
       <!-- Chart Container -->
       <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
-        <div class="mb-4">
-          <h3 class="text-sm font-semibold text-gray-700 dark:text-gray-300">
-            {{ selectedZoneType === 'hr' ? 'Heart Rate' : 'Power' }} Zone Distribution
-          </h3>
-          <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
-            Color-coded timeline showing which zone you were in throughout the workout
-          </p>
-        </div>
-
         <!-- Stacked Bar Chart -->
-        <div v-if="chartData.datasets.length > 0" style="height: 200px; position: relative;">
-          <Bar :data="chartData" :options="chartOptions" />
-        </div>
-        <div v-else class="h-[200px] flex items-center justify-center border-2 border-dashed border-gray-100 dark:border-gray-800 rounded-lg">
-           <p class="text-xs text-gray-400">Timeline view requires raw HR/Power stream data</p>
+        <div v-if="chartData.datasets.length > 0">
+          <div class="mb-4">
+            <h3 class="text-sm font-semibold text-gray-700 dark:text-gray-300">
+              {{ selectedZoneType === 'hr' ? 'Heart Rate' : 'Power' }} Zone Distribution
+            </h3>
+            <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+              Color-coded timeline showing which zone you were in throughout the workout
+            </p>
+          </div>
+          <div style="height: 200px; position: relative;">
+            <Bar :data="chartData" :options="chartOptions" />
+          </div>
         </div>
 
         <!-- Zone Legend -->
@@ -453,6 +451,7 @@ function formatDuration(seconds: number): string {
 
 // Fetch data
 async function fetchData() {
+  console.log('ZoneChart: fetchData called', { workoutId: props.workoutId, hasWorkoutData: !!props.workoutData })
   loading.value = true
   error.value = null
   

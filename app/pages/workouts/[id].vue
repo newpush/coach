@@ -86,7 +86,7 @@
             AI Analysis
           </UButton>
           <UButton
-            v-if="shouldShowPowerCurve(workout)"
+            v-if="shouldShowDetailedPacing(workout)"
             variant="ghost"
             color="neutral"
             @click="scrollToSection('power-curve')"
@@ -95,7 +95,7 @@
             Power Curve
           </UButton>
           <UButton
-            v-if="shouldShowPacing(workout)"
+            v-if="shouldShowIntervals(workout)"
             variant="ghost"
             color="neutral"
             @click="scrollToSection('intervals')"
@@ -104,7 +104,7 @@
             Intervals
           </UButton>
           <UButton
-            v-if="shouldShowPacing(workout)"
+            v-if="shouldShowDetailedPacing(workout)"
             variant="ghost"
             color="neutral"
             @click="scrollToSection('advanced')"
@@ -122,7 +122,7 @@
             Map
           </UButton>
           <UButton
-            v-if="shouldShowPacing(workout)"
+            v-if="shouldShowDetailedPacing(workout)"
             variant="ghost"
             color="neutral"
             @click="scrollToSection('pacing')"
@@ -131,7 +131,7 @@
             Pacing
           </UButton>
           <UButton
-            v-if="shouldShowPacing(workout)"
+            v-if="shouldShowDetailedPacing(workout)"
             variant="ghost"
             color="neutral"
             @click="scrollToSection('timeline')"
@@ -550,21 +550,21 @@
 
           <!-- Power Curve Section (for activities with power data) -->
           <div id="power-curve" class="scroll-mt-20"></div>
-          <div v-if="shouldShowPowerCurve(workout)" class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+          <div v-if="shouldShowDetailedPacing(workout)" class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
             <h2 class="text-xl font-bold text-gray-900 dark:text-white mb-4">Power Duration Curve</h2>
             <PowerCurveChart :workout-id="workout.id" />
           </div>
 
           <!-- Interval Analysis Section -->
           <div id="intervals" class="scroll-mt-20"></div>
-          <div v-if="shouldShowPacing(workout)" class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+          <div v-if="shouldShowIntervals(workout)" class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
             <h2 class="text-xl font-bold text-gray-900 dark:text-white mb-4">Intervals & Peak Efforts</h2>
             <IntervalsAnalysis :workout-id="workout.id" />
           </div>
 
           <!-- Advanced Analytics Section -->
           <div id="advanced" class="scroll-mt-20"></div>
-          <div v-if="shouldShowPacing(workout)" class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+          <div v-if="shouldShowDetailedPacing(workout)" class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
             <h2 class="text-xl font-bold text-gray-900 dark:text-white mb-4">Advanced Analytics</h2>
             <AdvancedWorkoutMetrics :workout-id="workout.id" />
           </div>
@@ -578,14 +578,14 @@
 
           <!-- Pacing Analysis Section (for Run/Ride/Walk/Hike activities) -->
           <div id="pacing" class="scroll-mt-20"></div>
-          <div v-if="shouldShowPacing(workout)" class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+          <div v-if="shouldShowDetailedPacing(workout)" class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
             <h2 class="text-xl font-bold text-gray-900 dark:text-white mb-4">Pacing Analysis</h2>
             <PacingAnalysis :workout-id="workout.id" />
           </div>
 
           <!-- Timeline Visualization (for Run/Ride/Walk/Hike activities) -->
           <div id="timeline" class="scroll-mt-20"></div>
-          <div v-if="shouldShowPacing(workout)" class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+          <div v-if="shouldShowDetailedPacing(workout)" class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
             <h2 class="text-xl font-bold text-gray-900 dark:text-white mb-4">Workout Timeline</h2>
             <WorkoutTimeline :workout-id="workout.id" />
           </div>
@@ -1029,12 +1029,27 @@ function shouldShowMap(workout: any) {
   return workout.streams.latlng && Array.isArray(workout.streams.latlng) && workout.streams.latlng.length > 0
 }
 
+function shouldShowIntervals(workout: any) {
+  if (!workout || !workout.streams) return false
+  const supportedSources = ['strava', 'intervals', 'fit_file']
+  return supportedSources.includes(workout.source) && 
+         (workout.streams.watts || workout.streams.heartrate || workout.streams.velocity)
+}
+
 function shouldShowPacing(workout: any) {
   if (!workout) return false
-  // Show timeline if workout has stream data (time-series HR, power, velocity, etc.)
-  // This includes any activity type with streams, not just runs/rides
-  const supportedSources = ['strava', 'intervals', 'fit_file']
-  return supportedSources.includes(workout.source) && workout.streams
+  // Show timeline/zones if workout has stream data (time-series HR, power, velocity, etc.)
+  // OR if it has cached zone data in rawJson (fallback for Whoop, etc.)
+  const supportedSources = ['strava', 'intervals', 'fit_file', 'whoop']
+  const hasRawZones = workout.rawJson?.score?.zone_durations?.length > 0
+  const hasStreams = workout.streams && (workout.streams.heartrate || workout.streams.watts || workout.streams.velocity || workout.streams.hrZoneTimes || workout.streams.powerZoneTimes)
+  return (supportedSources.includes(workout.source) && hasStreams) || hasRawZones
+}
+
+function shouldShowDetailedPacing(workout: any) {
+  if (!workout || !workout.streams) return false
+  // Detailed pacing needs raw time-series data
+  return workout.streams.heartrate || workout.streams.watts || workout.streams.velocity
 }
 
 function hasEfficiencyMetrics(workout: any) {
