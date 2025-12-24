@@ -12,28 +12,28 @@
       <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
         <thead class="bg-gray-50 dark:bg-gray-900">
           <tr>
-            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+            <th class="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
               Date
             </th>
-            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+            <th class="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
               Activity
             </th>
-            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+            <th class="hidden sm:table-cell px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
               Type
             </th>
-            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+            <th class="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
               Duration
             </th>
-            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+            <th class="hidden md:table-cell px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
               Load
             </th>
-            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+            <th class="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
               Score
             </th>
-            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+            <th class="hidden lg:table-cell px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
               AI Analysis
             </th>
-            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+            <th class="hidden lg:table-cell px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
               Source
             </th>
           </tr>
@@ -45,33 +45,34 @@
             @click="$emit('navigate', workout.id)"
             class="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
           >
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
-              {{ formatDate(workout.date) }}
+            <td class="px-3 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
+              <span class="sm:hidden">{{ formatDateMobile(workout.date) }}</span>
+              <span class="hidden sm:inline">{{ formatDate(workout.date) }}</span>
             </td>
-            <td class="px-6 py-4 text-sm text-gray-900 dark:text-white">
+            <td class="px-3 sm:px-6 py-4 text-sm text-gray-900 dark:text-white max-w-[150px] sm:max-w-none truncate">
               {{ workout.title }}
             </td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-400">
+            <td class="hidden sm:table-cell px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-400">
               {{ workout.type }}
             </td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-400">
+            <td class="px-3 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-400">
               {{ formatDuration(workout.durationSec) }}
             </td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-400">
+            <td class="hidden md:table-cell px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-400">
               {{ workout.trainingLoad ? Math.round(workout.trainingLoad) : '-' }}
             </td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm">
+            <td class="px-3 sm:px-6 py-4 whitespace-nowrap text-sm">
               <span v-if="workout.overallScore" :class="getScoreBadgeClass(workout.overallScore)">
-                {{ workout.overallScore }}/10
+                {{ workout.overallScore }}<span class="hidden sm:inline">/10</span>
               </span>
               <span v-else class="text-gray-400">-</span>
             </td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm">
+            <td class="hidden lg:table-cell px-6 py-4 whitespace-nowrap text-sm">
               <span :class="getAnalysisStatusBadgeClass(workout.aiAnalysisStatus)">
                 {{ getAnalysisStatusLabel(workout.aiAnalysisStatus) }}
               </span>
             </td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm">
+            <td class="hidden lg:table-cell px-6 py-4 whitespace-nowrap text-sm">
               <span :class="getSourceBadgeClass(workout.source)">
                 {{ workout.source }}
               </span>
@@ -141,6 +142,13 @@ const itemsPerPage = 20
 function formatDate(date: string | Date) {
   return new Date(date).toLocaleDateString('en-US', {
     year: 'numeric',
+    month: 'short',
+    day: 'numeric'
+  })
+}
+
+function formatDateMobile(date: string | Date) {
+  return new Date(date).toLocaleDateString('en-US', {
     month: 'short',
     day: 'numeric'
   })

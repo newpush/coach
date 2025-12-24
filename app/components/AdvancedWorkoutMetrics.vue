@@ -14,7 +14,7 @@
       <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
 
         <!-- 1. Aerobic Decoupling (Drift) & EF Decay -->
-        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6 border-l-4" :class="getDriftColor(data.advanced.decoupling)">
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 sm:p-6 border-l-4" :class="getDriftColor(data.advanced.decoupling)">
           <div class="flex items-center justify-between mb-2">
             <h3 class="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Aerobic Decoupling</h3>
             <UPopover mode="hover">
@@ -47,7 +47,7 @@
         </div>
 
         <!-- 2. W' Balance (Anaerobic Battery) -->
-        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6 border-l-4 border-purple-500">
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 sm:p-6 border-l-4 border-purple-500">
            <div class="flex items-center justify-between mb-2">
             <div class="flex flex-col">
               <h3 class="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Anaerobic Battery (W' Bal)</h3>
@@ -82,7 +82,7 @@
         </div>
 
         <!-- 3. Quadrant Analysis (Pedaling Style) -->
-         <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6 border-l-4 border-orange-500">
+         <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 sm:p-6 border-l-4 border-orange-500">
            <div class="flex items-center justify-between mb-2">
             <div class="flex flex-col">
               <h3 class="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Cadence Profile</h3>
@@ -142,7 +142,7 @@
         </div>
 
         <!-- 4. Coasting Analysis -->
-        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6 border-l-4 border-blue-500">
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 sm:p-6 border-l-4 border-blue-500">
           <div class="flex items-center justify-between mb-2">
             <h3 class="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Micro-Rests</h3>
             <UPopover mode="hover">
@@ -182,7 +182,7 @@
         </div>
 
         <!-- 5. Matches Burnt -->
-        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6 border-l-4 border-red-500">
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 sm:p-6 border-l-4 border-red-500">
           <div class="flex items-center justify-between mb-2">
             <div class="flex flex-col">
               <h3 class="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Matches Burnt</h3>
@@ -218,7 +218,7 @@
         </div>
 
         <!-- 6. Fatigue Sensitivity (Late Fade) -->
-        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6 border-l-4" :class="getFadeColor(data.advanced.fatigueSensitivity?.decay)">
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 sm:p-6 border-l-4" :class="getFadeColor(data.advanced.fatigueSensitivity?.decay)">
           <div class="flex items-center justify-between mb-2">
             <h3 class="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Endurance Fade</h3>
             <UPopover mode="hover">
@@ -250,7 +250,7 @@
 
       <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
         <!-- 7. Stability Metrics -->
-        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6 border-l-4 border-emerald-500">
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 sm:p-6 border-l-4 border-emerald-500">
           <div class="flex items-center justify-between mb-2">
             <h3 class="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Effort Stability</h3>
             <UPopover mode="hover">
@@ -296,7 +296,7 @@
         </div>
 
         <!-- 8. Recovery Rate Trend -->
-        <div v-if="data.advanced.recoveryTrend && data.advanced.recoveryTrend.length > 0" class="bg-white dark:bg-gray-800 rounded-lg shadow p-6 border-l-4 border-green-400">
+        <div v-if="data.advanced.recoveryTrend && data.advanced.recoveryTrend.length > 0" class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 sm:p-6 border-l-4 border-green-400">
            <div class="flex items-center justify-between mb-4">
             <h3 class="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">HR Recovery Trend</h3>
             <UPopover mode="hover">
