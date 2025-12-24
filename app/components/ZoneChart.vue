@@ -52,8 +52,11 @@
         </div>
 
         <!-- Stacked Bar Chart -->
-        <div style="height: 200px; position: relative;">
+        <div v-if="chartData.datasets.length > 0" style="height: 200px; position: relative;">
           <Bar :data="chartData" :options="chartOptions" />
+        </div>
+        <div v-else class="h-[200px] flex items-center justify-center border-2 border-dashed border-gray-100 dark:border-gray-800 rounded-lg">
+           <p class="text-xs text-gray-400">Timeline view requires raw HR/Power stream data</p>
         </div>
 
         <!-- Zone Legend -->
@@ -98,21 +101,29 @@
         </div>
 
         <!-- Time in Zone Summary -->
-        <div class="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
-          <h4 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Time in Zone</h4>
-          <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2">
+        <div v-if="timeInZones.length > 0" class="mt-6">
+          <h4 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">Time in Zone Summary</h4>
+          <div class="space-y-2">
             <div
               v-for="(zone, index) in currentZones"
               :key="index"
-              class="text-center p-2 rounded"
-              :style="{ backgroundColor: zoneColors[index] + '20', borderLeft: `3px solid ${zoneColors[index]}` }"
+              class="relative"
             >
-              <div class="text-xs text-gray-600 dark:text-gray-400">{{ zone.name.split(' ')[0] }}</div>
-              <div class="text-lg font-bold" :style="{ color: zoneColors[index] }">
-                {{ formatDuration(timeInZones[index] || 0) }}
+              <div class="flex justify-between text-xs mb-1">
+                <span class="font-medium text-gray-600 dark:text-gray-400">{{ zone.name }}</span>
+                <span class="text-gray-500 dark:text-gray-400">
+                  {{ formatDuration(timeInZones[index] || 0) }} 
+                  ({{ totalTime > 0 ? ((timeInZones[index] || 0) / totalTime * 100).toFixed(1) : 0 }}%)
+                </span>
               </div>
-              <div class="text-xs text-gray-500 dark:text-gray-400">
-                {{ totalTime > 0 ? ((timeInZones[index] || 0) / totalTime * 100).toFixed(0) : 0 }}%
+              <div class="h-2 w-full bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
+                <div
+                  class="h-full transition-all duration-500"
+                  :style="{ 
+                    width: (totalTime > 0 ? ((timeInZones[index] || 0) / totalTime * 100) : 0) + '%',
+                    backgroundColor: zoneColors[index]
+                  }"
+                ></div>
               </div>
             </div>
           </div>
@@ -126,23 +137,16 @@
 import { Bar } from 'vue-chartjs'
 import {
   Chart as ChartJS,
-  CategoryScale,
-  LinearScale,
-  BarElement,
   Title,
   Tooltip,
-  Legend
+  Legend,
+  BarElement,
+  CategoryScale,
+  LinearScale,
+  type ChartOptions
 } from 'chart.js'
 
-// Register Chart.js components
-ChartJS.register(
-  CategoryScale,
-  LinearScale,
-  BarElement,
-  Title,
-  Tooltip,
-  Legend
-)
+ChartJS.register(Title, Tooltip, Legend, BarElement, CategoryScale, LinearScale)
 
 interface Props {
   workoutId: string
@@ -292,10 +296,7 @@ const chartData = computed(() => {
 
   const time = streamData.value.time || []
   const values = selectedZoneType.value === 'hr' ? streamData.value.heartrate : streamData.value.watts
-  const cachedZones = selectedZoneType.value === 'hr' ? streamData.value.hrZoneTimes : streamData.value.powerZoneTimes
-
-  // If we have cached zones but no raw values, we still want to show the profile and summary
-  // but the timeline chart (Bar) needs data. If we don't have raw values, we can't show the timeline.
+  
   if (!values || values.length === 0) {
     return { labels: [], datasets: [] }
   }
@@ -321,8 +322,11 @@ const chartData = computed(() => {
     }
   })
 
-  timeInZones.value = timeInZonesCalc
-  totalTime.value = sampledTime[sampledTime.length - 1] - sampledTime[0]
+  // Only update reactive refs if we have actual stream data (not cached)
+  if (values.length > 0) {
+      timeInZones.value = timeInZonesCalc
+      totalTime.value = sampledTime[sampledTime.length - 1] - sampledTime[0]
+  }
 
   return {
     labels: sampledTime.map((t: number) => formatTime(t)),
@@ -337,8 +341,8 @@ const chartData = computed(() => {
   }
 })
 
-const chartOptions = computed(() => {
-  const isDark = document.documentElement.classList.contains('dark')
+const chartOptions = computed<ChartOptions<'bar'>>(() => {
+  const isDark = typeof document !== 'undefined' && document.documentElement.classList.contains('dark')
   
   return {
     responsive: true,
@@ -365,10 +369,9 @@ const chartOptions = computed(() => {
           footer: (contexts: any) => {
             const activeZones = contexts.filter((c: any) => c.parsed.y === 1)
             if (activeZones.length > 0) {
-              const zone = currentZones.value[activeZones[0].datasetIndex]
-              return `${zone.min}-${zone.max} ${selectedZoneType.value === 'hr' ? 'bpm' : 'W'}`
+              return `Active Zone: ${activeZones[0].dataset.label}`
             }
-            return ''
+            return null
           }
         }
       }
@@ -458,11 +461,10 @@ async function fetchData() {
       // Public mode: Fetch everything from share endpoint
       const workout = await $fetch(`/api/share/workouts/${props.publicToken}`) as any
       // We need streams separately as the main endpoint returns summarized workout data
-      // Actually, we need a new endpoint for streams in public mode
       const streams = await $fetch(`/api/share/workouts/${props.publicToken}/streams`)
       
       streamData.value = streams
-      // Extract zones from the user object nested in the workout (needs backend support)
+      // Extract zones from the user object nested in the workout
       userZones.value = {
         hrZones: workout.user?.hrZones || getDefaultHrZones(),
         powerZones: workout.user?.powerZones || getDefaultPowerZones()
@@ -515,42 +517,29 @@ function getDefaultPowerZones() {
   ]
 }
 
-function getProfileBadgeClass(type: string): string {
-  const base = 'border-2'
+function getProfileBadgeClass(type: string) {
+  const base = 'border shadow-sm'
   switch (type) {
-    case 'Polarized':
-      return `${base} bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-900/30 dark:to-purple-900/30 border-blue-300 dark:border-blue-700 text-blue-900 dark:text-blue-100`
-    case 'Pyramidal':
-      return `${base} bg-gradient-to-r from-green-50 to-blue-50 dark:from-green-900/30 dark:to-blue-900/30 border-green-300 dark:border-green-700 text-green-900 dark:text-green-100`
-    case 'Threshold':
-      return `${base} bg-gradient-to-r from-orange-50 to-red-50 dark:from-orange-900/30 dark:to-red-900/30 border-orange-300 dark:border-orange-700 text-orange-900 dark:text-orange-100`
-    case 'HIIT':
-      return `${base} bg-gradient-to-r from-red-50 to-pink-50 dark:from-red-900/30 dark:to-pink-900/30 border-red-300 dark:border-red-700 text-red-900 dark:text-red-100`
-    case 'Base':
-      return `${base} bg-gradient-to-r from-emerald-50 to-teal-50 dark:from-emerald-900/30 dark:to-teal-900/30 border-emerald-300 dark:border-emerald-700 text-emerald-900 dark:text-emerald-100`
-    default:
-      return `${base} bg-gradient-to-r from-gray-50 to-slate-50 dark:from-gray-900/30 dark:to-slate-900/30 border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100`
+    case 'HIIT': return `${base} bg-red-50 border-red-200 text-red-700 dark:bg-red-900/20 dark:border-red-800 dark:text-red-300`
+    case 'Threshold': return `${base} bg-orange-50 border-orange-200 text-orange-700 dark:bg-orange-900/20 dark:border-orange-800 dark:text-orange-300`
+    case 'Polarized': return `${base} bg-primary-50 border-primary-200 text-primary-700 dark:bg-primary-900/20 dark:border-primary-800 dark:text-primary-300`
+    case 'Base': return `${base} bg-emerald-50 border-emerald-200 text-emerald-700 dark:bg-emerald-900/20 dark:border-emerald-800 dark:text-emerald-300`
+    case 'Pyramidal': return `${base} bg-blue-50 border-blue-200 text-blue-700 dark:bg-blue-900/20 dark:border-blue-800 dark:text-blue-300`
+    default: return `${base} bg-gray-50 border-gray-200 text-gray-700 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-300`
   }
 }
 
-function getProfileIcon(type: string): string {
+function getProfileIcon(type: string) {
   switch (type) {
-    case 'Polarized':
-      return 'i-heroicons-arrows-up-down'
-    case 'Pyramidal':
-      return 'i-heroicons-chart-bar'
-    case 'Threshold':
-      return 'i-heroicons-bolt'
-    case 'HIIT':
-      return 'i-heroicons-fire'
-    case 'Base':
-      return 'i-heroicons-heart'
-    default:
-      return 'i-heroicons-squares-2x2'
+    case 'HIIT': return 'i-lucide-zap'
+    case 'Threshold': return 'i-lucide-flame'
+    case 'Polarized': return 'i-lucide-arrow-up-right'
+    case 'Base': return 'i-lucide-mountain'
+    case 'Pyramidal': return 'i-lucide-bar-chart'
+    default: return 'i-lucide-activity'
   }
 }
 
-// Load data on mount
 onMounted(() => {
   fetchData()
 })
