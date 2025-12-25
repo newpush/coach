@@ -218,7 +218,8 @@ const volumeOptions = [
 const strategyOptions = [
   { value: 'LINEAR', label: 'Linear Periodization', description: 'Classic steady progression. Best for most riders.' },
   { value: 'POLARIZED', label: 'Polarized (80/20)', description: 'High volume low intensity, minimal threshold work.' },
-  // { value: 'BLOCK', label: 'Block Periodization', description: 'Concentrated loads of specific intensity.' }
+  { value: 'UNDULATING', label: 'Daily Undulating', description: 'Frequent changes in intensity to prevent plateau.' },
+  { value: 'BLOCK', label: 'Block Periodization', description: 'Concentrated loads of specific intensity. Advanced.' }
 ]
 
 const totalWeeks = computed(() => {
