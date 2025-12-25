@@ -1,8 +1,5 @@
-import { getServerSession } from '../../utils/session'
 import { z } from 'zod'
-
 import { getServerSession } from '../../utils/session'
-import { z } from 'zod'
 
 defineRouteMeta({
   openAPI: {
@@ -26,7 +23,13 @@ defineRouteMeta({
               targetValue: { type: 'number' },
               startValue: { type: 'number' },
               currentValue: { type: 'number' },
-              priority: { type: 'string', enum: ['LOW', 'MEDIUM', 'HIGH'], default: 'MEDIUM' }
+              priority: { type: 'string', enum: ['LOW', 'MEDIUM', 'HIGH'], default: 'MEDIUM' },
+              aiContext: { type: 'string' },
+              distance: { type: 'number' },
+              elevation: { type: 'number' },
+              duration: { type: 'number' },
+              terrain: { type: 'string' },
+              phase: { type: 'string' }
             }
           }
         }
@@ -70,7 +73,26 @@ const goalSchema = z.object({
   targetValue: z.number().optional(),
   startValue: z.number().optional(),
   currentValue: z.number().optional(),
-  priority: z.enum(['LOW', 'MEDIUM', 'HIGH']).default('MEDIUM')
+  priority: z.enum(['LOW', 'MEDIUM', 'HIGH']).default('MEDIUM'),
+  aiContext: z.string().optional(),
+  distance: z.number().optional(),
+  elevation: z.number().optional(),
+  duration: z.number().optional(),
+  terrain: z.string().optional(),
+  phase: z.string().optional(),
+  eventId: z.string().optional(),
+  eventData: z.object({
+    externalId: z.string().optional(),
+    source: z.string().optional(),
+    title: z.string(),
+    date: z.string(),
+    type: z.string().optional(),
+    subType: z.string().optional(),
+    distance: z.number().optional(),
+    elevation: z.number().optional(),
+    expectedDuration: z.number().optional(),
+    terrain: z.string().optional()
+  }).optional()
 })
 
 export default defineEventHandler(async (event) => {
@@ -90,7 +112,7 @@ export default defineEventHandler(async (event) => {
     throw createError({
       statusCode: 400,
       statusMessage: 'Invalid input',
-      data: result.error.errors
+      data: result.error.issues
     })
   }
   
@@ -108,6 +130,64 @@ export default defineEventHandler(async (event) => {
       })
     }
     
+    // Handle Event creation/linkage
+    let finalEventId = data.eventId
+    
+    if (data.eventData) {
+      const { externalId, source, title, date, ...details } = data.eventData
+      
+      if (externalId && source) {
+        const eventRecord = await prisma.event.upsert({
+          where: {
+            userId_source_externalId: {
+              userId: user.id,
+              source,
+              externalId
+            }
+          },
+          update: {
+            title,
+            date: new Date(date),
+            type: details.type,
+            subType: details.subType,
+            distance: details.distance,
+            elevation: details.elevation,
+            expectedDuration: details.expectedDuration,
+            terrain: details.terrain
+          },
+          create: {
+            userId: user.id,
+            externalId,
+            source,
+            title,
+            date: new Date(date),
+            type: details.type,
+            subType: details.subType,
+            distance: details.distance,
+            elevation: details.elevation,
+            expectedDuration: details.expectedDuration,
+            terrain: details.terrain
+          }
+        })
+        finalEventId = eventRecord.id
+      } else {
+        const eventRecord = await prisma.event.create({
+          data: {
+            userId: user.id,
+            title,
+            date: new Date(date),
+            type: details.type,
+            subType: details.subType,
+            distance: details.distance,
+            elevation: details.elevation,
+            expectedDuration: details.expectedDuration,
+            terrain: details.terrain
+          }
+        })
+        finalEventId = eventRecord.id
+      }
+    }
+    
     const goal = await prisma.goal.create({
       data: {
         userId: user.id,
@@ -122,21 +202,28 @@ export default defineEventHandler(async (event) => {
         startValue: data.startValue,
         currentValue: data.currentValue || data.startValue,
         priority: data.priority,
-        // AI Context prompt could be generated here or later
-        aiContext: `Goal: ${data.title}. Type: ${data.type}.`
+        aiContext: data.aiContext || `Goal: ${data.title}. Type: ${data.type}.`,
+        distance: data.distance,
+        elevation: data.elevation,
+        duration: data.duration,
+        terrain: data.terrain,
+        phase: data.phase,
+        eventId: finalEventId
       }
     })
     
     return {
       success: true,
-      goal
+      goal: {
+        id: goal.id,
+        title: goal.title
+      }
     }
   } catch (error: any) {
     console.error('Error creating goal:', error)
     throw createError({
-      statusCode: 500,
-      statusMessage: 'Failed to create goal',
-      message: error.message
+      statusCode: error.statusCode || 500,
+      statusMessage: error.statusMessage || 'Internal Server Error'
     })
   }
 })

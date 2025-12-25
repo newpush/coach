@@ -25,7 +25,13 @@ defineRouteMeta({
               currentValue: { type: 'number' },
               status: { type: 'string', enum: ['ACTIVE', 'COMPLETED', 'ARCHIVED'] },
               targetDate: { type: 'string', format: 'date-time' },
-              targetValue: { type: 'number' }
+              targetValue: { type: 'number' },
+              aiContext: { type: 'string' },
+              distance: { type: 'number' },
+              elevation: { type: 'number' },
+              duration: { type: 'number' },
+              terrain: { type: 'string' },
+              phase: { type: 'string' }
             }
           }
         }
@@ -76,7 +82,7 @@ export default defineEventHandler(async (event) => {
   // Verify the goal belongs to this user
   const existingGoal = await prisma.goal.findUnique({
     where: { id },
-    select: { userId: true }
+    select: { userId: true, eventId: true }
   })
   
   if (!existingGoal) {
@@ -95,8 +101,83 @@ export default defineEventHandler(async (event) => {
   
   const body = await readBody(event)
   
+  // Handle Event updates
+  const { eventData, ...goalData } = body
+  const data: any = { ...goalData }
+  
+  if (eventData) {
+    const { externalId, source, title, date, ...details } = eventData
+    if (externalId && source) {
+      const eventRecord = await prisma.event.upsert({
+        where: {
+          userId_source_externalId: {
+            userId,
+            source,
+            externalId
+          }
+        },
+        update: {
+          title,
+          date: new Date(date),
+          type: details.type,
+          subType: details.subType,
+          distance: details.distance,
+          elevation: details.elevation,
+          expectedDuration: details.expectedDuration,
+          terrain: details.terrain
+        },
+        create: {
+          userId,
+          externalId,
+          source,
+          title,
+          date: new Date(date),
+          type: details.type,
+          subType: details.subType,
+          distance: details.distance,
+          elevation: details.elevation,
+          expectedDuration: details.expectedDuration,
+          terrain: details.terrain
+        }
+      })
+      data.eventId = eventRecord.id
+    } else if (title && date) {
+      // Determine which event to update
+      const eventIdToUpdate = data.eventId || existingGoal.eventId
+      if (eventIdToUpdate) {
+        await prisma.event.update({
+          where: { id: eventIdToUpdate },
+          data: {
+            title,
+            date: new Date(date),
+            type: details.type,
+            subType: details.subType,
+            distance: details.distance,
+            elevation: details.elevation,
+            expectedDuration: details.expectedDuration,
+            terrain: details.terrain
+          }
+        })
+      } else {
+        const eventRecord = await prisma.event.create({
+          data: {
+            userId,
+            title,
+            date: new Date(date),
+            type: details.type,
+            subType: details.subType,
+            distance: details.distance,
+            elevation: details.elevation,
+            expectedDuration: details.expectedDuration,
+            terrain: details.terrain
+          }
+        })
+        data.eventId = eventRecord.id
+      }
+    }
+  }
+
   // Convert date strings to Date objects for Prisma
-  const data: any = { ...body }
   if (data.targetDate && typeof data.targetDate === 'string') {
     data.targetDate = new Date(data.targetDate)
   }
