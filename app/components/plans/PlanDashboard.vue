@@ -128,11 +128,19 @@
                 <th class="px-4 py-2 text-left">Workout</th>
                 <th class="px-4 py-2 text-left">Duration</th>
                 <th class="px-4 py-2 text-left">TSS</th>
+                <th class="px-4 py-2 text-center">
+                  <UIcon name="i-heroicons-chart-bar" class="w-4 h-4 inline" title="Structured Workout" />
+                </th>
                 <th class="px-4 py-2 text-right">Status</th>
               </tr>
             </thead>
             <tbody class="divide-y divide-gray-100 dark:divide-gray-800">
-              <tr v-for="workout in selectedWeek.workouts" :key="workout.id" class="hover:bg-gray-50 dark:hover:bg-gray-800/50">
+              <tr
+                v-for="workout in selectedWeek.workouts"
+                :key="workout.id"
+                class="hover:bg-gray-50 dark:hover:bg-gray-800/50 cursor-pointer transition-colors"
+                @click="navigateToWorkout(workout.id)"
+              >
                 <td class="px-4 py-3 font-medium">{{ formatDay(workout.date) }}</td>
                 <td class="px-4 py-3">
                   <div class="font-semibold">{{ workout.title }}</div>
@@ -140,6 +148,20 @@
                 </td>
                 <td class="px-4 py-3">{{ Math.round(workout.durationSec / 60) }}m</td>
                 <td class="px-4 py-3">{{ Math.round(workout.tss) }}</td>
+                <td class="px-4 py-3 text-center">
+                  <UIcon
+                    v-if="workout.structuredWorkout"
+                    name="i-heroicons-check-circle"
+                    class="w-4 h-4 text-green-500 inline"
+                    title="Has structured workout data"
+                  />
+                  <UIcon
+                    v-else
+                    name="i-heroicons-minus-circle"
+                    class="w-4 h-4 text-gray-400 inline"
+                    title="No structured workout data"
+                  />
+                </td>
                 <td class="px-4 py-3 text-right">
                   <UBadge :color="workout.completed ? 'green' : 'gray'" size="xs">
                     {{ workout.completed ? 'Done' : 'Planned' }}
@@ -147,7 +169,7 @@
                 </td>
               </tr>
               <tr v-if="selectedWeek.workouts.length === 0">
-                <td colspan="5" class="px-4 py-8 text-center text-muted">
+                <td colspan="6" class="px-4 py-8 text-center text-muted">
                   No workouts generated for this week yet.
                   <div class="mt-2">
                     <UButton 
@@ -207,6 +229,10 @@ function getBlockStatusColor(block: any) {
   if (selectedBlockId.value === block.id) return 'bg-white border-primary scale-125'
   // Logic for past/future based on date could go here
   return 'bg-primary border-primary'
+}
+
+function navigateToWorkout(workoutId: string) {
+  navigateTo(`/workouts/planned/${workoutId}`)
 }
 
 async function generateWorkoutsForBlock() {
