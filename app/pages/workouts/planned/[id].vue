@@ -14,6 +14,25 @@
         </template>
         <template #right>
           <UButton
+            v-if="workout?.structuredWorkout"
+            color="neutral"
+            variant="ghost"
+            icon="i-heroicons-arrow-down-tray"
+            @click="showDownloadModal = true"
+          >
+            Download
+          </UButton>
+          
+          <UButton
+            v-if="workout"
+            color="neutral"
+            variant="ghost"
+            icon="i-heroicons-share"
+            @click="isShareModalOpen = true"
+          >
+            Share
+          </UButton>
+          <UButton
             v-if="workout && !workout.completed"
             size="xs"
             color="primary"
@@ -256,81 +275,186 @@
         </div>
       </div>
     </template>
-    
-    <UModal 
-      v-if="showAdjustModal" 
-      v-model:open="showAdjustModal" 
-      title="Adjust Workout"
-      description="Modify parameters and give feedback to AI to redesign this session."
-    >
-      <template #body>
-        <div class="p-6 flex flex-col gap-5">
-          <div class="w-full">
-            <label class="block text-sm font-medium mb-1.5 text-gray-700 dark:text-gray-200">Duration (minutes)</label>
-            <UInput v-model.number="adjustForm.durationMinutes" type="number" step="5" class="w-full" />
-          </div>
-          
-          <div class="w-full">
-            <label class="block text-sm font-medium mb-1.5 text-gray-700 dark:text-gray-200">Intensity</label>
-            <USelect 
-              v-model="adjustForm.intensity" 
-              :items="['recovery', 'easy', 'moderate', 'hard', 'very_hard']" 
-              class="w-full"
-            />
-          </div>
-          
-          <div class="w-full">
-            <label class="block text-sm font-medium mb-1.5 text-gray-700 dark:text-gray-200">Feedback / Instructions</label>
-            <UTextarea 
-              v-model="adjustForm.feedback" 
-              placeholder="e.g. 'Make the intervals longer', 'I want more rest', 'Focus on cadence'" 
-              :rows="3"
-              class="w-full"
-            />
-          </div>
-          
-          <div class="flex justify-end pt-2 gap-2">
-            <UButton variant="ghost" @click="showAdjustModal = false">Cancel</UButton>
-            <UButton color="primary" :loading="adjusting" @click="submitAdjustment">Apply Changes</UButton>
-          </div>
-        </div>
-      </template>
-    </UModal>
-    <UModal 
-      v-if="showMessageModal" 
-      v-model:open="showMessageModal" 
-      title="Add Coaching Messages"
-      description="Generate engaging text messages to display during your workout."
-    >
-      <template #body>
-        <div class="p-6 flex flex-col gap-5">
-          <div class="w-full">
-            <label class="block text-sm font-medium mb-1.5 text-gray-700 dark:text-gray-200">Coach Tone</label>
-            <USelect 
-              v-model="messageForm.tone" 
-              :items="['Motivational', 'Drill Sergeant', 'Technical', 'Funny', 'Supportive', 'Stoic']" 
-              class="w-full"
-            />
-          </div>
-          
-          <div class="w-full">
-            <label class="block text-sm font-medium mb-1.5 text-gray-700 dark:text-gray-200">Additional Context</label>
-            <UTextarea 
-              v-model="messageForm.context" 
-              placeholder="e.g. 'Emphasize high cadence', 'Remind me to drink', 'This is prep for a climbing race'" 
-              :rows="3"
-              class="w-full"
-            />
-          </div>
-          
-          <div class="flex justify-end pt-2 gap-2">
-            <UButton variant="ghost" @click="showMessageModal = false">Cancel</UButton>
-            <UButton color="primary" :loading="generatingMessages" @click="submitMessages">Generate Messages</UButton>
-          </div>
-        </div>
-      </template>
-    </UModal>
   </UDashboardPanel>
+
+  <!-- Modals -->
+  <UModal 
+    v-if="showAdjustModal" 
+    v-model:open="showAdjustModal" 
+    title="Adjust Workout"
+    description="Modify parameters and give feedback to AI to redesign this session."
+  >
+    <template #body>
+      <div class="p-6 flex flex-col gap-5">
+        <div class="w-full">
+          <label class="block text-sm font-medium mb-1.5 text-gray-700 dark:text-gray-200">Duration (minutes)</label>
+          <UInput v-model.number="adjustForm.durationMinutes" type="number" step="5" class="w-full" />
+        </div>
+        
+        <div class="w-full">
+          <label class="block text-sm font-medium mb-1.5 text-gray-700 dark:text-gray-200">Intensity</label>
+          <USelect 
+            v-model="adjustForm.intensity" 
+            :items="['recovery', 'easy', 'moderate', 'hard', 'very_hard']" 
+            class="w-full"
+          />
+        </div>
+        
+        <div class="w-full">
+          <label class="block text-sm font-medium mb-1.5 text-gray-700 dark:text-gray-200">Feedback / Instructions</label>
+          <UTextarea 
+            v-model="adjustForm.feedback" 
+            placeholder="e.g. 'Make the intervals longer', 'I want more rest', 'Focus on cadence'" 
+            :rows="3"
+            class="w-full"
+          />
+        </div>
+        
+        <div class="flex justify-end pt-2 gap-2">
+          <UButton variant="ghost" @click="showAdjustModal = false">Cancel</UButton>
+          <UButton color="primary" :loading="adjusting" @click="submitAdjustment">Apply Changes</UButton>
+        </div>
+      </div>
+    </template>
+  </UModal>
+
+  <UModal 
+    v-if="showMessageModal" 
+    v-model:open="showMessageModal" 
+    title="Add Coaching Messages"
+    description="Generate engaging text messages to display during your workout."
+  >
+    <template #body>
+      <div class="p-6 flex flex-col gap-5">
+        <div class="w-full">
+          <label class="block text-sm font-medium mb-1.5 text-gray-700 dark:text-gray-200">Coach Tone</label>
+          <USelect 
+            v-model="messageForm.tone" 
+            :items="['Motivational', 'Drill Sergeant', 'Technical', 'Funny', 'Supportive', 'Stoic']" 
+            class="w-full"
+          />
+        </div>
+        
+        <div class="w-full">
+          <label class="block text-sm font-medium mb-1.5 text-gray-700 dark:text-gray-200">Additional Context</label>
+          <UTextarea 
+            v-model="messageForm.context" 
+            placeholder="e.g. 'Emphasize high cadence', 'Remind me to drink', 'This is prep for a climbing race'" 
+            :rows="3"
+            class="w-full"
+          />
+        </div>
+        
+        <div class="flex justify-end pt-2 gap-2">
+          <UButton variant="ghost" @click="showMessageModal = false">Cancel</UButton>
+          <UButton color="primary" :loading="generatingMessages" @click="submitMessages">Generate Messages</UButton>
+        </div>
+      </div>
+    </template>
+  </UModal>
+  
+      <UModal 
+        v-if="showDownloadModal" 
+        v-model:open="showDownloadModal" 
+        title="Download Workout"
+        description="Select a format to download this workout."
+      >
+              <template #body>
+                <div class="p-6 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <UButton
+                    block
+                    color="primary"
+                    variant="soft"
+                    icon="i-heroicons-document-text"
+                    label="Zwift (.zwo)"
+                    @click="downloadWorkout('zwo')"
+                  />
+                  <UButton
+                    block
+                    color="primary"
+                    variant="soft"
+                    icon="i-heroicons-cpu-chip"
+                    label="Garmin (.fit)"
+                    @click="downloadWorkout('fit')"
+                  />
+                  <UButton
+                    block
+                    color="gray"
+                    variant="ghost"
+                    icon="i-heroicons-chart-bar"
+                    label="MRC (%FTP)"
+                    @click="downloadWorkout('mrc')"
+                  />
+                  <UButton
+                    block
+                    color="gray"
+                    variant="ghost"
+                    icon="i-heroicons-bolt"
+                    label="ERG (Watts)"
+                    @click="downloadWorkout('erg')"
+                  />
+                </div>
+              </template>        <template #footer>
+          <UButton
+            label="Close"
+            color="neutral"
+            variant="ghost"
+            @click="showDownloadModal = false"
+          />
+        </template>
+      </UModal>
+  
+      <UModal
+        v-model:open="isShareModalOpen"    title="Share Workout"
+    description="Anyone with this link can view this planned workout. The link will expire in 30 days."
+  >
+    <template #body>
+      <div class="space-y-4">
+        <div v-if="generatingShareLink" class="flex items-center justify-center py-8">
+          <UIcon name="i-heroicons-arrow-path" class="w-8 h-8 animate-spin text-primary" />
+        </div>
+        <div v-else-if="shareLink" class="space-y-4">
+          <div class="flex gap-2">
+            <UInput
+              v-model="shareLink"
+              readonly
+              class="flex-1"
+            />
+            <UButton
+              icon="i-heroicons-clipboard"
+              color="neutral"
+              variant="outline"
+              @click="copyToClipboard"
+            >
+              Copy
+            </UButton>
+          </div>
+          <p class="text-xs text-gray-500">
+            This link provides read-only access to this specific workout.
+          </p>
+        </div>
+        <div v-else class="flex flex-col items-center justify-center py-8 text-center">
+          <UIcon name="i-heroicons-link" class="w-8 h-8 text-gray-400 mb-2" />
+          <p class="text-gray-600 mb-4">Click below to generate a shareable link.</p>
+          <UButton
+            color="primary"
+            @click="generateShareLink"
+            :loading="generatingShareLink"
+          >
+            Generate Link
+          </UButton>
+        </div>
+      </div>
+    </template>
+    <template #footer>
+      <UButton
+        label="Close"
+        color="neutral"
+        variant="ghost"
+        @click="isShareModalOpen = false"
+      />
+    </template>
+  </UModal>
 </template>
 
 <script setup lang="ts">
@@ -351,6 +475,7 @@ const adjusting = ref(false)
 const generatingMessages = ref(false)
 const showAdjustModal = ref(false)
 const showMessageModal = ref(false)
+const showDownloadModal = ref(false)
 const adjustForm = reactive({
   durationMinutes: 60,
   intensity: 'moderate',
@@ -364,6 +489,62 @@ const polling = ref(false)
 const workout = ref<any>(null)
 const userFtp = ref<number | undefined>(undefined)
 let pollingInterval: NodeJS.Timeout | null = null
+
+// Share functionality
+const isShareModalOpen = ref(false)
+const shareLink = ref('')
+const generatingShareLink = ref(false)
+
+function downloadWorkout(format: string) {
+  if (!workout.value?.id) return
+  // Use window.location.href to trigger download, avoiding popup blockers for direct user actions usually
+  // But _blank is safer for files sometimes. Let's try direct nav.
+  window.location.href = `/api/workouts/planned/${workout.value.id}/download/${format}`
+}
+
+const generateShareLink = async () => {
+  if (!workout.value?.id) return
+  
+  generatingShareLink.value = true
+  try {
+    const response = await $fetch('/api/share/generate', {
+      method: 'POST',
+      body: {
+        resourceType: 'PLANNED_WORKOUT',
+        resourceId: workout.value.id
+      }
+    })
+    shareLink.value = response.url
+  } catch (error) {
+    console.error('Failed to generate share link:', error)
+    toast.add({
+      title: 'Error',
+      description: 'Failed to generate share link. Please try again.',
+      color: 'error'
+    })
+  } finally {
+    generatingShareLink.value = false
+  }
+}
+
+const copyToClipboard = () => {
+  if (!shareLink.value) return
+  
+  navigator.clipboard.writeText(shareLink.value)
+  toast.add({
+    title: 'Copied',
+    description: 'Share link copied to clipboard.',
+    color: 'success'
+  })
+}
+
+watch(isShareModalOpen, (newValue) => {
+  if (newValue && workout.value?.shareToken) {
+    // If token exists (would need API to return it), could pre-fill.
+    // For now we regenerate or check if we store it.
+    // The API generates a new token or returns existing one.
+  }
+})
 
 async function fetchWorkout() {
   loading.value = true
