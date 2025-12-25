@@ -54,10 +54,21 @@
                 >
                   <div class="font-semibold">{{ step.name }}</div>
                   <div class="text-[10px] opacity-80 mt-1">
-                    {{ formatDuration(step.durationSeconds) }} @ {{ Math.round((step.power?.value || 0) * 100) }}% FTP
+                    {{ formatDuration(step.durationSeconds) }} @ 
+                    <span v-if="step.power?.range">
+                      {{ Math.round(step.power.range.min * 100) }}-{{ Math.round(step.power.range.max * 100) }}% FTP
+                    </span>
+                    <span v-else>
+                      {{ Math.round((step.power?.value || 0) * 100) }}% FTP
+                    </span>
                   </div>
                   <div v-if="userFtp" class="text-[10px] opacity-80">
-                    {{ Math.round((step.power?.value || 0) * userFtp) }}W
+                    <span v-if="step.power?.range">
+                      {{ Math.round(step.power.range.min * userFtp) }}-{{ Math.round(step.power.range.max * userFtp) }}W
+                    </span>
+                    <span v-else>
+                      {{ Math.round((step.power?.value || 0) * userFtp) }}W
+                    </span>
                   </div>
                   <div v-if="step.cadence" class="text-[10px] opacity-80 border-t border-white/20 mt-1 pt-1">
                     Target Cadence: {{ step.cadence }} RPM
@@ -99,31 +110,45 @@
           <div
             v-for="(step, index) in workout.steps"
             :key="index"
-            class="flex items-center gap-3 p-2 rounded hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors"
+            class="grid grid-cols-[12px_1fr_48px_80px_110px_80px] items-center gap-4 p-2 rounded hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors"
           >
-            <div class="flex-shrink-0 w-3 h-3 rounded-full" :style="{ backgroundColor: getStepColor(step.type) }"></div>
-            <div class="flex-1 min-w-0">
+            <div class="w-3 h-3 rounded-full flex-shrink-0" :style="{ backgroundColor: getStepColor(step.type) }"></div>
+            <div class="min-w-0">
               <div class="text-sm font-medium truncate">{{ step.name }}</div>
               <div class="text-xs text-muted">{{ step.type }}</div>
             </div>
-            <div class="flex-shrink-0 text-center w-12">
-              <span class="text-xs px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 font-medium">
-                {{ getZone((step.power?.value || 0)) }}
+            <div class="text-center">
+              <span class="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 font-bold">
+                {{ getZone((step.power?.value || (step.power?.range ? (step.power.range.min + step.power.range.max)/2 : 0))) }}
               </span>
             </div>
-            <div v-if="step.cadence" class="flex-shrink-0 text-xs text-blue-500 font-medium">
-              {{ step.cadence }} RPM
+            <div class="text-xs text-blue-500 font-semibold text-center whitespace-nowrap">
+              <span v-if="step.cadence">{{ step.cadence }} RPM</span>
+              <span v-else class="text-gray-300 dark:text-gray-700">-</span>
             </div>
-            <div class="flex-shrink-0 text-right ml-2">
-              <div class="text-sm font-semibold">{{ Math.round((step.power?.value || 0) * 100) }}%</div>
-              <div class="text-xs text-muted">{{ formatDuration(step.durationSeconds) }}</div>
+            <div class="text-right">
+              <div class="text-sm font-bold whitespace-nowrap">
+                <span v-if="step.power?.range">
+                  {{ Math.round(step.power.range.min * 100) }}-{{ Math.round(step.power.range.max * 100) }}%
+                </span>
+                <span v-else>
+                  {{ Math.round((step.power?.value || 0) * 100) }}%
+                </span>
+              </div>
+              <div class="text-[10px] text-muted">{{ formatDuration(step.durationSeconds) }}</div>
             </div>
-            <div v-if="userFtp" class="flex-shrink-0 text-xs text-muted w-16 text-right">
-              {{ Math.round((step.power?.value || 0) * userFtp) }}W
+            <div v-if="userFtp" class="text-xs text-muted text-right whitespace-nowrap">
+              <span v-if="step.power?.range">
+                {{ Math.round(step.power.range.min * userFtp) }}-{{ Math.round(step.power.range.max * userFtp) }}W
+              </span>
+              <span v-else>
+                {{ Math.round((step.power?.value || 0) * userFtp) }}W
+              </span>
             </div>
           </div>
         </div>
       </div>
+
 
       <!-- Zone Distribution -->
       <div class="pt-4 border-t border-gray-200 dark:border-gray-700">
@@ -258,16 +283,33 @@ const zoneDistribution = computed(() => {
 
 // Functions
 function getStepStyle(step: any) {
-  const powerPercent = (step.power?.value || 0) * 100
-  const height = Math.min(powerPercent / 1.2, 100) // Scale to 120% max
   const width = (step.durationSeconds / totalDuration.value) * 100
   const color = getStepColor(step.type)
-
-  return {
-    height: `${height}%`,
-    width: `${width}%`,
-    backgroundColor: color,
-    minWidth: '2px'
+  const maxScale = 1.2 // 120% FTP is top of chart
+  
+  if (step.power?.range) {
+    // Ramp logic
+    const startH = Math.min(step.power.range.min / maxScale, 1) * 100
+    const endH = Math.min(step.power.range.max / maxScale, 1) * 100
+    
+    return {
+      width: `${width}%`,
+      height: '100%',
+      backgroundColor: color,
+      clipPath: `polygon(0% ${100 - startH}%, 100% ${100 - endH}%, 100% 100%, 0% 100%)`,
+      minWidth: '2px'
+    }
+  } else {
+    // Flat logic
+    const powerPercent = (step.power?.value || 0) * 100
+    const height = Math.min((step.power?.value || 0) / maxScale, 1) * 100
+    
+    return {
+      height: `${height}%`,
+      width: `${width}%`,
+      backgroundColor: color,
+      minWidth: '2px'
+    }
   }
 }
 

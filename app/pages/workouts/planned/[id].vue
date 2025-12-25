@@ -112,16 +112,27 @@
           <div v-if="workout.structuredWorkout" class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
             <div class="flex justify-between items-center mb-4">
               <h3 class="text-lg font-semibold">Power Profile</h3>
-              <UButton 
-                size="sm" 
-                color="gray" 
-                variant="ghost" 
-                icon="i-heroicons-arrow-path" 
-                :loading="generating" 
-                @click="generateStructure"
-              >
-                Regenerate
-              </UButton>
+              <div class="flex gap-2">
+                <UButton 
+                  size="sm" 
+                  color="gray" 
+                  variant="ghost" 
+                  icon="i-heroicons-adjustments-horizontal" 
+                  @click="openAdjustModal"
+                >
+                  Adjust
+                </UButton>
+                <UButton 
+                  size="sm" 
+                  color="gray" 
+                  variant="ghost" 
+                  icon="i-heroicons-arrow-path" 
+                  :loading="generating" 
+                  @click="generateStructure"
+                >
+                  Regenerate
+                </UButton>
+              </div>
             </div>
             <WorkoutChart :workout="workout.structuredWorkout" :user-ftp="userFtp" />
           </div>
@@ -230,6 +241,44 @@
         </div>
       </div>
     </template>
+    
+    <UModal 
+      v-if="showAdjustModal" 
+      v-model:open="showAdjustModal" 
+      title="Adjust Workout"
+      description="Modify parameters and give feedback to AI to redesign this session."
+    >
+      <template #body>
+        <div class="p-6 space-y-4">
+          <div class="space-y-1">
+            <label class="text-sm font-medium">Duration (minutes)</label>
+            <UInput v-model.number="adjustForm.durationMinutes" type="number" step="5" />
+          </div>
+          
+          <div class="space-y-1">
+            <label class="text-sm font-medium">Intensity</label>
+            <USelect 
+              v-model="adjustForm.intensity" 
+              :items="['recovery', 'easy', 'moderate', 'hard', 'very_hard']" 
+            />
+          </div>
+          
+          <div class="space-y-1">
+            <label class="text-sm font-medium">Feedback / Instructions</label>
+            <UTextarea 
+              v-model="adjustForm.feedback" 
+              placeholder="e.g. 'Make the intervals longer', 'I want more rest', 'Focus on cadence'" 
+              :rows="3"
+            />
+          </div>
+          
+          <div class="flex justify-end pt-4 gap-2">
+            <UButton variant="ghost" @click="showAdjustModal = false">Cancel</UButton>
+            <UButton color="primary" :loading="adjusting" @click="submitAdjustment">Apply Changes</UButton>
+          </div>
+        </div>
+      </template>
+    </UModal>
   </UDashboardPanel>
 </template>
 
@@ -246,6 +295,13 @@ const toast = useToast()
 
 const loading = ref(true)
 const generating = ref(false)
+const adjusting = ref(false)
+const showAdjustModal = ref(false)
+const adjustForm = reactive({
+  durationMinutes: 60,
+  intensity: 'moderate',
+  feedback: ''
+})
 const polling = ref(false)
 const workout = ref<any>(null)
 const userFtp = ref<number | undefined>(undefined)
@@ -257,11 +313,55 @@ async function fetchWorkout() {
     const data: any = await $fetch(`/api/workouts/planned/${route.params.id}`)
     workout.value = data.workout
     userFtp.value = data.userFtp
+    
+    // Init form
+    if (workout.value) {
+      adjustForm.durationMinutes = Math.round(workout.value.durationSec / 60)
+      adjustForm.intensity = workout.value.workIntensity > 0.8 ? 'hard' : workout.value.workIntensity > 0.6 ? 'moderate' : 'easy'
+    }
   } catch (error) {
     console.error('Failed to fetch workout', error)
     workout.value = null
   } finally {
     loading.value = false
+  }
+}
+
+function openAdjustModal() {
+  adjustForm.feedback = ''
+  if (workout.value) {
+     adjustForm.durationMinutes = Math.round(workout.value.durationSec / 60)
+     // approximate intensity mapping
+     const i = workout.value.workIntensity || 0.7
+     adjustForm.intensity = i > 0.9 ? 'very_hard' : i > 0.8 ? 'hard' : i > 0.6 ? 'moderate' : i > 0.4 ? 'easy' : 'recovery'
+  }
+  showAdjustModal.value = true
+}
+
+async function submitAdjustment() {
+  adjusting.value = true
+  try {
+    await $fetch(`/api/workouts/planned/${route.params.id}/adjust`, {
+      method: 'POST',
+      body: adjustForm
+    })
+    
+    toast.add({
+      title: 'Adjustment Started',
+      description: 'AI is redesigning your workout. This may take a moment.',
+      color: 'success'
+    })
+    
+    showAdjustModal.value = false
+    startPolling()
+  } catch (error: any) {
+    toast.add({
+      title: 'Adjustment Failed',
+      description: error.data?.message || 'Failed to submit adjustment',
+      color: 'error'
+    })
+  } finally {
+    adjusting.value = false
   }
 }
 
