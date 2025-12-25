@@ -29,7 +29,7 @@
 
         <!-- Active Plan View -->
         <div v-else-if="activePlan">
-           <PlanDashboard :plan="activePlan" @refresh="fetchActivePlan" />
+           <PlanDashboard :plan="activePlan" :user-ftp="userFtp" @refresh="fetchActivePlan" />
         </div>
 
         <!-- No Plan State / Onboarding -->
@@ -85,6 +85,7 @@ const toast = useToast()
 
 const { data, status, refresh } = await useFetch<any>('/api/plans/active')
 const activePlan = computed(() => data.value?.plan)
+const userFtp = computed(() => data.value?.userFtp)
 const loading = computed(() => status.value === 'pending')
 
 function fetchActivePlan() {

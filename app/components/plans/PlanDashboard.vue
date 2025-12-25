@@ -128,6 +128,7 @@
                 <th class="px-4 py-2 text-left">Workout</th>
                 <th class="px-4 py-2 text-left">Duration</th>
                 <th class="px-4 py-2 text-left">TSS</th>
+                <th v-if="userFtp" class="px-4 py-2 text-left">Power</th>
                 <th class="px-4 py-2 text-center">
                   <div class="flex items-center justify-center gap-1">
                     <UIcon name="i-heroicons-chart-bar" class="w-4 h-4 inline" title="Structured Workout" />
@@ -160,6 +161,12 @@
                 </td>
                 <td class="px-4 py-3">{{ Math.round(workout.durationSec / 60) }}m</td>
                 <td class="px-4 py-3">{{ Math.round(workout.tss) }}</td>
+                <td v-if="userFtp" class="px-4 py-3">
+                  <span class="font-semibold text-gray-700 dark:text-gray-300">
+                    {{ Math.round((workout.workIntensity || 0) * userFtp) }}W
+                  </span>
+                  <span class="text-xs text-muted ml-1">({{ Math.round((workout.workIntensity || 0) * 100) }}%)</span>
+                </td>
                 <td class="px-4 py-3 text-center">
                   <div class="flex justify-center">
                     <MiniWorkoutChart
@@ -185,7 +192,7 @@
                 </td>
               </tr>
               <tr v-if="selectedWeek.workouts.length === 0">
-                <td colspan="6" class="px-4 py-8 text-center text-muted">
+                <td :colspan="userFtp ? 7 : 6" class="px-4 py-8 text-center text-muted">
                   No workouts generated for this week yet.
                   <div class="mt-2">
                     <UButton 
@@ -220,6 +227,7 @@ import WeeklyZoneSummary from '~/components/ui/WeeklyZoneSummary.vue'
 
 const props = defineProps<{
   plan: any
+  userFtp?: number
 }>()
 
 const emit = defineEmits(['refresh'])
