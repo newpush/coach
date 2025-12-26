@@ -56,7 +56,8 @@ export default defineEventHandler(async (event) => {
       where: { email: session.user.email },
       include: {
         goals: {
-          orderBy: { createdAt: 'desc' }
+          orderBy: { createdAt: 'desc' },
+          include: { events: true }
         }
       }
     })

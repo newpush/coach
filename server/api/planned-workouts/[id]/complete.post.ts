@@ -19,9 +19,8 @@ defineRouteMeta({
         'application/json': {
           schema: {
             type: 'object',
-            required: ['workoutId'],
             properties: {
-              workoutId: { type: 'string' }
+              workoutId: { type: 'string', nullable: true }
             }
           }
         }
@@ -37,7 +36,7 @@ defineRouteMeta({
               properties: {
                 success: { type: 'boolean' },
                 plannedWorkout: { type: 'object' },
-                workout: { type: 'object' }
+                workout: { type: 'object', nullable: true }
               }
             }
           }
@@ -71,12 +70,7 @@ export default defineEventHandler(async (event) => {
     })
   }
   
-  if (!body.workoutId) {
-    throw createError({
-      statusCode: 400,
-      message: 'Workout ID is required to mark as complete'
-    })
-  }
+  // workoutId is now optional
   
   try {
     // Check if planned workout exists and belongs to user
@@ -98,22 +92,34 @@ export default defineEventHandler(async (event) => {
       })
     }
     
-    // Check if workout exists and belongs to user
-    const workout = await prisma.workout.findUnique({
-      where: { id: body.workoutId }
-    })
+    let updatedWorkout = null
     
-    if (!workout) {
-      throw createError({
-        statusCode: 404,
-        message: 'Workout not found'
+    if (body.workoutId) {
+      // Check if workout exists and belongs to user
+      const workout = await prisma.workout.findUnique({
+        where: { id: body.workoutId }
       })
-    }
-    
-    if (workout.userId !== userId) {
-      throw createError({
-        statusCode: 403,
-        message: 'Not authorized to link to this workout'
+      
+      if (!workout) {
+        throw createError({
+          statusCode: 404,
+          message: 'Workout not found'
+        })
+      }
+      
+      if (workout.userId !== userId) {
+        throw createError({
+          statusCode: 403,
+          message: 'Not authorized to link to this workout'
+        })
+      }
+      
+      // Update workout to link to planned workout
+      updatedWorkout = await prisma.workout.update({
+        where: { id: body.workoutId },
+        data: {
+          plannedWorkoutId: plannedWorkoutId
+        }
       })
     }
     
@@ -121,15 +127,8 @@ export default defineEventHandler(async (event) => {
     const updatedPlannedWorkout = await prisma.plannedWorkout.update({
       where: { id: plannedWorkoutId },
       data: {
-        completed: true
-      }
-    })
-    
-    // Update workout to link to planned workout
-    const updatedWorkout = await prisma.workout.update({
-      where: { id: body.workoutId },
-      data: {
-        plannedWorkoutId: plannedWorkoutId
+        completed: true,
+        completionStatus: 'COMPLETED'
       }
     })
     

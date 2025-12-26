@@ -102,11 +102,15 @@ export default defineEventHandler(async (event) => {
   const body = await readBody(event)
   
   // Handle Event updates
-  const { eventData, eventId, ...goalData } = body
+  const { eventData, eventId, eventIds, ...goalData } = body
   const data: any = { ...goalData }
   
-  if (eventId) {
-    data.events = { connect: { id: eventId } }
+  if (eventIds && Array.isArray(eventIds)) {
+    data.events = {
+      set: eventIds.map(id => ({ id }))
+    }
+  } else if (eventId) {
+    data.events = { set: [{ id: eventId }] }
   }
   
   if (eventData) {

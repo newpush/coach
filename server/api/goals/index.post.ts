@@ -67,20 +67,21 @@ const goalSchema = z.object({
   title: z.string(),
   description: z.string().optional(),
   targetDate: z.string().optional(), // ISO string
-  eventDate: z.string().optional(), // ISO string
-  eventType: z.string().optional(),
+  // eventDate: z.string().optional(), // Deprecated for EVENT goals
+  // eventType: z.string().optional(), // Deprecated for EVENT goals
   metric: z.string().optional(),
   targetValue: z.number().optional(),
   startValue: z.number().optional(),
   currentValue: z.number().optional(),
   priority: z.enum(['LOW', 'MEDIUM', 'HIGH']).default('MEDIUM'),
   aiContext: z.string().optional(),
-  distance: z.number().optional(),
-  elevation: z.number().optional(),
-  duration: z.number().optional(),
+  distance: z.number().optional(), // Keep for Performance goals
+  elevation: z.number().optional(), // Keep for Performance goals
+  duration: z.number().optional(), // Keep for Performance goals
   terrain: z.string().optional(),
   phase: z.string().optional(),
-  eventId: z.string().optional(),
+  eventIds: z.array(z.string()).optional(), // Multiple events
+  eventId: z.string().optional(), // Single event (backward compat)
   eventData: z.object({
     externalId: z.string().optional(),
     source: z.string().optional(),
@@ -118,6 +119,17 @@ export default defineEventHandler(async (event) => {
   
   const data = result.data
   
+  // Consistency Check: Event driven goals must have at least one event
+  const hasEventIds = (data.eventIds && data.eventIds.length > 0) || !!data.eventId
+  const hasEventData = !!data.eventData
+  
+  if (data.type === 'EVENT' && !hasEventIds && !hasEventData) {
+    throw createError({
+      statusCode: 400,
+      statusMessage: 'Event driven goals must have at least one event attached.'
+    })
+  }
+  
   try {
     const user = await prisma.user.findUnique({
       where: { email: session.user.email }
@@ -131,10 +143,22 @@ export default defineEventHandler(async (event) => {
     }
     
     // Handle Event creation/linkage
-    let finalEventId = data.eventId
+    const eventsToConnect: { id: string }[] = []
     
+    // Add existing IDs
+    if (data.eventIds) {
+      data.eventIds.forEach(id => eventsToConnect.push({ id }))
+    }
+    if (data.eventId) {
+      if (!eventsToConnect.some(e => e.id === data.eventId)) {
+        eventsToConnect.push({ id: data.eventId })
+      }
+    }
+    
+    // Create new event if provided
     if (data.eventData) {
       const { externalId, source, title, date, ...details } = data.eventData
+      let newEventId: string
       
       if (externalId && source) {
         const eventRecord = await prisma.event.upsert({
@@ -169,7 +193,7 @@ export default defineEventHandler(async (event) => {
             terrain: details.terrain
           }
         })
-        finalEventId = eventRecord.id
+        newEventId = eventRecord.id
       } else {
         const eventRecord = await prisma.event.create({
           data: {
@@ -184,9 +208,37 @@ export default defineEventHandler(async (event) => {
             terrain: details.terrain
           }
         })
-        finalEventId = eventRecord.id
+        newEventId = eventRecord.id
+      }
+      
+      if (!eventsToConnect.some(e => e.id === newEventId)) {
+        eventsToConnect.push({ id: newEventId })
       }
     }
+    
+    // Determine targetDate if not set (use latest event date)
+    let finalTargetDate = data.targetDate ? new Date(data.targetDate) : null
+    
+    if (!finalTargetDate && eventsToConnect.length > 0) {
+      // We need to fetch the dates of the events to determine the latest one
+      // Optimization: If we just created one, we know the date.
+      // If we only have IDs, we need to query.
+      const eventIds = eventsToConnect.map(e => e.id)
+      const linkedEvents = await prisma.event.findMany({
+        where: { id: { in: eventIds } },
+        select: { date: true }
+      })
+      
+      if (linkedEvents.length > 0) {
+        // Find max date
+        const maxDate = linkedEvents.reduce((max, e) => e.date > max ? e.date : max, linkedEvents[0].date)
+        finalTargetDate = maxDate
+      }
+    }
+
+    // Prepare Goal Data
+    // We strictly avoid duplicating event data for EVENT goals
+    const isEventGoal = data.type === 'EVENT'
     
     const goal = await prisma.goal.create({
       data: {
@@ -194,21 +246,26 @@ export default defineEventHandler(async (event) => {
         type: data.type,
         title: data.title,
         description: data.description,
-        targetDate: data.targetDate ? new Date(data.targetDate) : null,
-        eventDate: data.eventDate ? new Date(data.eventDate) : null,
-        eventType: data.eventType,
+        targetDate: finalTargetDate,
+        
+        // For EVENT goals, we do NOT set these redundant fields
+        // For other goals, we allow them
+        eventDate: isEventGoal ? null : (data.eventDate ? new Date(data.eventDate) : null),
+        eventType: isEventGoal ? null : data.eventType, // Or should this be null too?
+        distance: isEventGoal ? null : data.distance,
+        elevation: isEventGoal ? null : data.elevation,
+        duration: isEventGoal ? null : data.duration,
+        terrain: isEventGoal ? null : data.terrain,
+        
         metric: data.metric,
         targetValue: data.targetValue,
         startValue: data.startValue,
         currentValue: data.currentValue || data.startValue,
         priority: data.priority,
         aiContext: data.aiContext || `Goal: ${data.title}. Type: ${data.type}.`,
-        distance: data.distance,
-        elevation: data.elevation,
-        duration: data.duration,
-        terrain: data.terrain,
         phase: data.phase,
-        events: finalEventId ? { connect: { id: finalEventId } } : undefined
+        
+        events: eventsToConnect.length > 0 ? { connect: eventsToConnect } : undefined
       }
     })
     

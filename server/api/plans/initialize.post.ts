@@ -53,10 +53,10 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, message: 'Plan duration too short (min 4 weeks)' })
   }
 
-  // 3. Define Blocks
+  // 4. Define Blocks
   const blocks = calculateBlocks(start, totalWeeks, strategy, goal)
 
-  // 4. Create Plan Skeleton
+  // 5. Create Plan Skeleton
   const plan = await prisma.trainingPlan.create({
     data: {
       userId,
@@ -64,7 +64,7 @@ export default defineEventHandler(async (event) => {
       startDate: start,
       targetDate: end,
       strategy,
-      status: 'ACTIVE',
+      status: 'DRAFT',
       blocks: {
         create: blocks.map(block => ({
           order: block.order,
@@ -104,15 +104,6 @@ export default defineEventHandler(async (event) => {
       }
     }
   })
-
-  // 5. Trigger generation for the first block
-  if (plan.blocks.length > 0) {
-    const firstBlock = plan.blocks[0]
-    await tasks.trigger('generate-training-block', {
-      userId,
-      blockId: firstBlock.id
-    })
-  }
 
   return {
     success: true,
@@ -306,6 +297,35 @@ function calculateBlocks(startDate: Date, totalWeeks: number, strategy: string, 
       durationWeeks: taperWeeks,
       recoveryWeekIndex: 2
     })
+  }
+
+  // 3. Tag blocks with events
+  if (goal?.events && goal.events.length > 0) {
+    for (const block of blocks) {
+      const blockStart = block.startDate.getTime()
+      const blockEnd = blockStart + (block.durationWeeks * 7 * 24 * 60 * 60 * 1000)
+      
+      const eventsInBlock = goal.events.filter((e: any) => {
+        const eDate = new Date(e.date).getTime()
+        // Check if event is within this block's window
+        return eDate >= blockStart && eDate < blockEnd
+      })
+      
+      if (eventsInBlock.length > 0) {
+        // Sort by priority or date
+        // Just take the first one or join names
+        const eventNames = eventsInBlock.map((e: any) => e.title).join(', ')
+        
+        // Update block metadata to inform AI
+        block.name += ` [Race: ${eventNames}]`
+        
+        // If this isn't the final Peak block, marking it as having a race
+        // allows the AI (in generate-training-block) to schedule a mini-taper
+        if (block.type !== 'PEAK') {
+           block.primaryFocus += '_WITH_RACE'
+        }
+      }
+    }
   }
 
   return blocks
