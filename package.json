@@ -29,7 +29,7 @@
     "fit-file-parser": "^2.1.0",
     "leaflet": "^1.9.4",
     "marked": "^17.0.1",
-    "next-auth": "4.21.1",
+    "next-auth": "4.24.12",
     "nuxt": "^4.2.2",
     "nuxt-gtag": "^4.1.0",
     "pg": "^8.16.3",
