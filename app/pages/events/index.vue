@@ -8,7 +8,7 @@
         <template #right>
           <div class="flex gap-3">
             <UButton
-              @click="isEventFormOpen = true"
+              @click="openCreateModal"
               color="primary"
               variant="solid"
               icon="i-heroicons-plus"
@@ -33,105 +33,41 @@
         </div>
 
         <!-- Events List -->
-        <div class="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
-          <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
-            <h2 class="text-xl font-semibold text-gray-900 dark:text-white uppercase tracking-tight">Racing Events</h2>
-          </div>
-          
-          <div v-if="loading" class="p-8 text-center text-gray-600 dark:text-gray-400">
-            <UIcon name="i-lucide-loader-2" class="size-8 animate-spin mx-auto mb-2" />
-            Loading events...
-          </div>
-          
-          <div v-else-if="events.length === 0" class="p-8 text-center text-gray-600 dark:text-gray-400">
-            <UIcon name="i-lucide-flag" class="size-12 mx-auto mb-4 opacity-20" />
-            <p>No events found. Add your first race or event to get started.</p>
-            <UButton
-              class="mt-4 font-bold"
-              color="primary"
-              variant="outline"
-              size="sm"
-              icon="i-heroicons-plus"
-              @click="isEventFormOpen = true"
-            >
-              Add Event
-            </UButton>
-          </div>
-          
-          <div v-else class="overflow-x-auto">
-            <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-              <thead class="bg-gray-50 dark:bg-gray-900">
-                <tr>
-                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Event</th>
-                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Date</th>
-                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Type</th>
-                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider text-center">Priority</th>
-                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Profile</th>
-                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Location</th>
-                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Goals</th>
-                </tr>
-              </thead>
-              <tbody class="bg-white dark:bg-800 divide-y divide-gray-200 dark:divide-gray-700">
-                <tr
-                  v-for="event in events"
-                  :key="event.id"
-                  class="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-                >
-                  <td class="px-6 py-4 whitespace-nowrap">
-                    <div class="flex flex-col">
-                      <span class="text-sm font-bold text-gray-900 dark:text-white">{{ event.name }}</span>
-                      <span v-if="event.websiteUrl" class="text-xs text-blue-500 hover:underline">
-                        <a :href="event.websiteUrl" target="_blank">{{ event.websiteUrl }}</a>
-                      </span>
-                    </div>
-                  </td>
-                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-400">
-                    <div class="flex flex-col">
-                      <span>{{ formatDate(event.date) }}</span>
-                      <span v-if="event.startTime" class="text-xs font-medium text-gray-500">{{ event.startTime }}</span>
-                    </div>
-                  </td>
-                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-400">
-                    <div class="flex flex-col">
-                      <span>{{ event.type }}</span>
-                      <span v-if="event.subType" class="text-xs text-muted">{{ event.subType }}</span>
-                    </div>
-                    <span v-if="event.isVirtual" class="mt-1 inline-block text-[10px] bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 px-1 rounded uppercase font-bold w-fit">Virtual</span>
-                  </td>
-                  <td class="px-6 py-4 whitespace-nowrap text-center">
-                    <span :class="getPriorityBadgeClass(event.priority)">
-                      {{ event.priority }}
-                    </span>
-                  </td>
-                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-400">
-                    <div class="flex flex-col gap-0.5">
-                      <span v-if="event.distance" class="font-medium text-gray-900 dark:text-white">{{ event.distance }} km</span>
-                      <span v-if="event.elevation" class="text-xs">{{ event.elevation }} m elev.</span>
-                      <span v-if="event.expectedDuration" class="text-xs">{{ event.expectedDuration }} h</span>
-                    </div>
-                  </td>
-                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-400">
-                    {{ formatLocation(event) }}
-                  </td>
-                  <td class="px-6 py-4 whitespace-nowrap">
-                    <div class="flex flex-wrap gap-1">
-                      <span v-for="goalLink in event.goals" :key="goalLink.goalId" class="px-2 py-0.5 rounded-full text-[10px] bg-indigo-100 text-indigo-800 dark:bg-indigo-900/50 dark:text-indigo-200 font-medium">
-                        {{ goalLink.goal.title }}
-                      </span>
-                      <span v-if="!event.goals || event.goals.length === 0" class="text-xs text-gray-400 italic">No goals linked</span>
-                    </div>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
+        <EventTable
+          :events="paginatedEvents"
+          :loading="loading"
+          v-model:current-page="currentPage"
+          :total-pages="totalPages"
+          :total-events="events.length"
+          :visible-pages="visiblePages"
+          @navigate="navigateToEvent"
+          @create="openCreateModal"
+          @edit="openEditModal"
+          @delete="confirmDeleteEvent"
+        />
       </div>
 
       <!-- Event Form Modal -->
-      <UModal v-model:open="isEventFormOpen" title="Add New Event" description="Create a new race or event record.">
+      <UModal v-model:open="isEventFormOpen" :title="editingEvent ? 'Edit Event' : 'Add New Event'" :description="editingEvent ? 'Update event details.' : 'Create a new race or event record.'">
         <template #body>
-          <EventForm @success="onEventCreated" @cancel="isEventFormOpen = false" />
+          <EventForm
+            :initial-data="editingEvent"
+            @success="onEventSaved"
+            @cancel="isEventFormOpen = false"
+          />
+        </template>
+      </UModal>
+
+      <!-- Delete Confirmation Modal -->
+      <UModal v-model:open="isDeleteModalOpen" title="Delete Event" description="Are you sure you want to delete this event? This action cannot be undone.">
+        <template #body>
+          <div class="space-y-4">
+            <p>Are you sure you want to delete <strong>{{ eventToDelete?.title }}</strong>?</p>
+            <div class="flex justify-end gap-2">
+              <UButton color="neutral" variant="ghost" @click="isDeleteModalOpen = false">Cancel</UButton>
+              <UButton color="error" variant="solid" :loading="deleting" @click="deleteEvent">Delete</UButton>
+            </div>
+          </div>
         </template>
       </UModal>
     </template>
@@ -140,6 +76,7 @@
 
 <script setup lang="ts">
 import EventForm from '~/components/events/EventForm.vue'
+import EventTable from '~/components/events/EventTable.vue'
 
 definePageMeta({
   middleware: 'auth',
@@ -156,6 +93,37 @@ useHead({
 const loading = ref(true)
 const events = ref<any[]>([])
 const isEventFormOpen = ref(false)
+const editingEvent = ref<any>(null)
+const isDeleteModalOpen = ref(false)
+const eventToDelete = ref<any>(null)
+const deleting = ref(false)
+
+// Pagination
+const currentPage = ref(1)
+const itemsPerPage = 20
+
+const totalPages = computed(() => Math.ceil(events.value.length / itemsPerPage))
+const visiblePages = computed(() => {
+  const pages = []
+  const maxVisible = 7
+  let start = Math.max(1, currentPage.value - Math.floor(maxVisible / 2))
+  let end = Math.min(totalPages.value, start + maxVisible - 1)
+  
+  if (end - start < maxVisible - 1) {
+    start = Math.max(1, end - maxVisible + 1)
+  }
+  
+  for (let i = start; i <= end; i++) {
+    pages.push(i)
+  }
+  return pages
+})
+
+const paginatedEvents = computed(() => {
+  const start = (currentPage.value - 1) * itemsPerPage
+  const end = start + itemsPerPage
+  return events.value.slice(start, end)
+})
 
 async function fetchEvents() {
   loading.value = true
@@ -174,45 +142,62 @@ async function fetchEvents() {
   }
 }
 
-function onEventCreated() {
+function openCreateModal() {
+  editingEvent.value = null
+  isEventFormOpen.value = true
+}
+
+function openEditModal(event: any) {
+  editingEvent.value = event
+  isEventFormOpen.value = true
+}
+
+function onEventSaved() {
   isEventFormOpen.value = false
   fetchEvents()
   useToast().add({
     title: 'Success',
-    description: 'Event created successfully',
+    description: editingEvent.value ? 'Event updated successfully' : 'Event created successfully',
     color: 'success'
   })
 }
 
-function formatDate(date: string) {
-  return new Date(date).toLocaleDateString('en-US', {
-    weekday: 'short',
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric'
-  })
+function confirmDeleteEvent(event: any) {
+  eventToDelete.value = event
+  isDeleteModalOpen.value = true
 }
 
-function getPriorityBadgeClass(priority: string) {
-  const baseClass = 'px-3 py-1 rounded-full text-xs font-bold'
-  switch (priority) {
-    case 'A':
-      return `${baseClass} bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200 ring-1 ring-amber-500/20`
-    case 'B':
-      return `${baseClass} bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 ring-1 ring-blue-500/20`
-    case 'C':
-      return `${baseClass} bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300 ring-1 ring-gray-500/20`
-    default:
-      return `${baseClass} bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300`
+async function deleteEvent() {
+  if (!eventToDelete.value) return
+  
+  deleting.value = true
+  try {
+    await $fetch(`/api/events/${eventToDelete.value.id}`, {
+      method: 'DELETE'
+    })
+    
+    useToast().add({
+      title: 'Success',
+      description: 'Event deleted successfully',
+      color: 'success'
+    })
+    fetchEvents()
+  } catch (error) {
+    console.error('Error deleting event:', error)
+    useToast().add({
+      title: 'Error',
+      description: 'Failed to delete event',
+      color: 'error'
+    })
+  } finally {
+    deleting.value = false
+    isDeleteModalOpen.value = false
+    eventToDelete.value = null
   }
 }
 
-function formatLocation(event: any) {
-  const parts = []
-  if (event.city) parts.push(event.city)
-  if (event.country) parts.push(event.country)
-  if (parts.length === 0 && event.location) return event.location
-  return parts.join(', ')
+function navigateToEvent(id: string) {
+  navigateTo(`/events/${id}`)
 }
 
 onMounted(() => {
