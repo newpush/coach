@@ -116,7 +116,7 @@
       />
       <UButton
         type="submit"
-        label="Create Event"
+        :label="isEditing ? 'Update Event' : 'Create Event'"
         color="primary"
         :loading="loading"
       />
@@ -126,6 +126,10 @@
 
 <script setup lang="ts">
 import { z } from 'zod'
+
+const props = defineProps<{
+  initialData?: any
+}>()
 
 const emit = defineEmits(['success', 'cancel'])
 
@@ -152,6 +156,53 @@ const state = reactive({
   isPublic: false,
   goalIds: [] as string[]
 })
+
+const isEditing = computed(() => !!props.initialData)
+
+// Populate state when initialData changes
+watch(() => props.initialData, (newData) => {
+  if (newData) {
+    state.title = newData.title || ''
+    state.description = newData.description || ''
+    state.date = newData.date ? new Date(newData.date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]
+    state.startTime = newData.startTime || ''
+    state.type = newData.type || 'Run'
+    state.subType = newData.subType || ''
+    state.priority = newData.priority || 'B'
+    state.city = newData.city || ''
+    state.country = newData.country || ''
+    state.location = newData.location || ''
+    state.websiteUrl = newData.websiteUrl || ''
+    state.distance = newData.distance
+    state.elevation = newData.elevation
+    state.expectedDuration = newData.expectedDuration
+    state.terrain = newData.terrain || 'Rolling'
+    state.isVirtual = newData.isVirtual || false
+    state.isPublic = newData.isPublic || false
+    // Handle goals if they come as objects
+    state.goalIds = newData.goals ? newData.goals.map((g: any) => g.goalId || g) : []
+  } else {
+    // Reset to defaults
+    state.title = ''
+    state.description = ''
+    state.date = new Date().toISOString().split('T')[0]
+    state.startTime = ''
+    state.type = 'Run'
+    state.subType = ''
+    state.priority = 'B'
+    state.city = ''
+    state.country = ''
+    state.location = ''
+    state.websiteUrl = ''
+    state.distance = undefined
+    state.elevation = undefined
+    state.expectedDuration = undefined
+    state.terrain = 'Rolling'
+    state.isVirtual = false
+    state.isPublic = false
+    state.goalIds = []
+  }
+}, { immediate: true })
 
 const schema = z.object({
   title: z.string().min(1, 'Title is required'),
@@ -209,6 +260,8 @@ const subTypeOptions = computed(() => {
 
 // Watch type change to reset subType if not compatible
 watch(() => state.type, (newType) => {
+  // Only reset if not editing or if type actually changed by user interaction
+  // We check if current subType is valid for new type
   const options = subTypesByMainType[newType] || []
   if (!options.find(o => o.value === state.subType)) {
     state.subType = options[0]?.value || ''
@@ -239,19 +292,28 @@ async function onSubmit() {
   loading.value = true
   try {
     const eventDate = state.date ? new Date(state.date).toISOString() : new Date().toISOString()
-    await $fetch('/api/events', {
-      method: 'POST',
-      body: {
-        ...state,
-        date: eventDate
-      }
-    })
+    const payload = {
+      ...state,
+      date: eventDate
+    }
+
+    if (isEditing.value && props.initialData?.id) {
+      await $fetch(`/api/events/${props.initialData.id}`, {
+        method: 'PUT',
+        body: payload
+      })
+    } else {
+      await $fetch('/api/events', {
+        method: 'POST',
+        body: payload
+      })
+    }
     emit('success')
   } catch (error: any) {
-    console.error('Error creating event:', error)
+    console.error('Error saving event:', error)
     toast.add({
       title: 'Error',
-      description: error.data?.message || 'Failed to create event',
+      description: error.data?.message || 'Failed to save event',
       color: 'error'
     })
   } finally {
