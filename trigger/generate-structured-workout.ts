@@ -43,7 +43,7 @@ export const generateStructuredWorkoutTask = task({
   run: async (payload: { plannedWorkoutId: string }) => {
     const { plannedWorkoutId } = payload;
     
-    const workout = await prisma.plannedWorkout.findUnique({
+    const workout = await (prisma as any).plannedWorkout.findUnique({
       where: { id: plannedWorkoutId },
       include: {
         user: { select: { ftp: true, aiPersona: true, name: true } },
@@ -67,7 +67,7 @@ export const generateStructuredWorkoutTask = task({
     
     // Build context
     const persona = workout.user.aiPersona || 'Supportive';
-    const goal = workout.trainingWeek?.block.plan.goal.title || 'General Fitness';
+    const goal = workout.trainingWeek?.block.plan.goal?.title || workout.trainingWeek?.block.plan.name || 'General Fitness';
     const phase = workout.trainingWeek?.block.type || 'General';
     const focus = workout.trainingWeek?.block.primaryFocus || 'Fitness';
     
@@ -107,7 +107,7 @@ export const generateStructuredWorkoutTask = task({
       }
     );
     
-    await prisma.plannedWorkout.update({
+    await (prisma as any).plannedWorkout.update({
       where: { id: plannedWorkoutId },
       data: {
         structuredWorkout: structure as any

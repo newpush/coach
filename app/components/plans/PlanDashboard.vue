@@ -3,7 +3,7 @@
     <!-- Header / Overview -->
     <div class="flex items-center justify-between">
       <div>
-        <h2 class="text-2xl font-bold">{{ plan.goal.title }}</h2>
+        <h2 class="text-2xl font-bold">{{ plan.goal?.title || plan.name || 'Untitled Plan' }}</h2>
         <div class="flex items-center gap-2 text-muted mt-1">
           <UIcon name="i-heroicons-calendar" class="w-4 h-4" />
           <span>Target: {{ formatDate(plan.targetDate) }}</span>
@@ -14,13 +14,13 @@
         <div class="text-sm text-muted">Current Phase</div>
         <div class="font-bold text-lg text-primary">{{ currentBlock?.name || 'Prep' }}</div>
         <div class="flex gap-2 justify-end mt-1">
-          <UButton size="xs" color="gray" variant="ghost" icon="i-heroicons-adjustments-horizontal" @click="showAdaptModal = true">
+          <UButton size="xs" color="neutral" variant="ghost" icon="i-heroicons-adjustments-horizontal" @click="showAdaptModal = true">
             Adapt Plan
           </UButton>
-          <UButton size="xs" color="gray" variant="ghost" icon="i-heroicons-bookmark" @click="showSaveTemplateModal = true">
+          <UButton size="xs" color="neutral" variant="ghost" icon="i-heroicons-bookmark" @click="showSaveTemplateModal = true">
             Save Template
           </UButton>
-          <UButton size="xs" color="red" variant="ghost" icon="i-heroicons-trash" @click="abandonPlan">
+          <UButton size="xs" color="error" variant="ghost" icon="i-heroicons-trash" @click="abandonPlan">
             Abandon
           </UButton>
         </div>
@@ -40,7 +40,7 @@
           </UFormField>
           
           <div class="flex justify-end gap-2 mt-4">
-            <UButton color="gray" variant="ghost" @click="showSaveTemplateModal = false">Cancel</UButton>
+            <UButton color="neutral" variant="ghost" @click="showSaveTemplateModal = false">Cancel</UButton>
             <UButton color="primary" :loading="savingTemplate" @click="saveTemplate">Save</UButton>
           </div>
         </div>
@@ -168,7 +168,7 @@
                     <UIcon name="i-heroicons-chart-bar" class="w-4 h-4 inline" title="Structured Workout" />
                     <UButton
                       v-if="selectedWeek?.workouts.some((w: any) => !w.structuredWorkout)"
-                      size="2xs"
+                      size="xs"
                       color="primary"
                       variant="ghost"
                       icon="i-heroicons-sparkles"
@@ -218,7 +218,7 @@
                     <UButton
                       v-else
                       size="xs"
-                      color="gray"
+                      color="neutral"
                       variant="ghost"
                       icon="i-heroicons-sparkles"
                       :loading="generatingStructureForWorkoutId === workout.id"
@@ -228,7 +228,7 @@
                   </div>
                 </td>
                 <td class="px-4 py-3 text-right">
-                  <UBadge :color="workout.completed ? 'green' : 'gray'" size="xs">
+                  <UBadge :color="workout.completed ? 'success' : 'neutral'" size="xs">
                     {{ workout.completed ? 'Done' : 'Planned' }}
                   </UBadge>
                 </td>
