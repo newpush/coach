@@ -33,7 +33,9 @@
              :plan="activePlan" 
              :user-ftp="userFtp" 
              :is-generating="isPolling"
+             :should-auto-generate="autoTriggerStructure"
              @refresh="fetchActivePlan" 
+             @generation-started="autoTriggerStructure = false"
            />
         </div>
 
@@ -87,6 +89,7 @@ useHead({
 
 const showWizard = ref(false)
 const isPolling = ref(false)
+const autoTriggerStructure = ref(false)
 const toast = useToast()
 
 const { data, status, refresh } = await useFetch<any>('/api/plans/active')
@@ -150,7 +153,7 @@ function startPolling() {
         })
         
         // Pass a signal to PlanDashboard to auto-generate structure
-        activePlan.value.shouldAutoGenerateStructure = true
+        autoTriggerStructure.value = true
       }
     }
   }, 3000)

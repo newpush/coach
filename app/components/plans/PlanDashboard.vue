@@ -158,7 +158,7 @@
             </div>
             <div class="p-3 bg-gray-50 dark:bg-gray-900 rounded-lg">
               <div class="text-xs text-muted">Volume</div>
-              <div class="font-bold">{{ selectedWeek.volumeTargetMinutes / 60 }}h</div>
+              <div class="font-bold">{{ Math.round((selectedWeek.volumeTargetMinutes / 60) * 10) / 10 }}h</div>
             </div>
             <div class="p-3 bg-gray-50 dark:bg-gray-900 rounded-lg">
               <div class="text-xs text-muted">TSS</div>
@@ -304,9 +304,10 @@ const props = defineProps<{
   plan: any
   userFtp?: number
   isGenerating?: boolean
+  shouldAutoGenerate?: boolean
 }>()
 
-const emit = defineEmits(['refresh'])
+const emit = defineEmits(['refresh', 'generation-started'])
 
 const selectedBlockId = ref<string | null>(null)
 const selectedWeekId = ref<string | null>(null)
@@ -575,15 +576,17 @@ async function generateWorkoutsForBlock() {
     }
   }
 
-  async function abandonPlan() {
-    if (!confirm('Are you sure you want to abandon this plan? Future workouts will be removed.')) return
-
+  async function confirmAbandon() {
+    abandoning.value = true
     try {
       await $fetch(`/api/plans/${props.plan.id}/abandon`, { method: 'POST' })
       toast.add({ title: 'Plan Abandoned', color: 'success' })
       emit('refresh')
+      showAbandonModal.value = false
     } catch (error: any) {
       toast.add({ title: 'Failed to abandon plan', description: error.message, color: 'error' })
+    } finally {
+      abandoning.value = false
     }
   }
 
@@ -633,14 +636,25 @@ async function generateWorkoutsForBlock() {
       }
 
       // 3. Auto-trigger structure generation if requested
-      if (newPlan.shouldAutoGenerateStructure) {
+      if (props.shouldAutoGenerate) {
         // Wait a tick for computed properties to update
         nextTick(() => {
           generateAllStructureForWeek()
+          emit('generation-started')
         })
       }
     }
   }, { immediate: true })
+
+  // Watch specifically for the auto-generate prop to change
+  watch(() => props.shouldAutoGenerate, (should) => {
+    if (should) {
+      nextTick(() => {
+        generateAllStructureForWeek()
+        emit('generation-started')
+      })
+    }
+  })
 
   // When user manually changes block, update week
   watch(selectedBlockId, (newId) => {
