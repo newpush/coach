@@ -8,6 +8,15 @@
         <template #right>
           <UButton 
             v-if="activePlan"
+            color="neutral" 
+            variant="ghost" 
+            icon="i-heroicons-share" 
+            @click="isShareModalOpen = true"
+          >
+            <span class="hidden sm:inline">Share</span>
+          </UButton>
+          <UButton 
+            v-if="activePlan"
             size="xs" 
             color="gray" 
             variant="ghost" 
