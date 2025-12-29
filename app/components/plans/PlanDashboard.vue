@@ -286,14 +286,14 @@
               </tr>
               <tr v-if="selectedWeek.workouts.length === 0">
                 <td :colspan="userFtp ? 8 : 7" class="px-4 py-8 text-center text-muted">
-                  <div v-if="isGenerating" class="flex flex-col items-center justify-center space-y-2 text-yellow-600">
+                  <div v-if="isGenerating" class="flex flex-col items-center justify-center space-y-2 text-yellow-600 py-8">
                     <UIcon name="i-heroicons-arrow-path" class="w-8 h-8 animate-spin" />
                     <span class="font-medium animate-pulse">Generating Workouts...</span>
                     <span class="text-xs text-muted">This may take a minute as AI designs your optimal week.</span>
                   </div>
                   <div v-else>
                     No workouts generated for this week yet.
-                    <div class="mt-2">
+                    <div class="mt-2 flex justify-center">
                       <UButton 
                         size="xs" 
                         color="primary" 
