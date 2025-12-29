@@ -182,11 +182,11 @@
             <thead class="bg-gray-50 dark:bg-gray-900 text-muted">
               <tr>
                 <th class="w-8"></th>
+                <th class="px-4 py-2 text-left w-10"></th>
                 <th class="px-4 py-2 text-left">Day</th>
                 <th class="px-4 py-2 text-left">Workout</th>
-                <th class="px-4 py-2 text-left">Duration</th>
-                <th class="px-4 py-2 text-left">TSS</th>
-                <th v-if="userFtp" class="px-4 py-2 text-left">Power</th>
+                <th class="px-4 py-2 text-left">Duration / Metric</th>
+                <th class="px-4 py-2 text-left">Visual</th>
                 <th class="px-4 py-2 text-center">
                   <div class="flex items-center justify-center gap-1">
                     <UIcon name="i-heroicons-chart-bar" class="w-4 h-4 inline" title="Structured Workout" />
@@ -220,18 +220,45 @@
                 <td class="pl-2 text-center cursor-move text-gray-300 group-hover:text-gray-500">
                   <UIcon name="i-heroicons-bars-2" class="w-4 h-4" />
                 </td>
+                <td class="px-4 py-3 text-center border-l-4" :class="getSportColorClass(workout.type)">
+                   <UIcon :name="getWorkoutIcon(workout.type)" class="w-5 h-5 text-muted" />
+                </td>
                 <td class="px-4 py-3 font-medium">{{ formatDay(workout.date) }}</td>
                 <td class="px-4 py-3">
                   <div class="font-semibold">{{ workout.title }}</div>
                   <div class="text-xs text-muted">{{ workout.type }}</div>
                 </td>
-                <td class="px-4 py-3">{{ Math.round(workout.durationSec / 60) }}m</td>
-                <td class="px-4 py-3">{{ Math.round(workout.tss) }}</td>
-                <td v-if="userFtp" class="px-4 py-3">
-                  <span class="font-semibold text-gray-700 dark:text-gray-300">
-                    {{ Math.round((workout.workIntensity || 0) * userFtp) }}W
-                  </span>
-                  <span class="text-xs text-muted ml-1">({{ Math.round((workout.workIntensity || 0) * 100) }}%)</span>
+                <td class="px-4 py-3">
+                    <div>{{ Math.round(workout.durationSec / 60) }}m</div>
+                    <div v-if="workout.distanceMeters" class="text-xs text-muted">
+                        {{ Math.round(workout.distanceMeters / 1000 * 10) / 10 }} km
+                    </div>
+                </td>
+                <td class="px-4 py-3">
+                    <!-- Dynamic Visual Column -->
+                    <div v-if="workout.type === 'Ride' || workout.type === 'VirtualRide'">
+                        <span class="font-semibold text-gray-700 dark:text-gray-300">
+                            {{ Math.round(workout.tss || 0) }} TSS
+                        </span>
+                        <div v-if="userFtp && workout.workIntensity" class="text-xs text-muted">
+                            {{ Math.round((workout.workIntensity || 0) * userFtp) }}W
+                        </div>
+                    </div>
+                    <div v-else-if="workout.type === 'Run'">
+                         <div class="text-xs font-bold text-red-500 bg-red-50 dark:bg-red-900/20 px-2 py-1 rounded inline-block">
+                            Run Focus
+                         </div>
+                    </div>
+                    <div v-else-if="workout.type === 'Swim'">
+                         <div class="text-xs font-bold text-cyan-500 bg-cyan-50 dark:bg-cyan-900/20 px-2 py-1 rounded inline-block">
+                            {{ Math.round(workout.distanceMeters || 0) }}m
+                         </div>
+                    </div>
+                    <div v-else-if="workout.type === 'Gym' || workout.type === 'WeightTraining'">
+                         <div class="flex gap-1">
+                            <span class="text-[10px] font-bold uppercase bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300 px-1.5 py-0.5 rounded">Strength</span>
+                         </div>
+                    </div>
                 </td>
                 <td class="px-4 py-3 text-center">
                   <div class="flex justify-center">
@@ -348,6 +375,33 @@ function getBlockStatusColor(block: any) {
   if (selectedBlockId.value === block.id) return 'bg-white border-primary scale-125'
   // Logic for past/future based on date could go here
   return 'bg-primary border-primary'
+}
+
+function getWorkoutIcon(type: string) {
+  const map: Record<string, string> = {
+    'Ride': 'i-heroicons-bolt',
+    'VirtualRide': 'i-heroicons-bolt',
+    'Run': 'i-heroicons-fire',
+    'Swim': 'i-heroicons-drop',
+    'Gym': 'i-heroicons-trophy',
+    'WeightTraining': 'i-heroicons-trophy',
+    'Rest': 'i-heroicons-moon',
+    'Active Recovery': 'i-heroicons-arrow-path-rounded-square'
+  }
+  return map[type] || 'i-heroicons-question-mark-circle'
+}
+
+function getSportColorClass(type: string) {
+    const map: Record<string, string> = {
+        'Ride': 'border-green-500',
+        'VirtualRide': 'border-green-500',
+        'Run': 'border-orange-500',
+        'Swim': 'border-cyan-500',
+        'Gym': 'border-purple-500',
+        'WeightTraining': 'border-purple-500',
+        'Rest': 'border-gray-200 dark:border-gray-700'
+    }
+    return map[type] || 'border-gray-200'
 }
 
 function navigateToWorkout(workoutId: string) {

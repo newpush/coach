@@ -60,7 +60,7 @@
         <UModal 
           v-if="showWizard"
           v-model:open="showWizard" 
-          :ui="{ width: 'sm:max-w-4xl' }"
+          :ui="{ content: 'w-full sm:max-w-4xl' }"
           title="Create Training Plan"
           description="Follow the steps to configure your personalized training plan."
         >
