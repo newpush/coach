@@ -1,16 +1,18 @@
 <template>
-  <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
-    <div class="flex justify-between items-center mb-4">
+  <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-4 sm:p-6">
+    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-2">
       <h3 class="text-lg font-semibold">Power Profile</h3>
-      <div class="flex gap-2">
+      <div class="flex gap-2 w-full sm:w-auto overflow-x-auto pb-1 sm:pb-0">
         <UButton 
           size="sm" 
           color="neutral" 
           variant="ghost" 
           icon="i-heroicons-chat-bubble-left-right" 
           @click="$emit('add-messages')"
+          class="whitespace-nowrap"
         >
-          Add Messages
+          <span class="hidden sm:inline">Add Messages</span>
+          <span class="inline sm:hidden">Messages</span>
         </UButton>
         <UButton 
           size="sm" 
@@ -29,7 +31,8 @@
           :loading="generating" 
           @click="$emit('regenerate')"
         >
-          Regenerate
+          <span class="hidden sm:inline">Regenerate</span>
+          <span class="inline sm:hidden">Redo</span>
         </UButton>
       </div>
     </div>

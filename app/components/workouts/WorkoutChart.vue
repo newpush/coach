@@ -21,7 +21,7 @@
       <div class="relative bg-gray-50 dark:bg-gray-900 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
         <!-- Y-axis labels -->
         <div class="flex">
-          <div class="flex flex-col justify-between text-xs text-muted w-12 pr-2 text-right" style="height: 200px">
+          <div class="flex flex-col justify-between text-xs text-muted w-8 sm:w-12 pr-1 sm:pr-2 text-right" style="height: 200px">
             <span>120%</span>
             <span>100%</span>
             <span>80%</span>
@@ -31,7 +31,7 @@
           </div>
 
           <!-- Chart area -->
-          <div class="flex-1 relative" style="height: 200px">
+          <div class="flex-1 relative min-w-0" style="height: 200px">
             <!-- Grid lines -->
             <div class="absolute inset-0 flex flex-col justify-between">
               <div v-for="i in 6" :key="i" class="border-t border-gray-200 dark:border-gray-700"></div>
@@ -273,7 +273,7 @@ const zoneDistribution = computed(() => {
     
     // Find zone
     const zone = distribution.find(z => power <= z.max) || distribution[distribution.length - 1]
-    zone.duration += duration
+    if (zone) zone.duration += duration
   })
 
   return distribution
