@@ -104,37 +104,37 @@
                       : 'border-transparent bg-gray-50 dark:bg-gray-800 opacity-75 cursor-default'
                   ]"
                >
-                  <div class="flex justify-between items-start mb-1">
-                    <span class="text-sm font-medium text-gray-900 dark:text-white line-clamp-1">{{ workout.title }}</span>
-                    <UIcon v-if="workout.shareToken?.token" name="i-heroicons-arrow-top-right-on-square" class="w-4 h-4 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity absolute top-3 right-3" />
+                  <div class="flex items-center justify-between gap-4">
+                    <div class="flex-1 min-w-0">
+                      <div class="flex justify-between items-start mb-1 pr-6">
+                        <span class="text-sm font-medium text-gray-900 dark:text-white line-clamp-1">{{ workout.title }}</span>
+                      </div>
+                      <div class="flex items-center gap-3 text-xs text-gray-500 dark:text-gray-400">
+                        <span class="flex items-center gap-1">
+                          <UIcon name="i-heroicons-calendar" class="w-3 h-3" />
+                          {{ formatDay(workout.date) }}
+                        </span>
+                        <span v-if="workout.durationSec" class="flex items-center gap-1">
+                          <UIcon name="i-heroicons-clock" class="w-3 h-3" />
+                          {{ formatDuration(workout.durationSec) }}
+                        </span>
+                        <span v-if="workout.tss" class="flex items-center gap-1 text-amber-600 dark:text-amber-500">
+                          <UIcon name="i-heroicons-bolt" class="w-3 h-3" />
+                          {{ Math.round(workout.tss) }} TSS
+                        </span>
+                      </div>
+                    </div>
+
+                    <div v-if="workout.structuredWorkout" class="shrink-0">
+                       <MiniWorkoutChart
+                          :workout="workout.structuredWorkout"
+                          class="w-20 h-10 opacity-75"
+                       />
+                    </div>
                   </div>
-                  <div class="flex items-center gap-3 text-xs text-gray-500 dark:text-gray-400">
-                    <span class="flex items-center gap-1">
-                      <UIcon name="i-heroicons-calendar" class="w-3 h-3" />
-                      {{ formatDay(workout.date) }}
-                    </span>
-                    <span v-if="workout.durationSec" class="flex items-center gap-1">
-                      <UIcon name="i-heroicons-clock" class="w-3 h-3" />
-                      {{ formatDuration(workout.durationSec) }}
-                    </span>
-                    <span v-if="workout.tss" class="flex items-center gap-1 text-amber-600 dark:text-amber-500">
-                      <UIcon name="i-heroicons-bolt" class="w-3 h-3" />
-                      {{ Math.round(workout.tss) }} TSS
-                    </span>
-                  </div>
+
+                  <UIcon v-if="workout.shareToken?.token" name="i-heroicons-arrow-top-right-on-square" class="w-4 h-4 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity absolute top-3 right-3" />
                </NuxtLink>
-            </div>
-            
-            <div class="p-2 border-t border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/50">
-              <div class="flex flex-wrap gap-2 justify-end">
-                  <div v-for="workout in week.workouts" :key="workout.id + '_mini'" class="">
-                    <MiniWorkoutChart
-                        v-if="workout.structuredWorkout"
-                        :workout="workout.structuredWorkout"
-                        class="w-16 h-8 opacity-75"
-                     />
-                  </div>
-              </div>
             </div>
           </div>
         </div>

@@ -147,7 +147,7 @@
             <div class="text-xs font-semibold text-center px-1" :class="selectedBlockId === block.id ? 'text-primary' : 'text-muted'">
                 {{ block.name }}
             </div>
-            <div class="text-[10px] text-muted hidden group-hover:block">{{ block.durationWeeks }}w</div>
+            <div class="text-[10px] text-muted">{{ block.durationWeeks }}w</div>
             </div>
         </div>
       </div>
