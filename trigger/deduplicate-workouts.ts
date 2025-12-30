@@ -1,6 +1,7 @@
 import { logger, task } from "@trigger.dev/sdk/v3";
 import { prisma } from "../server/utils/db";
 import { workoutRepository } from "../server/utils/repositories/workoutRepository";
+import { recalculateStressAfterDate } from "../server/utils/calculate-workout-stress";
 import { userBackgroundQueue } from "./queues";
 
 interface DuplicateGroup {
@@ -211,6 +212,23 @@ export const deduplicateWorkoutsTask = task({
         totalDeleted: deletedCount,
         totalKept: keptCount
       });
+      
+      // If any duplicates were found and processed, recalculate stress scores
+      if (duplicateGroups.length > 0) {
+        // Find the earliest date among all workouts in all duplicate groups
+        let earliestDate = new Date();
+        for (const group of duplicateGroups) {
+          for (const workout of group.workouts) {
+            const workoutDate = new Date(workout.date);
+            if (workoutDate < earliestDate) {
+              earliestDate = workoutDate;
+            }
+          }
+        }
+        
+        logger.log(`Triggering training stress recalculation after ${earliestDate.toISOString()}`);
+        await recalculateStressAfterDate(actualUserId, earliestDate);
+      }
       
       return {
         success: true,

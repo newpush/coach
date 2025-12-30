@@ -125,6 +125,10 @@ export default defineEventHandler(async (event) => {
       })
     })
 
+    // Recalculate stress scores for the user after the earliest workout date in the merge
+    const earliestDate = primaryWorkout.date < secondaryWorkout.date ? primaryWorkout.date : secondaryWorkout.date
+    await recalculateStressAfterDate((session.user as any).id, earliestDate)
+
     return { success: true }
   } catch (error) {
     console.error('Error merging workouts:', error)

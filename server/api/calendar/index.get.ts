@@ -166,6 +166,9 @@ export default defineEventHandler(async (event) => {
     orderBy: { date: 'asc' }
   })
   
+  // Create a set of plannedWorkoutIds that are already represented by completed workouts
+  const completedPlannedIds = new Set(workouts.map(w => w.plannedWorkoutId).filter(Boolean))
+  
   // Group activities by date for nutrition injection
   const activitiesByDate = new Map()
   
@@ -233,6 +236,9 @@ export default defineEventHandler(async (event) => {
   
   // Process Planned Workouts
   for (const p of plannedWorkouts) {
+    // Skip planned workouts that are already completed and linked to an actual workout
+    if (completedPlannedIds.has(p.id)) continue
+    
     // Determine status
     let status = 'planned'
     if (p.completed) status = 'completed_plan'
