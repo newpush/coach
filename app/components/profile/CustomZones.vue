@@ -1,11 +1,10 @@
 <template>
   <div class="space-y-6 animate-fade-in">
-    <div class="flex items-center justify-between">
+    <div class="flex items-center">
       <h2 class="text-lg font-semibold flex items-center gap-2">
         <UIcon name="i-heroicons-chart-bar" class="w-5 h-5 text-primary" />
         Custom Zones
       </h2>
-      <UButton variant="soft" size="sm" icon="i-heroicons-plus">Add Zone System</UButton>
     </div>
     
     <div class="space-y-4">

@@ -257,11 +257,11 @@
           </button>
         </div>
           <div v-if="editingField === 'dob'" class="flex gap-2">
-          <UInput v-model="editValue" type="date" size="sm" class="w-full" autofocus @keyup.enter="saveField" @keyup.esc="cancelEdit" />
+          <UInput :model-value="editValue ? new Date(editValue).toISOString().split('T')[0] : ''" @update:model-value="val => editValue = val" type="date" size="sm" class="w-full" autofocus @keyup.enter="saveField" @keyup.esc="cancelEdit" />
           <UButton size="xs" color="primary" variant="ghost" icon="i-heroicons-check" @click="saveField" />
           <UButton size="xs" color="neutral" variant="ghost" icon="i-heroicons-x-mark" @click="cancelEdit" />
         </div>
-        <p v-else class="font-medium text-lg">{{ modelValue.dob }}</p>
+        <p v-else class="font-medium text-lg">{{ modelValue.dob ? new Date(modelValue.dob).toLocaleDateString() : 'Not set' }}</p>
       </div>
       
         <!-- City -->
@@ -327,6 +327,36 @@
         <p v-else class="font-medium text-lg">{{ modelValue.timezone }}</p>
       </div>
     </div>
+    
+    <!-- Autodetect Confirmation Modal -->
+    <UModal v-model:open="showConfirmModal" title="Confirm Profile Updates" description="We found differences between your current profile and your connected apps. Review the changes below:">
+      <template #body>
+        <ul class="divide-y divide-gray-200 dark:divide-gray-700 border border-gray-200 dark:border-gray-700 rounded-md">
+          <li v-for="(value, key) in pendingDiffs" :key="key" class="p-3 text-sm flex items-center justify-between">
+            <span class="font-medium text-gray-700 dark:text-gray-200 capitalize">
+              {{ formatFieldName(key) }}
+            </span>
+            <div class="flex items-center gap-3">
+               <div class="text-right">
+                  <span class="block text-xs text-gray-500 line-through mr-2">
+                      {{ formatValue(key, modelValue[key]) }}
+                  </span>
+               </div>
+               <div class="text-right font-semibold text-primary">
+                  {{ formatValue(key, value) }}
+               </div>
+            </div>
+          </li>
+        </ul>
+      </template>
+      
+      <template #footer>
+        <div class="flex justify-end gap-2">
+          <UButton color="neutral" variant="ghost" @click="showConfirmModal = false">Cancel</UButton>
+          <UButton color="primary" @click="confirmAutodetect">Apply Changes</UButton>
+        </div>
+      </template>
+    </UModal>
   </div>
 </template>
 
@@ -345,6 +375,11 @@ const timezones = Intl.supportedValuesOf('timeZone')
 const autodetecting = ref(false)
 const toast = useToast()
 
+// Confirmation Modal State
+const showConfirmModal = ref(false)
+const pendingDiffs = ref<any>({})
+const pendingDetectedProfile = ref<any>({})
+
 async function autodetectProfile() {
   autodetecting.value = true
   try {
@@ -352,23 +387,14 @@ async function autodetectProfile() {
       method: 'POST'
     })
     
-    if (response.success && response.updates) {
-      // Emit updates to parent
-      const newProfile = { ...props.modelValue, ...response.updates }
-      emit('update:modelValue', newProfile)
-      
-      // Emit event for parent to handle other updates (like zones)
-      emit('autodetect', response.profile)
-      
-      toast.add({
-        title: 'Profile Updated',
-        description: `Updated ${Object.keys(response.updates).length} fields from connected apps.`,
-        color: 'success'
-      })
+    if (response.success && response.diff && Object.keys(response.diff).length > 0) {
+      pendingDiffs.value = response.diff
+      pendingDetectedProfile.value = response.detected
+      showConfirmModal.value = true
     } else {
       toast.add({
-        title: 'No Updates',
-        description: response.message || 'No new data found.',
+        title: 'No Updates Found',
+        description: response.message || 'Your profile is already in sync with connected apps.',
         color: 'neutral'
       })
     }
@@ -381,6 +407,43 @@ async function autodetectProfile() {
   } finally {
     autodetecting.value = false
   }
+}
+
+function confirmAutodetect() {
+    // Merge pending diffs into modelValue
+    const newProfile = { ...props.modelValue, ...pendingDiffs.value }
+    
+    // Emit updates to parent
+    emit('update:modelValue', newProfile)
+    
+    // Emit event for parent to handle other updates (like zones)
+    emit('autodetect', pendingDetectedProfile.value)
+    
+    toast.add({
+        title: 'Profile Updated',
+        description: `Updated ${Object.keys(pendingDiffs.value).length} fields from connected apps.`,
+        color: 'success'
+    })
+    
+    showConfirmModal.value = false
+}
+
+function formatFieldName(key: string | number) {
+    const k = String(key)
+    if (k === 'ftp') return 'FTP'
+    if (k === 'maxHr') return 'Max HR'
+    if (k === 'restingHr') return 'Resting HR'
+    if (k === 'hrZones') return 'Heart Rate Zones'
+    if (k === 'powerZones') return 'Power Zones'
+    return k.charAt(0).toUpperCase() + k.slice(1).replace(/([A-Z])/g, ' $1')
+}
+
+function formatValue(key: string | number, value: any) {
+    if (value === null || value === undefined) return 'Not set'
+    if (key === 'hrZones' || key === 'powerZones') {
+        return `${(value as any[]).length} zones`
+    }
+    return value
 }
 
 function startEdit(field: string) {

@@ -106,19 +106,6 @@ const { data: profileData, refresh: refreshProfile } = await useFetch('/api/prof
   key: 'user-profile'
 })
 
-watchEffect(() => {
-  if (profileData.value?.profile) {
-    profile.value = { ...profile.value, ...profileData.value.profile }
-    
-    if (profileData.value.profile.hrZones) {
-      hrZones.value = profileData.value.profile.hrZones
-    }
-    if (profileData.value.profile.powerZones) {
-      powerZones.value = profileData.value.profile.powerZones
-    }
-  }
-})
-
 async function handleProfileUpdate(newProfile: any) {
   console.log('Profile update received:', newProfile)
   // Use Object.assign to update the existing reactive object
@@ -155,35 +142,62 @@ async function handleProfileUpdate(newProfile: any) {
   }
 }
 
-function handleAutodetect(updatedProfile: any) {
+async function handleAutodetect(updatedProfile: any) {
   if (updatedProfile) {
+    // Handle Zones
     if (updatedProfile.hrZones) {
-      hrZones.value = updatedProfile.hrZones
+      // Update local state and save
+      await updateZones('hr', updatedProfile.hrZones)
     }
     if (updatedProfile.powerZones) {
-      powerZones.value = updatedProfile.powerZones
+      await updateZones('power', updatedProfile.powerZones)
     }
-    // Update other profile fields if needed, though BasicSettings handles its own model update
-    // But we should sync profile.value to ensure consistency
-    Object.assign(profile.value, updatedProfile)
+    
+    // Handle Basic Settings
+    // Remove zones from profile object to avoid double saving/conflicts if passing to handleProfileUpdate
+    const basicUpdates = { ...updatedProfile }
+    delete basicUpdates.hrZones
+    delete basicUpdates.powerZones
+    
+    if (Object.keys(basicUpdates).length > 0) {
+      await handleProfileUpdate(basicUpdates)
+    }
   }
 }
 
 const hrZones = ref<any[]>([
-    { name: 'Z1 Recovery', min: 60, max: 120 },
-    { name: 'Z2 Endurance', min: 121, max: 145 },
-    { name: 'Z3 Tempo', min: 146, max: 160 },
-    { name: 'Z4 Threshold', min: 161, max: 175 },
-    { name: 'Z5 Anaerobic', min: 176, max: 185 }
+    { name: 'Z1 Recovery', min: 0, max: 0 },
+    { name: 'Z2 Aerobic', min: 0, max: 0 },
+    { name: 'Z3 Tempo', min: 0, max: 0 },
+    { name: 'Z4 SubThreshold', min: 0, max: 0 },
+    { name: 'Z5 SuperThreshold', min: 0, max: 0 },
+    { name: 'Z6 Aerobic Capacity', min: 0, max: 0 },
+    { name: 'Z7 Anaerobic', min: 0, max: 0 }
 ])
 
 const powerZones = ref<any[]>([
-    { name: 'Z1 Active Recovery', min: 0, max: 137 },
-    { name: 'Z2 Endurance', min: 137, max: 187 },
-    { name: 'Z3 Tempo', min: 188, max: 225 },
-    { name: 'Z4 Threshold', min: 226, max: 262 },
-    { name: 'Z5 VO2 Max', min: 263, max: 999 }
+    { name: 'Z1 Active Recovery', min: 0, max: 0 },
+    { name: 'Z2 Endurance', min: 0, max: 0 },
+    { name: 'Z3 Tempo', min: 0, max: 0 },
+    { name: 'SS Sweet Spot', min: 0, max: 0 },
+    { name: 'Z4 Threshold', min: 0, max: 0 },
+    { name: 'Z5 VO2 Max', min: 0, max: 0 },
+    { name: 'Z6 Anaerobic', min: 0, max: 0 },
+    { name: 'Z7 Neuromuscular', min: 0, max: 0 }
 ])
+
+watchEffect(() => {
+  if (profileData.value?.profile) {
+    profile.value = { ...profile.value, ...profileData.value.profile }
+    
+    if (profileData.value.profile.hrZones) {
+      hrZones.value = profileData.value.profile.hrZones
+    }
+    if (profileData.value.profile.powerZones) {
+      powerZones.value = profileData.value.profile.powerZones
+    }
+  }
+})
 
 // Save zones to API when updated
 async function updateZones(type: 'hr' | 'power', zones: any[]) {
