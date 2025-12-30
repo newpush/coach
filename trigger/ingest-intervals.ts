@@ -50,6 +50,13 @@ export const ingestIntervalsTask = task({
       const start = new Date(startDate);
       const end = new Date(endDate);
       
+      // Calculate 'now' to cap historical data fetching
+      const now = new Date();
+      // Cap at end of today to allow for timezone differences but prevent far future
+      now.setHours(23, 59, 59, 999);
+      
+      const historicalEnd = end > now ? now : end;
+      
       // Fetch and update athlete profile data first
       /* 
       // DISABLED: Automatic profile updates can overwrite user's manual settings. 
@@ -83,7 +90,7 @@ export const ingestIntervalsTask = task({
       
       // Fetch activities
       logger.log("Fetching activities...");
-      const allActivities = await fetchIntervalsWorkouts(integration, start, end);
+      const allActivities = await fetchIntervalsWorkouts(integration, start, historicalEnd);
       logger.log(`Fetched ${allActivities.length} activities from Intervals.icu`);
       
       // Filter out incomplete Strava activities (they don't have full data available via API)
@@ -105,7 +112,7 @@ export const ingestIntervalsTask = task({
       
       // Fetch wellness data
       logger.log("Fetching wellness data...");
-      const wellnessData = await fetchIntervalsWellness(integration, start, end);
+      const wellnessData = await fetchIntervalsWellness(integration, start, historicalEnd);
       logger.log(`Fetched ${wellnessData.length} wellness entries from Intervals.icu`);
       
       // Fetch planned workouts (import all categories)
