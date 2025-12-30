@@ -27,6 +27,33 @@
       </div>
     </UCard>
 
+    <!-- Athlete Profile Management -->
+    <UCard>
+      <template #header>
+        <div class="flex items-center gap-2">
+          <UIcon name="i-heroicons-user-circle" class="w-5 h-5 text-warning" />
+          <h2 class="text-xl font-semibold">Athlete Profile</h2>
+        </div>
+      </template>
+      
+      <div class="space-y-4">
+        <div>
+          <h3 class="font-medium mb-1">Wipe Athlete Profiles</h3>
+          <p class="text-sm text-muted mb-3">
+            Remove all AI-generated athlete profiles and clear cached performance scores. This is useful if your scores were calculated using duplicate workout data.
+          </p>
+          <UButton 
+            color="warning" 
+            variant="soft"
+            :loading="wipingProfiles"
+            @click="confirmWipeProfiles"
+          >
+            Wipe Profiles & Scores
+          </UButton>
+        </div>
+      </div>
+    </UCard>
+
     <!-- Account Deletion -->
     <UCard>
       <template #header>
@@ -57,6 +84,7 @@
 const toast = useToast()
 const { signOut } = useAuth()
 const clearingSchedule = ref(false)
+const wipingProfiles = ref(false)
 const deletingAccount = ref(false)
 
 async function confirmClearSchedule() {
@@ -84,6 +112,34 @@ async function confirmClearSchedule() {
     })
   } finally {
     clearingSchedule.value = false
+  }
+}
+
+async function confirmWipeProfiles() {
+  if (!confirm('Are you sure? This will permanently delete all AI athlete profiles and reset your performance scores (Fitness, Recovery, etc.). You will need to regenerate them from the dashboard.')) {
+    return
+  }
+
+  wipingProfiles.value = true
+  try {
+    const result: any = await $fetch('/api/profile/athlete-profiles', {
+      method: 'DELETE'
+    })
+    
+    toast.add({
+      title: 'Profiles Wiped',
+      description: `Removed ${result.count} profile records and reset scores.`,
+      color: 'success'
+    })
+  } catch (error) {
+    console.error('Failed to wipe profiles', error)
+    toast.add({
+      title: 'Action Failed',
+      description: 'Could not wipe athlete profiles.',
+      color: 'error'
+    })
+  } finally {
+    wipingProfiles.value = false
   }
 }
 
