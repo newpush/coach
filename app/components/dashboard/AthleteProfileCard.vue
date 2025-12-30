@@ -100,6 +100,48 @@
             </div>
           </div>
       </NuxtLink>
+
+      <!-- Training Load & Form Section -->
+      <NuxtLink
+        to="/performance"
+        class="group block w-full text-left p-4 rounded-xl bg-gray-50 dark:bg-gray-800/50 ring-1 ring-inset ring-gray-200 dark:ring-gray-700 hover:ring-primary-500/50 transition-all duration-200"
+      >
+        <div class="flex items-center justify-between mb-3">
+          <p class="text-[10px] font-bold text-purple-600 dark:text-purple-400 uppercase tracking-widest">Training Load & Form</p>
+          <UIcon name="i-heroicons-chevron-right" class="w-4 h-4 text-gray-400 group-hover:text-primary-500 transition-colors" />
+        </div>
+        
+        <div v-if="pmcLoading" class="grid grid-cols-3 gap-3 animate-pulse">
+          <div v-for="i in 3" :key="i" class="h-8 bg-gray-200 dark:bg-gray-700 rounded-lg"></div>
+        </div>
+        
+        <div v-else-if="pmcData?.summary" class="grid grid-cols-3 gap-3">
+          <div class="space-y-1">
+            <div class="flex items-center gap-1 text-[10px] font-bold text-gray-500 uppercase">
+              <UIcon name="i-heroicons-presentation-chart-line" class="w-3 h-3 text-purple-500" />
+              CTL <span class="text-[9px] font-normal lowercase opacity-70">(fitness)</span>
+            </div>
+            <div class="text-sm font-bold text-gray-900 dark:text-white">{{ (pmcData.summary.currentCTL ?? 0).toFixed(0) }}</div>
+          </div>
+          <div class="space-y-1">
+            <div class="flex items-center gap-1 text-[10px] font-bold text-gray-500 uppercase">
+              <UIcon name="i-heroicons-bolt" class="w-3 h-3 text-yellow-500" />
+              ATL <span class="text-[9px] font-normal lowercase opacity-70">(fatigue)</span>
+            </div>
+            <div class="text-sm font-bold text-gray-900 dark:text-white">{{ (pmcData.summary.currentATL ?? 0).toFixed(0) }}</div>
+          </div>
+          <div class="space-y-1">
+            <div class="flex items-center gap-1 text-[10px] font-bold text-gray-500 uppercase">
+              <UIcon name="i-heroicons-chart-bar" class="w-3 h-3" :class="getTSBIconColor(pmcData.summary.currentTSB)" />
+              TSB <span class="text-[9px] font-normal lowercase opacity-70">(form)</span>
+            </div>
+            <div class="text-sm font-bold" :class="getTSBTextColor(pmcData.summary.currentTSB)">
+              {{ (pmcData.summary.currentTSB ?? 0) > 0 ? '+' : '' }}{{ (pmcData.summary.currentTSB ?? 0).toFixed(0) }}
+            </div>
+          </div>
+        </div>
+        <div v-else class="text-xs text-gray-500 italic text-center py-1">Connect Intervals.icu for training load data</div>
+      </NuxtLink>
       
       <!-- Performance Section - Clickable -->
       <NuxtLink
@@ -175,8 +217,52 @@
 
 <script setup lang="ts">
 const userStore = useUserStore()
+const integrationStore = useIntegrationStore()
 
 defineEmits(['open-wellness'])
+
+const pmcData = ref<any>(null)
+const pmcLoading = ref(false)
+
+async function fetchPMCData() {
+  if (!integrationStore.intervalsConnected) return
+  
+  pmcLoading.value = true
+  try {
+    const data = await $fetch('/api/performance/pmc', {
+      query: { days: 7 }
+    })
+    pmcData.value = data
+  } catch (e) {
+    console.error('Failed to load PMC data', e)
+  } finally {
+    pmcLoading.value = false
+  }
+}
+
+function getTSBTextColor(tsb: number | undefined) {
+  const val = tsb ?? 0
+  if (val >= 5) return 'text-green-600 dark:text-green-400'
+  if (val < -30) return 'text-red-600 dark:text-red-400'
+  if (val < -10) return 'text-orange-600 dark:text-orange-400'
+  return 'text-gray-900 dark:text-white'
+}
+
+function getTSBIconColor(tsb: number | undefined) {
+  const val = tsb ?? 0
+  if (val >= 5) return 'text-green-500'
+  if (val < -30) return 'text-red-500'
+  if (val < -10) return 'text-orange-500'
+  return 'text-gray-400'
+}
+
+onMounted(() => {
+  fetchPMCData()
+})
+
+watch(() => integrationStore.intervalsConnected, (connected) => {
+  if (connected) fetchPMCData()
+})
 
 function formatWellnessDate(dateStr: string): string {
   const date = new Date(dateStr)

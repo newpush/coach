@@ -41,7 +41,11 @@
           <div class="text-2xl font-bold">
             {{ (pmcData.summary?.currentTSB ?? 0) > 0 ? '+' : '' }}{{ (pmcData.summary?.currentTSB ?? 0).toFixed(1) }}
           </div>
-          <div class="text-xs mt-1 capitalize">{{ pmcData.summary?.form || 'N/A' }}</div>
+          <div class="text-xs mt-1">
+            <span class="capitalize">{{ pmcData.summary?.formStatus || 'N/A' }}</span>
+            <span class="mx-1 opacity-50">•</span>
+            <span>Training Stress Balance</span>
+          </div>
         </div>
 
         <div class="bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-900/20 dark:to-blue-800/30 rounded-lg p-4 shadow">
