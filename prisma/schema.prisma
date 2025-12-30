@@ -27,6 +27,7 @@ model User {
   // Settings for Coaching
   ftp           Int?      // Functional Threshold Power (Watts)
   maxHr         Int?      // Max Heart Rate
+  lthr          Int?      // Lactate Threshold Heart Rate
   weight        Float?    // Weight in kg (for W/kg calcs)
   dob           DateTime? // Date of birth for age-based metrics
   altitude      Int?      // Home altitude in meters
