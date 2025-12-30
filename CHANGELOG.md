@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.5.1](https://github.com/newpush/coach/compare/v0.5.0...v0.5.1) (2025-12-30)
+
+
+### Bug Fixes
+
+* **api:** prevent duplicate planned workouts and recalculate stress after merge ([0edbdb0](https://github.com/newpush/coach/commit/0edbdb0b06f94b6ce3876e79e4e29050a198db4b))
+* **cli:** update changelog parser to support standard version headers ([028a787](https://github.com/newpush/coach/commit/028a7879174da6acb990eabacdcc8622de995314))
+* **pages:** separate completed and planned activity metrics in week summaries ([68f3740](https://github.com/newpush/coach/commit/68f3740402967696e7f94d4244a23f58ea332403))
+* **utils:** filter duplicate workouts from training metrics calculations ([7fbce41](https://github.com/newpush/coach/commit/7fbce41e26dfe0dbcdd5689d26d03316413d7249))
+
+
+### Features
+
+* **api:** add athlete profile wipe endpoint and ui integration ([45715d4](https://github.com/newpush/coach/commit/45715d40d0ccbfa02dad70bb6a5a2a2b1aebecd1))
+* **api:** add user and activity metrics tracking to admin stats ([1da11d6](https://github.com/newpush/coach/commit/1da11d69c916d31588ab326a3b67865068402a0a))
+* **pages:** add chat button to dashboard header and improve mobile spacing ([25c7494](https://github.com/newpush/coach/commit/25c749469fe03621203e1a8aef51eeb5ddde2185))
+* **pages:** add plan statistics and improve layout in plans list view ([128ff93](https://github.com/newpush/coach/commit/128ff932ec8296bfb1749ef1ceb373fb9e17188e))
+* **pages:** add user growth and activity charts with enhanced tooltips to admin dashboard ([e675d68](https://github.com/newpush/coach/commit/e675d6828e6a3459e2cd670d507c68c711f3cab1))
+* **plans:** add plan detail viewer with pagination and fullscreen modal ([29c4213](https://github.com/newpush/coach/commit/29c42134982f6247b4367ff805183d4da0f28db4))
+
 # [0.5.0](https://github.com/newpush/coach/compare/v0.4.0...v0.5.0) (2025-12-29)
 
 

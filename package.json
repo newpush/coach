@@ -85,5 +85,5 @@
     "cli": "tsx ./cli/index.ts"
   },
   "type": "module",
-  "version": "0.5.0"
+  "version": "0.5.1"
 }
