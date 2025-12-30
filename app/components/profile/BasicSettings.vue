@@ -173,6 +173,21 @@
         </div>
         <p v-else class="font-medium text-lg">{{ modelValue.maxHr }}</p>
       </div>
+        <!-- LTHR -->
+      <div class="group relative">
+          <div class="flex items-center gap-1 mb-1">
+          <label class="text-sm text-muted">LTHR</label>
+          <button @click="startEdit('lthr')" class="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded hover:bg-gray-100 dark:hover:bg-gray-800">
+            <UIcon name="i-heroicons-pencil" class="w-3 h-3 text-muted hover:text-primary" />
+          </button>
+        </div>
+        <div v-if="editingField === 'lthr'" class="flex gap-2">
+          <UInput v-model="editValue" type="number" size="sm" class="w-full" autofocus @keyup.enter="saveField" @keyup.esc="cancelEdit" />
+          <UButton size="xs" color="primary" variant="ghost" icon="i-heroicons-check" @click="saveField" />
+          <UButton size="xs" color="neutral" variant="ghost" icon="i-heroicons-x-mark" @click="cancelEdit" />
+        </div>
+        <p v-else class="font-medium text-lg">{{ modelValue.lthr }}</p>
+      </div>
         <!-- FTP -->
       <div class="group relative">
           <div class="flex items-center gap-1 mb-1">
@@ -431,6 +446,7 @@ function confirmAutodetect() {
 function formatFieldName(key: string | number) {
     const k = String(key)
     if (k === 'ftp') return 'FTP'
+    if (k === 'lthr') return 'LTHR'
     if (k === 'maxHr') return 'Max HR'
     if (k === 'restingHr') return 'Resting HR'
     if (k === 'hrZones') return 'Heart Rate Zones'

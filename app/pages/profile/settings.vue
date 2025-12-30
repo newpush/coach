@@ -90,6 +90,7 @@ const profile = ref({
   temperatureUnits: 'Celsius',
   restingHr: 0,
   maxHr: 0,
+  lthr: 0,
   ftp: 0,
   form: 'Absolute value',
   visibility: 'Private',
