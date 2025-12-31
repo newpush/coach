@@ -39,8 +39,11 @@ export class WorkoutConverter {
         .ele('workout');
 
     workout.steps.forEach(step => {
+      // Safely access power
+      const power = step.power || { value: 0 };
+
       // ZWO uses percentage of FTP (0.0 - 1.0+)
-      if (step.power.range) {
+      if (power.range) {
         // Ramp
         // Zwift uses <Ramp> or <Warmup>/<Cooldown> with PowerLow/PowerHigh
         const isWarmup = step.type === 'Warmup';
@@ -52,8 +55,8 @@ export class WorkoutConverter {
 
         const el = root.ele(tagName)
           .att('Duration', String(step.durationSeconds))
-          .att('PowerLow', String(step.power.range.start))
-          .att('PowerHigh', String(step.power.range.end));
+          .att('PowerLow', String(power.range.start))
+          .att('PowerHigh', String(power.range.end));
         
         if (step.cadence) el.att('Cadence', String(step.cadence));
         if (step.name) el.att('Text', step.name);
@@ -62,7 +65,7 @@ export class WorkoutConverter {
         // Steady State
         const el = root.ele('SteadyState')
           .att('Duration', String(step.durationSeconds))
-          .att('Power', String(step.power.value || 0));
+          .att('Power', String(power.value || 0));
         
         if (step.cadence) el.att('Cadence', String(step.cadence));
         if (step.name) el.att('Text', step.name); // Zwift displays this on screen
@@ -110,7 +113,9 @@ export class WorkoutConverter {
 
     // 3. Workout Steps
     workout.steps.forEach((step, index) => {
-      const isRamp = !!step.power.range;
+      // Safely access power
+      const power = step.power || { value: 0 };
+      const isRamp = !!power.range;
       
       // Target Value: Power
       // 1000 = 100% FTP?
@@ -142,27 +147,23 @@ export class WorkoutConverter {
       let powerLow = 0;
       let powerHigh = 0;
 
-      if (isRamp && step.power.range) {
-        powerLow = Math.round(step.power.range.start * ftp);
-        powerHigh = Math.round(step.power.range.end * ftp);
+      if (isRamp && power.range) {
+        powerLow = Math.round(power.range.start * ftp);
+        powerHigh = Math.round(power.range.end * ftp);
       } else {
         // Steady: Low and High define the zone window.
         // Usually target - 5% to target + 5%
-        const val = (step.power.value || 0) * ftp;
+        const val = (power.value || 0) * ftp;
         powerLow = Math.round(val - 10);
         powerHigh = Math.round(val + 10);
       }
 
       fitWriter.writeMessage('workout_step', {
-        message_index: index,
+        message_index: { value: index },
         wkt_step_name: step.name ? step.name.substring(0, 15) : undefined,
         duration_type: 'time', // 0
         duration_value: step.durationSeconds * 1000, // ms
         target_type: 'power', // 4
-        custom_target_value_low: powerLow + 1000, // Offset 1000 for Watts? No, that's specific to some devices.
-        // Wait, fit-file-writer handles types?
-        // Standard FIT: power is uint16, watts. offset 0.
-        // HOWEVER, "Workout Step Power" often has offset 1000 in definitions?
         // Let's use raw Watts.
         custom_target_value_low: powerLow,
         custom_target_value_high: powerHigh,
@@ -193,22 +194,25 @@ export class WorkoutConverter {
       const durationMins = step.durationSeconds / 60;
       const endTime = currentTime + durationMins;
 
+      // Safely access power
+      const power = step.power || { value: 0 };
+
       // Calculate start and end power as percentage (0-100)
       let startPercent = 0;
       let endPercent = 0;
 
-      if (step.power.range) {
-        startPercent = step.power.range.start * 100;
-        endPercent = step.power.range.end * 100;
+      if (power.range) {
+        startPercent = power.range.start * 100;
+        endPercent = power.range.end * 100;
       } else {
-        startPercent = (step.power.value || 0) * 100;
+        startPercent = (power.value || 0) * 100;
         endPercent = startPercent;
       }
 
       // Add points
       // Format: Time(min) Value(%)
-      lines.push(`${currentTime.toFixed(2)}\t${startPercent.toFixed(0)}`);
-      lines.push(`${endTime.toFixed(2)}\t${endPercent.toFixed(0)}`);
+      lines.push(`${currentTime.toFixed(2)}	${startPercent.toFixed(0)}`);
+      lines.push(`${endTime.toFixed(2)}	${endPercent.toFixed(0)}`);
 
       currentTime = endTime;
     });
@@ -237,21 +241,24 @@ export class WorkoutConverter {
       const durationMins = step.durationSeconds / 60;
       const endTime = currentTime + durationMins;
 
+      // Safely access power
+      const power = step.power || { value: 0 };
+
       // Calculate start and end power in Watts
       let startWatts = 0;
       let endWatts = 0;
 
-      if (step.power.range) {
-        startWatts = step.power.range.start * ftp;
-        endWatts = step.power.range.end * ftp;
+      if (power.range) {
+        startWatts = power.range.start * ftp;
+        endWatts = power.range.end * ftp;
       } else {
-        startWatts = (step.power.value || 0) * ftp;
+        startWatts = (power.value || 0) * ftp;
         endWatts = startWatts;
       }
 
       // Add points
-      lines.push(`${currentTime.toFixed(2)}\t${Math.round(startWatts)}`);
-      lines.push(`${endTime.toFixed(2)}\t${Math.round(endWatts)}`);
+      lines.push(`${currentTime.toFixed(2)}	${Math.round(startWatts)}`);
+      lines.push(`${endTime.toFixed(2)}	${Math.round(endWatts)}`);
 
       currentTime = endTime;
     });
@@ -267,6 +274,9 @@ export class WorkoutConverter {
     let currentType = '';
     
     workout.steps.forEach((step, index) => {
+      // Safely access power
+      const power = step.power || { value: 0 };
+
       // Add header if type changes
       // Intervals.icu recognizes: Warmup, Main Set, Cooldown
       // Our types: Warmup, Active, Rest, Cooldown
@@ -302,12 +312,12 @@ export class WorkoutConverter {
 
       // Format power
       let powerStr = '';
-      if (step.power.range) {
-        const start = Math.round(step.power.range.start * 100);
-        const end = Math.round(step.power.range.end * 100);
+      if (power.range) {
+        const start = Math.round(power.range.start * 100);
+        const end = Math.round(power.range.end * 100);
         powerStr = `${start}-${end}%`;
       } else {
-        const val = Math.round((step.power.value || 0) * 100);
+        const val = Math.round((power.value || 0) * 100);
         powerStr = `${val}%`;
       }
       
