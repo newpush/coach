@@ -59,7 +59,7 @@
     "commander": "^14.0.2",
     "glob": "^13.0.0",
     "magicast": "^0.3.5",
-    "next": "^13",
+    "next": "^14",
     "react": "^18",
     "react-dom": "^18",
     "release-it": "^19.1.0",
