@@ -33,10 +33,9 @@
           </div>
           <div v-else class="flex items-center gap-4">
             <div class="flex items-center gap-2">
-              <UBadge color="success">Connected</UBadge>
               <UButton
-                color="neutral"
-                variant="outline"
+                color="success"
+                variant="solid"
                 size="xs"
                 class="font-bold"
                 icon="i-heroicons-arrow-path"
@@ -92,10 +91,9 @@
           <div v-else class="flex items-center gap-4">
             <div class="flex flex-col items-end gap-1">
               <div class="flex items-center gap-2">
-                <UBadge color="success">Connected</UBadge>
                 <UButton
-                  color="neutral"
-                  variant="outline"
+                  color="success"
+                  variant="solid"
                   size="xs"
                   class="font-bold"
                   icon="i-heroicons-arrow-path"
@@ -153,19 +151,17 @@
           </div>
           <div v-else class="flex items-center gap-4">
             <div class="flex items-center gap-2">
-              <UBadge color="success">Connected</UBadge>
-              <UButton
-                color="neutral"
-                variant="outline"
-                size="xs"
-                class="font-bold"
-                icon="i-heroicons-arrow-path"
-                :loading="syncingProviders.has('withings')"
-                @click="$emit('sync', 'withings')"
-              >
-                Sync Now
-              </UButton>
-            </div>
+                          <UButton
+                            color="success"
+                            variant="solid"
+                            size="xs"
+                            class="font-bold"
+                            icon="i-heroicons-arrow-path"
+                            :loading="syncingProviders.has('withings')"
+                            @click="$emit('sync', 'withings')"
+                          >
+                            Sync Now
+                          </UButton>            </div>
             <UButton
               color="error"
               variant="ghost"
@@ -203,19 +199,17 @@
           </div>
           <div v-else class="flex items-center gap-4">
             <div class="flex items-center gap-2">
-              <UBadge color="success">Connected</UBadge>
-              <UButton
-                color="neutral"
-                variant="outline"
-                size="xs"
-                class="font-bold"
-                icon="i-heroicons-arrow-path"
-                :loading="syncingProviders.has('yazio')"
-                @click="$emit('sync', 'yazio')"
-              >
-                Sync Now
-              </UButton>
-            </div>
+                          <UButton
+                            color="success"
+                            variant="solid"
+                            size="xs"
+                            class="font-bold"
+                            icon="i-heroicons-arrow-path"
+                            :loading="syncingProviders.has('yazio')"
+                            @click="$emit('sync', 'yazio')"
+                          >
+                            Sync Now
+                          </UButton>            </div>
             <UButton
               color="error"
               variant="ghost"
@@ -253,19 +247,17 @@
           </div>
           <div v-else class="flex items-center gap-4">
             <div class="flex items-center gap-2">
-              <UBadge color="success">Connected</UBadge>
-              <UButton
-                color="neutral"
-                variant="outline"
-                size="xs"
-                class="font-bold"
-                icon="i-heroicons-arrow-path"
-                :loading="syncingProviders.has('hevy')"
-                @click="$emit('sync', 'hevy')"
-              >
-                Sync Now
-              </UButton>
-            </div>
+                          <UButton
+                            color="success"
+                            variant="solid"
+                            size="xs"
+                            class="font-bold"
+                            icon="i-heroicons-arrow-path"
+                            :loading="syncingProviders.has('hevy')"
+                            @click="$emit('sync', 'hevy')"
+                          >
+                            Sync Now
+                          </UButton>            </div>
             <UButton
               color="error"
               variant="ghost"
@@ -303,19 +295,17 @@
           </div>
           <div v-else class="flex items-center gap-4">
             <div class="flex items-center gap-2">
-              <UBadge color="success">Connected</UBadge>
-              <UButton
-                color="neutral"
-                variant="outline"
-                size="xs"
-                class="font-bold"
-                icon="i-heroicons-arrow-path"
-                :loading="syncingProviders.has('strava')"
-                @click="$emit('sync', 'strava')"
-              >
-                Sync Now
-              </UButton>
-            </div>
+                          <UButton
+                            color="success"
+                            variant="solid"
+                            size="xs"
+                            class="font-bold"
+                            icon="i-heroicons-arrow-path"
+                            :loading="syncingProviders.has('strava')"
+                            @click="$emit('sync', 'strava')"
+                          >
+                            Sync Now
+                          </UButton>            </div>
             <UButton
               color="error"
               variant="ghost"
