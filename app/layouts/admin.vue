@@ -17,6 +17,10 @@ const links = [
     icon: 'i-lucide-bar-chart-3',
     to: '/admin/stats',
   }, {
+    label: 'Database Health',
+    icon: 'i-lucide-database',
+    to: '/admin/database',
+  }, {
     label: 'Back to Site',
     icon: 'i-lucide-arrow-left',
     to: '/dashboard',
