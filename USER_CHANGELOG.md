@@ -1,3 +1,36 @@
+# 🎉 Coach Watts v0.5.3: Syncing, Stats, and Smarter Updates!
+
+Hey team! We've just rolled out a fantastic new update focused on integrating with your favorite tools and providing you with instant performance insights.
+
+Here’s what’s new in v0.5.3:
+
+---
+
+## 🔗 Major Integration: Intervals.icu Workout Sync!
+
+This is the feature you’ve been asking for! Coach Watts now plays nicely with Intervals.icu, making your planning workflow smoother than ever.
+
+*   **Instant Publishing:** You can now instantly sync your planned workouts from your Coach Watts dashboard directly onto your Intervals.icu calendar.
+*   **How it Works:** Just look for the new **'Publish' button** on your plan dashboard. A quick click is all it takes to push your training plan over! 🔄
+
+## 📈 Enhanced Performance Metrics
+
+Get a clearer picture of your current fitness and fatigue level right on your profile.
+
+*   **Key Training Insights:** We’ve added key cycling metrics, including **Training Load (CTL)** and **Form (TSB)**, directly to the Athlete Profile and Dashboard.
+*   **Track Your Freshness:** Coaches and athletes can now instantly see if the plan is working and how fresh (or fatigued) the athlete is for the next big session. 📊
+
+## 💡 Better App Experience
+
+We've improved how we communicate new features and updates to you.
+
+*   **In-App Release Notes:** You will now receive a dedicated notification on your dashboard when a new version of Coach Watts is released.
+*   **Stay Updated:** Read all the exciting changes and new features in a simple pop-up modal, without ever having to leave the application. 📰
+
+Happy Cycling!
+
+— The Coach Watts Team 🚴‍♀️💨
+
 # 🎉 Coach Watts v0.5.3: Sync Your Plan & Track Your Form!
 
 Hey Coach Watts Community!

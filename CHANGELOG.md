@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.5.4](https://github.com/newpush/coach/compare/v0.5.3...v0.5.4) (2026-01-01)
+
+
+### Bug Fixes
+
+* **server:** remove duplicate lines in workout converter ([f3736b6](https://github.com/newpush/coach/commit/f3736b62e308b7eb184082b4ffc16a16efb4205e))
+
+
+### Features
+
+* **admin:** add database health monitoring page with table statistics ([acf357f](https://github.com/newpush/coach/commit/acf357f86d50867bf0d7d4132c8371cc199f48f6))
+* **components:** add workout run chart component with zone visualization ([3259f7a](https://github.com/newpush/coach/commit/3259f7acafd3ce0f4ff7f99fd794ceb246b01c7c))
+* **trigger:** add score explanations and fix running cadence conversion to spm ([cf31675](https://github.com/newpush/coach/commit/cf3167545bc6ee1474e72975999da0c655f777f6))
+
 ## [0.5.3](https://github.com/newpush/coach/compare/v0.5.2...v0.5.3) (2025-12-31)
 
 
