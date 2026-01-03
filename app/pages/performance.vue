@@ -64,7 +64,7 @@
               :explanation="profileData.scores?.currentFitnessExplanationJson ? 'Click for detailed analysis' : profileData.scores?.currentFitnessExplanation"
               icon="i-heroicons-bolt"
               color="blue"
-              @click="(data) => openModalWithStructured(data, profileData.scores?.currentFitnessExplanationJson)"
+              @click="(data) => openModalWithStructured(data, profileData?.scores?.currentFitnessExplanationJson)"
             />
             <ScoreCard
               title="Recovery Capacity"
@@ -72,7 +72,7 @@
               :explanation="profileData.scores?.recoveryCapacityExplanationJson ? 'Click for detailed analysis' : profileData.scores?.recoveryCapacityExplanation"
               icon="i-heroicons-heart"
               color="green"
-              @click="(data) => openModalWithStructured(data, profileData.scores?.recoveryCapacityExplanationJson)"
+              @click="(data) => openModalWithStructured(data, profileData?.scores?.recoveryCapacityExplanationJson)"
             />
             <ScoreCard
               title="Nutrition Compliance"
@@ -80,7 +80,7 @@
               :explanation="profileData.scores?.nutritionComplianceExplanationJson ? 'Click for detailed analysis' : profileData.scores?.nutritionComplianceExplanation"
               icon="i-heroicons-cake"
               color="purple"
-              @click="(data) => openModalWithStructured(data, profileData.scores?.nutritionComplianceExplanationJson)"
+              @click="(data) => openModalWithStructured(data, profileData?.scores?.nutritionComplianceExplanationJson)"
             />
             <ScoreCard
               title="Training Consistency"
@@ -88,7 +88,7 @@
               :explanation="profileData.scores?.trainingConsistencyExplanationJson ? 'Click for detailed analysis' : profileData.scores?.trainingConsistencyExplanation"
               icon="i-heroicons-calendar"
               color="orange"
-              @click="(data) => openModalWithStructured(data, profileData.scores?.trainingConsistencyExplanationJson)"
+              @click="(data) => openModalWithStructured(data, profileData?.scores?.trainingConsistencyExplanationJson)"
             />
           </div>
         </div>
@@ -418,8 +418,26 @@ const distributionPeriodOptions = [
   { label: '24 Weeks', value: 24 }
 ]
 
+interface AthleteProfile {
+  scores?: {
+    lastUpdated?: string
+    currentFitness?: number
+    currentFitnessExplanation?: string
+    currentFitnessExplanationJson?: any
+    recoveryCapacity?: number
+    recoveryCapacityExplanation?: string
+    recoveryCapacityExplanationJson?: any
+    nutritionCompliance?: number
+    nutritionComplianceExplanation?: string
+    nutritionComplianceExplanationJson?: any
+    trainingConsistency?: number
+    trainingConsistencyExplanation?: string
+    trainingConsistencyExplanationJson?: any
+  }
+}
+
 // Fetch athlete profile data
-const { data: profileData, pending: profileLoading } = await useFetch('/api/scores/athlete-profile')
+const { data: profileData, pending: profileLoading } = await useFetch<AthleteProfile>('/api/scores/athlete-profile')
 
 // Fetch workout score trends
 const { data: workoutData, pending: workoutLoading } = await useFetch('/api/scores/workout-trends', {

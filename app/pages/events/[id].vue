@@ -97,7 +97,7 @@
                   :to="event.websiteUrl"
                   target="_blank"
                   icon="i-heroicons-link"
-                  color="gray"
+                  color="neutral"
                   variant="ghost"
                   size="sm"
                 >
@@ -149,7 +149,7 @@
                     Target: {{ formatDate(goal.targetDate) }}
                   </div>
                 </div>
-                <UBadge :color="goal.status === 'COMPLETED' ? 'green' : 'blue'" variant="subtle">
+                <UBadge :color="goal.status === 'COMPLETED' ? 'success' : 'primary'" variant="subtle">
                   {{ goal.status === 'COMPLETED' ? 'Completed' : 'In Progress' }}
                 </UBadge>
               </div>

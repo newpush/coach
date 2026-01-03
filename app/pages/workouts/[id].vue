@@ -286,7 +286,7 @@
                   <span class="text-sm font-medium text-blue-700 dark:text-blue-300">TSS (Load)</span>
                   <UPopover mode="hover">
                     <UIcon name="i-heroicons-information-circle" class="w-4 h-4 text-blue-500 cursor-help" />
-                    <template #panel>
+                    <template #content>
                       <div class="p-3 text-xs max-w-xs">
                         Training Stress Score (TSS) measures the workload of a session based on duration and intensity relative to your threshold.
                       </div>
@@ -304,7 +304,7 @@
                   <span class="text-sm font-medium text-green-700 dark:text-green-300">Fitness (CTL)</span>
                   <UPopover mode="hover">
                     <UIcon name="i-heroicons-information-circle" class="w-4 h-4 text-green-500 cursor-help" />
-                    <template #panel>
+                    <template #content>
                       <div class="p-3 text-xs max-w-xs">
                         Chronic Training Load (CTL) represents your long-term fitness, calculated as a weighted average of your daily TSS over the last 42 days.
                       </div>
@@ -322,7 +322,7 @@
                   <span class="text-sm font-medium text-orange-700 dark:text-orange-300">Fatigue (ATL)</span>
                   <UPopover mode="hover">
                     <UIcon name="i-heroicons-information-circle" class="w-4 h-4 text-orange-500 cursor-help" />
-                    <template #panel>
+                    <template #content>
                       <div class="p-3 text-xs max-w-xs">
                         Acute Training Load (ATL) represents your current fatigue, calculated as a weighted average of your daily TSS over the last 7 days.
                       </div>
@@ -340,7 +340,7 @@
                   <span class="text-sm font-medium opacity-80">Form (TSB)</span>
                   <UPopover mode="hover">
                     <UIcon name="i-heroicons-information-circle" class="w-4 h-4 opacity-70 cursor-help" />
-                    <template #panel>
+                    <template #content>
                       <div class="p-3 text-xs max-w-xs">
                         Training Stress Balance (TSB) is your 'Form', calculated as Fitness (CTL) minus Fatigue (ATL). Positive means you are fresh, negative means you are training hard.
                       </div>
@@ -707,7 +707,7 @@
                       </div>
                     </div>
                     <div class="flex items-center gap-2">
-                      <UBadge color="yellow" variant="subtle" size="xs">Duplicate</UBadge>
+                      <UBadge color="warning" variant="subtle" size="xs">Duplicate</UBadge>
                       <UIcon name="i-heroicons-arrow-right" class="w-4 h-4 text-gray-400" />
                     </div>
                   </div>
@@ -946,7 +946,7 @@ async function analyzeWorkout() {
   try {
     const result = await $fetch(`/api/workouts/${workout.value.id}/analyze`, {
       method: 'POST'
-    })
+    }) as any
     
     // If already completed, update immediately
     if (result.status === 'COMPLETED' && 'analysis' in result && result.analysis) {
@@ -1001,12 +1001,12 @@ function startPolling() {
     if (!workout.value) return
     
     try {
-      const updated = await $fetch(`/api/workouts/${workout.value.id}`)
+      const updated = await $fetch(`/api/workouts/${workout.value.id}`) as any
       
       // Update workout data
       workout.value.aiAnalysis = updated.aiAnalysis
-      workout.value.aiAnalysisJson = (updated as any).aiAnalysisJson
-      workout.value.aiAnalysisStatus = (updated as any).aiAnalysisStatus
+      workout.value.aiAnalysisJson = updated.aiAnalysisJson
+      workout.value.aiAnalysisStatus = updated.aiAnalysisStatus
       workout.value.aiAnalyzedAt = updated.aiAnalyzedAt
       
       // If completed or failed, stop polling

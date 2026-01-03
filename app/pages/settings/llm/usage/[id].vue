@@ -23,7 +23,7 @@
             <div class="flex items-center gap-3">
               <UIcon 
                 :name="data.success ? 'i-heroicons-check-circle' : 'i-heroicons-x-circle'" 
-                :class="data.success ? 'text-green-500' : 'text-red-500'"
+                :class="data.success ? 'text-success-500' : 'text-error-500'"
                 class="w-6 h-6"
               />
               <div>
@@ -46,7 +46,7 @@
             <div class="font-semibold">{{ data.model }}</div>
             <UBadge
               v-if="data.modelType"
-              :color="data.modelType === 'flash' ? 'blue' : 'purple'"
+              :color="data.modelType === 'flash' ? 'info' : 'primary'"
               variant="subtle"
               size="xs"
               class="mt-1"
@@ -167,9 +167,33 @@ definePageMeta({
   middleware: 'auth'
 })
 
+interface LlmUsage {
+  id: string
+  success: boolean
+  createdAt: string
+  model: string
+  provider: string
+  operation: string
+  modelType: string | null
+  totalTokens: number | null
+  promptTokens: number | null
+  completionTokens: number | null
+  estimatedCost: number | null
+  durationMs: number | null
+  retryCount: number
+  entityType: string | null
+  entityId: string | null
+  errorType: string | null
+  errorMessage: string | null
+  promptFull: string | null
+  promptPreview: string | null
+  responseFull: string | null
+  responsePreview: string | null
+}
+
 const id = computed(() => route.params.id as string)
 
-const { data } = await useFetch(`/api/analytics/llm-usage/${id.value}`, {
+const { data } = await useFetch<LlmUsage>(`/api/analytics/llm-usage/${id.value}`, {
   lazy: true,
   server: false
 })

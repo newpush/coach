@@ -79,7 +79,7 @@ const tabs = [
 const activeTab = ref('basic')
 
 // Profile Data
-const profile = ref({
+const profile = ref<any>({
   name: user.value?.name || 'Athlete',
   language: 'English',
   weight: 0,
@@ -116,16 +116,16 @@ async function handleProfileUpdate(newProfile: any) {
     const response = await $fetch('/api/profile', {
       method: 'PATCH',
       body: newProfile
-    })
+    }) as any
     
     console.log('Profile update response:', response)
     
     // Check if zones were updated via autodetect logic (which might merge into profile)
     if (response.profile && response.profile.hrZones) {
-      hrZones.value = response.profile.hrZones
+      hrZones.value = response.profile.hrZones as any[]
     }
     if (response.profile && response.profile.powerZones) {
-      powerZones.value = response.profile.powerZones
+      powerZones.value = response.profile.powerZones as any[]
     }
     
     toast.add({
@@ -188,14 +188,15 @@ const powerZones = ref<any[]>([
 ])
 
 watchEffect(() => {
-  if (profileData.value?.profile) {
-    profile.value = { ...profile.value, ...profileData.value.profile }
+  const pData = profileData.value as any
+  if (pData?.profile) {
+    profile.value = { ...profile.value, ...pData.profile }
     
-    if (profileData.value.profile.hrZones) {
-      hrZones.value = profileData.value.profile.hrZones
+    if (pData.profile.hrZones) {
+      hrZones.value = pData.profile.hrZones as any[]
     }
-    if (profileData.value.profile.powerZones) {
-      powerZones.value = profileData.value.profile.powerZones
+    if (pData.profile.powerZones) {
+      powerZones.value = pData.profile.powerZones as any[]
     }
   }
 })

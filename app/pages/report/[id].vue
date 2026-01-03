@@ -568,7 +568,21 @@ const route = useRoute()
 const { signOut } = useAuth()
 const reportId = route.params.id as string
 
-const { data: report, pending, refresh: refreshReport } = await useFetch(`/api/reports/${reportId}`, {
+interface Report {
+  id: string
+  type: string
+  status: string
+  dateRangeStart: string
+  dateRangeEnd: string
+  analysisJson?: any
+  markdown?: string
+  nutrition?: any[]
+  workouts?: any[]
+  suggestions?: any
+  modelVersion?: string
+}
+
+const { data: report, pending, refresh: refreshReport } = await useFetch<Report>(`/api/reports/${reportId}`, {
   watch: false,
 })
 

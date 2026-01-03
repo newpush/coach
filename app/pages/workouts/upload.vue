@@ -6,7 +6,7 @@
           <UDashboardSidebarCollapse />
           <UButton
             to="/data"
-            color="gray"
+            color="neutral"
             variant="ghost"
             icon="i-heroicons-arrow-left"
           >
@@ -44,7 +44,7 @@
             
             <div v-if="!selectedFile" class="text-center">
               <UButton
-                @click="$refs.fileInput.click()"
+                @click="fileInput?.click()"
                 color="primary"
                 variant="soft"
                 class="mb-4"
@@ -59,7 +59,7 @@
                 <UIcon name="i-heroicons-document" class="w-6 h-6 text-gray-400" />
                 <span class="font-medium">{{ selectedFile.name }}</span>
                 <UButton
-                  color="gray"
+                  color="neutral"
                   variant="ghost"
                   icon="i-heroicons-x-mark"
                   size="xs"
@@ -117,14 +117,14 @@ const uploadResult = ref<{ success: boolean; message: string } | null>(null)
 function handleDrop(e: DragEvent) {
   isDragging.value = false
   const files = e.dataTransfer?.files
-  if (files?.length) {
+  if (files?.length && files[0]) {
     validateAndSelectFile(files[0])
   }
 }
 
 function handleFileSelect(e: Event) {
   const files = (e.target as HTMLInputElement).files
-  if (files?.length) {
+  if (files?.length && files[0]) {
     validateAndSelectFile(files[0])
   }
 }
@@ -134,7 +134,7 @@ function validateAndSelectFile(file: File) {
     useToast().add({
       title: 'Invalid File',
       description: 'Please upload a valid .fit file',
-      color: 'red'
+      color: 'error'
     })
     return
   }

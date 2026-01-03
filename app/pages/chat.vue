@@ -21,7 +21,7 @@ interface ToolCall {
 
 interface Message {
   id: string
-  role: 'user' | 'assistant'
+  role: 'user' | 'assistant' | 'system'
   parts: Array<{
     type: 'text'
     id: string
@@ -76,7 +76,7 @@ const navigationItems = computed(() => {
 const input = ref('')
 const messages = ref<Message[]>([])
 const status = ref<'ready' | 'submitted' | 'streaming' | 'error'>('ready')
-const error = ref<Error | null>(null)
+const error = ref<Error | undefined>(undefined)
 const currentRoomId = ref('')
 const loadingMessages = ref(true)
 const rooms = ref<Room[]>([])
@@ -102,7 +102,7 @@ async function loadRooms() {
     rooms.value = loadedRooms
     
     // Select first room if we don't have a current one
-    if (!currentRoomId.value && loadedRooms.length > 0) {
+    if (!currentRoomId.value && loadedRooms.length > 0 && loadedRooms[0]) {
       await selectRoom(loadedRooms[0].roomId)
     }
   } catch (err: any) {
@@ -174,7 +174,7 @@ async function onSubmit() {
   
   try {
     status.value = 'submitted'
-    error.value = null
+    error.value = undefined
     
     // Send message and get AI response
     const response = await $fetch<Message>('/api/chat/messages', {
@@ -408,26 +408,26 @@ function formatTimestamp(timestamp: string | undefined) {
                 <template #content="{ message }">
                   <div class="space-y-4">
                     <!-- Tool calls (shown before text for assistant messages) -->
-                    <div v-if="message.role === 'assistant' && getToolCallsFromMessage(message).length > 0" class="space-y-2">
+                    <div v-if="message.role === 'assistant' && getToolCallsFromMessage(message as any).length > 0" class="space-y-2">
                       <div class="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">
-                        🔧 Tool Calls ({{ getToolCallsFromMessage(message).length }})
+                        🔧 Tool Calls ({{ getToolCallsFromMessage(message as any).length }})
                       </div>
                       <ChatToolCall
-                        v-for="(toolCall, index) in getToolCallsFromMessage(message)"
+                        v-for="(toolCall, index) in getToolCallsFromMessage(message as any)"
                         :key="`${message.id}-tool-${index}`"
                         :tool-call="toolCall"
                       />
                     </div>
                     
                     <!-- Text content with markdown support -->
-                    <div v-if="getTextFromMessage(message)" class="prose prose-sm dark:prose-invert max-w-none">
-                      <MDC :value="getTextFromMessage(message)" :cache-key="message.id" />
+                    <div v-if="getTextFromMessage(message as any)" class="prose prose-sm dark:prose-invert max-w-none">
+                      <MDC :value="getTextFromMessage(message as any)" :cache-key="message.id" />
                     </div>
                     
                     <!-- Inline charts -->
-                    <div v-if="getChartsFromMessage(message).length > 0" class="space-y-4">
+                    <div v-if="getChartsFromMessage(message as any).length > 0" class="space-y-4">
                       <ChatChart
-                        v-for="chart in getChartsFromMessage(message)"
+                        v-for="chart in getChartsFromMessage(message as any)"
                         :key="chart.id"
                         :chart-data="chart"
                       />

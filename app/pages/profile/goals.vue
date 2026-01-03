@@ -125,7 +125,7 @@ async function pollForSuggestions(jobId: string) {
     }
     
     try {
-      const result = await $fetch(`/api/goals/suggestions?jobId=${jobId}`)
+      const result = await $fetch(`/api/goals/suggestions?jobId=${jobId}`) as any
       
       if (result.isCompleted && result.output) {
         suggestions.value = result.output.suggestions
@@ -208,7 +208,7 @@ async function pollForReview(jobId: string) {
     }
     
     try {
-      const result = await $fetch(`/api/goals/review-result?jobId=${jobId}`)
+      const result = await $fetch(`/api/goals/review-result?jobId=${jobId}`) as any
       
       if (result.isCompleted && result.output) {
         review.value = result.output.review

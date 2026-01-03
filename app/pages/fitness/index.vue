@@ -343,7 +343,7 @@ async function fetchWellness() {
     // Debug: Log fetched wellness data
     console.log('[Fitness] Fetched wellness data:', {
       totalRecords: wellness.length,
-      latestDate: wellness.length > 0 ? wellness[0].date : 'none',
+      latestDate: wellness.length > 0 ? (wellness[0] as any).date : 'none',
       recentDates: wellness.slice(0, 5).map((w: any) => ({
         date: w.date,
         recoveryScore: w.recoveryScore,

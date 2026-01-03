@@ -4,7 +4,28 @@ definePageMeta({
   middleware: ['auth', 'admin']
 })
 
-const { data: stats, pending } = await useFetch('/api/admin/stats')
+interface StatItem {
+  date: string
+  count: number
+  cost?: number
+}
+
+interface SystemStats {
+  totalUsers: number
+  totalWorkouts: number
+  totalAiCost: number
+  totalAiCalls: number
+  aiSuccessRate: number
+  avgAiCostPerCall: number
+  workoutsByDay: StatItem[]
+  avgWorkoutsPerDay: number
+  aiCostHistory: (StatItem & { cost: number })[]
+  usersByDay: StatItem[]
+  activeUsersByDay: StatItem[]
+  totalUsersLast30Days: number
+}
+
+const { data: stats, pending } = await useFetch<SystemStats>('/api/admin/stats')
 
 const chartOptions = {
   responsive: true,
@@ -78,8 +99,8 @@ useHead({
             </template>
             <div class="h-64">
                <!-- Bar chart component placeholder - assuming Bar is available or used like in other pages -->
-               <div class="flex items-end justify-between h-full pt-4 gap-1">
-                  <div v-for="day in stats?.workoutsByDay" :key="day.date" 
+               <div v-if="stats" class="flex items-end justify-between h-full pt-4 gap-1">
+                  <div v-for="day in stats.workoutsByDay" :key="day.date" 
                        class="group relative flex-1 bg-blue-500 rounded-t transition-all hover:bg-blue-600"
                        :style="{ height: `${(day.count / (Math.max(...stats.workoutsByDay.map((d: any) => d.count)) || 1)) * 100}%` }"
                   >
@@ -99,8 +120,8 @@ useHead({
               </div>
             </template>
             <div class="h-64">
-              <div class="flex items-end justify-between h-full pt-4 gap-1">
-                  <div v-for="day in stats?.aiCostHistory" :key="day.date" 
+              <div v-if="stats" class="flex items-end justify-between h-full pt-4 gap-1">
+                  <div v-for="day in stats.aiCostHistory" :key="day.date" 
                        class="group relative flex-1 bg-emerald-500 rounded-t transition-all hover:bg-emerald-600"
                        :style="{ height: `${(day.cost / (Math.max(...stats.aiCostHistory.map((d: any) => d.cost)) || 0.01)) * 100}%` }"
                   >
@@ -122,8 +143,8 @@ useHead({
               </div>
             </template>
             <div class="h-64">
-               <div class="flex items-end justify-between h-full pt-4 gap-1">
-                  <div v-for="day in stats?.usersByDay" :key="day.date" 
+               <div v-if="stats" class="flex items-end justify-between h-full pt-4 gap-1">
+                  <div v-for="day in stats.usersByDay" :key="day.date" 
                        class="group relative flex-1 bg-purple-500 rounded-t transition-all hover:bg-purple-600"
                        :style="{ height: `${(day.count / (Math.max(...stats.usersByDay.map((d: any) => d.count)) || 1)) * 100}%` }"
                   >
@@ -143,8 +164,8 @@ useHead({
               </div>
             </template>
             <div class="h-64">
-               <div class="flex items-end justify-between h-full pt-4 gap-1">
-                  <div v-for="day in stats?.activeUsersByDay" :key="day.date" 
+               <div v-if="stats" class="flex items-end justify-between h-full pt-4 gap-1">
+                  <div v-for="day in stats.activeUsersByDay" :key="day.date" 
                        class="group relative flex-1 bg-amber-500 rounded-t transition-all hover:bg-amber-600"
                        :style="{ height: `${(day.count / (Math.max(...stats.activeUsersByDay.map((d: any) => d.count)) || 1)) * 100}%` }"
                   >

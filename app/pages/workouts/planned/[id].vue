@@ -4,7 +4,7 @@
       <UDashboardNavbar :title="workout?.title || 'Workout Details'">
         <template #leading>
           <UButton
-            color="gray"
+            color="neutral"
             variant="ghost"
             icon="i-heroicons-arrow-left"
             @click="goBack"
@@ -85,7 +85,7 @@
                     <span class="whitespace-nowrap">{{ Math.round(workout.tss) }} TSS</span>
                   </div>
                   <span class="hidden sm:inline">•</span>
-                  <UBadge :color="workout.completed ? 'green' : 'amber'" size="sm" class="whitespace-nowrap">
+                  <UBadge :color="workout.completed ? 'success' : 'warning'" size="sm" class="whitespace-nowrap">
                     {{ workout.completed ? 'Completed' : 'Planned' }}
                   </UBadge>
                 </div>

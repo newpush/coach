@@ -72,7 +72,7 @@
              <span class="i-heroicons-cube-transparent w-6 h-6 text-primary-500"></span>
              {{ block.name }}
            </h2>
-           <UBadge color="gray" variant="soft">{{ block.weeks?.length || 0 }} Weeks</UBadge>
+           <UBadge color="neutral" variant="soft">{{ block.weeks?.length || 0 }} Weeks</UBadge>
         </div>
 
         <div class="grid gap-6 md:grid-cols-2 lg:grid-cols-3">

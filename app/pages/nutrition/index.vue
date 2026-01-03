@@ -624,13 +624,20 @@ const paginatedNutrition = computed(() => {
 function formatDate(date: string | Date) {
   // Handle date string properly to avoid timezone shifts
   // If it's a string in YYYY-MM-DD format, parse it as local date
-  if (typeof date === 'string') {
-    const [year, month, day] = date.split('-').map(Number)
-    return new Date(year, month - 1, day).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric'
-    })
+  if (typeof date === 'string' && date.includes('-')) {
+    const parts = date.split('-').map(Number)
+    if (parts.length === 3) {
+      const year = parts[0]
+      const month = parts[1]
+      const day = parts[2]
+      if (year !== undefined && month !== undefined && day !== undefined) {
+        return new Date(year, month - 1, day).toLocaleDateString('en-US', {
+          year: 'numeric',
+          month: 'short',
+          day: 'numeric'
+        })
+      }
+    }
   }
   return new Date(date).toLocaleDateString('en-US', {
     year: 'numeric',

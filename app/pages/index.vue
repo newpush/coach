@@ -35,7 +35,7 @@
               to="https://discord.gg/dPYkzg49T9"
               target="_blank"
               variant="ghost"
-              color="gray"
+              color="neutral"
               icon="i-simple-icons-discord"
             >
               Discord
@@ -44,7 +44,7 @@
               to="https://github.com/newpush/coach"
               target="_blank"
               variant="ghost"
-              color="gray"
+              color="neutral"
               icon="i-simple-icons-github"
             >
               GitHub
@@ -52,7 +52,7 @@
             <UButton
               to="#"
               variant="ghost"
-              color="gray"
+              color="neutral"
               icon="i-lucide-book"
             >
               Docs

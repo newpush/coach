@@ -36,9 +36,9 @@
               <template #content>
                 <div class="p-2">
                   <UCalendar
-                    v-model="selectedDate"
+                    :model-value="selectedDate as any"
                     :max-value="today"
-                    @update:model-value="handleDateChange"
+                    @update:model-value="(val) => handleDateChange(val as any)"
                   />
                   <div class="mt-2 pt-2 border-t flex justify-end">
                     <UButton
@@ -501,7 +501,7 @@
 </template>
 
 <script setup lang="ts">
-import { CalendarDate, getLocalTimeZone, today as getTodayDate } from '@internationalized/date'
+import { type DateValue, getLocalTimeZone, today as getTodayDate } from '@internationalized/date'
 
 const toast = useToast()
 const { formatDate, formatShortDate } = useFormat()
@@ -512,14 +512,14 @@ const userStore = useUserStore()
 
 // Date selection state
 const today = getTodayDate(getLocalTimeZone())
-const selectedDate = ref<CalendarDate | null>(null)
+const selectedDate = ref<DateValue | null>(null)
 
 // Computed label for the date picker button
 const selectedDateLabel = computed(() => {
   if (!selectedDate.value) {
     return 'Latest Profile'
   }
-  const date = selectedDate.value.toDate(getLocalTimeZone())
+  const date = (selectedDate.value as any).toDate(getLocalTimeZone())
   return formatDate(date)
 })
 
@@ -532,7 +532,7 @@ const queryParams = computed(() => {
   
   if (selectedDate.value) {
     // Find profile on or before the selected date
-    const date = selectedDate.value.toDate(getLocalTimeZone())
+    const date = (selectedDate.value as any).toDate(getLocalTimeZone())
     params.beforeDate = date.toISOString()
   }
   
@@ -605,8 +605,12 @@ const isViewingHistorical = computed(() => {
 })
 
 // Date change handler
-const handleDateChange = async (date: CalendarDate) => {
-  selectedDate.value = date
+const handleDateChange = async (date: DateValue | null | undefined) => {
+  if (date) {
+    selectedDate.value = date
+  } else {
+    selectedDate.value = null
+  }
   // refresh will be triggered automatically by watch
 }
 

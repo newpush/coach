@@ -18,7 +18,13 @@ const columns = [{
   id: 'total_size_bytes'
 }]
 
-const { data: stats, pending, refresh } = useFetch('/api/admin/database')
+interface TableStat {
+  table_name: string
+  row_count: number
+  total_size_bytes: number
+}
+
+const { data: stats, pending, refresh } = useFetch<TableStat[]>('/api/admin/database')
 
 const formatBytes = (bytes: number, decimals = 2) => {
   if (!bytes) return '0 Bytes'
@@ -44,10 +50,10 @@ useHead({
       <h1 class="text-2xl font-semibold text-gray-900 dark:text-white">Database Health</h1>
       <UButton
         icon="i-heroicons-arrow-path"
-        color="white"
+        color="neutral"
         variant="solid"
         :loading="pending"
-        @click="refresh"
+        @click="() => refresh()"
       >
         Refresh
       </UButton>

@@ -575,13 +575,18 @@ function formatDate(date: string | Date) {
   if (typeof date === 'string' && date.includes('-')) {
     const parts = date.split('-').map(Number)
     if (parts.length === 3 && parts.every(p => !isNaN(p))) {
-      const [year, month, day] = parts
-      return new Date(year, month - 1, day).toLocaleDateString('en-US', {
-        weekday: 'long',
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric'
-      })
+      const year = parts[0]
+      const month = parts[1]
+      const day = parts[2]
+      
+      if (year !== undefined && month !== undefined && day !== undefined) {
+        return new Date(year, month - 1, day).toLocaleDateString('en-US', {
+          weekday: 'long',
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric'
+        })
+      }
     }
   }
   return new Date(date).toLocaleDateString('en-US', {
@@ -615,7 +620,7 @@ async function analyzeNutrition() {
   try {
     const result = await $fetch(`/api/nutrition/${nutrition.value.id}/analyze`, {
       method: 'POST'
-    })
+    }) as any
     
     // If already completed, update immediately
     if (result.status === 'COMPLETED' && 'analysis' in result && result.analysis) {
@@ -670,12 +675,12 @@ function startPolling() {
     if (!nutrition.value) return
     
     try {
-      const updated = await $fetch(`/api/nutrition/${nutrition.value.id}`)
+      const updated = await $fetch(`/api/nutrition/${nutrition.value.id}`) as any
       
       // Update nutrition data
       nutrition.value.aiAnalysis = updated.aiAnalysis
-      nutrition.value.aiAnalysisJson = (updated as any).aiAnalysisJson
-      nutrition.value.aiAnalysisStatus = (updated as any).aiAnalysisStatus
+      nutrition.value.aiAnalysisJson = updated.aiAnalysisJson
+      nutrition.value.aiAnalysisStatus = updated.aiAnalysisStatus
       nutrition.value.aiAnalyzedAt = updated.aiAnalyzedAt
       
       // If completed or failed, stop polling

@@ -181,7 +181,7 @@
                   class="bg-gray-50 dark:bg-gray-800/50 p-2 flex flex-col justify-between border-r border-gray-200 dark:border-gray-700 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
                   @click="openWeekZoneDetail(week)"
                 >
-                  <div class="text-xs font-bold text-gray-400">W{{ getWeekNumber(week[0].date) }}</div>
+                  <div class="text-xs font-bold text-gray-400">W{{ week[0] ? getWeekNumber(week[0].date) : '' }}</div>
                   <div class="space-y-1 mt-2">
                     <div class="flex items-center justify-between text-[10px]">
                       <span class="text-gray-500">Time:</span>
@@ -238,7 +238,7 @@
             <div class="lg:hidden space-y-4">
               <div v-for="(week, weekIdx) in calendarWeeks" :key="'mob-week-' + weekIdx" class="space-y-2">
                 <div class="flex items-center justify-between bg-gray-100 dark:bg-gray-800 p-2 rounded-lg sticky top-0 z-10">
-                  <span class="text-xs font-bold uppercase">Week {{ getWeekNumber(week[0].date) }}</span>
+                  <span class="text-xs font-bold uppercase">Week {{ week[0] ? getWeekNumber(week[0].date) : '' }}</span>
                   <div class="flex items-center gap-3 text-[10px]">
                     <span>{{ formatDuration(getWeekSummary(week).duration || getWeekSummary(week).plannedDuration) }}</span>
                     <span>{{ formatDistance(getWeekSummary(week).distance) }}</span>
@@ -265,10 +265,10 @@
                       <!-- Wellness/Nutrition summary -->
                       <div v-if="day.activities.some(a => a.wellness || a.nutrition)" class="flex gap-2 mb-1">
                          <div v-if="day.activities.find(a => a.wellness)?.wellness?.recoveryScore" class="px-1.5 py-0.5 rounded bg-blue-50 dark:bg-blue-900/30 text-[10px] font-bold text-blue-600 dark:text-blue-400">
-                           {{ day.activities.find(a => a.wellness).wellness.recoveryScore }}% REC
+                           {{ day.activities.find(a => a.wellness)?.wellness?.recoveryScore }}% REC
                          </div>
                          <div v-if="day.activities.find(a => a.nutrition)?.nutrition?.calories" class="px-1.5 py-0.5 rounded bg-amber-50 dark:bg-amber-900/30 text-[10px] font-bold text-amber-600 dark:text-amber-400">
-                           {{ Math.round(day.activities.find(a => a.nutrition).nutrition.calories) }} KCAL
+                           {{ Math.round(day.activities.find(a => a.nutrition)?.nutrition?.calories || 0) }} KCAL
                          </div>
                       </div>
 
@@ -280,14 +280,14 @@
                         @click="openActivity(activity)"
                       >
                         <div class="flex items-center gap-3 overflow-hidden">
-                          <UIcon :name="getActivityIcon(activity.type)" class="w-5 h-5 shrink-0" :class="activity.source === 'completed' ? 'text-green-500' : 'text-amber-500'" />
+                          <UIcon :name="getActivityIcon(activity.type || '')" class="w-5 h-5 shrink-0" :class="activity.source === 'completed' ? 'text-green-500' : 'text-amber-500'" />
                           <div class="truncate">
                             <div class="text-xs font-bold truncate">{{ activity.title }}</div>
                             <div class="text-[10px] text-gray-500">{{ formatDurationCompact(activity.duration || activity.plannedDuration || 0) }} • {{ formatDistance(activity.distance || activity.plannedDistance || 0) }}</div>
                           </div>
                         </div>
                         <div v-if="activity.tss || activity.plannedTss" class="text-xs font-bold text-green-600 shrink-0">
-                          {{ Math.round(activity.tss || activity.plannedTss) }}
+                          {{ Math.round((activity.tss || activity.plannedTss) || 0) }}
                         </div>
                       </div>
                     </div>
@@ -307,7 +307,7 @@
               :loading="status === 'pending'"
               class="flex-1 w-full"
               empty="No activities found for this month"
-              @select="openActivity"
+              @select="(_, row) => openActivity(row.original)"
               :ui="{
                 root: 'w-full',
                 base: 'w-full table-auto',
@@ -318,7 +318,7 @@
             >
               <template #type-cell="{ row }">
                 <div class="flex items-center gap-2">
-                  <UIcon :name="getActivityIcon(row.original.type)" class="w-4 h-4 flex-shrink-0" />
+                  <UIcon :name="getActivityIcon(row.original.type || '')" class="w-4 h-4 flex-shrink-0" />
                   <span class="hidden sm:inline">{{ row.original.type }}</span>
                 </div>
               </template>
@@ -344,7 +344,7 @@
 
               <template #distance-cell="{ row }">
                 <span v-if="row.original.distance || row.original.plannedDistance" class="whitespace-nowrap">
-                  {{ ((row.original.distance || row.original.plannedDistance) / 1000).toFixed(1) }} km
+                  {{ (((row.original.distance || row.original.plannedDistance) || 0) / 1000).toFixed(1) }} km
                 </span>
                 <span v-else class="text-gray-400">-</span>
               </template>
@@ -366,7 +366,7 @@
 
               <template #tss-cell="{ row }">
                 <span v-if="row.original.tss || row.original.plannedTss">
-                  {{ Math.round(row.original.tss || row.original.plannedTss) }}
+                  {{ Math.round((row.original.tss || row.original.plannedTss) || 0) }}
                 </span>
                 <span v-else class="text-gray-400">-</span>
               </template>
@@ -564,7 +564,7 @@
     v-model:open="showMatcherModal" 
     title="Link Workouts" 
     description="Manually match completed activities with planned workouts."
-    :ui="{ width: 'sm:max-w-4xl' }"
+    :ui="{ content: 'sm:max-w-4xl' }"
   >
     <template #body>
       <div class="p-3 sm:p-6">
@@ -581,7 +581,7 @@
 <script setup lang="ts">
 import { startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval, format, addMonths, subMonths, isSameMonth, getISOWeek, isToday as isTodayDate } from 'date-fns'
 import { useStorage } from '@vueuse/core'
-import type { CalendarActivity } from '~/types/calendar'
+import type { CalendarActivity } from '../../types/calendar'
 import WorkoutMatcher from '~/components/workouts/WorkoutMatcher.vue'
 
 definePageMeta({
@@ -950,7 +950,7 @@ const availableColumns = [
 
 // Use column visibility state that persists in localStorage
 // Default: hide some of the more advanced columns
-const columnVisibility = useStorage('activities-list-columns-visibility', {
+const columnVisibility = useStorage<Record<string, boolean>>('activities-list-columns-visibility', {
   trainingLoad: false,
   trimp: false,
   sessionRpe: false,

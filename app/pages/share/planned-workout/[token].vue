@@ -84,16 +84,16 @@
         <div v-if="workout.trainingWeek" class="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
           <div class="text-xs text-gray-500 dark:text-gray-400 mb-2">Training Context</div>
           <div class="flex flex-wrap gap-2 text-sm">
-            <UBadge color="gray" variant="soft" v-if="workout.trainingWeek.block?.plan?.goal?.title">
+            <UBadge color="neutral" variant="soft" v-if="workout.trainingWeek.block?.plan?.goal?.title">
               Goal: {{ workout.trainingWeek.block.plan.goal.title }}
             </UBadge>
-            <UBadge color="gray" variant="soft" v-if="workout.trainingWeek.block?.name">
+            <UBadge color="neutral" variant="soft" v-if="workout.trainingWeek.block?.name">
               {{ workout.trainingWeek.block.name }}
             </UBadge>
-            <UBadge color="gray" variant="soft" v-if="workout.trainingWeek.weekNumber">
+            <UBadge color="neutral" variant="soft" v-if="workout.trainingWeek.weekNumber">
               Week {{ workout.trainingWeek.weekNumber }}
             </UBadge>
-            <UBadge color="gray" variant="soft" v-if="workout.trainingWeek.focus || workout.trainingWeek.block?.primaryFocus">
+            <UBadge color="neutral" variant="soft" v-if="workout.trainingWeek.focus || workout.trainingWeek.block?.primaryFocus">
               Focus: {{ workout.trainingWeek.focus || workout.trainingWeek.block.primaryFocus }}
             </UBadge>
           </div>
