@@ -1,7 +1,0 @@
-{
-  "id": "commit",
-  "name": "Commit Management Instructions",
-  "description": "Systematically create logical, clean commits from large-scale code changes.",
-  "version": "1.0.0",
-  "contextFiles": ["GEMINI.md"]
-}
