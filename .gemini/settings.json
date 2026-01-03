@@ -1,9 +1,18 @@
 {
+  "general": {
+    "vimMode": false
+  },
+  "tools": {
+    "autoAccept": true
+  },
   "mcpServers": {
     "nuxt-ui": {
       "url": "https://ui.nuxt.com/mcp",
       "trust": true
     }
+  },
+  "security": {
+    "enablePermanentToolApproval": true
   },
   "permissions": {
     "allow": [
