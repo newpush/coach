@@ -683,7 +683,7 @@
                   <div class="mt-4 pt-4 border-t border-yellow-200 dark:border-yellow-800/50">
                     <UButton
                       size="xs"
-                      color="yellow"
+                      color="warning"
                       variant="soft"
                       icon="i-heroicons-arrow-path-rounded-square"
                       :loading="promoting"
@@ -770,7 +770,7 @@
         />
         <UButton
           label="Make Primary"
-          color="yellow"
+          color="warning"
           variant="solid"
           :loading="promoting"
           @click="confirmPromoteWorkout"
