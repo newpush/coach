@@ -91,6 +91,9 @@ git commit -m "fix(components): resolve null reference in user profile"
 ```bash
 # Check total files to process
 git status --porcelain | wc -l
+
+# Run typecheck to ensure no regressions
+npx nuxt typecheck
 ```
 
 ### During Processing
@@ -165,6 +168,9 @@ git diff
 ```bash
 # Confirm clean working directory
 git status
+
+# Run typecheck to ensure no regressions
+npx nuxt typecheck
 
 # Review commit history
 git log --oneline -10
