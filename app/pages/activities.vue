@@ -123,17 +123,6 @@
             </UDropdownMenu>
 
             <UButton
-              icon="i-heroicons-link"
-              color="neutral"
-              variant="outline"
-              size="sm"
-              class="font-bold"
-              @click="showMatcherModal = true"
-            >
-              <span class="hidden sm:inline">Link Workouts</span>
-            </UButton>
-
-            <UButton
               to="/workouts/upload"
               icon="i-heroicons-cloud-arrow-up"
               color="neutral"
