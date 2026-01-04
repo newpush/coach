@@ -295,7 +295,8 @@ useHead({
             class="font-bold"
             @click="showWizard = true"
           >
-            Add Goal
+            <span class="hidden sm:inline">Add Goal</span>
+            <span class="sm:hidden">Add</span>
           </UButton>
         </template>
       </UDashboardNavbar>

@@ -15,7 +15,8 @@
               size="sm"
               class="font-bold"
             >
-              Add Event
+              <span class="hidden sm:inline">Add Event</span>
+              <span class="sm:hidden">Add</span>
             </UButton>
           </div>
         </template>

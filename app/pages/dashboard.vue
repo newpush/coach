@@ -96,11 +96,11 @@
 
               <div class="flex-1 space-y-4">
                 <div v-if="loadingUpcoming" class="space-y-3">
-                  <div v-for="i in 3" :key="i" class="flex items-center gap-3 animate-pulse">
-                    <div class="w-10 h-10 bg-gray-100 dark:bg-gray-800 rounded-lg"></div>
+                  <div v-for="i in 3" :key="i" class="flex items-center gap-3">
+                    <USkeleton class="w-10 h-10 rounded-lg" />
                     <div class="flex-1 space-y-2">
-                      <div class="h-3 bg-gray-100 dark:bg-gray-800 rounded w-3/4"></div>
-                      <div class="h-2 bg-gray-100 dark:bg-gray-800 rounded w-1/2"></div>
+                      <USkeleton class="h-3 w-3/4" />
+                      <USkeleton class="h-2 w-1/2" />
                     </div>
                   </div>
                 </div>

@@ -276,8 +276,8 @@ function formatTimestamp(timestamp: string | undefined) {
         </template>
         <template #right>
           <UButton
-            color="neutral"
-            variant="ghost"
+            color="primary"
+            variant="solid"
             icon="i-heroicons-plus"
             aria-label="New Chat"
             size="sm"
@@ -285,6 +285,7 @@ function formatTimestamp(timestamp: string | undefined) {
             @click="createNewChat"
           >
             <span class="hidden sm:inline">New Chat</span>
+            <span class="sm:hidden">New</span>
           </UButton>
           <UButton
             to="/settings/ai"
@@ -307,8 +308,14 @@ function formatTimestamp(timestamp: string | undefined) {
           </div>
           
           <div class="flex-1 overflow-y-auto py-2 px-2">
-            <div v-if="loadingRooms" class="flex items-center justify-center py-8">
-              <UIcon name="i-heroicons-arrow-path" class="w-6 h-6 animate-spin text-gray-400" />
+            <div v-if="loadingRooms" class="space-y-2 py-4 px-2">
+              <div v-for="i in 5" :key="i" class="flex items-center gap-3 px-2 py-2">
+                <USkeleton class="h-10 w-10 rounded-full" />
+                <div class="flex-1 space-y-2">
+                  <USkeleton class="h-3 w-3/4" />
+                  <USkeleton class="h-2 w-1/2" />
+                </div>
+              </div>
             </div>
             
             <UNavigationMenu
@@ -345,8 +352,14 @@ function formatTimestamp(timestamp: string | undefined) {
         <USlideover v-model:open="isRoomListOpen" title="Chat History" side="left">
           <template #body>
             <div class="flex-1 overflow-y-auto py-2 px-2">
-              <div v-if="loadingRooms" class="flex items-center justify-center py-8">
-                <UIcon name="i-heroicons-arrow-path" class="w-6 h-6 animate-spin text-gray-400" />
+              <div v-if="loadingRooms" class="space-y-2 py-4 px-2">
+                <div v-for="i in 5" :key="i" class="flex items-center gap-3 px-2 py-2">
+                  <USkeleton class="h-10 w-10 rounded-full" />
+                  <div class="flex-1 space-y-2">
+                    <USkeleton class="h-3 w-3/4" />
+                    <USkeleton class="h-2 w-1/2" />
+                  </div>
+                </div>
               </div>
               
               <UNavigationMenu
@@ -385,8 +398,17 @@ function formatTimestamp(timestamp: string | undefined) {
           <!-- Messages Container with proper overflow -->
           <div class="flex-1 overflow-y-auto">
             <UContainer class="h-full">
-              <div v-if="loadingMessages" class="flex items-center justify-center h-full">
-                <UIcon name="i-heroicons-arrow-path" class="w-8 h-8 animate-spin text-gray-400" />
+              <div v-if="loadingMessages" class="space-y-6 py-8">
+                <div v-for="i in 3" :key="i" class="flex flex-col space-y-4">
+                  <div class="flex items-start gap-3">
+                    <USkeleton class="h-8 w-8 rounded-full" />
+                    <USkeleton class="h-16 w-1/2 rounded-2xl" />
+                  </div>
+                  <div class="flex items-start justify-end gap-3">
+                    <USkeleton class="h-16 w-1/2 rounded-2xl" />
+                    <USkeleton class="h-8 w-8 rounded-full" />
+                  </div>
+                </div>
               </div>
               
               <UChatMessages

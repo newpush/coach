@@ -14,7 +14,8 @@
             class="font-bold"
             @click="isConnectModalOpen = true"
           >
-            Add Athlete
+            <span class="hidden sm:inline">Add Athlete</span>
+            <span class="sm:hidden">Add</span>
           </UButton>
         </template>
       </UDashboardNavbar>
@@ -31,9 +32,28 @@
           <p class="text-neutral-500 text-sm mt-1">Manage your athletes and their training plans.</p>
         </div>
 
-        <div v-if="loading" class="py-12 text-center">
-          <UIcon name="i-heroicons-arrow-path" class="w-8 h-8 animate-spin mx-auto text-primary-500" />
-          <p class="mt-4 text-neutral-500">Loading athletes...</p>
+        <div v-if="loading" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <UCard v-for="i in 3" :key="i" class="flex flex-col h-full">
+            <template #header>
+              <div class="flex items-center gap-3">
+                <USkeleton class="h-12 w-12 rounded-full" />
+                <div class="space-y-2">
+                  <USkeleton class="h-4 w-32" />
+                  <USkeleton class="h-3 w-48" />
+                </div>
+              </div>
+            </template>
+            <div class="grid grid-cols-2 gap-4 my-2">
+              <USkeleton class="h-16 w-full rounded-lg" />
+              <USkeleton class="h-16 w-full rounded-lg" />
+            </div>
+            <template #footer>
+              <div class="flex gap-2">
+                <USkeleton class="h-10 flex-1 rounded" />
+                <USkeleton class="h-10 w-10 rounded" />
+              </div>
+            </template>
+          </UCard>
         </div>
 
         <div v-else-if="error" class="py-12 text-center">
