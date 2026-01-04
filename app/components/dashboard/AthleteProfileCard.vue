@@ -81,7 +81,7 @@
               <div class="text-sm font-bold text-gray-900 dark:text-white">
                 <template v-if="userStore.profile.maxHr">{{ userStore.profile.maxHr }} bpm</template>
                 <template v-else-if="userStore.profile.estimatedMaxHR">~{{ userStore.profile.estimatedMaxHR }} bpm</template>
-                <template v-else>N/A</template>
+                <UButton v-else to="/profile/settings" icon="i-heroicons-pencil" color="neutral" variant="soft" size="xs" class="-my-1" @click.stop />
               </div>
             </div>
             <div class="space-y-1">
@@ -89,14 +89,20 @@
                  <UIcon name="i-heroicons-heart" class="w-3 h-3 text-blue-500" />
                  Resting HR
                </div>
-               <div class="text-sm font-bold text-gray-900 dark:text-white">{{ userStore.profile.restingHr ? `${userStore.profile.restingHr} bpm` : 'N/A' }}</div>
+               <div class="text-sm font-bold text-gray-900 dark:text-white">
+                 <template v-if="userStore.profile.restingHr">{{ userStore.profile.restingHr }} bpm</template>
+                 <UButton v-else to="/profile/settings" icon="i-heroicons-pencil" color="neutral" variant="soft" size="xs" class="-my-1" @click.stop />
+               </div>
             </div>
             <div class="space-y-1">
                <div class="flex items-center gap-1 text-[10px] font-bold text-gray-500 uppercase">
                  <UIcon name="i-heroicons-fire" class="w-3 h-3 text-orange-500" />
                  LTHR
                </div>
-               <div class="text-sm font-bold text-gray-900 dark:text-white">{{ userStore.profile.lthr ? `${userStore.profile.lthr} bpm` : 'N/A' }}</div>
+               <div class="text-sm font-bold text-gray-900 dark:text-white">
+                 <template v-if="userStore.profile.lthr">{{ userStore.profile.lthr }} bpm</template>
+                 <UButton v-else to="/profile/settings" icon="i-heroicons-pencil" color="neutral" variant="soft" size="xs" class="-my-1" @click.stop />
+               </div>
             </div>
           </div>
       </NuxtLink>
@@ -158,21 +164,32 @@
               <UIcon name="i-heroicons-bolt-solid" class="w-3 h-3" />
               FTP
             </div>
-            <div class="text-sm font-bold text-gray-900 dark:text-white">{{ userStore.profile.ftp ? `${userStore.profile.ftp}W` : 'N/A' }}</div>
+            <div class="text-sm font-bold text-gray-900 dark:text-white">
+              <template v-if="userStore.profile.ftp">{{ userStore.profile.ftp }}W</template>
+              <UButton v-else to="/profile/settings" icon="i-heroicons-pencil" color="neutral" variant="soft" size="xs" class="-my-1" @click.stop />
+            </div>
           </div>
           <div class="space-y-1">
             <div class="flex items-center gap-1 text-[10px] font-bold text-gray-500 uppercase">
               <UIcon name="i-heroicons-scale" class="w-3 h-3" />
               Weight
             </div>
-            <div class="text-sm font-bold text-gray-900 dark:text-white">{{ userStore.profile.weight ? `${userStore.profile.weight}kg` : 'N/A' }}</div>
+            <div class="text-sm font-bold text-gray-900 dark:text-white">
+              <template v-if="userStore.profile.weight">{{ userStore.profile.weight }}kg</template>
+              <UButton v-else to="/profile/settings" icon="i-heroicons-pencil" color="neutral" variant="soft" size="xs" class="-my-1" @click.stop />
+            </div>
           </div>
           <div class="space-y-1">
             <div class="flex items-center gap-1 text-[10px] font-bold text-gray-500 uppercase">
               <UIcon name="i-heroicons-chart-bar-square" class="w-3 h-3" />
               W/kg
             </div>
-            <div class="text-sm font-bold text-gray-900 dark:text-white">{{ userStore.profile.ftp && userStore.profile.weight ? (userStore.profile.ftp / userStore.profile.weight).toFixed(2) : 'N/A' }}</div>
+            <div class="text-sm font-bold text-gray-900 dark:text-white">
+              <template v-if="userStore.profile.ftp && userStore.profile.weight">
+                {{ (userStore.profile.ftp / userStore.profile.weight).toFixed(2) }}
+              </template>
+              <UButton v-else to="/profile/settings" icon="i-heroicons-pencil" color="neutral" variant="soft" size="xs" class="-my-1" @click.stop />
+            </div>
           </div>
         </div>
       </NuxtLink>

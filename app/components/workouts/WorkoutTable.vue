@@ -1,14 +1,6 @@
 <template>
   <div class="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
-    <div v-if="loading" class="p-8 text-center text-gray-600 dark:text-gray-400">
-      Loading workouts...
-    </div>
-    
-    <div v-else-if="workouts.length === 0" class="p-8 text-center text-gray-600 dark:text-gray-400">
-      No workouts found. Sync your data to get started.
-    </div>
-    
-    <div v-else class="overflow-x-auto">
+    <div class="overflow-x-auto">
       <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
         <thead class="bg-gray-50 dark:bg-gray-900">
           <tr>
@@ -38,7 +30,26 @@
             </th>
           </tr>
         </thead>
-        <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+        <tbody v-if="loading" class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+          <tr v-for="i in 10" :key="i">
+            <td class="px-3 sm:px-6 py-4 whitespace-nowrap"><USkeleton class="h-4 w-24" /></td>
+            <td class="px-3 sm:px-6 py-4"><USkeleton class="h-4 w-full max-w-[200px]" /></td>
+            <td class="hidden sm:table-cell px-6 py-4 whitespace-nowrap"><USkeleton class="h-4 w-16" /></td>
+            <td class="px-3 sm:px-6 py-4 whitespace-nowrap"><USkeleton class="h-4 w-16" /></td>
+            <td class="hidden md:table-cell px-6 py-4 whitespace-nowrap"><USkeleton class="h-4 w-12" /></td>
+            <td class="px-3 sm:px-6 py-4 whitespace-nowrap"><USkeleton class="h-5 w-16 rounded" /></td>
+            <td class="hidden lg:table-cell px-6 py-4 whitespace-nowrap"><USkeleton class="h-5 w-20 rounded" /></td>
+            <td class="hidden lg:table-cell px-6 py-4 whitespace-nowrap"><USkeleton class="h-5 w-20 rounded" /></td>
+          </tr>
+        </tbody>
+        <tbody v-else-if="workouts.length === 0" class="bg-white dark:bg-gray-800">
+          <tr>
+            <td colspan="8" class="p-8 text-center text-gray-600 dark:text-gray-400">
+              No workouts found. Sync your data to get started.
+            </td>
+          </tr>
+        </tbody>
+        <tbody v-else class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
           <tr
             v-for="workout in workouts"
             :key="workout.id"

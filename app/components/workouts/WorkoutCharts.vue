@@ -7,7 +7,10 @@
           Activity Distribution
         </h3>
       </template>
-      <div class="flex justify-center" style="height: 300px;">
+      <div v-if="loading" class="flex items-center justify-center h-[300px]">
+        <USkeleton class="h-64 w-64 rounded-full" />
+      </div>
+      <div v-else class="flex justify-center" style="height: 300px;">
         <ClientOnly>
           <Doughnut :data="distributionData" :options="chartOptions" />
         </ClientOnly>
@@ -21,7 +24,10 @@
           Workout Scores (30d)
         </h3>
       </template>
-      <div style="height: 300px;">
+      <div v-if="loading" class="flex items-center justify-center h-[300px] px-4">
+        <USkeleton class="h-full w-full" />
+      </div>
+      <div v-else style="height: 300px;">
         <ClientOnly>
           <Line :data="scoresData" :options="lineOptions" />
         </ClientOnly>
@@ -35,7 +41,10 @@
           Training Load (30d)
         </h3>
       </template>
-      <div style="height: 300px;">
+      <div v-if="loading" class="flex items-center justify-center h-[300px] px-4">
+        <USkeleton class="h-full w-full" />
+      </div>
+      <div v-else style="height: 300px;">
         <ClientOnly>
           <Bar :data="loadData" :options="barOptions" />
         </ClientOnly>
@@ -49,7 +58,10 @@
           Weekly Volume (8w)
         </h3>
       </template>
-      <div style="height: 300px;">
+      <div v-if="loading" class="flex items-center justify-center h-[300px] px-4">
+        <USkeleton class="h-full w-full" />
+      </div>
+      <div v-else style="height: 300px;">
         <ClientOnly>
           <Bar :data="volumeData" :options="barOptions" />
         </ClientOnly>
@@ -87,6 +99,7 @@ ChartJS.register(
 )
 
 defineProps<{
+  loading?: boolean
   distributionData: any
   scoresData: any
   loadData: any

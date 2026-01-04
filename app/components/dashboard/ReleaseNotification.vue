@@ -39,7 +39,7 @@ onMounted(() => {
     </div>
 
     <!-- Release Modal -->
-    <UModal v-model:open="isReleaseModalOpen">
+    <UModal v-model:open="isReleaseModalOpen" :ui="{ content: 'sm:max-w-2xl' }">
       <template #header>
         <div class="flex items-center justify-between">
             <h3 class="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">

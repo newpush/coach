@@ -232,14 +232,19 @@ const groups = computed(() => [{
       :ui="{ footer: 'lg:border-t lg:border-default' }"
     >
       <template #header="{ collapsed }">
-        <div class="flex flex-col w-full">
-          <div class="flex items-center gap-2 p-4">
-            <div v-if="!collapsed" class="flex items-center gap-2">
-              <UIcon name="i-lucide-zap" class="size-6" />
-              <span class="font-semibold">Coach Watts</span>
-            </div>
-            <UIcon v-else name="i-lucide-zap" class="size-6" />
-          </div>
+        <div class="flex items-center justify-center w-full overflow-hidden" :class="collapsed ? 'p-1' : 'p-4'">
+          <img 
+            v-if="!collapsed"
+            src="/media/coach-watts.webp" 
+            alt="Coach Watts" 
+            class="w-full h-auto object-contain"
+          />
+          <img 
+            v-else
+            src="/media/logo.webp" 
+            alt="Coach Watts" 
+            class="size-12 object-contain"
+          />
         </div>
       </template>
 
