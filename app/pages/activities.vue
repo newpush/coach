@@ -139,8 +139,8 @@
               variant="outline"
               size="sm"
               class="font-bold"
-              :loading="status === 'pending'"
-              @click="() => { refresh() }"
+              :loading="status === 'pending' || integrationStore.syncingData"
+              @click="handleRefresh"
             >
               <span class="hidden sm:inline">Refresh</span>
             </UButton>
@@ -599,6 +599,8 @@ definePageMeta({
   middleware: 'auth',
   layout: 'default'
 })
+
+const integrationStore = useIntegrationStore()
 
 // Modal state
 const showPlannedWorkoutModal = ref(false)
@@ -1160,5 +1162,10 @@ const unlinkedPlannedWorkouts = computed(() => {
 function onWorkoutsMatched() {
   refresh()
   // showMatcherModal.value = false // Optional: keep open to match more
+}
+
+async function handleRefresh() {
+  await integrationStore.syncAllData()
+  await refresh()
 }
 </script>
