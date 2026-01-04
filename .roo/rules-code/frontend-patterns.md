@@ -82,3 +82,26 @@ export const useFormat = () => {
 - **Auto-Imports**: Leverage Nuxt's auto-imports (e.g., `ref`, `computed`, `watch`, `$fetch`) instead of manually importing them from `vue` or `nuxt/app`.
 - **Type Safety**: Ensure strict typing for props, emits, and store state.
 - **Head Management**: Use `useHead()` for managing page meta tags (title, description, etc.) instead of `definePageMeta`'s layout or middleware options, as `useHead` provides more flexibility and better Nuxt compatibility for SEO.
+
+## Loading States
+
+Consistent loading states improve perceived performance and user experience.
+
+- **Prefer Skeletons**: Use the `USkeleton` component to mimic the layout of the content being loaded (e.g., text blocks, cards, table rows). This reduces layout shift (CLS).
+- **Avoid Generic Spinners**: Minimize the use of isolated spinning icons (`animate-spin`), especially for primary content areas.
+- **Table Loading**: For tables, replace the `tbody` content with skeleton rows that match the column structure, rather than replacing the entire table.
+
+### Example (Skeleton)
+
+```vue
+<!-- Good: Layout remains stable -->
+<div v-if="pending" class="space-y-4">
+  <div class="flex gap-4">
+    <USkeleton class="h-12 w-12 rounded-full" />
+    <div class="space-y-2">
+      <USkeleton class="h-4 w-[250px]" />
+      <USkeleton class="h-4 w-[200px]" />
+    </div>
+  </div>
+</div>
+```
