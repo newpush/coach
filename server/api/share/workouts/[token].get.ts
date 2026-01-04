@@ -49,9 +49,29 @@ export default defineEventHandler(async (event) => {
     })
   }
 
+  // Find the share token
+  const shareToken = await prisma.shareToken.findUnique({
+    where: { token }
+  })
+
+  if (!shareToken || shareToken.resourceType !== 'WORKOUT') {
+    throw createError({
+      statusCode: 404,
+      message: 'Workout not found or link is invalid'
+    })
+  }
+
+  // Check for expiration
+  if (shareToken.expiresAt && new Date() > new Date(shareToken.expiresAt)) {
+    throw createError({
+      statusCode: 404,
+      message: 'Share link has expired'
+    })
+  }
+
   const workout = await prisma.workout.findUnique({
     where: {
-      shareToken: token
+      id: shareToken.resourceId
     },
     include: {
       streams: true,
@@ -62,14 +82,16 @@ export default defineEventHandler(async (event) => {
           hrZones: true,
           powerZones: true
         }
-      }
+      },
+      planAdherence: true,
+      plannedWorkout: true
     }
   })
 
   if (!workout) {
     throw createError({
       statusCode: 404,
-      message: 'Workout not found or link is invalid'
+      message: 'Workout not found'
     })
   }
 

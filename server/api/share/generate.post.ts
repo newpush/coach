@@ -114,7 +114,7 @@ export default defineEventHandler(async (event) => {
   
   switch(resourceType) {
     case 'REPORT': sharePath = '/share/profile'; break;
-    case 'WORKOUT': sharePath = '/share/workout'; break;
+    case 'WORKOUT': sharePath = '/share/workouts'; break;
     case 'NUTRITION': sharePath = '/share/nutrition'; break;
     case 'PLANNED_WORKOUT': sharePath = '/share/planned-workout'; break;
     case 'TRAINING_PLAN': sharePath = '/share/plan'; break;
