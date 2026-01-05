@@ -17,7 +17,7 @@
     <a href="#key-features">Key Features</a> •
     <a href="#quick-start">Quick Start</a> •
     <a href="#integrations">Integrations</a> •
-    <a href="./docs/README.md">Documentation</a>
+    <a href="./docs/INDEX.md">Documentation</a>
   </p>
 </div>
 
@@ -78,7 +78,7 @@ Copy the example env file and fill in your API keys:
 ```bash
 cp .env.example .env
 ```
-> **Note:** You will need API keys for Google (Auth & Gemini), and optionally Intervals.icu, Strava, etc. See [Getting Credentials](./docs/implementation-guide.md#getting-api-keys--credentials).
+> **Note:** You will need API keys for Google (Auth & Gemini), and optionally Intervals.icu, Strava, etc. See [Getting Credentials](./docs/04-guides/implementation-guide.md#prerequisites).
 
 ### 4. Run Migrations
 ```bash
@@ -96,12 +96,12 @@ Visit `http://localhost:3099` and log in!
 
 We have extensive documentation available in the [`docs/`](./docs) directory:
 
-- [**Architecture**](./docs/architecture.md): System design and data flow.
-- [**Database Schema**](./docs/database-schema.md): Detailed Prisma models.
+- [**Architecture**](./docs/01-architecture/system-overview.md): System design and data flow.
+- [**Database Schema**](./docs/01-architecture/database-schema.md): Detailed Prisma models.
 - **Feature Guides**:
-  - [AI Chat System](./docs/chat-feature.md)
-  - [Scoring System](./docs/scoring-system.md)
-  - [Integration Guides](./docs/README.md#integration-specific-docs)
+  - [AI Chat System](./docs/02-features/chat/overview.md)
+  - [Scoring System](./docs/02-features/analytics/scoring-system.md)
+  - [Integration Guides](./docs/INDEX.md#03-integrations)
 
 ## 🤝 Contributing
 
