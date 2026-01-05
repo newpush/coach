@@ -3,12 +3,10 @@ import type { Integration } from '@prisma/client'
 function getIntervalsHeaders(integration: Integration): Record<string, string> {
   // If we have a scope or refresh token, it's an OAuth integration
   if (integration.scope || integration.refreshToken) {
-    console.log(`[Intervals Auth] Using OAuth Bearer token (hasScope: ${!!integration.scope}, hasRefreshToken: ${!!integration.refreshToken})`)
     return { 'Authorization': `Bearer ${integration.accessToken}` }
   }
   
   // Otherwise, assume it's a legacy API Key integration
-  console.log('[Intervals Auth] Using Legacy API Key Basic auth')
   const auth = Buffer.from(`API_KEY:${integration.accessToken}`).toString('base64')
   return { 'Authorization': `Basic ${auth}` }
 }
@@ -131,6 +129,31 @@ interface IntervalsPlannedWorkout {
   [key: string]: any
 }
 
+async function fetchWithRetry(url: string, options: RequestInit, retries = 3, backoff = 1000): Promise<Response> {
+  try {
+    const response = await fetch(url, options)
+    
+    if (response.status === 429 && retries > 0) {
+      const retryAfter = response.headers.get('Retry-After')
+      const waitTime = retryAfter ? parseInt(retryAfter, 10) * 1000 : backoff
+      
+      console.warn(`[Intervals API] 429 Too Many Requests. Retrying in ${waitTime}ms... (${retries} retries left)`)
+      await new Promise(resolve => setTimeout(resolve, waitTime))
+      
+      return fetchWithRetry(url, options, retries - 1, backoff * 2)
+    }
+    
+    return response
+  } catch (error) {
+    if (retries > 0) {
+      console.warn(`[Intervals API] Network error: ${error}. Retrying in ${backoff}ms... (${retries} retries left)`)
+      await new Promise(resolve => setTimeout(resolve, backoff))
+      return fetchWithRetry(url, options, retries - 1, backoff * 2)
+    }
+    throw error
+  }
+}
+
 export async function createIntervalsPlannedWorkout(
   integration: Integration,
   data: {
@@ -199,7 +222,7 @@ export async function createIntervalsPlannedWorkout(
   const headers = getIntervalsHeaders(integration)
   const bodyStr = JSON.stringify(eventData)
     
-  const response = await fetch(url, {
+  const response = await fetchWithRetry(url, {
     method: 'POST',
     headers: {
       ...headers,
@@ -237,7 +260,7 @@ export async function deleteIntervalsPlannedWorkout(
   const url = `https://intervals.icu/api/v1/athlete/${athleteId}/events/${eventId}`
   const headers = getIntervalsHeaders(integration)
     
-  const response = await fetch(url, {
+  const response = await fetchWithRetry(url, {
     method: 'DELETE',
     headers
   })
@@ -307,7 +330,7 @@ export async function updateIntervalsPlannedWorkout(
   const url = `https://intervals.icu/api/v1/athlete/${athleteId}/events/${eventId}`
   const headers = getIntervalsHeaders(integration)
     
-  const response = await fetch(url, {
+  const response = await fetchWithRetry(url, {
     method: 'PUT',
     headers: {
       ...headers,
@@ -340,7 +363,7 @@ export async function fetchIntervalsPlannedWorkouts(
   
   const headers = getIntervalsHeaders(integration)
     
-  const response = await fetch(url.toString(), {
+  const response = await fetchWithRetry(url.toString(), {
     headers
   })
   
@@ -369,7 +392,7 @@ export async function fetchIntervalsWorkouts(
   
   console.log(`[Intervals Sync] Fetching workouts from: ${url.toString()}`)
     
-  const response = await fetch(url.toString(), {
+  const response = await fetchWithRetry(url.toString(), {
     headers
   })
   
@@ -392,7 +415,7 @@ export async function fetchIntervalsAthlete(accessToken: string, athleteId?: str
   
   const auth = Buffer.from(`API_KEY:${accessToken}`).toString('base64')
   
-  const response = await fetch(`https://intervals.icu/api/v1/athlete/${athleteId}`, {
+  const response = await fetchWithRetry(`https://intervals.icu/api/v1/athlete/${athleteId}`, {
     headers: {
       'Authorization': `Basic ${auth}`
     }
@@ -414,7 +437,7 @@ export async function fetchIntervalsAthleteProfile(integration: Integration) {
   console.log(`[Intervals Sync] Fetching athlete profile from: https://intervals.icu/api/v1/athlete/${athleteId}`)
   
   // Fetch athlete data
-  const athleteResponse = await fetch(`https://intervals.icu/api/v1/athlete/${athleteId}`, {
+  const athleteResponse = await fetchWithRetry(`https://intervals.icu/api/v1/athlete/${athleteId}`, {
     headers
   })
   
@@ -436,7 +459,7 @@ export async function fetchIntervalsAthleteProfile(integration: Integration) {
     const dateStr = date.toISOString().split('T')[0]
     
     try {
-      const wellnessResponse = await fetch(
+      const wellnessResponse = await fetchWithRetry(
         `https://intervals.icu/api/v1/athlete/${athleteId}/wellness/${dateStr}`,
         {
           headers
@@ -636,7 +659,7 @@ export async function fetchIntervalsWellness(
     const headers = getIntervalsHeaders(integration)
     
     try {
-      const response = await fetch(url, {
+      const response = await fetchWithRetry(url, {
         headers
       })
       
@@ -819,7 +842,7 @@ export async function fetchIntervalsActivityStreams(
   
   const url = `https://intervals.icu/api/v1/activity/${activityId}/streams`
   
-  const response = await fetch(url, {
+  const response = await fetchWithRetry(url, {
     headers
   })
   
