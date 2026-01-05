@@ -228,7 +228,7 @@ export default defineEventHandler(async (event) => {
         weight: recentWeight,
         ftp: user.ftp,
         restingHr: recentRestingHR,
-        maxHR: user.maxHr,
+        maxHr: user.maxHr,
         estimatedMaxHR,
         recentHRV,
         lthr: user.lthr,

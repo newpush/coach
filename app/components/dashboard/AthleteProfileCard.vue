@@ -196,7 +196,7 @@
       
       <!-- Wellness Section - Clickable -->
       <button
-        v-if="userStore.profile.recentHRV || userStore.profile.restingHR || userStore.profile.recentSleep || userStore.profile.recentRecoveryScore"
+        v-if="userStore.profile.recentHRV || userStore.profile.restingHr || userStore.profile.recentSleep || userStore.profile.recentRecoveryScore"
         @click="$emit('open-wellness')"
         class="group w-full text-left p-4 rounded-xl bg-gray-50 dark:bg-gray-800/50 ring-1 ring-inset ring-gray-200 dark:ring-gray-700 hover:ring-primary-500/50 transition-all duration-200"
       >
@@ -219,12 +219,12 @@
              </div>
             <div class="text-sm font-bold text-gray-900 dark:text-white">{{ Math.round(userStore.profile.recentHRV) }} ms</div>
           </div>
-           <div v-if="userStore.profile.restingHR" class="space-y-1">
+           <div v-if="userStore.profile.restingHr" class="space-y-1">
              <div class="flex items-center gap-1 text-[10px] font-bold text-gray-500 uppercase">
                <UIcon name="i-heroicons-heart" class="w-3 h-3 text-indigo-500" />
                RHR
              </div>
-            <div class="text-sm font-bold text-gray-900 dark:text-white">{{ userStore.profile.restingHR }} bpm</div>
+            <div class="text-sm font-bold text-gray-900 dark:text-white">{{ userStore.profile.restingHr }} bpm</div>
           </div>
         </div>
       </button>
