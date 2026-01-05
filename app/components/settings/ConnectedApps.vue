@@ -19,13 +19,22 @@
           </div>
           
           <div class="flex items-center justify-end gap-2 pt-4 border-t border-gray-100 dark:border-gray-800 mt-auto">
-            <div v-if="!intervalsConnected">
+            <div v-if="!intervalsConnected" class="flex flex-col items-end gap-2">
               <UButton
                 color="neutral"
                 variant="outline"
-                @click="navigateTo('/connect-intervals')"
+                @click="signIn('intervals')"
               >
                 Connect
+              </UButton>
+              <UButton
+                color="gray"
+                variant="link"
+                size="xs"
+                :padded="false"
+                @click="navigateTo('/connect-intervals')"
+              >
+                Connect manually (API Key)
               </UButton>
             </div>
             <div v-else class="flex items-center gap-2">
@@ -354,6 +363,7 @@
 </template>
 
 <script setup lang="ts">
+const { signIn } = useAuth()
 const advancedSyncModalOpen = ref(false)
 const selectedDays = ref<number | undefined>()
 

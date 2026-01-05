@@ -57,11 +57,17 @@
               </p>
             </div>
 
-            <div class="space-y-6">
+            <div class="space-y-4">
               <UButton block size="xl" icon="i-lucide-chrome" color="primary" variant="solid"
                 class="shadow-sm hover:bg-primary-600 transition-all py-4" :loading="loading"
                 @click="handleGoogleLogin">
                 Continue with Google
+              </UButton>
+
+              <UButton block size="xl" icon="i-heroicons-chart-bar" color="neutral" variant="outline"
+                class="shadow-sm py-4" :loading="loadingIntervals"
+                @click="handleIntervalsLogin">
+                Continue with Intervals.icu
               </UButton>
 
               <div class="relative">
@@ -69,7 +75,7 @@
                   <span class="w-full border-t border-gray-200 dark:border-gray-700" />
                 </div>
                 <div class="relative flex justify-center text-sm">
-                  <span class="bg-white dark:bg-gray-900 px-2 text-gray-500">Only Google Login supported</span>
+                  <span class="bg-white dark:bg-gray-900 px-2 text-gray-500">Secure OAuth Login</span>
                 </div>
               </div>
             </div>
@@ -113,6 +119,7 @@ useHead({
 })
 
 const loading = ref(false)
+const loadingIntervals = ref(false)
 
 async function handleGoogleLogin() {
   loading.value = true
@@ -125,6 +132,20 @@ async function handleGoogleLogin() {
       color: 'error'
     })
     loading.value = false
+  }
+}
+
+async function handleIntervalsLogin() {
+  loadingIntervals.value = true
+  try {
+    await signIn('intervals', { callbackUrl: '/dashboard' })
+  } catch (error: any) {
+    toast.add({
+      title: 'Login Failed',
+      description: error.message || 'Could not initiate Intervals login.',
+      color: 'error'
+    })
+    loadingIntervals.value = false
   }
 }
 </script>
