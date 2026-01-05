@@ -61,9 +61,46 @@ Troubleshooting and debugging commands.
 
 *   **Debug Auth Logic:**
     ```bash
-    npx tsx cli/index.ts debug auth-logic
+    pnpm cw:cli debug auth-logic
     ```
     Checks environment variables and database records related to authentication, including the bypass user.
+
+*   **Troubleshoot Workouts:**
+    ```bash
+    pnpm cw:cli debug workout [url] [options]
+    ```
+    Compares ingested workout records against their stored `rawJson` data to identify discrepancies.
+    
+    Arguments:
+    *   `[url]`: Optional URL of the workout (e.g., from `coachwatts.com`). Automatically sets `--prod` and extracts the workout ID.
+
+    Options:
+    *   `--prod`: Use production database (requires `DATABASE_URL_PROD` in `.env`).
+    *   `--user <email>`: Filter by user email.
+    *   `--id <id>`: Filter by workout ID.
+    *   `--date <YYYY-MM-DD>`: Filter by workout date.
+    *   `--source <source>`: Filter by source (default: `intervals`).
+    *   `-v, --verbose`: Show comparison for all fields, even matching ones.
+
+## Development & Maintenance
+
+### Philosophy
+We prefer **extending this CLI** over creating one-off scripts for troubleshooting and maintenance tasks. This ensures:
+1.  **Reusability**: Tools are documented, discoverable, and reusable by the entire team.
+2.  **Consistency**: Shared utilities (like database connections and logging) are used consistently.
+3.  **Maintenance**: It's easier to maintain a structured CLI than a folder full of disparate scripts.
+
+### How to Extend
+1.  **Identify the Category**: Decide if your tool is for `db` (database ops), `check` (validation), or `debug` (troubleshooting).
+2.  **Create Command**: Add a new file in the corresponding directory (e.g., `cli/debug/my-tool.ts`).
+3.  **Register**: Import and add your command in the category's `index.ts`.
+4.  **Document**: Update this README with the new command details.
+
+### Workflow
+When faced with a new troubleshooting task:
+1.  Check if an existing CLI command can be extended (e.g., adding a flag to `debug workout`).
+2.  If not, create a new CLI command instead of a standalone script in `scripts/`.
+3.  Use the `pnpm cw:cli` script for execution.
 
 ## Adding New Commands
 

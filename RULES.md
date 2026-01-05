@@ -109,10 +109,12 @@ This file aggregates all critical development rules and guidelines for the Coach
 
 ---
 
-## 8. Troubleshooting
+## 8. Troubleshooting & CLI
 
--   **Scripts**: Use `dotenv/config` and import the shared `prisma` instance.
--   **Execution**: Run scripts using `pnpm exec tsx scripts/script-name.ts`.
+-   **Preference**: Always prefer extending the project CLI (`cli/`) over creating one-off scripts in `scripts/`.
+-   **Execution**: Run CLI commands using `pnpm cw:cli [command]`.
+-   **Existing Tools**: Use `pnpm cw:cli debug workout` for data ingestion issues.
+-   **Scripts**: If a standalone script is absolutely necessary, use `dotenv/config` and import the shared `prisma` instance. Run with `pnpm exec tsx scripts/script-name.ts`.
 
 ---
 

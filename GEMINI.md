@@ -69,6 +69,13 @@ When the user mentions specific UUIDs, IDs, or asks to verify data integrity:
     ```
 4.  **Verify Relationships:** Check related tables (e.g., `ShareToken`, `PlannedWorkout`) if the issue involves linked data.
 
+### CLI & Tooling
+The project includes a robust CLI for debugging and maintenance tasks.
+-   **Command**: `pnpm cw:cli`
+-   **Troubleshooting**: Use `pnpm cw:cli debug workout [url]` to diagnose data ingestion issues.
+-   **Documentation**: See `cli/README.md` for full usage and extension guides.
+-   **Philosophy**: Extend the CLI rather than creating one-off scripts.
+
 ### [Architecture](./architecture.md)
 **System design and technical decisions**
 
