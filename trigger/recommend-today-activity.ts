@@ -62,7 +62,7 @@ export const recommendTodayActivityTask = task({
     logger.log("Starting today's activity recommendation", { userId, date: today });
     
     // Fetch all required data
-    const [plannedWorkout, todayMetric, recentWorkouts, user, athleteProfile] = await Promise.all([
+    const [plannedWorkout, todayMetric, recentWorkouts, user, athleteProfile, activeGoals] = await Promise.all([
       // Today's planned workout
       prisma.plannedWorkout.findFirst({
         where: { userId, date: today },
@@ -93,6 +93,23 @@ export const recommendTodayActivityTask = task({
         },
         orderBy: { createdAt: 'desc' },
         select: { analysisJson: true, createdAt: true }
+      }),
+
+      // Active goals
+      prisma.goal.findMany({
+        where: {
+          userId,
+          status: 'ACTIVE'
+        },
+        orderBy: { priority: 'desc' },
+        select: {
+          title: true,
+          type: true,
+          description: true,
+          targetDate: true,
+          eventDate: true,
+          priority: true
+        }
       })
     ]);
     
@@ -100,7 +117,8 @@ export const recommendTodayActivityTask = task({
       hasPlannedWorkout: !!plannedWorkout,
       hasTodayMetric: !!todayMetric,
       recentWorkoutsCount: recentWorkouts.length,
-      hasAthleteProfile: !!athleteProfile
+      hasAthleteProfile: !!athleteProfile,
+      activeGoalsCount: activeGoals.length
     });
     
     // Build athlete profile context
@@ -136,6 +154,25 @@ ATHLETE BASIC INFO:
 - Weight: ${user?.weight || 'Unknown'} kg
 - Max HR: ${user?.maxHr || 'Unknown'} bpm
 Note: No structured athlete profile available yet. Generate one for better recommendations.
+`;
+    }
+
+    // Add goals context
+    if (activeGoals.length > 0) {
+      athleteContext += `
+      
+CURRENT GOALS:
+${activeGoals.map(g => {
+  const daysToTarget = g.targetDate ? Math.ceil((new Date(g.targetDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24)) : null;
+  const daysToEvent = g.eventDate ? Math.ceil((new Date(g.eventDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24)) : null;
+  
+  let goalLine = `- [${g.priority}] ${g.title} (${g.type})`;
+  if (g.description) goalLine += ` - ${g.description}`;
+  if (daysToTarget) goalLine += ` | ${daysToTarget} days to target`;
+  if (daysToEvent) goalLine += ` | Event in ${daysToEvent} days`;
+  
+  return goalLine;
+}).join('\n')}
 `;
     }
     

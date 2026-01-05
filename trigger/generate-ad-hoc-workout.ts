@@ -29,7 +29,7 @@ export const generateAdHocWorkoutTask = task({
     logger.log("Generating ad-hoc workout", { userId, date: today, preferences });
     
     // Fetch Data
-    const [todayMetric, recentWorkouts, user, athleteProfile] = await Promise.all([
+    const [todayMetric, recentWorkouts, user, athleteProfile, activeGoals] = await Promise.all([
       wellnessRepository.getByDate(userId, today),
       workoutRepository.getForUser(userId, {
         startDate: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
@@ -43,6 +43,21 @@ export const generateAdHocWorkoutTask = task({
         where: { userId, type: 'ATHLETE_PROFILE', status: 'COMPLETED' },
         orderBy: { createdAt: 'desc' },
         select: { analysisJson: true }
+      }),
+      prisma.goal.findMany({
+        where: {
+          userId,
+          status: 'ACTIVE'
+        },
+        orderBy: { priority: 'desc' },
+        select: {
+          title: true,
+          type: true,
+          description: true,
+          targetDate: true,
+          eventDate: true,
+          priority: true
+        }
       })
     ]);
 
@@ -56,6 +71,15 @@ export const generateAdHocWorkoutTask = task({
     if (athleteProfile?.analysisJson) {
       const p = athleteProfile.analysisJson as any;
       context += `\nFocus: ${p.planning_context?.current_focus || 'General Fitness'}.`;
+    }
+
+    if (activeGoals.length > 0) {
+      context += `\n\nCURRENT GOALS:\n${activeGoals.map(g => {
+        const daysToTarget = g.targetDate ? Math.ceil((new Date(g.targetDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24)) : null;
+        let goalLine = `- ${g.title}`;
+        if (daysToTarget) goalLine += ` (${daysToTarget} days left)`;
+        return goalLine;
+      }).join('\n')}`;
     }
 
     // Incorporate User Preferences
