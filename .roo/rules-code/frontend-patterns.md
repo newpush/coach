@@ -104,4 +104,50 @@ Consistent loading states improve perceived performance and user experience.
     </div>
   </div>
 </div>
+
+## Nuxt UI Modals & Forms
+
+When building interactive modals with forms, follow these guidelines to ensure consistency, responsiveness, and usability.
+
+### Modals
+- **Width Control:** Use the `:ui="{ content: 'sm:max-w-lg' }"` (or relevant width class) prop to control modal width. Do NOT use `width` directly in `ui` as it may cause type errors.
+- **Content:** Place main content in the default slot (`#body` or direct child) and actions in `#footer`.
+
+### Forms
+- **Full Width Inputs:** Ensure inputs (`USelect`, `UInput`, `UTextarea`) inside modals or constrained containers have `class="w-full"`.
+- **Form Fields:** Wrap all inputs in `<UFormField>` to provide consistent labels, help text, and spacing.
+- **Icons:** Use `icon` props on inputs to improve visual recognition (e.g., `i-heroicons-calendar` for dates).
+- **Responsive Layouts:** Use CSS Grid (e.g., `grid-cols-1 sm:grid-cols-2`) for multi-column forms to ensure they stack correctly on mobile.
+
+### Example
+
+```vue
+<template>
+  <UModal v-model:open="isOpen" :ui="{ content: 'sm:max-w-lg' }">
+    <template #body>
+      <div class="space-y-4">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <UFormField label="Type" name="type">
+            <USelect v-model="form.type" :items="types" class="w-full" icon="i-heroicons-bolt" />
+          </UFormField>
+          
+          <UFormField label="Duration" name="duration">
+             <UInput v-model="form.duration" type="number" class="w-full" icon="i-heroicons-clock" />
+          </UFormField>
+        </div>
+        
+        <UFormField label="Notes" name="notes">
+          <UTextarea v-model="form.notes" class="w-full" :rows="3" />
+        </UFormField>
+      </div>
+    </template>
+    
+    <template #footer>
+      <div class="flex justify-end gap-2">
+        <UButton color="neutral" variant="ghost" @click="isOpen = false">Cancel</UButton>
+        <UButton color="primary" @click="submit">Save</UButton>
+      </div>
+    </template>
+  </UModal>
+</template>
 ```

@@ -57,6 +57,7 @@ This file aggregates all critical development rules and guidelines for the Coach
 ### Layouts
 -   **Dashboard**: Use `UDashboardPanel`, `UDashboardNavbar`, `UDashboardSidebar`.
 -   **Forms**: Wrap inputs in `UFormField`.
+-   **Modals**: Use `:ui="{ content: 'sm:max-w-lg' }"` for width control. Ensure inputs are full width (`w-full`).
 
 ### Responsive Design
 -   Ensure all designs work on mobile and desktop.
