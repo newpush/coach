@@ -1,4 +1,5 @@
-import { logger, task, tasks } from "@trigger.dev/sdk/v3";
+import { logger, task } from "@trigger.dev/sdk/v3";
+import { userIngestionQueue } from "./queues";
 import { fetchWithingsMeasures, normalizeWithingsMeasureGroup, WITHINGS_MEASURE_TYPES, fetchWithingsWorkouts, normalizeWithingsWorkout, fetchWithingsSleep, normalizeWithingsSleep, fetchWithingsIntraday } from "../server/utils/withings";
 import { prisma } from "../server/utils/db";
 import { wellnessRepository } from "../server/utils/repositories/wellnessRepository";
@@ -8,6 +9,7 @@ import { calculateWorkoutStress } from "../server/utils/calculate-workout-stress
 
 export const ingestWithingsTask = task({
   id: "ingest-withings",
+  queue: userIngestionQueue,
   run: async (payload: {
     userId: string;
     startDate: string;

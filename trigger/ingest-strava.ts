@@ -1,4 +1,5 @@
 import { logger, task, tasks } from "@trigger.dev/sdk/v3";
+import { userIngestionQueue } from "./queues";
 import {
   fetchStravaActivities,
   fetchStravaActivityDetails,
@@ -10,6 +11,7 @@ import { calculateWorkoutStress } from "../server/utils/calculate-workout-stress
 
 export const ingestStravaTask = task({
   id: "ingest-strava",
+  queue: userIngestionQueue,
   run: async (payload: {
     userId: string;
     startDate: string;
@@ -129,6 +131,8 @@ export const ingestStravaTask = task({
           userId,
           workoutId: upsertedWorkout.id,
           activityId: activity.id
+        }, {
+          concurrencyKey: userId
         });
         triggeredWorkoutIds.add(upsertedWorkout.id);
         
@@ -179,6 +183,8 @@ export const ingestStravaTask = task({
             userId,
             workoutId: workout.id,
             activityId
+          }, {
+            concurrencyKey: userId
           });
           
           // Small delay to be safe

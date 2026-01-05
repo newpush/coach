@@ -1,4 +1,5 @@
 import { task, logger } from '@trigger.dev/sdk/v3'
+import { userIngestionQueue } from "./queues";
 import { prisma } from '../server/utils/db'
 import { fetchIntervalsActivityStreams } from '../server/utils/intervals'
 import {
@@ -17,6 +18,7 @@ interface IngestStreamsPayload {
 
 export const ingestIntervalsStreams = task({
   id: 'ingest-intervals-streams',
+  queue: userIngestionQueue,
   run: async (payload: IngestStreamsPayload) => {
     logger.log('Starting Intervals.icu stream ingestion', { 
       workoutId: payload.workoutId, 

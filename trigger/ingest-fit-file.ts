@@ -1,4 +1,5 @@
 import { logger, task } from "@trigger.dev/sdk/v3";
+import { userIngestionQueue } from "./queues";
 import { prisma } from "../server/utils/db";
 import { workoutRepository } from "../server/utils/repositories/workoutRepository";
 import { parseFitFile, normalizeFitSession, extractFitStreams } from "../server/utils/fit";
@@ -6,6 +7,7 @@ import { calculateWorkoutStress } from "../server/utils/calculate-workout-stress
 
 export const ingestFitFile = task({
   id: "ingest-fit-file",
+  queue: userIngestionQueue,
   run: async (payload: {
     userId: string;
     fitFileId: string;

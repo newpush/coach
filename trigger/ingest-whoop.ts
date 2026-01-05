@@ -1,4 +1,5 @@
 import { logger, task } from "@trigger.dev/sdk/v3";
+import { userIngestionQueue } from "./queues";
 import { fetchWhoopRecovery, fetchWhoopSleep, fetchWhoopWorkouts, normalizeWhoopRecovery, normalizeWhoopWorkout, extractWhoopHrZones } from "../server/utils/whoop";
 import { prisma } from "../server/utils/db";
 import { workoutRepository } from "../server/utils/repositories/workoutRepository";
@@ -8,6 +9,7 @@ import { calculateWorkoutStress } from "../server/utils/calculate-workout-stress
 
 export const ingestWhoopTask = task({
   id: "ingest-whoop",
+  queue: userIngestionQueue,
   run: async (payload: {
     userId: string;
     startDate: string;

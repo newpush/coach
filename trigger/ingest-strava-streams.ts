@@ -1,4 +1,5 @@
 import { task, logger } from '@trigger.dev/sdk/v3'
+import { userIngestionQueue } from "./queues";
 import { prisma } from '../server/utils/db'
 import { fetchStravaActivityStreams } from '../server/utils/strava'
 import {
@@ -19,6 +20,7 @@ interface IngestStreamsPayload {
 
 export const ingestStravaStreams = task({
   id: 'ingest-strava-streams',
+  queue: userIngestionQueue,
   run: async (payload: IngestStreamsPayload) => {
     logger.log('Starting stream ingestion', { 
       workoutId: payload.workoutId, 

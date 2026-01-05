@@ -1,4 +1,5 @@
 import { logger, task, tasks } from "@trigger.dev/sdk/v3";
+import { userIngestionQueue } from "./queues";
 import {
   fetchIntervalsWorkouts,
   fetchIntervalsWellness,
@@ -17,6 +18,7 @@ import { calculateWorkoutStress } from "../server/utils/calculate-workout-stress
 
 export const ingestIntervalsTask = task({
   id: "ingest-intervals",
+  queue: userIngestionQueue,
   run: async (payload: {
     userId: string;
     startDate: string;
@@ -164,6 +166,8 @@ export const ingestIntervalsTask = task({
             userId,
             workoutId: upsertedWorkout.id,
             activityId: activity.id
+          }, {
+            concurrencyKey: userId
           });
         }
       }

@@ -1,4 +1,5 @@
 import { logger, task } from "@trigger.dev/sdk/v3"
+import { userIngestionQueue } from "./queues";
 import { prisma } from "../server/utils/db"
 import { nutritionRepository } from "../server/utils/repositories/nutritionRepository"
 import {
@@ -10,6 +11,7 @@ import {
 
 export const ingestYazioTask = task({
   id: "ingest-yazio",
+  queue: userIngestionQueue,
   run: async (payload: { 
     userId: string
     startDate: string
