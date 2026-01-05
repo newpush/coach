@@ -82,7 +82,8 @@
     "release:patch": "release-it patch",
     "release:minor": "release-it minor",
     "release:major": "release-it major",
-    "cli": "tsx ./cli/index.ts"
+    "cli": "tsx ./cli/index.ts",
+    "cw:cli": "tsx cli/index.ts"
   },
   "type": "module",
   "version": "0.5.6"
