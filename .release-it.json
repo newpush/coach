@@ -1,6 +1,7 @@
 {
   "hooks": {
-    "after:bump": "pnpm run cli changelog --write --version ${version} --from ${latestTag} && git add USER_CHANGELOG.md public/content/releases/"
+    "after:bump": "pnpm run cli changelog --write --version ${version} --from ${latestTag} && git add USER_CHANGELOG.md public/content/releases/",
+    "after:release": "pnpm run cli changelog publish && pnpm run cli changelog publish --file CHANGELOG.md --type technical"
   },
   "plugins": {
     "@release-it/conventional-changelog": {
