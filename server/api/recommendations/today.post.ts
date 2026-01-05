@@ -42,6 +42,9 @@ export default defineEventHandler(async (event) => {
   const today = new Date()
   today.setHours(0, 0, 0, 0)
   
+  const body = await readBody(event)
+  const userFeedback = body?.userFeedback
+
   // Create a PENDING recommendation record immediately
   const recommendation = await prisma.activityRecommendation.create({
     data: {
@@ -50,7 +53,9 @@ export default defineEventHandler(async (event) => {
       recommendation: 'proceed', // Placeholder
       confidence: 0,
       reasoning: 'Analysis in progress...',
-      status: 'PROCESSING'
+      status: 'PROCESSING',
+      // We could store the feedback in a new field if we want to persist it,
+      // but passing it to the job is sufficient for now.
     }
   })
   
@@ -58,7 +63,8 @@ export default defineEventHandler(async (event) => {
   const handle = await tasks.trigger('recommend-today-activity', {
     userId,
     date: today,
-    recommendationId: recommendation.id
+    recommendationId: recommendation.id,
+    userFeedback
   })
   
   return {

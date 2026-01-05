@@ -19,7 +19,10 @@ defineRouteMeta({
                 recommendation: { type: 'string' },
                 confidence: { type: 'number' },
                 reasoning: { type: 'string' },
-                status: { type: 'string' }
+                status: { type: 'string' },
+                userAccepted: { type: 'boolean' },
+                analysisJson: { type: 'object' },
+                plannedWorkout: { type: 'object' }
               }
             }
           }
@@ -49,6 +52,9 @@ export default defineEventHandler(async (event) => {
     where: {
       userId,
       date: today
+    },
+    include: {
+      plannedWorkout: true
     },
     orderBy: { createdAt: 'desc' }
   })

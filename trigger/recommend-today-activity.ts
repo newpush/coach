@@ -52,8 +52,8 @@ const recommendationSchema = {
 export const recommendTodayActivityTask = task({
   id: "recommend-today-activity",
   maxDuration: 300,
-  run: async (payload: { userId: string; date: Date; recommendationId?: string }) => {
-    const { userId, date, recommendationId } = payload;
+  run: async (payload: { userId: string; date: Date; recommendationId?: string; userFeedback?: string }) => {
+    const { userId, date, recommendationId, userFeedback } = payload;
     
     // Set date to start of day
     const today = new Date(date);
@@ -164,6 +164,10 @@ ${todayMetric.spO2 ? `- SpO2: ${todayMetric.spO2}%` : ''}
 
 RECENT TRAINING (Last 7 days):
 ${recentWorkouts.length > 0 ? buildWorkoutSummary(recentWorkouts) : 'No recent workouts'}
+
+${userFeedback ? `USER FEEDBACK / OBJECTION:
+"${userFeedback}"
+IMPORTANT: The user has explicitly provided this feedback. You MUST take it into account and adjust your recommendation accordingly. If they say they are tired, recommend rest or easy. If they want to push, allow it if safety permits.` : ''}
 
 TASK:
 Analyze whether the athlete should proceed with today's planned workout or modify it based on their current recovery state and recent training load.
