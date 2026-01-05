@@ -49,12 +49,20 @@
             <UIcon name="i-lucide-alert-triangle" class="w-4 h-4 mr-2" />
             Danger Zone
           </UButton>
+          <UButton
+            :variant="isActive('/settings/changelog') ? 'solid' : 'ghost'"
+            :color="isActive('/settings/changelog') ? 'primary' : 'neutral'"
+            @click="navigateTo('/settings/changelog')"
+          >
+            <UIcon name="i-lucide-list" class="w-4 h-4 mr-2" />
+            Changelog
+          </UButton>
         </div>
       </UDashboardToolbar>
     </template>
 
     <template #body>
-      <div class="p-6" :class="isFullWidth ? 'max-w-full' : 'max-w-4xl mx-auto'">
+      <div class="p-4 sm:p-6" :class="isFullWidth ? 'max-w-full' : 'max-w-4xl mx-auto'">
         <NuxtPage />
       </div>
     </template>
