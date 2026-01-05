@@ -9,8 +9,8 @@
         <!-- Intervals.icu -->
         <UCard :ui="{ body: 'flex flex-col h-full justify-between gap-4' }">
           <div class="flex items-start gap-4">
-            <div class="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center shrink-0">
-              <UIcon name="i-heroicons-chart-bar" class="w-6 h-6 text-blue-600" />
+            <div class="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center shrink-0 overflow-hidden">
+              <img src="/images/logos/intervals.png" alt="Intervals.icu Logo" class="w-8 h-8 object-contain" />
             </div>
             <div>
               <h3 class="font-semibold">Intervals.icu</h3>
@@ -74,8 +74,8 @@
         <!-- WHOOP -->
         <UCard :ui="{ body: 'flex flex-col h-full justify-between gap-4' }">
           <div class="flex items-start gap-4">
-            <div class="w-12 h-12 bg-red-100 rounded-lg flex items-center justify-center shrink-0">
-              <UIcon name="i-heroicons-heart" class="w-6 h-6 text-red-600" />
+            <div class="w-12 h-12 bg-white rounded-lg flex items-center justify-center shrink-0 overflow-hidden ring-1 ring-gray-200 dark:ring-gray-700">
+              <img src="/images/logos/whoop_square.svg" alt="WHOOP Logo" class="w-8 h-8 object-contain" />
             </div>
             <div>
               <h3 class="font-semibold">WHOOP</h3>
@@ -132,8 +132,8 @@
         <!-- Withings -->
         <UCard :ui="{ body: 'flex flex-col h-full justify-between gap-4' }">
           <div class="flex items-start gap-4">
-            <div class="w-12 h-12 bg-cyan-100 rounded-lg flex items-center justify-center shrink-0">
-              <UIcon name="i-heroicons-scale" class="w-6 h-6 text-cyan-600" />
+            <div class="w-12 h-12 bg-white rounded-lg flex items-center justify-center shrink-0 overflow-hidden ring-1 ring-gray-200 dark:ring-gray-700">
+              <img src="/images/logos/withings.png" alt="Withings Logo" class="w-8 h-8 object-contain" />
             </div>
             <div>
               <h3 class="font-semibold">Withings</h3>
@@ -178,8 +178,8 @@
         <!-- Yazio -->
         <UCard :ui="{ body: 'flex flex-col h-full justify-between gap-4' }">
           <div class="flex items-start gap-4">
-            <div class="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center shrink-0">
-              <UIcon name="i-heroicons-cake" class="w-6 h-6 text-green-600" />
+            <div class="w-12 h-12 bg-white rounded-lg flex items-center justify-center shrink-0 overflow-hidden ring-1 ring-gray-200 dark:ring-gray-700">
+              <img src="/images/logos/yazio_square.webp" alt="Yazio Logo" class="w-8 h-8 object-contain" />
             </div>
             <div>
               <h3 class="font-semibold">Yazio</h3>
@@ -224,8 +224,8 @@
         <!-- Hevy -->
         <UCard :ui="{ body: 'flex flex-col h-full justify-between gap-4' }">
           <div class="flex items-start gap-4">
-            <div class="w-12 h-12 bg-indigo-100 rounded-lg flex items-center justify-center shrink-0">
-              <UIcon name="i-heroicons-trophy" class="w-6 h-6 text-indigo-600" />
+            <div class="w-12 h-12 bg-white rounded-lg flex items-center justify-center shrink-0 overflow-hidden ring-1 ring-gray-200 dark:ring-gray-700">
+              <img src="/images/logos/hevy-icon.png" alt="Hevy Logo" class="w-8 h-8 object-contain" />
             </div>
             <div>
               <h3 class="font-semibold">Hevy</h3>
@@ -270,8 +270,8 @@
         <!-- Strava -->
         <UCard :ui="{ body: 'flex flex-col h-full justify-between gap-4' }">
           <div class="flex items-start gap-4">
-            <div class="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center shrink-0">
-              <UIcon name="i-heroicons-bolt" class="w-6 h-6 text-orange-600" />
+            <div class="w-12 h-12 bg-white rounded-lg flex items-center justify-center shrink-0 overflow-hidden ring-1 ring-gray-200 dark:ring-gray-700">
+              <img src="/images/logos/strava.svg" alt="Strava Logo" class="w-8 h-8 object-contain" />
             </div>
             <div>
               <h3 class="font-semibold">Strava</h3>

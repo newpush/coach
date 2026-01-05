@@ -64,9 +64,12 @@
                 Continue with Google
               </UButton>
 
-              <UButton block size="xl" icon="i-heroicons-chart-bar" color="neutral" variant="outline"
+              <UButton block size="xl" color="neutral" variant="outline"
                 class="shadow-sm py-4" :loading="loadingIntervals"
                 @click="handleIntervalsLogin">
+                <template #leading>
+                  <img src="/images/logos/intervals.png" alt="Intervals.icu Logo" class="w-5 h-5" />
+                </template>
                 Continue with Intervals.icu
               </UButton>
 

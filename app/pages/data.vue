@@ -92,9 +92,14 @@
           <!-- Intervals.icu Card -->
           <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
             <div class="flex items-center justify-between mb-4">
-              <div>
-                <h2 class="text-xl font-semibold text-gray-900 dark:text-white">Intervals.icu</h2>
-                <p class="text-sm text-gray-600 dark:text-gray-400">Training activities & wellness</p>
+              <div class="flex items-center gap-3">
+                <div class="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center overflow-hidden shrink-0">
+                  <img src="/images/logos/intervals.png" alt="Intervals.icu Logo" class="w-6 h-6 object-contain" />
+                </div>
+                <div>
+                  <h2 class="text-xl font-semibold text-gray-900 dark:text-white">Intervals.icu</h2>
+                  <p class="text-sm text-gray-600 dark:text-gray-400">Training activities & wellness</p>
+                </div>
               </div>
               <div v-if="intervalsStatus" :class="getStatusClass(intervalsStatus.syncStatus)">
                 {{ intervalsStatus.syncStatus || 'Not Connected' }}
@@ -136,9 +141,14 @@
           <!-- Whoop Card -->
           <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
             <div class="flex items-center justify-between mb-4">
-              <div>
-                <h2 class="text-xl font-semibold text-gray-900 dark:text-white">Whoop</h2>
-                <p class="text-sm text-gray-600 dark:text-gray-400">Recovery & strain data</p>
+              <div class="flex items-center gap-3">
+                <div class="w-10 h-10 bg-white rounded-lg flex items-center justify-center overflow-hidden shrink-0 ring-1 ring-gray-200 dark:ring-gray-700">
+                  <img src="/images/logos/whoop_square.svg" alt="WHOOP Logo" class="w-6 h-6 object-contain" />
+                </div>
+                <div>
+                  <h2 class="text-xl font-semibold text-gray-900 dark:text-white">Whoop</h2>
+                  <p class="text-sm text-gray-600 dark:text-gray-400">Recovery & strain data</p>
+                </div>
               </div>
               <div v-if="whoopStatus" :class="getStatusClass(whoopStatus.syncStatus)">
                 {{ whoopStatus.syncStatus || 'Not Connected' }}
@@ -180,9 +190,14 @@
           <!-- Yazio Card -->
           <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
             <div class="flex items-center justify-between mb-4">
-              <div>
-                <h2 class="text-xl font-semibold text-gray-900 dark:text-white">Yazio</h2>
-                <p class="text-sm text-gray-600 dark:text-gray-400">Nutrition tracking</p>
+              <div class="flex items-center gap-3">
+                <div class="w-10 h-10 bg-white rounded-lg flex items-center justify-center overflow-hidden shrink-0 ring-1 ring-gray-200 dark:ring-gray-700">
+                  <img src="/images/logos/yazio_square.webp" alt="Yazio Logo" class="w-6 h-6 object-contain" />
+                </div>
+                <div>
+                  <h2 class="text-xl font-semibold text-gray-900 dark:text-white">Yazio</h2>
+                  <p class="text-sm text-gray-600 dark:text-gray-400">Nutrition tracking</p>
+                </div>
               </div>
               <div v-if="yazioStatus" :class="getStatusClass(yazioStatus.syncStatus)">
                 {{ yazioStatus.syncStatus || 'Not Connected' }}
@@ -224,9 +239,14 @@
           <!-- Strava Card -->
           <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
             <div class="flex items-center justify-between mb-4">
-              <div>
-                <h2 class="text-xl font-semibold text-gray-900 dark:text-white">Strava</h2>
-                <p class="text-sm text-gray-600 dark:text-gray-400">Activity tracking</p>
+              <div class="flex items-center gap-3">
+                <div class="w-10 h-10 bg-white rounded-lg flex items-center justify-center overflow-hidden shrink-0 ring-1 ring-gray-200 dark:ring-gray-700">
+                  <img src="/images/logos/strava.svg" alt="Strava Logo" class="w-6 h-6 object-contain" />
+                </div>
+                <div>
+                  <h2 class="text-xl font-semibold text-gray-900 dark:text-white">Strava</h2>
+                  <p class="text-sm text-gray-600 dark:text-gray-400">Activity tracking</p>
+                </div>
               </div>
               <div v-if="stravaStatus" :class="getStatusClass(stravaStatus.syncStatus)">
                 {{ stravaStatus.syncStatus || 'Not Connected' }}
@@ -268,9 +288,14 @@
           <!-- Hevy Card -->
           <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
             <div class="flex items-center justify-between mb-4">
-              <div>
-                <h2 class="text-xl font-semibold text-gray-900 dark:text-white">Hevy</h2>
-                <p class="text-sm text-gray-600 dark:text-gray-400">Strength workouts</p>
+              <div class="flex items-center gap-3">
+                <div class="w-10 h-10 bg-white rounded-lg flex items-center justify-center overflow-hidden shrink-0 ring-1 ring-gray-200 dark:ring-gray-700">
+                  <img src="/images/logos/hevy-icon.png" alt="Hevy Logo" class="w-6 h-6 object-contain" />
+                </div>
+                <div>
+                  <h2 class="text-xl font-semibold text-gray-900 dark:text-white">Hevy</h2>
+                  <p class="text-sm text-gray-600 dark:text-gray-400">Strength workouts</p>
+                </div>
               </div>
               <div v-if="hevyStatus" :class="getStatusClass(hevyStatus.syncStatus)">
                 {{ hevyStatus.syncStatus || 'Not Connected' }}
@@ -312,9 +337,14 @@
           <!-- Withings Card -->
           <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
             <div class="flex items-center justify-between mb-4">
-              <div>
-                <h2 class="text-xl font-semibold text-gray-900 dark:text-white">Withings</h2>
-                <p class="text-sm text-gray-600 dark:text-gray-400">Weight & Sleep Tracking</p>
+              <div class="flex items-center gap-3">
+                <div class="w-10 h-10 bg-white rounded-lg flex items-center justify-center overflow-hidden shrink-0 ring-1 ring-gray-200 dark:ring-gray-700">
+                  <img src="/images/logos/withings.png" alt="Withings Logo" class="w-6 h-6 object-contain" />
+                </div>
+                <div>
+                  <h2 class="text-xl font-semibold text-gray-900 dark:text-white">Withings</h2>
+                  <p class="text-sm text-gray-600 dark:text-gray-400">Weight & Sleep Tracking</p>
+                </div>
               </div>
               <div v-if="withingsStatus" :class="getStatusClass(withingsStatus.syncStatus)">
                 {{ withingsStatus.syncStatus || 'Not Connected' }}

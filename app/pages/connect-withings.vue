@@ -20,8 +20,8 @@
         <UCard>
           <template #header>
             <div class="flex items-center gap-4">
-              <div class="w-12 h-12 bg-white rounded-lg flex items-center justify-center border border-gray-200 dark:border-gray-700">
-                <img src="/images/logos/withings.png" alt="Withings" class="w-8 h-8 object-contain" />
+              <div class="w-12 h-12 bg-white rounded-lg flex items-center justify-center shrink-0 overflow-hidden ring-1 ring-gray-200 dark:ring-gray-700">
+                <img src="/images/logos/withings.png" alt="Withings Logo" class="w-8 h-8 object-contain" />
               </div>
               <div>
                 <h2 class="text-xl font-semibold">Connect Withings</h2>

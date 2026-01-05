@@ -20,8 +20,8 @@
         <UCard>
           <template #header>
             <div class="flex items-center gap-4">
-              <div class="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-                <UIcon name="i-heroicons-chart-bar" class="w-6 h-6 text-blue-600" />
+              <div class="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center overflow-hidden">
+                <img src="/images/logos/intervals.png" alt="Intervals.icu Logo" class="w-8 h-8 object-contain" />
               </div>
               <div>
                 <h2 class="text-xl font-semibold">Connect Intervals.icu</h2>
