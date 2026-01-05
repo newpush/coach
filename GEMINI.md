@@ -3081,7 +3081,7 @@ const providerInfo = {
   whoop: {
     name: 'Whoop',
     description: 'Recovery, HRV, and sleep tracking',
-    logo: '/images/whoop-logo.png'
+    logo: '/images/logos/whoop_square.svg'
   }
 }
 
