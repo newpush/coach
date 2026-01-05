@@ -129,6 +129,8 @@ export default defineEventHandler(async (event) => {
   await tasks.trigger('ingest-fit-file', {
     userId: user.id,
     fitFileId: fitFile.id
+  }, {
+    concurrencyKey: user.id
   })
 
   return {

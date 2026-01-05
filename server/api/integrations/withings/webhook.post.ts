@@ -110,6 +110,8 @@ export default defineEventHandler(async (event) => {
       userId: integration.userId,
       startDate: bufferStart.toISOString(),
       endDate: bufferEnd.toISOString()
+    }, {
+      concurrencyKey: integration.userId
     })
     
     console.log(`[Withings Webhook] Triggered ingestion for user ${integration.userId}`)
