@@ -1,4 +1,6 @@
 export const useFormatters = () => {
+  const { formatDate: baseFormatDate } = useFormat()
+
   const formatDuration = (seconds: number) => {
     if (!seconds) return '0s'
     const hours = Math.floor(seconds / 3600)
@@ -15,12 +17,7 @@ export const useFormatters = () => {
 
   const formatDate = (date: string | Date) => {
     if (!date) return ''
-    return new Date(date).toLocaleDateString('en-US', {
-      weekday: 'long',
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
-    })
+    return baseFormatDate(date, 'EEEE, MMMM d, yyyy')
   }
 
   return {

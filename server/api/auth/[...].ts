@@ -103,6 +103,7 @@ export default NuxtAuthHandler({
       if (session.user) {
         session.user.id = user.id
         session.user.isAdmin = user.isAdmin || false
+        session.user.timezone = user.timezone || null
       }
       return session
     },
