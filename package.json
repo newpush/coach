@@ -83,7 +83,9 @@
     "release:minor": "release-it minor",
     "release:major": "release-it major",
     "cli": "tsx ./cli/index.ts",
-    "cw:cli": "tsx cli/index.ts"
+    "cw:cli": "tsx cli/index.ts",
+    "db:dump": "scripts/dump-db.sh",
+    "db:dump:prod": "scripts/dump-db.sh DATABASE_URL_PROD"
   },
   "type": "module",
   "version": "0.5.7"
