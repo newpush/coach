@@ -7,6 +7,7 @@ import dbCommand from './db';
 import checkCommand from './check';
 import debugCommand from './debug';
 import changelogCommand from './changelog';
+import backfillCommand from './backfill';
 
 const program = new Command();
 
@@ -19,6 +20,7 @@ program.addCommand(dbCommand);
 program.addCommand(checkCommand);
 program.addCommand(debugCommand);
 program.addCommand(changelogCommand);
+program.addCommand(backfillCommand);
 
 program.parse(process.argv);
 
