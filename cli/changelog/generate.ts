@@ -12,7 +12,7 @@ export const generateCommand = new Command('generate')
   .option('-i, --input <file>', 'Input changelog file', 'CHANGELOG.md')
   .option('-o, --output <file>', 'Output file', 'USER_CHANGELOG.md')
   .option('-w, --write', 'Write to output file instead of stdout', false)
-  .option('-v, --version <version>', 'Release version (overrides extraction from file)')
+  .option('-v, --release-version <version>', 'Release version (overrides extraction from file)')
   .option('-f, --from <tag>', 'Git tag to start from (e.g. v0.5.5) - uses git log instead of input file')
   .action(async (options) => {
     console.log(chalk.blue('=== Generating User Changelog ==='));
@@ -23,11 +23,11 @@ export const generateCommand = new Command('generate')
     let latestVersionBlock = '';
     let version = '';
 
-    if (options.version && options.from) {
+    if (options.releaseVersion && options.from) {
       // Mode 1: Use Git Log
       console.log(chalk.gray(`Using git log from ${options.from} to HEAD`));
       try {
-        version = options.version;
+        version = options.releaseVersion;
         // Get commits: subject, hash
         latestVersionBlock = execSync(
           `git log ${options.from}..HEAD --pretty=format:"- %s (%h)" --no-merges`,
@@ -75,8 +75,8 @@ export const generateCommand = new Command('generate')
       }
 
       // If version was explicitly provided, check if it matches
-      if (options.version && version !== options.version) {
-        console.warn(chalk.yellow(`Warning: Extracted version (${version}) does not match provided version (${options.version}). Using extracted version.`));
+      if (options.releaseVersion && version !== options.releaseVersion) {
+        console.warn(chalk.yellow(`Warning: Extracted version (${version}) does not match provided version (${options.releaseVersion}). Using extracted version.`));
       }
     }
 

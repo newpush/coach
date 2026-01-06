@@ -1,3 +1,42 @@
+# 🚀 Coach Watts Update: v0.5.7 is Live!
+
+We've been hard at work behind the scenes to make your training analysis smarter, faster, and easier to understand. This release focuses heavily on improving the workout recommendation engine, enhancing data clarity, and strengthening overall platform stability.
+
+Here is what's new in version 0.5.7:
+
+---
+
+### 🧠 Smarter Coaching & Personalized Workouts
+
+We’ve significantly upgraded the logic behind your personalized training suggestions.
+
+*   **Goal-Driven Recommendations:** The workout generation engine is now smarter! It actively considers your **active training goals** when suggesting modifications or new sessions, ensuring every recommendation is directly aligned with where you want to go.
+*   **Seamless Acceptance:** We've polished the look and feel of your recommendation cards on the Dashboard. You can now **Accept** a suggested workout with a single click, immediately incorporating it into your plan.
+*   **Ad-Hoc Workout Generation:** For coaches and athletes needing quick flexibility, we've added endpoints to instantly generate new workouts based on context and feedback.
+
+### 📊 Data Clarity & Analysis Upgrades
+
+Understanding complex performance metrics shouldn't require a textbook. We've introduced tooltips across the platform to help you instantly grasp key training concepts.
+
+*   **Metric Tooltips Everywhere!** 💡 We’ve added consistent, helpful tooltips across workout analysis pages, the share page, and efficiency cards. If you're unsure what a metric like **Aerobic Decoupling** means, just hover over it for a clear definition.
+*   **Accurate Pacing for Uploaded Files:** When manually uploading .FIT files (especially useful for runs or outdoor rides), we now correctly calculate and display all critical **pacing metrics** like speed and distance.
+*   **Decoupling Fix:** We corrected the calculation and display logic for Aerobic Decoupling to ensure you are getting the most accurate assessment of your endurance efficiency during workouts.
+*   **Dashboard Polish:** The "Analyze" button and data syncing process on your dashboard are now more robust and reliable.
+
+### ⚠️ Important Note: Temporary Strava Integration Pause
+
+For stability and security purposes related to some underlying architecture updates, we have temporarily **disabled the Strava integration** on the main hosted version of Coach Watts (v0.5.7).
+
+*   **What this means:** You will not be able to sync new activities directly from Strava until we re-enable the feature in a subsequent update.
+*   **Workaround:** Please continue to use your preferred platform (Garmin, Wahoo, etc.) to upload activities, or manually upload .FIT files directly to Coach Watts.
+*   We prioritize reliable data synchronization and expect to restore Strava functionality soon!
+
+---
+
+Happy Training!
+
+
+
 # Coach Watts App Update: v0.5.6 is Live! 🚀
 
 Hello athletes and coaches! We've just pushed a major update focused on powerful new data connections, stability, and a polished look.
