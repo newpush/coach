@@ -130,28 +130,16 @@
           </UButton>
         </div>
         <UButton
-          v-else-if="!recommendationStore.generating"
-          color="neutral"
-          variant="outline"
+          :class="['font-bold w-full', { 'sm:col-span-2': !recommendationStore.todayRecommendation }]"
+          :color="!recommendationStore.todayRecommendation ? 'primary' : 'neutral'"
+          :variant="!recommendationStore.todayRecommendation ? 'solid' : 'ghost'"
           size="sm"
-          class="font-bold w-full"
-          @click="$emit('open-details')"
-          :disabled="!recommendationStore.todayRecommendation"
+          @click="handleAnalyzeClick"
+          :loading="recommendationStore.generating || isSyncingForAnalysis"
+          :disabled="recommendationStore.generating || recommendationStore.generatingAdHoc || isSyncingForAnalysis"
+          :icon="!recommendationStore.todayRecommendation ? 'i-heroicons-sparkles' : 'i-heroicons-arrow-path'"
         >
-          Details
-        </UButton>
-        
-        <UButton
-          color="neutral"
-          variant="ghost"
-          size="sm"
-          class="font-bold w-full"
-          @click="() => recommendationStore.generateTodayRecommendation()"
-          :loading="recommendationStore.generating"
-          :disabled="recommendationStore.generating || recommendationStore.generatingAdHoc"
-          icon="i-heroicons-arrow-path"
-        >
-          {{ recommendationStore.generating ? 'Thinking...' : (recommendationStore.todayRecommendation ? 'Refresh' : 'Get Insight') }}
+          {{ getButtonLabel() }}
         </UButton>
       </div>
     </template>
@@ -182,6 +170,7 @@ defineEmits(['open-details'])
 const showCreateAdHoc = ref(false)
 const showRefine = ref(false)
 const accepting = ref(false)
+const isSyncingForAnalysis = ref(false)
 
 onMounted(async () => {
   await recommendationStore.fetchTodayWorkout()
@@ -216,6 +205,25 @@ async function handleRefine(feedback: string) {
 async function handleCreateAdHoc(data: any) {
   showCreateAdHoc.value = false
   await recommendationStore.generateAdHocWorkout(data)
+}
+
+async function handleAnalyzeClick() {
+  if (!recommendationStore.todayRecommendation) {
+    isSyncingForAnalysis.value = true
+    try {
+      await integrationStore.syncAllData()
+    } finally {
+      isSyncingForAnalysis.value = false
+    }
+  }
+  await recommendationStore.generateTodayRecommendation()
+}
+
+function getButtonLabel() {
+  if (isSyncingForAnalysis.value) return 'Syncing data...'
+  if (recommendationStore.generating) return 'Thinking...'
+  if (recommendationStore.todayRecommendation) return 'Refresh'
+  return 'Ask Coach to Analyze Readiness'
 }
 
 function getLoadingText() {
