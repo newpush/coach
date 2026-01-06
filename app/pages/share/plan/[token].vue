@@ -146,6 +146,8 @@
 <script setup lang="ts">
 import MiniWorkoutChart from '~/components/workouts/MiniWorkoutChart.vue'
 
+const { formatDate: baseFormatDate, formatShortDate } = useFormat()
+
 definePageMeta({
   layout: 'share'
 })
@@ -184,25 +186,17 @@ useHead({
 
 function formatDate(d: string | Date) {
   if (!d) return ''
-  return new Date(d).toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric'
-  })
+  return baseFormatDate(d)
 }
 
 function formatDay(d: string | Date) {
     if (!d) return ''
-    return new Date(d).toLocaleDateString('en-US', {
-        weekday: 'short'
-    })
+    return baseFormatDate(d, 'EEE')
 }
 
 function formatDateRange(start: string | Date, end: string | Date) {
     if (!start || !end) return ''
-    const s = new Date(start)
-    const e = new Date(end)
-    return `${s.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${e.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
+    return `${baseFormatDate(start, 'MMM d')} - ${baseFormatDate(end, 'MMM d')}`
 }
 
 function formatDuration(seconds: number) {

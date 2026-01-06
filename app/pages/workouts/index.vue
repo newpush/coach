@@ -146,6 +146,8 @@ import WorkoutCharts from '~/components/workouts/WorkoutCharts.vue'
 import WorkoutRecommendations from '~/components/workouts/WorkoutRecommendations.vue'
 import WorkoutTable from '~/components/workouts/WorkoutTable.vue'
 
+const { formatDate, getUserLocalDate, timezone } = useFormat()
+
 definePageMeta({
   middleware: 'auth',
   layout: 'default'
@@ -506,8 +508,9 @@ const activityDistributionData = computed(() => {
 
 const scoresTimelineData = computed(() => {
   // Get workouts from last 30 days with scores
-  const thirtyDaysAgo = new Date()
-  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+  const today = getUserLocalDate()
+  const thirtyDaysAgo = new Date(today)
+  thirtyDaysAgo.setDate(today.getDate() - 30)
   
   const recentWorkouts = allWorkouts.value
     .filter(w => w.overallScore && new Date(w.date) >= thirtyDaysAgo)
@@ -516,7 +519,7 @@ const scoresTimelineData = computed(() => {
   // Group by date and calculate average
   const scoresByDate: Record<string, number[]> = {}
   recentWorkouts.forEach(w => {
-    const dateStr = new Date(w.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+    const dateStr = formatDate(w.date, 'MMM d')
     if (!scoresByDate[dateStr]) scoresByDate[dateStr] = []
     scoresByDate[dateStr].push(w.overallScore)
   })
@@ -546,8 +549,9 @@ const scoresTimelineData = computed(() => {
 
 const trainingLoadData = computed(() => {
   // Get workouts from last 30 days with training load
-  const thirtyDaysAgo = new Date()
-  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+  const today = getUserLocalDate()
+  const thirtyDaysAgo = new Date(today)
+  thirtyDaysAgo.setDate(today.getDate() - 30)
   
   const recentWorkouts = allWorkouts.value
     .filter(w => w.trainingLoad && new Date(w.date) >= thirtyDaysAgo)
@@ -556,7 +560,7 @@ const trainingLoadData = computed(() => {
   // Group by date and sum training load
   const loadByDate: Record<string, number> = {}
   recentWorkouts.forEach(w => {
-    const dateStr = new Date(w.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+    const dateStr = formatDate(w.date, 'MMM d')
     loadByDate[dateStr] = (loadByDate[dateStr] || 0) + w.trainingLoad
   })
   
@@ -577,8 +581,9 @@ const trainingLoadData = computed(() => {
 
 const weeklyVolumeData = computed(() => {
   // Get workouts from last 8 weeks
-  const eightWeeksAgo = new Date()
-  eightWeeksAgo.setDate(eightWeeksAgo.getDate() - 56)
+  const today = getUserLocalDate()
+  const eightWeeksAgo = new Date(today)
+  eightWeeksAgo.setDate(today.getDate() - 56)
   
   const recentWorkouts = allWorkouts.value
     .filter(w => new Date(w.date) >= eightWeeksAgo)
@@ -588,8 +593,8 @@ const weeklyVolumeData = computed(() => {
   recentWorkouts.forEach(w => {
     const date = new Date(w.date)
     const weekStart = new Date(date)
-    weekStart.setDate(date.getDate() - date.getDay()) // Start of week (Sunday)
-    const weekLabel = weekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+    weekStart.setDate(date.getDate() - date.getDay()) // Start of week (Sunday) - local aware enough for labels
+    const weekLabel = formatDate(weekStart, 'MMM d')
     
     const hours = (w.durationSec || 0) / 3600
     volumeByWeek[weekLabel] = (volumeByWeek[weekLabel] || 0) + hours
@@ -604,7 +609,7 @@ const weeklyVolumeData = computed(() => {
       label: 'Hours',
       data: hours,
       backgroundColor: 'rgba(168, 85, 247, 0.8)',
-      borderColor: 'rgb(168, 85, 247)',
+      borderColor: 'rgba(168, 85, 247, 1)',
       borderWidth: 2
     }]
   }

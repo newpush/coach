@@ -363,6 +363,8 @@
 <script setup lang="ts">
 import PlanAdherence from '~/components/workouts/PlanAdherence.vue'
 
+const { formatDate: baseFormatDate, formatDateTime } = useFormat()
+
 // Public share page - accessible to everyone (authenticated or not)
 definePageMeta({
   layout: 'share'
@@ -383,12 +385,7 @@ const error = computed(() => {
 // Formatters
 function formatDate(date: string | Date) {
   if (!date) return ''
-  return new Date(date).toLocaleDateString('en-US', {
-    weekday: 'long',
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric'
-  })
+  return formatDateTime(date, 'EEEE, MMMM d, yyyy')
 }
 
 const pageTitle = computed(() => workout.value ? `${workout.value.title} - Shared Workout | Coach Wattz` : 'Shared Workout | Coach Wattz')

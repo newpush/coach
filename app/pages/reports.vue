@@ -217,7 +217,7 @@
                     </span>
                   </td>
                   <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-400">
-                    {{ formatDate(report.createdAt) }}
+                    {{ formatDateTime(report.createdAt) }}
                   </td>
                   <td class="px-6 py-4 whitespace-nowrap text-sm">
                     <UButton
@@ -244,7 +244,7 @@
 // State
 const showConfigModal = ref(false)
 const toast = useToast()
-const { formatDateTime } = useFormat()
+const { formatDate: baseFormatDate, formatDateTime } = useFormat()
 
 const reportStore = useReportStore()
 
@@ -351,12 +351,8 @@ const getStatusBadgeClass = (status: string) => {
 }
 
 const formatDateRange = (start: string, end: string) => {
-  const startDate = new Date(start).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-  const endDate = new Date(end).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-  return `${startDate} - ${endDate}`
-}
-
-const formatDate = (date: string) => {
-  return formatDateTime(date)
+  const startDateStr = baseFormatDate(start, 'MMM d')
+  const endDateStr = baseFormatDate(end, 'MMM d, yyyy')
+  return `${startDateStr} - ${endDateStr}`
 }
 </script>

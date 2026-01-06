@@ -183,6 +183,8 @@
 </template>
 
 <script setup lang="ts">
+const { formatDate, getUserLocalDate } = useFormat()
+
 definePageMeta({
   middleware: 'auth'
 })
@@ -211,7 +213,9 @@ async function fetchUpcomingWorkouts() {
   try {
     const { plan } = await $fetch<{ plan: any }>('/api/plans/active')
     if (plan) {
-      const now = new Date().getTime()
+      const today = getUserLocalDate()
+      const todayTime = today.getTime()
+      
       // Flatten all workouts from all blocks and weeks
       const allWorkouts = plan.blocks.flatMap((b: any) => 
         b.weeks.flatMap((w: any) => w.workouts)
@@ -219,7 +223,7 @@ async function fetchUpcomingWorkouts() {
       
       // Filter for future workouts, sort by date, and take the next 5
       upcomingWorkouts.value = allWorkouts
-        .filter((w: any) => new Date(w.date).getTime() >= now && !w.completed)
+        .filter((w: any) => new Date(w.date).getTime() >= todayTime && !w.completed)
         .sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime())
         .slice(0, 5)
     }
@@ -231,11 +235,11 @@ async function fetchUpcomingWorkouts() {
 }
 
 function formatDayShort(d: string) {
-  return new Date(d).toLocaleDateString('en-US', { weekday: 'short' })
+  return formatDate(d, 'EEE')
 }
 
 function formatDateDay(d: string) {
-  return new Date(d).getDate()
+  return formatDate(d, 'd')
 }
 
 // Initial data fetch
@@ -296,7 +300,7 @@ function openWellnessModal() {
   // Use today's date or the latest wellness date
   wellnessModalDate.value = userStore.profile?.latestWellnessDate
     ? new Date(userStore.profile.latestWellnessDate)
-    : new Date()
+    : getUserLocalDate()
   showWellnessModal.value = true
 }
 

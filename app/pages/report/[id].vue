@@ -588,6 +588,7 @@
 <script setup lang="ts">
 const route = useRoute()
 const { signOut } = useAuth()
+const { formatDate: baseFormatDate, formatShortDate } = useFormat()
 const reportId = route.params.id as string
 
 interface Report {
@@ -701,16 +702,12 @@ const getTrendBadgeColor = (trend: string) => {
 
 
 const formatDate = (date: string) => {
-  return new Date(date).toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric'
-  })
+  return baseFormatDate(date)
 }
 
 const formatDateRange = (start: string, end: string) => {
-  const startDate = new Date(start).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-  const endDate = new Date(end).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+  const startDate = baseFormatDate(start, 'MMM d')
+  const endDate = baseFormatDate(end)
   return `${startDate} - ${endDate}`
 }
 

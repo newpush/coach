@@ -49,7 +49,7 @@
           <div class="flex items-center justify-between px-1">
             <h2 class="text-xl font-bold text-gray-900 dark:text-white uppercase tracking-tight">Athlete Profile</h2>
             <UBadge v-if="profileData?.scores?.lastUpdated" color="neutral" variant="subtle" size="sm" class="font-bold">
-              Updated {{ formatDate(profileData.scores.lastUpdated) }}
+              Updated {{ formatDateLocal(profileData.scores.lastUpdated) }}
             </UBadge>
           </div>
           
@@ -366,6 +366,8 @@ import ActivityHighlights from '~/components/ActivityHighlights.vue'
 import PowerCurveChart from '~/components/PowerCurveChart.vue'
 import EfficiencyTrendChart from '~/components/EfficiencyTrendChart.vue'
 import ReadinessCorrelationChart from '~/components/ReadinessCorrelationChart.vue'
+
+const { formatDate: baseFormatDate } = useFormat()
 
 definePageMeta({
   middleware: 'auth',
@@ -717,11 +719,7 @@ watch(selectedPeriod, async () => {
   ])
 })
 
-const formatDate = (date: string) => {
-  return new Date(date).toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric'
-  })
+const formatDateLocal = (date: string) => {
+  return baseFormatDate(date)
 }
 </script>

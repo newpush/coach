@@ -923,6 +923,8 @@ import { marked } from 'marked'
 import PlanAdherence from '~/components/workouts/PlanAdherence.vue'
 import { metricTooltips } from '~/utils/tooltips'
 
+const { formatDate: baseFormatDate, formatDateTime } = useFormat()
+
 definePageMeta({
   middleware: 'auth'
 })
@@ -993,11 +995,7 @@ useHead(() => {
   }
 
   const workoutType = workout.value.type ? ` - ${workout.value.type}` : ''
-  const workoutDate = new Date(workout.value.date).toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric'
-  })
+  const workoutDate = baseFormatDate(workout.value.date)
   
   const title = `${workout.value.title} | Coach Wattz`
   
@@ -1265,14 +1263,7 @@ function stopPolling() {
 
 // Utility functions
 function formatDate(date: string | Date) {
-  return new Date(date).toLocaleDateString('en-US', {
-    weekday: 'long',
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit'
-  })
+  return formatDateTime(date, 'EEEE, MMMM d, yyyy h:mm a')
 }
 
 function formatDuration(seconds: number) {
