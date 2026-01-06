@@ -100,6 +100,38 @@ export default defineEventHandler(async (event) => {
           startDate.setDate(startDate.getDate() - 2)
           break
 
+        case 'ACTIVITY_UPDATED':
+          const activityDateStr = intervalEvent.activity?.start_date_local || intervalEvent.activity?.start_date
+          if (activityDateStr) {
+            const actDate = new Date(activityDateStr)
+            startDate = new Date(actDate)
+            startDate.setDate(startDate.getDate() - 1)
+            endDate = new Date(actDate)
+            endDate.setDate(endDate.getDate() + 1)
+          } else {
+            // Fallback
+            startDate = new Date()
+            startDate.setDate(startDate.getDate() - 2)
+          }
+          break
+
+        case 'FITNESS_UPDATED':
+          const records = intervalEvent.records || []
+          if (records.length > 0) {
+            // records have 'id' as 'YYYY-MM-DD'
+            const dates = records.map((r: any) => new Date(r.id).getTime())
+            const minDate = new Date(Math.min(...dates))
+            const maxDate = new Date(Math.max(...dates))
+            
+            startDate = minDate
+            endDate = maxDate
+          } else {
+            // Fallback
+            startDate = new Date()
+            startDate.setDate(startDate.getDate() - 2)
+          }
+          break
+
         case 'ACTIVITY_DELETED':
           // Handle activity deletion explicitly since ingest-intervals only upserts
           const deletedActivityId = intervalEvent.activity?.id || intervalEvent.id
