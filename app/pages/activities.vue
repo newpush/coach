@@ -389,13 +389,12 @@
                 <span v-else class="text-gray-400">-</span>
               </template>
 
-              <template #feel-cell="{ row }">
-                <span v-if="row.original.feel">
-                  {{ row.original.feel }}/10
-                </span>
-                <span v-else class="text-gray-400">-</span>
-              </template>
-
+                        <template #feel-cell="{ row }">
+                          <span v-if="row.original.feel">
+                            {{ row.original.feel }}/5
+                          </span>
+                          <span v-else class="text-gray-400">-</span>
+                        </template>
               <template #averageWatts-cell="{ row }">
                 <span v-if="row.original.averageWatts" class="font-medium">
                   {{ Math.round(row.original.averageWatts) }}W

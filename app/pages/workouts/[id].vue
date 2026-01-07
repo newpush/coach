@@ -1064,8 +1064,8 @@ const availableMetrics = computed(() => {
   // Subjective metrics
   if (workout.value.rpe) metrics.push({ key: 'rpe', label: 'RPE', value: `${workout.value.rpe}/10` })
   if (workout.value.sessionRpe) metrics.push({ key: 'srpe', label: 'Session RPE', value: `${workout.value.sessionRpe}` })
-  const feelScale = workout.value.source === 'intervals' ? 5 : 10
-  if (workout.value.feel) metrics.push({ key: 'feel', label: 'Feel', value: `${workout.value.feel}/${feelScale}` })
+  // Standardized feel scale is 1-5 (1=Weak, 5=Strong)
+  if (workout.value.feel) metrics.push({ key: 'feel', label: 'Feel', value: `${workout.value.feel}/5` })
   if (workout.value.trimp) metrics.push({ key: 'trimp', label: 'TRIMP', value: `${workout.value.trimp}` })
   
   // Environment

@@ -31,7 +31,7 @@ export const metricTooltips: Record<string, string> = {
   'Max Cadence': 'The highest pedal cadence recorded.',
   'Avg Temperature': 'The average ambient temperature during the activity.',
   'Indoor Trainer': 'Indicates whether the activity was recorded on an indoor trainer.',
-  'Feel': 'How you felt during the workout (1-10).',
+  'Feel': 'How you felt during the workout (1-5).',
   
   // Advanced Physiology & Nutrition
   'Strain Score': 'A cumulative score of physiological strain, often derived from heart rate or power intensity.',
