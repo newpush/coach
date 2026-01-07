@@ -4,17 +4,19 @@ import 'dotenv/config';
 import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import pg from 'pg';
+import { fetchIntervalsActivityStreams } from '../../server/utils/intervals';
 
 const troubleshootWorkoutsCommand = new Command('workout');
 
 troubleshootWorkoutsCommand
-  .description('Troubleshoot discrepancies between Workout records and rawJson')
+  .description('Troubleshoot discrepancies between Workout records, rawJson, and Streams')
   .argument('[url]', 'Optional URL of the workout to troubleshoot (extracts ID and sets --prod if applicable)')
   .option('--prod', 'Use production database')
   .option('--user <email>', 'Filter by user email')
   .option('--id <workoutId>', 'Filter by workout ID')
   .option('--date <date>', 'Filter by date (YYYY-MM-DD)')
   .option('--source <source>', 'Filter by source (intervals, strava, etc.)', 'intervals')
+  .option('--check-streams', 'Verify streams against external API and DB')
   .option('-v, --verbose', 'Show all fields even if they match')
   .action(async (url, options) => {
     let workoutId = options.id;
@@ -73,6 +75,10 @@ troubleshootWorkoutsCommand
         if (shareToken && shareToken.resourceType === 'WORKOUT') {
           console.log(chalk.green(`Resolved ShareToken to Workout ID: ${shareToken.resourceId}`));
           where.id = shareToken.resourceId;
+        } else if (workoutId.match(/^i\d+$/)) {
+             console.log(chalk.green(`Detected Intervals External ID: ${workoutId}`));
+             where.externalId = workoutId;
+             where.source = 'intervals';
         } else {
           where.id = workoutId;
         }
@@ -121,6 +127,7 @@ troubleshootWorkoutsCommand
         }
 
         const raw: any = w.rawJson;
+        console.log(`Intervals Source: ${chalk.yellow(raw.source || 'Unknown')}`);
         console.log(chalk.gray(`Original data captured: Yes (rawJson present)`));
 
         const checks: { label: string, db: any, raw: any, tolerance: number, unit?: string }[] = [];
@@ -220,6 +227,66 @@ troubleshootWorkoutsCommand
         } else {
             console.log(chalk.red(`
 ❌ Found ${workoutDiscrepancies} discrepancies in this workout.`));
+        }
+
+        if (options.checkStreams && w.source === 'intervals') {
+            console.log(chalk.bold.blue(`
+=== Stream Verification ===`));
+            
+            // Fetch DB Stream
+            const dbStream = await prisma.workoutStream.findUnique({
+                where: { workoutId: w.id }
+            });
+            
+            if (dbStream) {
+                console.log(chalk.green(`✓ DB Stream found (ID: ${dbStream.id})`));
+                console.log(`  Data Points: Time=${dbStream.time.length}, Watts=${dbStream.watts?.length || 0}, HR=${dbStream.heartrate?.length || 0}`);
+            } else {
+                console.log(chalk.red(`❌ DB Stream NOT found`));
+            }
+
+            // Fetch API Stream
+            const integration = await prisma.integration.findUnique({
+                 where: { userId_provider: { userId: w.userId, provider: 'intervals' } }
+            });
+
+            if (integration) {
+                 try {
+                     console.log(chalk.gray(`Fetching streams from Intervals.icu...`));
+                     // Try with getIntervalsAthleteId logic first
+                     let apiStreams = await fetchIntervalsActivityStreams(integration, w.externalId);
+                     
+                     // If no streams, try stripping the 'i' prefix if it exists
+                     if (Object.keys(apiStreams).length === 0 && w.externalId.startsWith('i')) {
+                         const numericId = w.externalId.substring(1);
+                         console.log(chalk.gray(`No streams with ID ${w.externalId}, trying numeric ID: ${numericId}`));
+                         apiStreams = await fetchIntervalsActivityStreams(integration, numericId);
+                     }
+                     
+                     let streamKeys = Object.keys(apiStreams);
+                     
+                     if (streamKeys.length === 0 && integration.externalUserId) {
+                         console.log(chalk.yellow(`⚠️ No streams found with default athleteId. Retrying with explicit athleteId: ${integration.externalUserId}`));
+                         // Manually override for retry
+                         const legacyIntegration = { ...integration, scope: null, refreshToken: null } as any;
+                         apiStreams = await fetchIntervalsActivityStreams(legacyIntegration, w.externalId);
+                         streamKeys = Object.keys(apiStreams);
+                     }
+
+                     if (streamKeys.length > 0) {
+                         console.log(chalk.green(`✓ API Streams found: ${streamKeys.join(', ')}`));
+                         const timeLen = Array.isArray(apiStreams.time?.data) ? apiStreams.time.data.length : 0;
+                         const wattsLen = Array.isArray(apiStreams.watts?.data) ? apiStreams.watts.data.length : 0;
+                         console.log(`  Data Points: Time=${timeLen}, Watts=${wattsLen}`);
+                     } else {
+                         console.log(chalk.red(`❌ API Streams empty or not found`));
+                     }
+                 } catch (err: any) {
+                     console.log(chalk.red(`❌ Error fetching API streams: ${err.message}`));
+                 }
+            } else {
+                console.log(chalk.yellow(`⚠️ Intervals integration not found for user`));
+            }
         }
       }
 
