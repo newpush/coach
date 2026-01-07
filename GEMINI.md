@@ -76,6 +76,16 @@ The project includes a robust CLI for debugging and maintenance tasks.
 -   **Documentation**: See `cli/README.md` for full usage and extension guides.
 -   **Philosophy**: Extend the CLI rather than creating one-off scripts.
 
+### [Issue Management](./docs/04-guides/issue-management.md)
+**Guidelines for creating and managing GitHub issues**
+
+Standardized procedures for bug reports, feature requests, and maintenance tasks:
+- **Templates**: Required formats for issue titles and bodies.
+- **Labels**: Standardized taxonomy for types, priorities, and functional areas.
+- **Process**: Best practices for reporting and updating issues.
+
+**Reference this** before creating any new GitHub issue to ensure consistency.
+
 ### [Architecture](./architecture.md)
 **System design and technical decisions**
 
