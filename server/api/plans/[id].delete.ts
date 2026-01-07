@@ -24,7 +24,11 @@ export default defineEventHandler(async (event) => {
 
   // Allow deleting DRAFT plans and Templates
   if (plan.status !== 'DRAFT' && !plan.isTemplate) {
-    throw createError({ statusCode: 400, message: 'Only drafts or templates can be permanently deleted. Active plans should be abandoned or archived.' })
+    throw createError({
+      statusCode: 400,
+      message:
+        'Only drafts or templates can be permanently deleted. Active plans should be abandoned or archived.'
+    })
   }
 
   await (prisma as any).trainingPlan.delete({

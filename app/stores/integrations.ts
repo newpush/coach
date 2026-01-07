@@ -24,16 +24,18 @@ export const useIntegrationStore = defineStore('integration', () => {
   const syncingData = ref(false)
   const toast = useToast()
 
-  const intervalsConnected = computed(() =>
-    integrationStatus.value?.integrations?.some((i) => i.provider === 'intervals') ?? false
+  const intervalsConnected = computed(
+    () => integrationStatus.value?.integrations?.some((i) => i.provider === 'intervals') ?? false
   )
 
   const lastSyncTime = computed(() => {
     if (!integrationStatus.value?.integrations) return null
-    
-    const intervalsIntegration = integrationStatus.value.integrations.find((i) => i.provider === 'intervals')
+
+    const intervalsIntegration = integrationStatus.value.integrations.find(
+      (i) => i.provider === 'intervals'
+    )
     if (!intervalsIntegration?.lastSyncAt) return null
-    
+
     return intervalsIntegration.lastSyncAt
   })
 
@@ -48,39 +50,38 @@ export const useIntegrationStore = defineStore('integration', () => {
 
   async function syncAllData() {
     if (syncingData.value) return
-    
+
     syncingData.value = true
-    
+
     try {
       console.log('Triggering batch sync...')
       await $fetch('/api/integrations/sync', {
         method: 'POST',
         body: { provider: 'all' }
       })
-      
+
       toast.add({
         title: 'Data Sync Started',
         description: 'Syncing data from all connected integrations. This may take a minute...',
         color: 'success',
         icon: 'i-heroicons-arrow-path'
       })
-      
+
       // We rely on the caller or a separate polling mechanism to update the data
       // or we can implement polling here if needed.
       // For now, let's refresh status after a delay
       setTimeout(async () => {
         await fetchStatus()
         toast.add({
-            title: 'Sync Complete',
-            description: 'Your data has been updated successfully!',
-            color: 'success',
-            icon: 'i-heroicons-check-circle'
+          title: 'Sync Complete',
+          description: 'Your data has been updated successfully!',
+          color: 'success',
+          icon: 'i-heroicons-check-circle'
         })
       }, 10000)
-
     } catch (error: any) {
       console.error('Error syncing data:', error)
-      
+
       toast.add({
         title: 'Sync Failed',
         description: error.data?.message || 'Failed to sync data. Please try again.',

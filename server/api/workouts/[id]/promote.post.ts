@@ -5,7 +5,8 @@ defineRouteMeta({
   openAPI: {
     tags: ['Workouts'],
     summary: 'Promote workout',
-    description: 'Promotes a duplicate workout to be the primary version, swapping roles with the current primary.',
+    description:
+      'Promotes a duplicate workout to be the primary version, swapping roles with the current primary.',
     responses: {
       200: {
         description: 'Success',
@@ -29,11 +30,11 @@ defineRouteMeta({
 
 export default defineEventHandler(async (event) => {
   const session = await getServerSession(event)
-  
+
   if (!session?.user) {
-    throw createError({ 
+    throw createError({
       statusCode: 401,
-      message: 'Unauthorized' 
+      message: 'Unauthorized'
     })
   }
 
@@ -44,7 +45,7 @@ export default defineEventHandler(async (event) => {
 
   // Fetch the workout to be promoted
   const workoutToPromote = await prisma.workout.findUnique({
-    where: { 
+    where: {
       id,
       userId: (session.user as any).id
     }
@@ -55,9 +56,9 @@ export default defineEventHandler(async (event) => {
   }
 
   if (!workoutToPromote.isDuplicate || !workoutToPromote.duplicateOf) {
-    throw createError({ 
-      statusCode: 400, 
-      message: 'This workout is not a duplicate and cannot be promoted' 
+    throw createError({
+      statusCode: 400,
+      message: 'This workout is not a duplicate and cannot be promoted'
     })
   }
 
@@ -65,16 +66,16 @@ export default defineEventHandler(async (event) => {
 
   // Fetch the current primary workout
   const oldPrimaryWorkout = await prisma.workout.findUnique({
-    where: { 
+    where: {
       id: oldPrimaryId,
       userId: (session.user as any).id
     }
   })
 
   if (!oldPrimaryWorkout) {
-    throw createError({ 
-      statusCode: 404, 
-      message: 'Primary workout not found' 
+    throw createError({
+      statusCode: 404,
+      message: 'Primary workout not found'
     })
   }
 
@@ -107,7 +108,7 @@ export default defineEventHandler(async (event) => {
 
       // 3. Update any OTHER duplicates that were pointing to oldPrimaryId to now point to id
       await tx.workout.updateMany({
-        where: { 
+        where: {
           duplicateOf: oldPrimaryId,
           id: { not: id } // Exclude the one we just promoted (though we already updated it in step 1, safe to exclude)
         },

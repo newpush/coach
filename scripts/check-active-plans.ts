@@ -16,15 +16,23 @@ async function main() {
     include: {
       trainingPlans: {
         orderBy: { createdAt: 'desc' },
-        select: { id: true, name: true, createdAt: true, status: true, goal: { select: { title: true } } }
+        select: {
+          id: true,
+          name: true,
+          createdAt: true,
+          status: true,
+          goal: { select: { title: true } }
+        }
       }
     }
   })
 
   if (user) {
     console.log(`Plans for ${user.email}:`)
-    user.trainingPlans.forEach(p => {
-      console.log(` - [${p.status}] ID: ${p.id} | Created: ${p.createdAt.toISOString()} | Goal: ${p.goal?.title}`)
+    user.trainingPlans.forEach((p) => {
+      console.log(
+        ` - [${p.status}] ID: ${p.id} | Created: ${p.createdAt.toISOString()} | Goal: ${p.goal?.title}`
+      )
     })
   } else {
     console.log(`User ${targetEmail} not found.`)
@@ -32,7 +40,7 @@ async function main() {
 }
 
 main()
-  .catch(e => {
+  .catch((e) => {
     console.error(e)
     process.exit(1)
   })

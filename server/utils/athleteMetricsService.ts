@@ -7,18 +7,21 @@ export const athleteMetricsService = {
    * Update athlete metrics (FTP, Weight, Max HR) and automatically recalculate zones.
    * This ensures that whenever a core metric changes, the training zones remain valid.
    */
-  async updateMetrics(userId: string, metrics: {
-    ftp?: number | null
-    weight?: number | null
-    maxHr?: number | null
-    lthr?: number | null // Optional, if we start tracking this explicitly
-    date?: Date // Optional effective date for this update (default: now)
-  }) {
+  async updateMetrics(
+    userId: string,
+    metrics: {
+      ftp?: number | null
+      weight?: number | null
+      maxHr?: number | null
+      lthr?: number | null // Optional, if we start tracking this explicitly
+      date?: Date // Optional effective date for this update (default: now)
+    }
+  ) {
     const user = await userRepository.getById(userId)
     if (!user) throw new Error('User not found')
 
     const updateData: any = {}
-    
+
     // Process Fields
     if (metrics.ftp !== undefined) updateData.ftp = metrics.ftp
     if (metrics.weight !== undefined) updateData.weight = metrics.weight
@@ -28,7 +31,9 @@ export const athleteMetricsService = {
     if (metrics.ftp) {
       const powerZones = calculatePowerZones(metrics.ftp)
       updateData.powerZones = powerZones
-      console.log(`[MetricsService] Recalculated Power Zones for user ${userId} based on FTP ${metrics.ftp}W`)
+      console.log(
+        `[MetricsService] Recalculated Power Zones for user ${userId} based on FTP ${metrics.ftp}W`
+      )
     }
 
     // 2. Recalculate HR Zones if MaxHR changed (or LTHR if we had it)
@@ -36,7 +41,7 @@ export const athleteMetricsService = {
       // We don't have explicit LTHR in DB yet, so we estimate or use MaxHR model
       const lthr = metrics.lthr || (metrics.maxHr ? Math.round(metrics.maxHr * 0.9) : null)
       const hrZones = calculateHrZones(lthr, metrics.maxHr)
-      
+
       if (hrZones.length > 0) {
         updateData.hrZones = hrZones
         console.log(`[MetricsService] Recalculated HR Zones for user ${userId}`)
@@ -53,7 +58,9 @@ export const athleteMetricsService = {
     // If FTP changes significantly, we might want to flag recent workouts for reprocessing.
     // For now, we'll just log it.
     if (metrics.ftp && user.ftp && Math.abs(metrics.ftp - user.ftp) > 5) {
-      console.log(`[MetricsService] FTP changed significantly (${user.ftp} -> ${metrics.ftp}). Consider reprocessing recent workouts.`)
+      console.log(
+        `[MetricsService] FTP changed significantly (${user.ftp} -> ${metrics.ftp}). Consider reprocessing recent workouts.`
+      )
     }
 
     // 5. Weight History
@@ -81,7 +88,9 @@ export const athleteMetricsService = {
             weight: metrics.weight
           }
         })
-        console.log(`[MetricsService] Logged weight ${metrics.weight}kg to Wellness history for ${dateOnly.toISOString()}`)
+        console.log(
+          `[MetricsService] Logged weight ${metrics.weight}kg to Wellness history for ${dateOnly.toISOString()}`
+        )
       } catch (e) {
         console.error(`[MetricsService] Failed to log weight history:`, e)
       }

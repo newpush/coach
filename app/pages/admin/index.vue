@@ -1,17 +1,15 @@
 <script setup lang="ts">
-definePageMeta({
-  layout: 'admin',
-  middleware: ['auth', 'admin']
-})
+  definePageMeta({
+    layout: 'admin',
+    middleware: ['auth', 'admin']
+  })
 
-const { data: stats } = await useFetch('/api/admin/stats')
+  const { data: stats } = await useFetch('/api/admin/stats')
 
-useHead({
-  title: 'Admin Dashboard',
-  meta: [
-    { name: 'description', content: 'Coach Watts system administration and overview.' }
-  ]
-})
+  useHead({
+    title: 'Admin Dashboard',
+    meta: [{ name: 'description', content: 'Coach Watts system administration and overview.' }]
+  })
 </script>
 
 <template>
@@ -28,21 +26,29 @@ useHead({
           <template #header>
             <h3 class="text-xs font-bold text-gray-500 uppercase tracking-widest">Total Users</h3>
           </template>
-          <p class="text-3xl font-bold text-gray-900 dark:text-white">{{ stats?.totalUsers || 0 }}</p>
+          <p class="text-3xl font-bold text-gray-900 dark:text-white">
+            {{ stats?.totalUsers || 0 }}
+          </p>
         </UCard>
 
         <UCard>
           <template #header>
-            <h3 class="text-xs font-bold text-gray-500 uppercase tracking-widest">Total Workouts</h3>
+            <h3 class="text-xs font-bold text-gray-500 uppercase tracking-widest">
+              Total Workouts
+            </h3>
           </template>
-          <p class="text-3xl font-bold text-gray-900 dark:text-white">{{ stats?.totalWorkouts || 0 }}</p>
+          <p class="text-3xl font-bold text-gray-900 dark:text-white">
+            {{ stats?.totalWorkouts || 0 }}
+          </p>
         </UCard>
 
         <UCard>
           <template #header>
             <h3 class="text-xs font-bold text-gray-500 uppercase tracking-widest">AI Cost (MTD)</h3>
           </template>
-          <p class="text-3xl font-bold text-gray-900 dark:text-white">${{ stats?.totalAiCost?.toFixed(2) || '0.00' }}</p>
+          <p class="text-3xl font-bold text-gray-900 dark:text-white">
+            ${{ stats?.totalAiCost?.toFixed(2) || '0.00' }}
+          </p>
         </UCard>
       </div>
 
@@ -52,7 +58,9 @@ useHead({
             <h2 class="text-xl font-bold uppercase tracking-tight">Recent Activity</h2>
           </template>
           <!-- Placeholder for activity list -->
-          <div class="text-sm text-gray-500 italic">Recent system-wide events will appear here...</div>
+          <div class="text-sm text-gray-500 italic">
+            Recent system-wide events will appear here...
+          </div>
         </UCard>
 
         <UCard>
@@ -62,11 +70,17 @@ useHead({
           <div class="space-y-4">
             <div class="flex justify-between items-center">
               <span class="text-sm">Database</span>
-              <span class="px-2 py-1 rounded text-xs font-semibold bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">Online</span>
+              <span
+                class="px-2 py-1 rounded text-xs font-semibold bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200"
+                >Online</span
+              >
             </div>
             <div class="flex justify-between items-center">
               <span class="text-sm">Trigger.dev</span>
-              <span class="px-2 py-1 rounded text-xs font-semibold bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">Connected</span>
+              <span
+                class="px-2 py-1 rounded text-xs font-semibold bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200"
+                >Connected</span
+              >
             </div>
           </div>
         </UCard>

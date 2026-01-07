@@ -36,16 +36,16 @@ defineRouteMeta({
 
 export default defineEventHandler(async (event) => {
   const session = await getServerSession(event)
-  
+
   if (!session?.user) {
-    throw createError({ 
+    throw createError({
       statusCode: 401,
-      message: 'Unauthorized' 
+      message: 'Unauthorized'
     })
   }
 
   const id = getRouterParam(event, 'id')
-  
+
   if (!id) {
     throw createError({
       statusCode: 400,
@@ -72,16 +72,16 @@ export default defineEventHandler(async (event) => {
   // Check if streams table exists and has records for this workout (schema check might be needed if streams are JSON on workout)
   // In our schema, streams is a JSON field on Workout, but we also have WorkoutStream table in some versions.
   // Assuming streams is a JSON column based on previous context, but let's check if we need to delete related entities.
-  
+
   // Actually, we should check if there are other related records like 'PlannedWorkout' links.
   // If this workout completed a planned workout, we might want to un-complete it?
   // For now, let's just delete the workout.
-  
+
   try {
     // Soft delete by marking as ignored if we want to prevent re-ingestion
     // But typically, if a user deletes a workout, they might want to re-import it later or it's gone from source.
     // If it still exists on source (e.g. Strava), it WILL be re-ingested on next sync unless we track deleted IDs.
-    
+
     // For now, we are doing a hard delete.
     // IMPLICATION: If the activity exists on the external provider (Strava, etc.),
     // it WILL be re-ingested during the next full sync or webhook event.

@@ -41,9 +41,7 @@ export default defineEventHandler(async (event) => {
       name: 'New Chat', // Could be dynamic or user-provided
       avatar: '/media/logo.webp',
       users: {
-        create: [
-          { userId: userId }
-        ]
+        create: [{ userId: userId }]
       }
     },
     include: {
@@ -67,7 +65,10 @@ export default defineEventHandler(async (event) => {
       content: 'Room created',
       senderId: 'system',
       username: 'System',
-      timestamp: new Date(newRoom.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      timestamp: new Date(newRoom.createdAt).toLocaleTimeString([], {
+        hour: '2-digit',
+        minute: '2-digit'
+      }),
       saved: true,
       distributed: true,
       seen: true,

@@ -30,23 +30,27 @@ defineRouteMeta({
 
 export default defineEventHandler(async (event) => {
   const session = await getServerSession(event)
-  
+
   if (!session?.user) {
-    throw createError({ 
+    throw createError({
       statusCode: 401,
-      message: 'Unauthorized' 
+      message: 'Unauthorized'
     })
   }
-  
+
   const userId = (session.user as any).id
-  
+
   // Trigger the background job to handle the full deletion (cascading, cleanup, etc.)
-  const handle = await tasks.trigger('delete-user-account', {
-    userId
-  }, {
-    concurrencyKey: userId
-  })
-  
+  const handle = await tasks.trigger(
+    'delete-user-account',
+    {
+      userId
+    },
+    {
+      concurrencyKey: userId
+    }
+  )
+
   // Immediately invalidate sessions to prevent further access
   try {
     // Note: This relies on using a database adapter for sessions.
@@ -59,7 +63,7 @@ export default defineEventHandler(async (event) => {
     console.error('Failed to clear sessions immediately', e)
     // Continue anyway, the job will handle it
   }
-  
+
   return {
     success: true,
     jobId: handle.id,

@@ -160,7 +160,7 @@ export default defineEventHandler(async (event) => {
     orderBy: { createdAt: 'desc' },
     take: 50
   })
-  
+
   const chronologicalHistory = history.reverse()
 
   // 4. Fetch Recent Activity Data (Last 7 Days)
@@ -232,7 +232,7 @@ export default defineEventHandler(async (event) => {
   // Fetch planned workouts (next 14 days)
   const fourteenDaysAhead = new Date()
   fourteenDaysAhead.setDate(fourteenDaysAhead.getDate() + 14)
-  
+
   const plannedWorkouts = await prisma.plannedWorkout.findMany({
     where: {
       userId,
@@ -269,24 +269,21 @@ export default defineEventHandler(async (event) => {
   const day = currentWeekStart.getDay()
   const diff = currentWeekStart.getDate() - day + (day === 0 ? -6 : 1)
   currentWeekStart.setDate(diff)
-  
+
   const currentPlan = await prisma.weeklyTrainingPlan.findFirst({
     where: {
       userId,
       weekStartDate: { lte: currentWeekStart }
     },
-    orderBy: [
-      { status: 'asc' },
-      { weekStartDate: 'desc' }
-    ]
+    orderBy: [{ status: 'asc' }, { weekStartDate: 'desc' }]
   })
 
   // 5. Build Comprehensive Athlete Context
   let athleteContext = '\n\n## Athlete Profile\n'
-  
+
   if (userProfile) {
     if (userProfile.name) athleteContext += `- **Name**: ${userProfile.name}\n`
-    
+
     const metrics: string[] = []
     if (userProfile.ftp) metrics.push(`FTP: ${userProfile.ftp}W`)
     if (userProfile.maxHr) metrics.push(`Max HR: ${userProfile.maxHr} bpm`)
@@ -303,14 +300,16 @@ export default defineEventHandler(async (event) => {
       metrics.push(`Height: ${userProfile.height}${heightUnit}`)
     }
     if (userProfile.dob) {
-      const age = Math.floor((Date.now() - new Date(userProfile.dob).getTime()) / (365.25 * 24 * 60 * 60 * 1000))
+      const age = Math.floor(
+        (Date.now() - new Date(userProfile.dob).getTime()) / (365.25 * 24 * 60 * 60 * 1000)
+      )
       metrics.push(`Age: ${age}`)
     }
     if (userProfile.sex) metrics.push(`Sex: ${userProfile.sex}`)
     if (metrics.length > 0) {
       athleteContext += `- **Physical Metrics**: ${metrics.join(', ')}\n`
     }
-    
+
     // User Preferences & Settings
     const settings: string[] = []
     if (userProfile.language) settings.push(`Language: ${userProfile.language}`)
@@ -318,17 +317,19 @@ export default defineEventHandler(async (event) => {
     if (userProfile.temperatureUnits) settings.push(`Temperature: ${userProfile.temperatureUnits}`)
     if (userProfile.timezone) settings.push(`Timezone: ${userProfile.timezone}`)
     if (userProfile.city || userProfile.state || userProfile.country) {
-      const location = [userProfile.city, userProfile.state, userProfile.country].filter(Boolean).join(', ')
+      const location = [userProfile.city, userProfile.state, userProfile.country]
+        .filter(Boolean)
+        .join(', ')
       settings.push(`Location: ${location}`)
     }
     if (settings.length > 0) {
       athleteContext += `- **Preferences**: ${settings.join(' | ')}\n`
     }
-    
+
     // Custom Training Zones
     if (userProfile.powerZones || userProfile.hrZones) {
       athleteContext += '\n### Custom Training Zones\n'
-      
+
       if (userProfile.powerZones) {
         athleteContext += '**Power Zones** (based on FTP):\n'
         const zones = userProfile.powerZones as any[]
@@ -342,7 +343,7 @@ export default defineEventHandler(async (event) => {
           athleteContext += '\n'
         })
       }
-      
+
       if (userProfile.hrZones) {
         athleteContext += '\n**Heart Rate Zones** (based on Max HR):\n'
         const zones = userProfile.hrZones as any[]
@@ -356,23 +357,28 @@ export default defineEventHandler(async (event) => {
           athleteContext += '\n'
         })
       }
-      athleteContext += '\n*Use these zones when discussing intensity, pacing, and workout structure.*\n'
+      athleteContext +=
+        '\n*Use these zones when discussing intensity, pacing, and workout structure.*\n'
     }
-    
+
     // AI Preferences
     if (userProfile.aiPersona) {
       athleteContext += `\n- **Coaching Style Preference**: ${userProfile.aiPersona}\n`
     }
-    
+
     const scores: string[] = []
-    if (userProfile.currentFitnessScore) scores.push(`Fitness: ${userProfile.currentFitnessScore}/10`)
-    if (userProfile.recoveryCapacityScore) scores.push(`Recovery: ${userProfile.recoveryCapacityScore}/10`)
-    if (userProfile.nutritionComplianceScore) scores.push(`Nutrition: ${userProfile.nutritionComplianceScore}/10`)
-    if (userProfile.trainingConsistencyScore) scores.push(`Consistency: ${userProfile.trainingConsistencyScore}/10`)
+    if (userProfile.currentFitnessScore)
+      scores.push(`Fitness: ${userProfile.currentFitnessScore}/10`)
+    if (userProfile.recoveryCapacityScore)
+      scores.push(`Recovery: ${userProfile.recoveryCapacityScore}/10`)
+    if (userProfile.nutritionComplianceScore)
+      scores.push(`Nutrition: ${userProfile.nutritionComplianceScore}/10`)
+    if (userProfile.trainingConsistencyScore)
+      scores.push(`Consistency: ${userProfile.trainingConsistencyScore}/10`)
     if (scores.length > 0) {
       athleteContext += `- **Current Scores**: ${scores.join(', ')}\n`
     }
-    
+
     // Add detailed explanations with JSON insights
     if (userProfile.currentFitnessExplanation) {
       athleteContext += `\n### Fitness Insights\n${userProfile.currentFitnessExplanation}\n`
@@ -398,64 +404,71 @@ export default defineEventHandler(async (event) => {
         athleteContext += `\n**Structured Insights**: ${JSON.stringify(userProfile.trainingConsistencyExplanationJson)}\n`
       }
     }
-    
+
     if (userProfile.profileLastUpdated) {
       athleteContext += `\n*Profile last updated: ${new Date(userProfile.profileLastUpdated).toLocaleDateString()}*\n`
     }
   }
-  
+
   // Add Current Goals
   if (activeGoals.length > 0) {
     athleteContext += '\n\n## Current Goals\n'
     for (const goal of activeGoals) {
-      const daysToTarget = goal.targetDate ? Math.ceil((new Date(goal.targetDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24)) : null
-      const daysToEvent = goal.eventDate ? Math.ceil((new Date(goal.eventDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24)) : null
-      
+      const daysToTarget = goal.targetDate
+        ? Math.ceil((new Date(goal.targetDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+        : null
+      const daysToEvent = goal.eventDate
+        ? Math.ceil((new Date(goal.eventDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+        : null
+
       athleteContext += `\n### [${goal.priority}] ${goal.title} (${goal.type})\n`
       if (goal.description) athleteContext += `${goal.description}\n`
-      
+
       if (goal.metric && goal.targetValue) {
         athleteContext += `- **Target**: ${goal.metric} = ${goal.targetValue}`
-        if (goal.currentValue) athleteContext += ` (Current: ${goal.currentValue}, Start: ${goal.startValue || 'N/A'})`
+        if (goal.currentValue)
+          athleteContext += ` (Current: ${goal.currentValue}, Start: ${goal.startValue || 'N/A'})`
         athleteContext += '\n'
       }
-      
+
       if (daysToTarget) {
         athleteContext += `- **Timeline**: ${daysToTarget} days remaining`
-        if (goal.targetDate) athleteContext += ` (Target: ${new Date(goal.targetDate).toLocaleDateString()})`
+        if (goal.targetDate)
+          athleteContext += ` (Target: ${new Date(goal.targetDate).toLocaleDateString()})`
         athleteContext += '\n'
       }
-      
+
       if (goal.eventDate) {
         athleteContext += `- **Event**: ${goal.eventType || 'race'} on ${new Date(goal.eventDate).toLocaleDateString()} (${daysToEvent} days away)\n`
       }
-      
+
       if (goal.aiContext) {
         athleteContext += `- **Context**: ${goal.aiContext}\n`
       }
-      
+
       athleteContext += `- **Created**: ${new Date(goal.createdAt).toLocaleDateString()}\n`
     }
   } else {
-    athleteContext += '\n\n## Current Goals\nNo active goals set. Consider creating goals to help focus training efforts.\n'
+    athleteContext +=
+      '\n\n## Current Goals\nNo active goals set. Consider creating goals to help focus training efforts.\n'
   }
 
   // Generate comprehensive training context for last 14 days
   const fourteenDaysAgo = new Date()
   fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 14)
-  
+
   const trainingContext = await generateTrainingContext(userId, fourteenDaysAgo, new Date(), {
     includeZones: false, // Skip expensive zone calculation for chat context
     period: 'Last 14 Days'
   })
-  
+
   const formattedTrainingContext = formatTrainingContextForPrompt(trainingContext)
-  
+
   athleteContext += '\n\n' + formattedTrainingContext
-  
+
   // Add Recent Activity Detail (Last 7 Days) - keeping for granular day-by-day view
   athleteContext += '\n\n## Recent Activity Detail (Last 7 Days)\n'
-  
+
   // Recent Workouts Summary
   if (recentWorkouts.length > 0) {
     athleteContext += `\n### Recent Workouts (${recentWorkouts.length} activities)\n`
@@ -464,12 +477,13 @@ export default defineEventHandler(async (event) => {
       athleteContext += `- **${workout.date.toLocaleDateString()}**: ${workout.title || workout.type}\n`
       athleteContext += `  - **ID**: \`${workout.id}\` (use this ID to get detailed analysis)\n`
       athleteContext += `  - Duration: ${Math.round(workout.durationSec / 60)} min`
-      if (workout.distanceMeters) athleteContext += ` | Distance: ${(workout.distanceMeters / 1000).toFixed(1)} km`
+      if (workout.distanceMeters)
+        athleteContext += ` | Distance: ${(workout.distanceMeters / 1000).toFixed(1)} km`
       if (workout.averageWatts) athleteContext += ` | Avg Power: ${workout.averageWatts}W`
       if (workout.tss) athleteContext += ` | TSS: ${Math.round(workout.tss)}`
       if (workout.overallScore) athleteContext += ` | Score: ${workout.overallScore}/10`
       athleteContext += '\n'
-      
+
       if (workout.aiAnalysisJson) {
         const analysis = workout.aiAnalysisJson as any
         athleteContext += `  - Key Insight: ${analysis.executive_summary || analysis.quick_take || 'Analysis available'}\n`
@@ -478,7 +492,7 @@ export default defineEventHandler(async (event) => {
   } else {
     athleteContext += '\n### Recent Workouts\nNo workouts in the last 7 days\n'
   }
-  
+
   // Recent Nutrition Summary
   if (recentNutrition.length > 0) {
     athleteContext += `\n### Nutrition (${recentNutrition.length} days logged)\n`
@@ -489,7 +503,7 @@ export default defineEventHandler(async (event) => {
       if (nutrition.carbs) athleteContext += ` | Carbs: ${Math.round(nutrition.carbs)}g`
       if (nutrition.fat) athleteContext += ` | Fat: ${Math.round(nutrition.fat)}g`
       athleteContext += '\n'
-      
+
       if (nutrition.aiAnalysisJson) {
         athleteContext += `  - AI Analysis: ${JSON.stringify(nutrition.aiAnalysisJson)}\n`
       }
@@ -497,11 +511,11 @@ export default defineEventHandler(async (event) => {
   } else {
     athleteContext += '\n### Nutrition\nNo nutrition data in the last 7 days\n'
   }
-  
+
   // Recent Wellness Summary
   if (recentWellness.length > 0) {
     const entriesWithData = []
-    
+
     for (const wellness of recentWellness) {
       const metrics: string[] = []
       if (wellness.recoveryScore) metrics.push(`Recovery: ${wellness.recoveryScore}%`)
@@ -509,18 +523,19 @@ export default defineEventHandler(async (event) => {
       if (wellness.sleepHours) metrics.push(`Sleep: ${wellness.sleepHours}h`)
       if (wellness.sleepScore) metrics.push(`Sleep Score: ${wellness.sleepScore}%`)
       if (wellness.readiness) metrics.push(`Readiness: ${wellness.readiness}%`)
-      
+
       // Only include dates that have actual data
       if (metrics.length > 0) {
         entriesWithData.push(`- **${wellness.date.toLocaleDateString()}**: ${metrics.join(' | ')}`)
       }
     }
-    
+
     if (entriesWithData.length > 0) {
       athleteContext += `\n### Wellness & Recovery (${entriesWithData.length} days)\n`
       athleteContext += entriesWithData.join('\n') + '\n'
     } else {
-      athleteContext += '\n### Wellness & Recovery\nNo wellness data with metrics in the last 7 days\n'
+      athleteContext +=
+        '\n### Wellness & Recovery\nNo wellness data with metrics in the last 7 days\n'
     }
   } else {
     athleteContext += '\n### Wellness & Recovery\nNo wellness data in the last 7 days\n'
@@ -528,15 +543,18 @@ export default defineEventHandler(async (event) => {
 
   // Training Plan Context
   athleteContext += '\n\n## Training Plan & Schedule\n'
-  
+
   // Current Training Plan
   if (currentPlan) {
     athleteContext += `\n### Current Training Plan\n`
     athleteContext += `- **Week**: ${currentPlan.weekStartDate.toLocaleDateString()} - ${currentPlan.weekEndDate.toLocaleDateString()}\n`
     athleteContext += `- **Status**: ${currentPlan.status}\n`
-    if (currentPlan.totalTSS) athleteContext += `- **Weekly TSS Target**: ${Math.round(currentPlan.totalTSS)}\n`
-    if (currentPlan.workoutCount) athleteContext += `- **Workouts Planned**: ${currentPlan.workoutCount}\n`
-    if (currentPlan.totalDuration) athleteContext += `- **Total Duration**: ${Math.round(currentPlan.totalDuration / 60)} minutes\n`
+    if (currentPlan.totalTSS)
+      athleteContext += `- **Weekly TSS Target**: ${Math.round(currentPlan.totalTSS)}\n`
+    if (currentPlan.workoutCount)
+      athleteContext += `- **Workouts Planned**: ${currentPlan.workoutCount}\n`
+    if (currentPlan.totalDuration)
+      athleteContext += `- **Total Duration**: ${Math.round(currentPlan.totalDuration / 60)} minutes\n`
     if (currentPlan.notes) athleteContext += `- **Notes**: ${currentPlan.notes}\n`
     if (currentPlan.createdAt) {
       athleteContext += `\n*Plan generated: ${new Date(currentPlan.createdAt).toLocaleDateString()}*\n`
@@ -544,7 +562,7 @@ export default defineEventHandler(async (event) => {
   } else {
     athleteContext += '\n### Current Training Plan\nNo active training plan\n'
   }
-  
+
   // Training Availability
   if (trainingAvailability.length > 0) {
     athleteContext += `\n### Weekly Training Availability\n`
@@ -556,7 +574,7 @@ export default defineEventHandler(async (event) => {
       if (avail.morning) slots.push('Morning')
       if (avail.afternoon) slots.push('Afternoon')
       if (avail.evening) slots.push('Evening')
-      
+
       if (slots.length > 0) {
         athleteContext += `Available (${slots.join(', ')})`
         const constraints: string[] = []
@@ -575,15 +593,20 @@ export default defineEventHandler(async (event) => {
   } else {
     athleteContext += '\n### Weekly Training Availability\nNo availability preferences set\n'
   }
-  
+
   // Planned Workouts (Next 14 Days)
   if (plannedWorkouts.length > 0) {
     athleteContext += `\n### Upcoming Planned Workouts (Next 14 Days)\n`
     athleteContext += `*Total: ${plannedWorkouts.length} workouts scheduled*\n\n`
     for (const workout of plannedWorkouts) {
-      const syncIcon = workout.syncStatus === 'SYNCED' ? '✓' :
-                      workout.syncStatus === 'PENDING' ? '⏳' :
-                      workout.syncStatus === 'FAILED' ? '⚠' : '○'
+      const syncIcon =
+        workout.syncStatus === 'SYNCED'
+          ? '✓'
+          : workout.syncStatus === 'PENDING'
+            ? '⏳'
+            : workout.syncStatus === 'FAILED'
+              ? '⚠'
+              : '○'
       athleteContext += `- ${syncIcon} **${workout.date.toLocaleDateString()}**: ${workout.title || workout.type || 'Workout'}\n`
       if (workout.description) athleteContext += `  - ${workout.description}\n`
       const details: string[] = []
@@ -597,7 +620,8 @@ export default defineEventHandler(async (event) => {
     }
     athleteContext += `\n*Legend: ✓ Synced to Intervals.icu | ⏳ Sync pending | ⚠ Sync failed | ○ Local only*\n`
   } else {
-    athleteContext += '\n### Upcoming Planned Workouts\nNo workouts currently scheduled for the next 14 days\n'
+    athleteContext +=
+      '\n### Upcoming Planned Workouts\nNo workouts currently scheduled for the next 14 days\n'
   }
 
   // 5. Build System Instruction with Current Time Context
@@ -613,44 +637,48 @@ export default defineEventHandler(async (event) => {
     minute: '2-digit',
     hour12: true
   })
-  const hourOfDay = parseInt(now.toLocaleString('en-US', { timeZone: userTimeZone, hour: 'numeric', hour12: false }))
-  
+  const hourOfDay = parseInt(
+    now.toLocaleString('en-US', { timeZone: userTimeZone, hour: 'numeric', hour12: false })
+  )
+
   let timeOfDay = 'morning'
   if (hourOfDay >= 12 && hourOfDay < 17) timeOfDay = 'afternoon'
   else if (hourOfDay >= 17 && hourOfDay < 21) timeOfDay = 'evening'
   else if (hourOfDay >= 21 || hourOfDay < 5) timeOfDay = 'late night'
-  
+
   // Calculate upcoming days for relative date understanding
   const getNextDays = (count: number) => {
-    const days = [];
-    const today = new Date(now);
-    today.setHours(0, 0, 0, 0);
-    
+    const days = []
+    const today = new Date(now)
+    today.setHours(0, 0, 0, 0)
+
     for (let i = 0; i < count; i++) {
-      const date = new Date(today);
-      date.setDate(today.getDate() + i);
+      const date = new Date(today)
+      date.setDate(today.getDate() + i)
       const dayName = date.toLocaleDateString('en-US', {
         timeZone: userTimeZone,
         weekday: 'long'
-      });
+      })
       const dateStr = date.toLocaleDateString('en-US', {
         timeZone: userTimeZone,
         month: 'short',
         day: 'numeric',
         year: 'numeric'
-      });
-      days.push({ dayName, dateStr, date: date.toISOString().split('T')[0] });
+      })
+      days.push({ dayName, dateStr, date: date.toISOString().split('T')[0] })
     }
-    return days;
-  };
-  
-  const nextSevenDays = getNextDays(7);
-  const dateReference = nextSevenDays.map((d, i) => {
-    if (i === 0) return `- **Today (${d.dayName})**: ${d.dateStr}`;
-    if (i === 1) return `- **Tomorrow (${d.dayName})**: ${d.dateStr}`;
-    return `- **${d.dayName}**: ${d.dateStr}`;
-  }).join('\n');
-  
+    return days
+  }
+
+  const nextSevenDays = getNextDays(7)
+  const dateReference = nextSevenDays
+    .map((d, i) => {
+      if (i === 0) return `- **Today (${d.dayName})**: ${d.dateStr}`
+      if (i === 1) return `- **Tomorrow (${d.dayName})**: ${d.dateStr}`
+      return `- **${d.dayName}**: ${d.dateStr}`
+    })
+    .join('\n')
+
   const systemInstruction = `You are Coach Watts, a spirited, cool/edgy cycling coach with a gritty, high-energy personality.
 You are the ultimate riding buddy who happens to be an expert in physiology. You believe in "Ride Hard, Recover Harder."
 
@@ -660,12 +688,12 @@ You are the ultimate riding buddy who happens to be an expert in physiology. You
 **Current Time**: ${userTime} (${timeOfDay})
 
 **Today's Date**: ${now.toLocaleDateString('en-US', {
-  timeZone: userTimeZone,
-  weekday: 'long',
-  month: 'long',
-  day: 'numeric',
-  year: 'numeric'
-})}
+    timeZone: userTimeZone,
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric'
+  })}
 
 **Upcoming Days**:
 ${dateReference}
@@ -871,22 +899,22 @@ OR
   // 7. Initialize Model with Tools (without JSON mode during tool calling)
   // Use pro model for chat (better quality and reasoning)
   const modelName = MODEL_NAMES.pro
-  
+
   const model = genAI.getGenerativeModel({
     model: modelName,
     systemInstruction,
-    tools: [{ functionDeclarations: chatToolDeclarations }],
+    tools: [{ functionDeclarations: chatToolDeclarations }]
   })
 
   // 8. Start Chat with History
   const chat = model.startChat({
-    history: historyForModel,
+    history: historyForModel
   })
 
   // 9. Send Message and Handle Tool Calls Iteratively
   let result = await chat.sendMessage(content)
   let response = result.response
-  
+
   // Maximum 5 rounds of tool calls to prevent infinite loops
   let roundCount = 0
   const MAX_ROUNDS = 5
@@ -895,32 +923,36 @@ OR
 
   while (roundCount < MAX_ROUNDS) {
     const functionCalls = response.functionCalls?.()
-    
+
     if (!functionCalls || functionCalls.length === 0) {
       break
     }
-    
+
     roundCount++
-    console.log(`[Tool Call Round ${roundCount}/${MAX_ROUNDS}] Processing ${functionCalls.length} function call(s)`)
-    
+    console.log(
+      `[Tool Call Round ${roundCount}/${MAX_ROUNDS}] Processing ${functionCalls.length} function call(s)`
+    )
+
     // Process ALL function calls and build responses array
     const functionResponses = await Promise.all(
       functionCalls.map(async (functionCall, index) => {
         const callTimestamp = new Date().toISOString()
-        
-        console.log(`[Tool Call ${roundCount}.${index + 1}] ${functionCall.name}`, functionCall.args)
-        
+
+        console.log(
+          `[Tool Call ${roundCount}.${index + 1}] ${functionCall.name}`,
+          functionCall.args
+        )
+
         try {
-          const toolResult = await executeToolCall(
-            functionCall.name,
-            functionCall.args,
-            userId
+          const toolResult = await executeToolCall(functionCall.name, functionCall.args, userId)
+
+          console.log(
+            `[Tool Result ${roundCount}.${index + 1}] ${functionCall.name}:`,
+            typeof toolResult === 'object'
+              ? JSON.stringify(toolResult).substring(0, 200) + '...'
+              : toolResult
           )
-          
-          console.log(`[Tool Result ${roundCount}.${index + 1}] ${functionCall.name}:`,
-            typeof toolResult === 'object' ? JSON.stringify(toolResult).substring(0, 200) + '...' : toolResult
-          )
-          
+
           // Store complete tool call information including response
           toolCallsUsed.push({
             name: functionCall.name,
@@ -928,7 +960,7 @@ OR
             response: toolResult,
             timestamp: callTimestamp
           })
-          
+
           return {
             functionResponse: {
               name: functionCall.name,
@@ -936,10 +968,15 @@ OR
             }
           }
         } catch (error: any) {
-          console.error(`[Tool Error ${roundCount}.${index + 1}] ${functionCall.name}:`, error?.message || error)
-          
-          const errorResponse = { error: `Failed to execute tool: ${error?.message || 'Unknown error'}` }
-          
+          console.error(
+            `[Tool Error ${roundCount}.${index + 1}] ${functionCall.name}:`,
+            error?.message || error
+          )
+
+          const errorResponse = {
+            error: `Failed to execute tool: ${error?.message || 'Unknown error'}`
+          }
+
           // Store error response as well
           toolCallsUsed.push({
             name: functionCall.name,
@@ -947,7 +984,7 @@ OR
             response: errorResponse,
             timestamp: callTimestamp
           })
-          
+
           return {
             functionResponse: {
               name: functionCall.name,
@@ -957,12 +994,12 @@ OR
         }
       })
     )
-    
+
     // Send all function responses back together
     result = await chat.sendMessage(functionResponses)
     response = result.response
   }
-  
+
   if (roundCount >= MAX_ROUNDS) {
     console.warn(`Reached maximum tool call rounds (${MAX_ROUNDS}). Tools used:`, toolCallsUsed)
   }
@@ -975,30 +1012,33 @@ OR
     const promptTokens = usageMetadata?.promptTokenCount
     const completionTokens = usageMetadata?.candidatesTokenCount
     const totalTokens = usageMetadata?.totalTokenCount
-    
+
     // Calculate cost (Gemini 2.0 Flash pricing)
     const PRICING = {
-      input: 0.075,   // $0.075 per 1M input tokens
-      output: 0.30    // $0.30 per 1M output tokens
+      input: 0.075, // $0.075 per 1M input tokens
+      output: 0.3 // $0.30 per 1M output tokens
     }
-    const estimatedCost = promptTokens && completionTokens
-      ? ((promptTokens / 1_000_000) * PRICING.input) + ((completionTokens / 1_000_000) * PRICING.output)
-      : undefined
-    
+    const estimatedCost =
+      promptTokens && completionTokens
+        ? (promptTokens / 1_000_000) * PRICING.input +
+          (completionTokens / 1_000_000) * PRICING.output
+        : undefined
+
     // Build full prompt context for logging
     const fullPrompt = [
       '=== SYSTEM INSTRUCTION ===',
       systemInstruction,
       '',
       '=== CHAT HISTORY ===',
-      ...historyForModel.map((msg: any) =>
-        `${msg.role}: ${typeof msg.parts[0] === 'string' ? msg.parts[0] : JSON.stringify(msg.parts[0])}`
+      ...historyForModel.map(
+        (msg: any) =>
+          `${msg.role}: ${typeof msg.parts[0] === 'string' ? msg.parts[0] : JSON.stringify(msg.parts[0])}`
       ),
       '',
       '=== USER MESSAGE ===',
       content
     ].join('\n')
-    
+
     await prisma.llmUsage.create({
       data: {
         userId,
@@ -1054,29 +1094,25 @@ AI: ${aiResponseText.substring(0, 500)}
 Title:`
 
       console.log(`[Chat] Generating title for room ${roomId}`)
-      let roomTitle = await generateCoachAnalysis(
-        titlePrompt,
-        'flash',
-        {
-          userId,
-          operation: 'chat_title_generation',
-          entityType: 'ChatRoom',
-          entityId: roomId
-        }
-      )
+      let roomTitle = await generateCoachAnalysis(titlePrompt, 'flash', {
+        userId,
+        operation: 'chat_title_generation',
+        entityType: 'ChatRoom',
+        entityId: roomId
+      })
       roomTitle = roomTitle.trim()
-      
+
       // Clean up the title - remove quotes, limit length
       roomTitle = roomTitle.replace(/^["']|["']$/g, '').substring(0, 60)
-      
+
       console.log(`[Chat] Generated title: "${roomTitle}"`)
-      
+
       // Update the room name
       await prisma.chatRoom.update({
         where: { id: roomId },
         data: { name: roomTitle }
       })
-      
+
       console.log(`[Chat] Successfully renamed room ${roomId} to: "${roomTitle}"`)
     } catch (error: any) {
       console.error(`[Chat] Failed to auto-rename room ${roomId}:`, {
@@ -1091,7 +1127,7 @@ Title:`
   }
 
   // 12. Extract chart data from tool calls
-  const chartToolCalls = toolCallsUsed.filter(t => t.name === 'create_chart')
+  const chartToolCalls = toolCallsUsed.filter((t) => t.name === 'create_chart')
   const charts = chartToolCalls.map((call, index) => ({
     id: `chart-${aiMessage.id}-${index}`,
     ...call.args
@@ -1105,7 +1141,7 @@ Title:`
         metadata: {
           charts,
           toolCalls: toolCallsUsed, // Store complete tool call info with args and responses
-          toolsUsed: toolCallsUsed.map(t => t.name), // Keep for backward compatibility
+          toolsUsed: toolCallsUsed.map((t) => t.name), // Keep for backward compatibility
           toolCallCount: toolCallsUsed.length
         } as any // Cast to any to handle Json type
       }
@@ -1126,7 +1162,7 @@ Title:`
     metadata: {
       charts,
       toolCalls: toolCallsUsed, // Include complete tool call info in response
-      toolsUsed: toolCallsUsed.map(t => t.name),
+      toolsUsed: toolCallsUsed.map((t) => t.name),
       toolCallCount: toolCallsUsed.length,
       createdAt: aiMessage.createdAt
     }

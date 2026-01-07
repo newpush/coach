@@ -29,18 +29,18 @@ defineRouteMeta({
 
 export default defineEventHandler(async (event) => {
   const session = await getServerSession(event)
-  
+
   if (!session?.user) {
     throw createError({ statusCode: 401, message: 'Unauthorized' })
   }
-  
+
   const body = await readBody(event)
   const { type, durationMinutes, intensity, notes } = body
-  
+
   const userId = (session.user as any).id
   const today = new Date()
   today.setHours(0, 0, 0, 0)
-  
+
   const handle = await tasks.trigger('generate-ad-hoc-workout', {
     userId,
     date: today,
@@ -51,7 +51,7 @@ export default defineEventHandler(async (event) => {
       notes
     }
   })
-  
+
   return {
     success: true,
     jobId: handle.id,

@@ -27,23 +27,25 @@ export const altitudeService = {
 
     // Take first 5 minutes (300s) or less
     const startSegment = altitudeStream.slice(0, 300)
-    
+
     // Calculate median to avoid GPS spikes
     startSegment.sort((a, b) => a - b)
     const medianValue = startSegment[Math.floor(startSegment.length / 2)]
     if (medianValue === undefined || medianValue === null) return
-    
+
     const medianAltitude = Math.round(medianValue)
 
     // Get current setting
-    const user = await userRepository.getById(userId) as any // Casting until schema update
+    const user = (await userRepository.getById(userId)) as any // Casting until schema update
     const currentAltitude = user?.altitude || 0
 
     // Update if diff > 100m (significant move or travel)
     // We don't want to update for every small variation
     if (Math.abs(medianAltitude - currentAltitude) > 100) {
-      console.log(`[AltitudeService] Detected new home altitude: ${medianAltitude}m (was ${currentAltitude}m)`)
-      
+      console.log(
+        `[AltitudeService] Detected new home altitude: ${medianAltitude}m (was ${currentAltitude}m)`
+      )
+
       await prisma.user.update({
         where: { id: userId },
         data: { altitude: medianAltitude } as any

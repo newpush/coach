@@ -3,12 +3,12 @@ import type { Integration } from '@prisma/client'
 function getIntervalsHeaders(integration: Integration): Record<string, string> {
   // If we have a scope or refresh token, it's an OAuth integration
   if (integration.scope || integration.refreshToken) {
-    return { 'Authorization': `Bearer ${integration.accessToken}` }
+    return { Authorization: `Bearer ${integration.accessToken}` }
   }
-  
+
   // Otherwise, assume it's a legacy API Key integration
   const auth = Buffer.from(`API_KEY:${integration.accessToken}`).toString('base64')
-  return { 'Authorization': `Basic ${auth}` }
+  return { Authorization: `Basic ${auth}` }
 }
 
 function getIntervalsAthleteId(integration: Integration): string {
@@ -31,7 +31,7 @@ interface IntervalsActivity {
   duration?: number
   distance?: number
   total_elevation_gain?: number
-  
+
   // Power metrics
   average_watts?: number
   max_watts?: number
@@ -43,45 +43,45 @@ interface IntervalsActivity {
   icu_variability_index?: number
   icu_power_hr?: number
   icu_efficiency_factor?: number
-  
+
   // Heart rate
   average_heartrate?: number
   max_heartrate?: number
-  
+
   // Cadence
   average_cadence?: number
   max_cadence?: number
-  
+
   // Speed
   average_speed?: number
-  
+
   // Training load
   icu_training_load?: number
   icu_intensity?: number
   trimp?: number
   tss?: number
   intensity?: number
-  
+
   // Training status
   icu_ctl?: number
   icu_atl?: number
-  
+
   // Subjective
   perceived_exertion?: number
   session_rpe?: number
   feel?: number
-  
+
   // Performance
   decoupling?: number
   polarization_index?: number
-  
+
   // Environmental
   average_temp?: number
   trainer?: boolean
-  
+
   // Balance
   avg_lr_balance?: number
-  
+
   [key: string]: any
 }
 
@@ -141,25 +141,34 @@ interface IntervalsPlannedWorkout {
   [key: string]: any
 }
 
-async function fetchWithRetry(url: string, options: RequestInit, retries = 3, backoff = 1000): Promise<Response> {
+async function fetchWithRetry(
+  url: string,
+  options: RequestInit,
+  retries = 3,
+  backoff = 1000
+): Promise<Response> {
   try {
     const response = await fetch(url, options)
-    
+
     if (response.status === 429 && retries > 0) {
       const retryAfter = response.headers.get('Retry-After')
       const waitTime = retryAfter ? parseInt(retryAfter, 10) * 1000 : backoff
-      
-      console.warn(`[Intervals API] 429 Too Many Requests. Retrying in ${waitTime}ms... (${retries} retries left)`)
-      await new Promise(resolve => setTimeout(resolve, waitTime))
-      
+
+      console.warn(
+        `[Intervals API] 429 Too Many Requests. Retrying in ${waitTime}ms... (${retries} retries left)`
+      )
+      await new Promise((resolve) => setTimeout(resolve, waitTime))
+
       return fetchWithRetry(url, options, retries - 1, backoff * 2)
     }
-    
+
     return response
   } catch (error) {
     if (retries > 0) {
-      console.warn(`[Intervals API] Network error: ${error}. Retrying in ${backoff}ms... (${retries} retries left)`)
-      await new Promise(resolve => setTimeout(resolve, backoff))
+      console.warn(
+        `[Intervals API] Network error: ${error}. Retrying in ${backoff}ms... (${retries} retries left)`
+      )
+      await new Promise((resolve) => setTimeout(resolve, backoff))
       return fetchWithRetry(url, options, retries - 1, backoff * 2)
     }
     throw error
@@ -179,16 +188,16 @@ export async function createIntervalsPlannedWorkout(
   }
 ): Promise<IntervalsPlannedWorkout> {
   const athleteId = getIntervalsAthleteId(integration)
-  
+
   // Map workout types to Intervals.icu format
   const category = 'WORKOUT'
   let sport = data.type
-  
+
   // Handle Gym workouts - use "WeightTraining" (no space) for Intervals.icu
   if (data.type === 'Gym') {
     sport = 'WeightTraining'
   }
-  
+
   // Format date as ISO datetime string (YYYY-MM-DDTHH:mm:ss) - preserving time
   const year = data.date.getFullYear()
   const month = String(data.date.getMonth() + 1).padStart(2, '0')
@@ -197,12 +206,12 @@ export async function createIntervalsPlannedWorkout(
   const minute = String(data.date.getMinutes()).padStart(2, '0')
   const second = String(data.date.getSeconds()).padStart(2, '0')
   const dateStr = `${year}-${month}-${day}T${hour}:${minute}:${second}`
-  
+
   const workoutText = data.workout_doc || ''
-  const combinedDescription = data.description 
+  const combinedDescription = data.description
     ? `${data.description}\n\n${workoutText}`.trim()
     : workoutText
-  
+
   const eventData: any = {
     start_date_local: dateStr,
     name: data.title,
@@ -224,16 +233,19 @@ export async function createIntervalsPlannedWorkout(
       eventData.tss = data.tss
     }
   }
-  
-  console.log('[createIntervalsPlannedWorkout] 📤 Sending to Intervals.icu (using description for workout text):', {
-    athleteId,
-    url: `https://intervals.icu/api/v1/athlete/${athleteId}/events`
-  })
-  
+
+  console.log(
+    '[createIntervalsPlannedWorkout] 📤 Sending to Intervals.icu (using description for workout text):',
+    {
+      athleteId,
+      url: `https://intervals.icu/api/v1/athlete/${athleteId}/events`
+    }
+  )
+
   const url = `https://intervals.icu/api/v1/athlete/${athleteId}/events`
   const headers = getIntervalsHeaders(integration)
   const bodyStr = JSON.stringify(eventData)
-    
+
   const response = await fetchWithRetry(url, {
     method: 'POST',
     headers: {
@@ -242,7 +254,7 @@ export async function createIntervalsPlannedWorkout(
     },
     body: bodyStr
   })
-  
+
   if (!response.ok) {
     const errorText = await response.text()
     console.error('[createIntervalsPlannedWorkout] ❌ Intervals.icu API error:', {
@@ -253,13 +265,13 @@ export async function createIntervalsPlannedWorkout(
     })
     throw new Error(`Intervals API error: ${response.status} ${errorText}`)
   }
-  
+
   const result = await response.json()
   console.log('[createIntervalsPlannedWorkout] ✅ Intervals.icu response:', {
     id: result.id,
     name: result.name
   })
-  
+
   return result
 }
 
@@ -268,15 +280,15 @@ export async function deleteIntervalsPlannedWorkout(
   eventId: string
 ): Promise<void> {
   const athleteId = getIntervalsAthleteId(integration)
-  
+
   const url = `https://intervals.icu/api/v1/athlete/${athleteId}/events/${eventId}`
   const headers = getIntervalsHeaders(integration)
-    
+
   const response = await fetchWithRetry(url, {
     method: 'DELETE',
     headers
   })
-  
+
   if (!response.ok && response.status !== 404) {
     const errorText = await response.text()
     throw new Error(`Intervals API error: ${response.status} ${errorText}`)
@@ -297,13 +309,13 @@ export async function updateIntervalsPlannedWorkout(
   }
 ): Promise<IntervalsPlannedWorkout> {
   const athleteId = getIntervalsAthleteId(integration)
-  
+
   // Map workout types to Intervals.icu format
   let sport = data.type
   if (data.type === 'Gym') {
     sport = 'WeightTraining'
   }
-  
+
   // Format date if provided
   let dateStr: string | undefined
   if (data.date) {
@@ -312,17 +324,17 @@ export async function updateIntervalsPlannedWorkout(
     const day = String(data.date.getDate()).padStart(2, '0')
     dateStr = `${year}-${month}-${day}T00:00:00`
   }
-  
+
   const eventData: any = {}
   if (dateStr) eventData.start_date_local = dateStr
   if (data.title) eventData.name = data.title
-  
+
   // Handle workout doc / description merge
   if (data.workout_doc) {
     const workoutText = data.workout_doc
     const description = data.description || ''
     eventData.description = `${description}\n\n${workoutText}`.trim()
-    
+
     // Don't send duration/tss if we have workout structure, let Intervals calculate it
     // Unless specifically requested? Usually safer to let Intervals calc it.
   } else {
@@ -330,18 +342,18 @@ export async function updateIntervalsPlannedWorkout(
     if (data.durationSec) eventData.duration = data.durationSec
     if (data.tss) eventData.tss = data.tss
   }
-  
+
   if (sport) eventData.type = sport
-  
+
   console.log('[updateIntervalsPlannedWorkout] 📤 Updating on Intervals.icu:', {
     athleteId,
     eventId,
     eventData
   })
-  
+
   const url = `https://intervals.icu/api/v1/athlete/${athleteId}/events/${eventId}`
   const headers = getIntervalsHeaders(integration)
-    
+
   const response = await fetchWithRetry(url, {
     method: 'PUT',
     headers: {
@@ -350,12 +362,12 @@ export async function updateIntervalsPlannedWorkout(
     },
     body: JSON.stringify(eventData)
   })
-  
+
   if (!response.ok) {
     const errorText = await response.text()
     throw new Error(`Intervals API error: ${response.status} ${errorText}`)
   }
-  
+
   return await response.json()
 }
 
@@ -365,24 +377,24 @@ export async function fetchIntervalsPlannedWorkouts(
   endDate: Date
 ): Promise<IntervalsPlannedWorkout[]> {
   const athleteId = getIntervalsAthleteId(integration)
-  
+
   const url = new URL(`https://intervals.icu/api/v1/athlete/${athleteId}/events`)
   const oldestStr = startDate.toISOString().split('T')[0]
   const newestStr = endDate.toISOString().split('T')[0]
-  
+
   if (oldestStr) url.searchParams.set('oldest', oldestStr)
   if (newestStr) url.searchParams.set('newest', newestStr)
-  
+
   const headers = getIntervalsHeaders(integration)
-    
+
   const response = await fetchWithRetry(url.toString(), {
     headers
   })
-  
+
   if (!response.ok) {
     throw new Error(`Intervals API error: ${response.status} ${response.statusText}`)
   }
-  
+
   return await response.json()
 }
 
@@ -392,84 +404,92 @@ export async function fetchIntervalsWorkouts(
   endDate: Date
 ): Promise<IntervalsActivity[]> {
   const athleteId = getIntervalsAthleteId(integration)
-  
+
   const url = new URL(`https://intervals.icu/api/v1/athlete/${athleteId}/activities`)
   const oldestStr = startDate.toISOString().split('T')[0]
   const newestStr = endDate.toISOString().split('T')[0]
-  
+
   if (oldestStr) url.searchParams.set('oldest', oldestStr)
   if (newestStr) url.searchParams.set('newest', newestStr)
-  
+
   const headers = getIntervalsHeaders(integration)
-  
+
   console.log(`[Intervals Sync] Fetching workouts from: ${url.toString()}`)
-    
+
   const response = await fetchWithRetry(url.toString(), {
     headers
   })
-  
+
   if (!response.ok) {
     const errorText = await response.text()
     console.error(`[Intervals Sync] ❌ Error ${response.status}: ${errorText}`)
     throw new Error(`Intervals API error: ${response.status} ${response.statusText}`)
   }
-  
+
   return await response.json()
 }
 
-export async function fetchIntervalsAthlete(accessToken: string, athleteId?: string): Promise<IntervalsAthlete> {
+export async function fetchIntervalsAthlete(
+  accessToken: string,
+  athleteId?: string
+): Promise<IntervalsAthlete> {
   // Intervals.icu API expects Basic Auth with "API_KEY" as username and the API key as password
   // The athlete ID must be provided in the URL path
-  
+
   if (!athleteId) {
     throw new Error('Athlete ID is required')
   }
-  
+
   const auth = Buffer.from(`API_KEY:${accessToken}`).toString('base64')
-  
+
   const response = await fetchWithRetry(`https://intervals.icu/api/v1/athlete/${athleteId}`, {
     headers: {
-      'Authorization': `Basic ${auth}`
+      Authorization: `Basic ${auth}`
     }
   })
-  
+
   if (!response.ok) {
     const errorText = await response.text()
     console.error('Intervals.icu API error:', response.status, errorText)
     throw new Error(`Intervals API error: ${response.status} ${response.statusText}`)
   }
-  
+
   return await response.json()
 }
 
 export async function fetchIntervalsAthleteProfile(integration: Integration) {
   const athleteId = getIntervalsAthleteId(integration)
   const headers = getIntervalsHeaders(integration)
-  
-  console.log(`[Intervals Sync] Fetching athlete profile from: https://intervals.icu/api/v1/athlete/${athleteId}`)
-  
+
+  console.log(
+    `[Intervals Sync] Fetching athlete profile from: https://intervals.icu/api/v1/athlete/${athleteId}`
+  )
+
   // Fetch athlete data
-  const athleteResponse = await fetchWithRetry(`https://intervals.icu/api/v1/athlete/${athleteId}`, {
-    headers
-  })
-  
+  const athleteResponse = await fetchWithRetry(
+    `https://intervals.icu/api/v1/athlete/${athleteId}`,
+    {
+      headers
+    }
+  )
+
   if (!athleteResponse.ok) {
     throw new Error(`Failed to fetch athlete profile: ${athleteResponse.statusText}`)
   }
-  
+
   const athlete = await athleteResponse.json()
-  
+
   // Fetch recent wellness data (last 7 days)
   const today = new Date()
   const sevenDaysAgo = new Date(today)
   sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
-  
+
   const wellnessData: any[] = []
   for (let i = 0; i < 7; i++) {
     const date = new Date(today)
     date.setDate(date.getDate() - i)
     const dateStr = date.toISOString().split('T')[0]
-    
+
     try {
       const wellnessResponse = await fetchWithRetry(
         `https://intervals.icu/api/v1/athlete/${athleteId}/wellness/${dateStr}`,
@@ -477,7 +497,7 @@ export async function fetchIntervalsAthleteProfile(integration: Integration) {
           headers
         }
       )
-      
+
       if (wellnessResponse.ok) {
         const wellness = await wellnessResponse.json()
         if (wellness && Object.keys(wellness).length > 0) {
@@ -489,32 +509,33 @@ export async function fetchIntervalsAthleteProfile(integration: Integration) {
       console.error(`Error fetching wellness for ${dateStr}:`, error)
     }
   }
-  
+
   // Extract FTP and other metrics from type settings
   let ftp: number | null = null
   let lthr: number | null = null
   let maxHR: number | null = null
   let hrZones = null
   let powerZones = null
-  
+
   // Check for both new (sportSettings) and legacy (icu_type_settings) formats
-  const settings = (athlete.sportSettings && athlete.sportSettings.length > 0) 
-    ? athlete.sportSettings 
-    : (athlete.icu_type_settings || []);
+  const settings =
+    athlete.sportSettings && athlete.sportSettings.length > 0
+      ? athlete.sportSettings
+      : athlete.icu_type_settings || []
 
   if (settings.length > 0) {
     // Look for cycling/ride FTP first
-    const cyclingSettings = settings.find((s: any) =>
-      s.types && (s.types.includes('Ride') || s.types.includes('VirtualRide'))
+    const cyclingSettings = settings.find(
+      (s: any) => s.types && (s.types.includes('Ride') || s.types.includes('VirtualRide'))
     )
-    
+
     if (cyclingSettings) {
       ftp = cyclingSettings.ftp
       lthr = cyclingSettings.lthr
       maxHR = cyclingSettings.max_hr
-      
+
       // Extract Zones (Handle both formats)
-      
+
       // 1. New Format (sportSettings has direct arrays)
       if (cyclingSettings.hr_zones && cyclingSettings.hr_zone_names) {
         // hr_zones are typically upper bounds? Or boundaries?
@@ -525,9 +546,9 @@ export async function fetchIntervalsAthleteProfile(integration: Integration) {
           // Prefix with Z{i} if needed
           let name = cyclingSettings.hr_zone_names[index] || `Z${index + 1}`
           if (!name.startsWith('Z')) {
-             name = `Z${index + 1} ${name}`
+            name = `Z${index + 1} ${name}`
           }
-          
+
           return {
             name,
             min: index === 0 ? 0 : prevMax + 1,
@@ -535,7 +556,7 @@ export async function fetchIntervalsAthleteProfile(integration: Integration) {
           }
         })
       }
-      
+
       if (cyclingSettings.power_zones && cyclingSettings.power_zone_names) {
         // power_zones are usually % of FTP in the new format
         // Example: [55, 75, 90, 105, 120, 150, 999]
@@ -543,11 +564,11 @@ export async function fetchIntervalsAthleteProfile(integration: Integration) {
         powerZones = cyclingSettings.power_zones.map((val: number, index: number) => {
           const prevVal = index === 0 ? 0 : cyclingSettings.power_zones[index - 1]
           const prevMaxAbs = Math.round((prevVal / 100) * threshold)
-          
+
           // Prefix with Z{i} if needed
           let name = cyclingSettings.power_zone_names[index] || `Z${index + 1}`
           if (!name.startsWith('Z') && !name.startsWith('SS')) {
-             name = `Z${index + 1} ${name}`
+            name = `Z${index + 1} ${name}`
           }
 
           return {
@@ -569,10 +590,10 @@ export async function fetchIntervalsAthleteProfile(integration: Integration) {
           hrZones = hrZ.zones.map((z: any) => ({
             name: z.id || z.name, // e.g. "Z1"
             min: Math.round((z.min / 100) * threshold),
-            max: z.max ? Math.round((z.max / 100) * threshold) : (maxHR || 200)
+            max: z.max ? Math.round((z.max / 100) * threshold) : maxHR || 200
           }))
         }
-        
+
         // Power Zones
         const powerZ = cyclingSettings.training_zones.find((z: any) => z.type === 'POWER')
         if (powerZ && powerZ.zones) {
@@ -594,7 +615,7 @@ export async function fetchIntervalsAthleteProfile(integration: Integration) {
       }
     }
   }
-  
+
   // Calculate age from date of birth
   const calculateAge = (dob: string): number | null => {
     if (!dob) return null
@@ -607,15 +628,14 @@ export async function fetchIntervalsAthleteProfile(integration: Integration) {
     }
     return age
   }
-  
+
   // Calculate recent HRV average
-  const recentHrvValues = wellnessData
-    .map(d => d.hrv)
-    .filter(v => v != null)
-  const avgRecentHRV = recentHrvValues.length > 0
-    ? recentHrvValues.reduce((a, b) => a + b, 0) / recentHrvValues.length
-    : null
-  
+  const recentHrvValues = wellnessData.map((d) => d.hrv).filter((v) => v != null)
+  const avgRecentHRV =
+    recentHrvValues.length > 0
+      ? recentHrvValues.reduce((a, b) => a + b, 0) / recentHrvValues.length
+      : null
+
   return {
     // Basic info
     name: athlete.name || null,
@@ -628,24 +648,24 @@ export async function fetchIntervalsAthleteProfile(integration: Integration) {
       state: athlete.state || null,
       country: athlete.country || null
     },
-    
+
     // Physical metrics
     weight: athlete.icu_weight || athlete.weight || null,
     restingHR: athlete.icu_resting_hr || null,
-    
+
     // Performance metrics (from type settings)
     ftp,
     lthr,
     maxHR,
     hrZones,
     powerZones,
-    
+
     // Recent wellness
     recentHRV: wellnessData.length > 0 ? wellnessData[0].hrv : null,
     avgRecentHRV: avgRecentHRV ? Math.round(avgRecentHRV * 10) / 10 : null,
-    recentWeight: wellnessData.find(d => d.weight)?.weight || null,
+    recentWeight: wellnessData.find((d) => d.weight)?.weight || null,
     recentReadiness: wellnessData.length > 0 ? wellnessData[0].readiness : null,
-    
+
     // Preferences
     timezone: athlete.timezone || null,
     locale: athlete.locale || null,
@@ -659,22 +679,22 @@ export async function fetchIntervalsWellness(
   endDate: Date
 ): Promise<IntervalsWellness[]> {
   const athleteId = getIntervalsAthleteId(integration)
-  
+
   const wellness: IntervalsWellness[] = []
-  
+
   // Fetch wellness data for each day in the range
   const currentDate = new Date(startDate)
   while (currentDate <= endDate) {
     const dateStr = currentDate.toISOString().split('T')[0]
     const url = `https://intervals.icu/api/v1/athlete/${athleteId}/wellness/${dateStr}`
-    
+
     const headers = getIntervalsHeaders(integration)
-    
+
     try {
       const response = await fetchWithRetry(url, {
         headers
       })
-      
+
       if (response.ok) {
         const data = await response.json()
         wellness.push({ id: dateStr, ...data })
@@ -683,10 +703,10 @@ export async function fetchIntervalsWellness(
       // Continue on error for individual days
       console.error(`Error fetching wellness for ${dateStr}:`, error)
     }
-    
+
     currentDate.setDate(currentDate.getDate() + 1)
   }
-  
+
   return wellness
 }
 
@@ -695,7 +715,7 @@ export function normalizeIntervalsWorkout(activity: IntervalsActivity, userId: s
   const elapsed_time = activity.elapsed_time || 0
   const duration = activity.duration || 0
   const durationSec = moving_time || elapsed_time || duration
-  
+
   return {
     userId,
     externalId: activity.id,
@@ -709,28 +729,28 @@ export function normalizeIntervalsWorkout(activity: IntervalsActivity, userId: s
     durationSec,
     distanceMeters: activity.distance || null,
     elevationGain: activity.total_elevation_gain ? Math.round(activity.total_elevation_gain) : null,
-    
+
     // Power metrics
     averageWatts: activity.icu_average_watts || activity.average_watts || null,
     maxWatts: activity.max_watts || null,
     normalizedPower: activity.normalized_power || null,
     weightedAvgWatts: activity.icu_weighted_avg_watts || null,
-    
+
     // Heart rate
     averageHr: activity.average_heartrate ? Math.round(activity.average_heartrate) : null,
     maxHr: activity.max_heartrate ? Math.round(activity.max_heartrate) : null,
-    
+
     // Cadence
     averageCadence: activity.average_cadence ? Math.round(activity.average_cadence) : null,
     maxCadence: activity.max_cadence ? Math.round(activity.max_cadence) : null,
-    
+
     // Speed
     averageSpeed: activity.average_speed || null,
-    
+
     // Training load
     tss: activity.tss || null,
     trainingLoad: activity.icu_training_load || null,
-    
+
     // FIX: Normalize intensity to 0-1 scale
     intensity: (() => {
       let val = activity.icu_intensity || activity.intensity || null
@@ -739,10 +759,10 @@ export function normalizeIntervalsWorkout(activity: IntervalsActivity, userId: s
       }
       return val ? Math.round(val * 10000) / 10000 : null
     })(),
-    
+
     kilojoules: activity.icu_joules || null,
     trimp: activity.trimp || null,
-    
+
     // Performance metrics
     ftp: activity.icu_ftp || null,
     variabilityIndex: activity.icu_variability_index || null,
@@ -750,34 +770,34 @@ export function normalizeIntervalsWorkout(activity: IntervalsActivity, userId: s
     efficiencyFactor: activity.icu_efficiency_factor || null,
     decoupling: activity.decoupling || null,
     polarizationIndex: activity.polarization_index || null,
-    
+
     // Training status
     ctl: activity.icu_ctl || null,
     atl: activity.icu_atl || null,
-    
+
     // Subjective metrics
     rpe: activity.perceived_exertion || activity.icu_rpe || null,
     sessionRpe: activity.session_rpe || null,
     // Intervals uses 1 (Strong) to 5 (Weak). We standardize to 1 (Weak) to 5 (Strong).
     feel: activity.feel ? 6 - activity.feel : null,
-    
+
     // Environmental
     avgTemp: activity.average_temp || null,
     trainer: activity.trainer || null,
-    
+
     // Balance
     lrBalance: activity.avg_lr_balance || null,
-    
+
     // Energy & Time
     calories: activity.calories || null,
     elapsedTimeSec: activity.elapsed_time || null,
-    
+
     // Device & Metadata
     deviceName: null, // Intervals.icu doesn't provide device info
     commute: false, // Intervals.icu doesn't track commute flag
     isPrivate: false, // Intervals.icu doesn't provide privacy flag
     gearId: null, // Intervals.icu doesn't provide gear info
-    
+
     // Store raw data
     rawJson: activity
   }
@@ -787,18 +807,18 @@ export function normalizeIntervalsPlannedWorkout(event: IntervalsPlannedWorkout,
   // Intervals.icu sometimes uses different field names for planned metrics depending on the source/type
   const durationSec = event.duration ?? event.moving_time ?? event.workout_doc?.duration ?? null
   const tss = event.tss ?? event.icu_training_load ?? null
-  
+
   // FIX: Prioritize icu_intensity and normalize to 0-1 scale
   // event.work is Joules, which shouldn't be mapped to intensity
   let workIntensity = event.icu_intensity ?? null
-  
+
   // If intensity is > 5, assume it's a percentage (e.g. 75 for 0.75)
   if (workIntensity !== null && workIntensity > 5) {
     workIntensity = workIntensity / 100
   }
 
   const distance = event.distance ?? event.icu_distance ?? null
-  
+
   // Structured workout data
   const structuredWorkout = event.workout_doc ?? (event.steps ? { steps: event.steps } : null)
 
@@ -820,65 +840,69 @@ export function normalizeIntervalsPlannedWorkout(event: IntervalsPlannedWorkout,
   }
 }
 
-export function normalizeIntervalsWellness(wellness: IntervalsWellness, userId: string, date: Date) {
+export function normalizeIntervalsWellness(
+  wellness: IntervalsWellness,
+  userId: string,
+  date: Date
+) {
   return {
     userId,
     date,
-    
+
     // HRV
     hrv: wellness.hrv || null,
     hrvSdnn: wellness.hrvSDNN || null,
-    
+
     // Heart rate
     restingHr: wellness.restingHR || null,
     avgSleepingHr: wellness.avgSleepingHR || null,
-    
+
     // Sleep
     sleepSecs: wellness.sleepSecs || null,
     sleepHours: wellness.sleepSecs ? Math.round((wellness.sleepSecs / 3600) * 10) / 10 : null,
     sleepScore: wellness.sleepScore || null,
     sleepQuality: wellness.sleepQuality || null,
-    
+
     // Recovery
     readiness: wellness.readiness || null,
     recoveryScore: null, // Not directly available from Intervals.icu
-    
+
     // Subjective
     soreness: wellness.soreness || null,
     fatigue: wellness.fatigue || null,
     stress: wellness.stress || null,
     mood: wellness.mood || null,
     motivation: wellness.motivation || null,
-    
+
     // Physical
     weight: wellness.weight || null,
     bodyFat: wellness.bodyFat || null,
     abdomen: wellness.abdomen || null,
     vo2max: wellness.vo2max || null,
     spO2: wellness.spO2 || null,
-    
+
     // Vitals
     systolic: wellness.systolic || null,
     diastolic: wellness.diastolic || null,
     respiration: wellness.respiration || null,
     bloodGlucose: wellness.bloodGlucose || null,
     lactate: wellness.lactate || null,
-    
+
     // Hydration & Health
     hydration: wellness.hydration || null,
     hydrationVolume: wellness.hydrationVolume || null,
     injury: wellness.injury || null,
-    
+
     // Cycle
     menstrualPhase: wellness.menstrualPhase || null,
-    
+
     // Training load
     ctl: wellness.ctl || null,
     atl: wellness.atl || null,
-    
+
     // Notes
     comments: wellness.comments || null,
-    
+
     // Raw data
     rawJson: wellness
   }
@@ -899,13 +923,13 @@ export async function fetchIntervalsActivityStreams(
 ): Promise<Record<string, IntervalsStream>> {
   const athleteId = getIntervalsAthleteId(integration)
   const headers = getIntervalsHeaders(integration)
-  
+
   const url = `https://intervals.icu/api/v1/activity/${activityId}/streams`
-  
+
   const response = await fetchWithRetry(url, {
     headers
   })
-  
+
   if (!response.ok) {
     if (response.status === 404) {
       // Activity doesn't have stream data
@@ -913,7 +937,7 @@ export async function fetchIntervalsActivityStreams(
     }
     throw new Error(`Intervals API error: ${response.status} ${response.statusText}`)
   }
-  
+
   const data = await response.json()
   const streams: Record<string, IntervalsStream> = {}
 
@@ -926,7 +950,7 @@ export async function fetchIntervalsActivityStreams(
         streams[item.type] = { type: item.type, data: item.data }
       }
     }
-    
+
     // Check if we need to reconstruct latlng from lat and lon streams
     if (!streams.latlng && streams.lat && streams.lon) {
       const lat = streams.lat.data as number[]
@@ -941,16 +965,19 @@ export async function fetchIntervalsActivityStreams(
       }
       streams.latlng = { type: 'latlng', data: latlng }
     }
-  } 
+  }
   // Fallback for object format if it ever exists
   else if (typeof data === 'object' && data !== null) {
     if (data.time) streams.time = { type: 'time', data: data.time }
     if (data.distance) streams.distance = { type: 'distance', data: data.distance }
     if (data.velocity) streams.velocity = { type: 'velocity', data: data.velocity }
-    if (data.heartrate || data.hr) streams.heartrate = { type: 'heartrate', data: data.heartrate || data.hr }
-    if (data.cadence || data.cad) streams.cadence = { type: 'cadence', data: data.cadence || data.cad }
+    if (data.heartrate || data.hr)
+      streams.heartrate = { type: 'heartrate', data: data.heartrate || data.hr }
+    if (data.cadence || data.cad)
+      streams.cadence = { type: 'cadence', data: data.cadence || data.cad }
     if (data.watts) streams.watts = { type: 'watts', data: data.watts }
-    if (data.altitude || data.alt) streams.altitude = { type: 'altitude', data: data.altitude || data.alt }
+    if (data.altitude || data.alt)
+      streams.altitude = { type: 'altitude', data: data.altitude || data.alt }
     if (data.lat && data.lon) {
       const latlng: [number, number][] = []
       for (let i = 0; i < data.lat.length; i++) {
@@ -961,6 +988,6 @@ export async function fetchIntervalsActivityStreams(
     if (data.grade) streams.grade = { type: 'grade', data: data.grade }
     if (data.moving) streams.moving = { type: 'moving', data: data.moving }
   }
-  
+
   return streams
 }

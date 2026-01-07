@@ -7,6 +7,7 @@ This guide provides a sequential, step-by-step approach to building the Coach Wa
 ## Prerequisites
 
 Before starting, ensure you have:
+
 - Node.js 18+ installed
 - pnpm (recommended) or npm
 - PostgreSQL database (local or cloud)
@@ -22,6 +23,7 @@ Before starting, ensure you have:
 **Goal:** Create a new Nuxt 3 project with essential dependencies
 
 **Instructions:**
+
 1. Create a new Nuxt 3 project named `coach-watts`
 2. Initialize the project
 3. Install `@nuxt/ui` for the component library
@@ -31,6 +33,7 @@ Before starting, ensure you have:
 7. Ensure the project runs successfully on `localhost:3000`
 
 **Commands:**
+
 ```bash
 # Create project
 npx nuxi@latest init coach-watts
@@ -52,11 +55,13 @@ pnpm dev
 ```
 
 **Expected Output:**
+
 - Project running on `http://localhost:3000`
 - Prisma folder created with `schema.prisma`
 - `.env` file with database URL
 
 **Validation:**
+
 - [ ] Nuxt dev server starts without errors
 - [ ] `prisma/schema.prisma` file exists
 - [ ] `.env` file contains `DATABASE_URL`
@@ -68,18 +73,21 @@ pnpm dev
 **Goal:** Set up the complete database schema
 
 **Instructions:**
+
 1. Update the `prisma/schema.prisma` file
 2. Copy the complete schema from `docs/database-schema.md`
 3. Run a migration named `init_schema`
 4. Generate Prisma Client
 
 **Schema to Apply:**
+
 ```prisma
 // Copy the complete schema from docs/database-schema.md
 // Located in the "Complete Schema" section
 ```
 
 **Commands:**
+
 ```bash
 # After updating schema.prisma
 npx prisma migrate dev --name init_schema
@@ -87,11 +95,13 @@ npx prisma generate
 ```
 
 **Expected Output:**
+
 - Migration files created in `prisma/migrations/`
 - Database tables created
 - Prisma Client generated
 
 **Validation:**
+
 - [ ] Migration runs successfully
 - [ ] All tables visible in Prisma Studio (`npx prisma studio`)
 - [ ] No TypeScript errors in IDE
@@ -105,6 +115,7 @@ npx prisma generate
 **Goal:** Implement authentication using NuxtAuth with Google provider
 
 **Instructions:**
+
 1. Install `@sidebase/nuxt-auth` and `next-auth`
 2. Configure NuxtAuth module in `nuxt.config.ts` with PrismaAdapter
 3. Create auth handler at `server/api/auth/[...].ts`
@@ -113,6 +124,7 @@ npx prisma generate
 6. Protect `/dashboard` route for authenticated users only
 
 **Commands:**
+
 ```bash
 # Install dependencies
 pnpm add @sidebase/nuxt-auth @auth/core @auth/prisma-adapter
@@ -122,10 +134,11 @@ pnpm add next-auth
 **Configuration:**
 
 `nuxt.config.ts`:
+
 ```typescript
 export default defineNuxtConfig({
   modules: ['@nuxt/ui', '@sidebase/nuxt-auth'],
-  
+
   auth: {
     baseURL: process.env.AUTH_ORIGIN || 'http://localhost:3000/api/auth',
     provider: {
@@ -136,6 +149,7 @@ export default defineNuxtConfig({
 ```
 
 `server/api/auth/[...].ts`:
+
 ```typescript
 import { NuxtAuthHandler } from '#auth'
 import GoogleProvider from 'next-auth/providers/google'
@@ -155,6 +169,7 @@ export default NuxtAuthHandler({
 ```
 
 `pages/login.vue`:
+
 ```vue
 <template>
   <div class="min-h-screen flex items-center justify-center">
@@ -162,29 +177,28 @@ export default NuxtAuthHandler({
       <template #header>
         <h1 class="text-2xl font-bold">Welcome to Coach Watts</h1>
       </template>
-      
-      <UButton @click="signIn('google')">
-        Sign in with Google
-      </UButton>
+
+      <UButton @click="signIn('google')"> Sign in with Google </UButton>
     </UCard>
   </div>
 </template>
 
 <script setup lang="ts">
-const { signIn } = useAuth()
+  const { signIn } = useAuth()
 
-definePageMeta({
-  layout: 'auth',
-  middleware: 'guest'
-})
+  definePageMeta({
+    layout: 'auth',
+    middleware: 'guest'
+  })
 </script>
 ```
 
 `middleware/auth.ts`:
+
 ```typescript
 export default defineNuxtRouteMiddleware((to, from) => {
   const { status } = useAuth()
-  
+
   if (status.value !== 'authenticated') {
     return navigateTo('/login')
   }
@@ -192,6 +206,7 @@ export default defineNuxtRouteMiddleware((to, from) => {
 ```
 
 **Environment Variables:**
+
 ```env
 GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
 GOOGLE_CLIENT_SECRET=your-client-secret
@@ -200,6 +215,7 @@ AUTH_ORIGIN=http://localhost:3000/api/auth
 ```
 
 **Validation:**
+
 - [ ] Login page renders
 - [ ] Google OAuth flow works
 - [ ] User record created in database
@@ -215,12 +231,14 @@ AUTH_ORIGIN=http://localhost:3000/api/auth
 **Goal:** Set up background job infrastructure
 
 **Instructions:**
+
 1. Install Trigger.dev SDK (`@trigger.dev/sdk`)
 2. Initialize configuration in `trigger.config.ts`
 3. Create `trigger/` folder at project root
 4. Create a test job `trigger/test.ts` to verify setup
 
 **Commands:**
+
 ```bash
 # Install Trigger.dev
 pnpm add @trigger.dev/sdk
@@ -232,6 +250,7 @@ npx trigger.dev@latest init
 **Configuration:**
 
 `trigger.config.ts`:
+
 ```typescript
 import { defineConfig } from '@trigger.dev/sdk/v3'
 
@@ -254,6 +273,7 @@ export default defineConfig({
 ```
 
 `trigger/test.ts`:
+
 ```typescript
 import { task } from '@trigger.dev/sdk/v3'
 
@@ -267,6 +287,7 @@ export const testJob = task({
 ```
 
 **Commands to Test:**
+
 ```bash
 # Run Trigger.dev dev server
 npx trigger.dev@latest dev
@@ -276,6 +297,7 @@ npx trigger.dev@latest test --task-id test-job
 ```
 
 **Validation:**
+
 - [ ] Trigger.dev dashboard accessible
 - [ ] Test job appears in dashboard
 - [ ] Job executes successfully
@@ -288,6 +310,7 @@ npx trigger.dev@latest test --task-id test-job
 **Goal:** Fetch workout data from Intervals.icu
 
 **Instructions:**
+
 1. Create `server/utils/intervals.ts` service
 2. Implement `fetchIntervalsWorkouts()` function
 3. Use endpoint: `https://intervals.icu/api/v1/athlete/{athleteId}/activities`
@@ -297,6 +320,7 @@ npx trigger.dev@latest test --task-id test-job
 **Implementation:**
 
 `server/utils/intervals.ts`:
+
 ```typescript
 import type { Integration } from '@prisma/client'
 
@@ -321,20 +345,20 @@ export async function fetchIntervalsWorkouts(
   endDate: Date
 ): Promise<IntervalsActivity[]> {
   const athleteId = integration.externalUserId || '0' // 0 means authenticated user
-  
+
   const response = await fetch(
     `https://intervals.icu/api/v1/athlete/${athleteId}/activities?oldest=${startDate.toISOString()}&newest=${endDate.toISOString()}`,
     {
       headers: {
-        'Authorization': `Bearer ${integration.accessToken}`
+        Authorization: `Bearer ${integration.accessToken}`
       }
     }
   )
-  
+
   if (!response.ok) {
     throw new Error(`Intervals API error: ${response.statusText}`)
   }
-  
+
   return await response.json()
 }
 
@@ -359,6 +383,7 @@ export function normalizeIntervalsWorkout(activity: IntervalsActivity, userId: s
 ```
 
 `trigger/ingest-intervals.ts`:
+
 ```typescript
 import { task } from '@trigger.dev/sdk/v3'
 import { prisma } from '~/server/utils/db'
@@ -368,7 +393,7 @@ export const ingestIntervals = task({
   id: 'ingest-intervals',
   run: async (payload: { userId: string; startDate: string; endDate: string }) => {
     const { userId, startDate, endDate } = payload
-    
+
     // Fetch integration
     const integration = await prisma.integration.findUnique({
       where: {
@@ -378,17 +403,17 @@ export const ingestIntervals = task({
         }
       }
     })
-    
+
     if (!integration) {
       throw new Error('Intervals integration not found')
     }
-    
+
     // Update sync status
     await prisma.integration.update({
       where: { id: integration.id },
       data: { syncStatus: 'SYNCING' }
     })
-    
+
     try {
       // Fetch activities
       const activities = await fetchIntervalsWorkouts(
@@ -396,11 +421,11 @@ export const ingestIntervals = task({
         new Date(startDate),
         new Date(endDate)
       )
-      
+
       // Upsert workouts
       for (const activity of activities) {
         const workout = normalizeIntervalsWorkout(activity, userId)
-        
+
         await prisma.workout.upsert({
           where: {
             userId_source_externalId: {
@@ -413,7 +438,7 @@ export const ingestIntervals = task({
           create: workout
         })
       }
-      
+
       // Update sync status
       await prisma.integration.update({
         where: { id: integration.id },
@@ -423,7 +448,7 @@ export const ingestIntervals = task({
           errorMessage: null
         }
       })
-      
+
       return {
         success: true,
         count: activities.length
@@ -437,7 +462,7 @@ export const ingestIntervals = task({
           errorMessage: error.message
         }
       })
-      
+
       throw error
     }
   }
@@ -447,22 +472,23 @@ export const ingestIntervals = task({
 **API Endpoint to Trigger:**
 
 `server/api/integrations/sync.post.ts`:
+
 ```typescript
 export default defineEventHandler(async (event) => {
   const { provider } = await readBody(event)
   const session = await getServerSession(event)
-  
+
   if (!session?.user) {
     throw createError({ statusCode: 401 })
   }
-  
+
   // Trigger background job
   const handle = await tasks.trigger('ingest-intervals', {
     userId: session.user.id,
     startDate: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString(), // Last 90 days
     endDate: new Date().toISOString()
   })
-  
+
   return {
     jobId: handle.id
   }
@@ -470,6 +496,7 @@ export default defineEventHandler(async (event) => {
 ```
 
 **Validation:**
+
 - [ ] Job appears in Trigger.dev dashboard
 - [ ] Workouts fetched from Intervals.icu
 - [ ] Data normalized correctly
@@ -483,6 +510,7 @@ export default defineEventHandler(async (event) => {
 **Goal:** Fetch recovery data from Whoop
 
 **Instructions:**
+
 1. Create `server/utils/whoop.ts` service
 2. Implement `fetchWhoopRecovery()` function
 3. Use endpoint: `https://api.prod.whoop.com/developer/v1/recovery`
@@ -492,6 +520,7 @@ export default defineEventHandler(async (event) => {
 **Implementation:**
 
 `server/utils/whoop.ts`:
+
 ```typescript
 import type { Integration } from '@prisma/client'
 
@@ -526,15 +555,15 @@ export async function fetchWhoopRecovery(
     `https://api.prod.whoop.com/developer/v1/recovery?start=${startDate.toISOString()}&end=${endDate.toISOString()}`,
     {
       headers: {
-        'Authorization': `Bearer ${integration.accessToken}`
+        Authorization: `Bearer ${integration.accessToken}`
       }
     }
   )
-  
+
   if (!response.ok) {
     throw new Error(`Whoop API error: ${response.statusText}`)
   }
-  
+
   const data = await response.json()
   return data.records || []
 }
@@ -555,6 +584,7 @@ export function normalizeWhoopRecovery(recovery: WhoopRecovery, userId: string) 
 ```
 
 `trigger/ingest-whoop.ts`:
+
 ```typescript
 import { task } from '@trigger.dev/sdk/v3'
 import { prisma } from '~/server/utils/db'
@@ -564,7 +594,7 @@ export const ingestWhoop = task({
   id: 'ingest-whoop',
   run: async (payload: { userId: string; startDate: string; endDate: string }) => {
     const { userId, startDate, endDate } = payload
-    
+
     const integration = await prisma.integration.findUnique({
       where: {
         userId_provider: {
@@ -573,26 +603,26 @@ export const ingestWhoop = task({
         }
       }
     })
-    
+
     if (!integration) {
       throw new Error('Whoop integration not found')
     }
-    
+
     await prisma.integration.update({
       where: { id: integration.id },
       data: { syncStatus: 'SYNCING' }
     })
-    
+
     try {
       const recoveryData = await fetchWhoopRecovery(
         integration,
         new Date(startDate),
         new Date(endDate)
       )
-      
+
       for (const recovery of recoveryData) {
         const metric = normalizeWhoopRecovery(recovery, userId)
-        
+
         await prisma.dailyMetric.upsert({
           where: {
             userId_date: {
@@ -604,7 +634,7 @@ export const ingestWhoop = task({
           create: metric
         })
       }
-      
+
       await prisma.integration.update({
         where: { id: integration.id },
         data: {
@@ -613,7 +643,7 @@ export const ingestWhoop = task({
           errorMessage: null
         }
       })
-      
+
       return {
         success: true,
         count: recoveryData.length
@@ -626,7 +656,7 @@ export const ingestWhoop = task({
           errorMessage: error.message
         }
       })
-      
+
       throw error
     }
   }
@@ -634,6 +664,7 @@ export const ingestWhoop = task({
 ```
 
 **Validation:**
+
 - [ ] Whoop API authentication works
 - [ ] Recovery data fetched
 - [ ] Data normalized to DailyMetric format
@@ -649,6 +680,7 @@ export const ingestWhoop = task({
 **Goal:** Initialize Google Gemini AI client
 
 **Instructions:**
+
 1. Install Google Generative AI SDK (`@google/generative-ai`)
 2. Create `server/utils/gemini.ts`
 3. Export `generateCoachAnalysis()` function
@@ -656,6 +688,7 @@ export const ingestWhoop = task({
 5. Ensure API key from environment
 
 **Commands:**
+
 ```bash
 pnpm add @google/generative-ai
 ```
@@ -663,6 +696,7 @@ pnpm add @google/generative-ai
 **Implementation:**
 
 `server/utils/gemini.ts`:
+
 ```typescript
 import { GoogleGenerativeAI } from '@google/generative-ai'
 
@@ -682,7 +716,7 @@ export async function generateCoachAnalysis(
   const model = genAI.getGenerativeModel({
     model: MODEL_NAMES[modelType]
   })
-  
+
   const result = await model.generateContent(prompt)
   const response = result.response
   return response.text()
@@ -700,31 +734,39 @@ export async function generateStructuredAnalysis<T>(
       responseSchema: schema
     }
   })
-  
+
   const result = await model.generateContent(prompt)
   const response = result.response
   return JSON.parse(response.text())
 }
 
 export function buildWorkoutSummary(workouts: any[]): string {
-  return workouts.map(w => 
-    `${w.date.toISOString()}: ${w.title} - ${w.durationSec}s, ${w.tss || 'N/A'} TSS, ${w.averageWatts || 'N/A'}W avg`
-  ).join('\n')
+  return workouts
+    .map(
+      (w) =>
+        `${w.date.toISOString()}: ${w.title} - ${w.durationSec}s, ${w.tss || 'N/A'} TSS, ${w.averageWatts || 'N/A'}W avg`
+    )
+    .join('\n')
 }
 
 export function buildMetricsSummary(metrics: any[]): string {
-  return metrics.map(m =>
-    `${m.date.toISOString()}: Recovery ${m.recoveryScore}%, HRV ${m.hrv}ms, Sleep ${m.hoursSlept}h`
-  ).join('\n')
+  return metrics
+    .map(
+      (m) =>
+        `${m.date.toISOString()}: Recovery ${m.recoveryScore}%, HRV ${m.hrv}ms, Sleep ${m.hoursSlept}h`
+    )
+    .join('\n')
 }
 ```
 
 **Environment Variable:**
+
 ```env
 GEMINI_API_KEY=your-api-key-here
 ```
 
 **Validation:**
+
 - [ ] Gemini client initializes
 - [ ] API key loaded from environment
 - [ ] Test prompt returns response
@@ -737,6 +779,7 @@ GEMINI_API_KEY=your-api-key-here
 **Goal:** Generate comprehensive weekly analysis reports
 
 **Instructions:**
+
 1. Create `trigger/generate-weekly-report.ts` job
 2. Query last 30 days of workouts and metrics
 3. Format data for Gemini Pro
@@ -746,31 +789,32 @@ GEMINI_API_KEY=your-api-key-here
 **Implementation:**
 
 `trigger/generate-weekly-report.ts`:
+
 ```typescript
 import { task } from '@trigger.dev/sdk/v3'
 import { prisma } from '~/server/utils/db'
-import { 
-  generateCoachAnalysis, 
-  buildWorkoutSummary, 
-  buildMetricsSummary 
+import {
+  generateCoachAnalysis,
+  buildWorkoutSummary,
+  buildMetricsSummary
 } from '~/server/utils/gemini'
 
 export const generateWeeklyReport = task({
   id: 'generate-weekly-report',
   run: async (payload: { userId: string; reportId: string }) => {
     const { userId, reportId } = payload
-    
+
     // Update report status
     await prisma.report.update({
       where: { id: reportId },
       data: { status: 'PROCESSING' }
     })
-    
+
     try {
       // Calculate date range (last 30 days)
       const endDate = new Date()
       const startDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
-      
+
       // Fetch data
       const [workouts, metrics, user] = await Promise.all([
         prisma.workout.findMany({
@@ -792,7 +836,7 @@ export const generateWeeklyReport = task({
           select: { ftp: true, weight: true }
         })
       ])
-      
+
       // Build prompt
       const prompt = `You are an expert cycling coach analyzing training data.
 
@@ -824,7 +868,7 @@ Begin your analysis:`
 
       // Generate with Gemini Pro
       const markdown = await generateCoachAnalysis(prompt, 'pro')
-      
+
       // Save report
       await prisma.report.update({
         where: { id: reportId },
@@ -836,7 +880,7 @@ Begin your analysis:`
           dateRangeEnd: endDate
         }
       })
-      
+
       return {
         success: true,
         reportId
@@ -849,7 +893,7 @@ Begin your analysis:`
           errorMessage: error.message
         }
       })
-      
+
       throw error
     }
   }
@@ -859,13 +903,14 @@ Begin your analysis:`
 **API Endpoint:**
 
 `server/api/reports/generate.post.ts`:
+
 ```typescript
 export default defineEventHandler(async (event) => {
   const session = await getServerSession(event)
   if (!session?.user) {
     throw createError({ statusCode: 401 })
   }
-  
+
   // Create report record
   const report = await prisma.report.create({
     data: {
@@ -876,13 +921,13 @@ export default defineEventHandler(async (event) => {
       dateRangeEnd: new Date()
     }
   })
-  
+
   // Trigger background job
   const handle = await tasks.trigger('generate-weekly-report', {
     userId: session.user.id,
     reportId: report.id
   })
-  
+
   return {
     reportId: report.id,
     jobId: handle.id
@@ -891,6 +936,7 @@ export default defineEventHandler(async (event) => {
 ```
 
 **Validation:**
+
 - [ ] Report created with PENDING status
 - [ ] Job triggered successfully
 - [ ] Data fetched and formatted
@@ -904,6 +950,7 @@ export default defineEventHandler(async (event) => {
 **Goal:** Generate quick daily coaching suggestions
 
 **Instructions:**
+
 1. Create `trigger/daily-coach.ts` job
 2. Fetch yesterday's load and today's recovery
 3. Apply decision logic for workout adjustments
@@ -913,6 +960,7 @@ export default defineEventHandler(async (event) => {
 **Implementation:**
 
 `trigger/daily-coach.ts`:
+
 ```typescript
 import { task } from '@trigger.dev/sdk/v3'
 import { prisma } from '~/server/utils/db'
@@ -936,10 +984,10 @@ export const dailyCoach = task({
   id: 'daily-coach',
   run: async (payload: { userId: string }) => {
     const { userId } = payload
-    
+
     const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000)
     const today = new Date()
-    
+
     // Fetch data
     const [yesterdayWorkout, todayMetric, plannedWorkout] = await Promise.all([
       prisma.workout.findFirst({
@@ -967,7 +1015,7 @@ export const dailyCoach = task({
         orderBy: { date: 'asc' }
       })
     ])
-    
+
     // Build prompt
     const prompt = `You are a cycling coach providing daily workout guidance.
 
@@ -989,12 +1037,8 @@ DECISION LOGIC:
 
 Provide a structured recommendation:`
 
-    const suggestion = await generateStructuredAnalysis(
-      prompt,
-      suggestionSchema,
-      'flash'
-    )
-    
+    const suggestion = await generateStructuredAnalysis(prompt, suggestionSchema, 'flash')
+
     // Save suggestion as report
     const report = await prisma.report.create({
       data: {
@@ -1007,7 +1051,7 @@ Provide a structured recommendation:`
         suggestions: suggestion
       }
     })
-    
+
     return {
       success: true,
       reportId: report.id,
@@ -1020,6 +1064,7 @@ Provide a structured recommendation:`
 **Scheduled Trigger:**
 
 `trigger/scheduled.ts`:
+
 ```typescript
 import { schedules } from '@trigger.dev/sdk/v3'
 
@@ -1038,7 +1083,7 @@ export const dailyCoachSchedule = schedules.task({
         }
       }
     })
-    
+
     // Trigger daily coach for each user
     for (const user of users) {
       await tasks.trigger('daily-coach', {
@@ -1050,6 +1095,7 @@ export const dailyCoachSchedule = schedules.task({
 ```
 
 **Validation:**
+
 - [ ] Job runs on schedule
 - [ ] Data fetched correctly
 - [ ] Decision logic applied
@@ -1065,6 +1111,7 @@ export const dailyCoachSchedule = schedules.task({
 **Goal:** Build main dashboard with readiness and activity views
 
 **Instructions:**
+
 1. Create `/dashboard` page
 2. Use Nuxt UI components (Cards, Grid)
 3. Display today's readiness (HRV, Sleep, Recovery)
@@ -1074,18 +1121,19 @@ export const dailyCoachSchedule = schedules.task({
 **Implementation:**
 
 `pages/dashboard.vue`:
+
 ```vue
 <template>
   <div class="container mx-auto p-6">
     <h1 class="text-3xl font-bold mb-6">Dashboard</h1>
-    
+
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
       <!-- Today's Readiness -->
       <div class="lg:col-span-1">
         <ReadinessCard :metric="todayMetric" />
         <CoachSuggestion :suggestion="dailySuggestion" class="mt-4" />
       </div>
-      
+
       <!-- Recent Activity -->
       <div class="lg:col-span-2">
         <UCard>
@@ -1097,7 +1145,7 @@ export const dailyCoachSchedule = schedules.task({
               </UButton>
             </div>
           </template>
-          
+
           <ActivityFeed :workouts="recentWorkouts" />
         </UCard>
       </div>
@@ -1106,79 +1154,77 @@ export const dailyCoachSchedule = schedules.task({
 </template>
 
 <script setup lang="ts">
-definePageMeta({
-  middleware: 'auth'
-})
+  definePageMeta({
+    middleware: 'auth'
+  })
 
-const generating = ref(false)
+  const generating = ref(false)
 
-// Fetch data
-const { data: todayMetric } = await useFetch('/api/metrics/today')
-const { data: dailySuggestion } = await useFetch('/api/reports/daily-suggestion')
-const { data: recentWorkouts } = await useFetch('/api/workouts?limit=10')
+  // Fetch data
+  const { data: todayMetric } = await useFetch('/api/metrics/today')
+  const { data: dailySuggestion } = await useFetch('/api/reports/daily-suggestion')
+  const { data: recentWorkouts } = await useFetch('/api/workouts?limit=10')
 
-const generateReport = async () => {
-  generating.value = true
-  try {
-    const { reportId } = await $fetch('/api/reports/generate', {
-      method: 'POST'
-    })
-    await navigateTo(`/reports/${reportId}`)
-  } finally {
-    generating.value = false
+  const generateReport = async () => {
+    generating.value = true
+    try {
+      const { reportId } = await $fetch('/api/reports/generate', {
+        method: 'POST'
+      })
+      await navigateTo(`/reports/${reportId}`)
+    } finally {
+      generating.value = false
+    }
   }
-}
 </script>
 ```
 
 `components/dashboard/ReadinessCard.vue`:
+
 ```vue
 <template>
   <UCard>
     <template #header>
       <h2 class="text-xl font-semibold">Today's Readiness</h2>
     </template>
-    
+
     <div v-if="metric" class="space-y-4">
       <div class="flex items-center justify-between">
         <span class="text-gray-600">Recovery</span>
-        <span class="text-2xl font-bold" :class="recoveryColor">
-          {{ metric.recoveryScore }}%
-        </span>
+        <span class="text-2xl font-bold" :class="recoveryColor"> {{ metric.recoveryScore }}% </span>
       </div>
-      
+
       <div class="flex items-center justify-between">
         <span class="text-gray-600">HRV</span>
         <span class="text-lg">{{ metric.hrv }} ms</span>
       </div>
-      
+
       <div class="flex items-center justify-between">
         <span class="text-gray-600">Sleep</span>
         <span class="text-lg">{{ metric.hoursSlept?.toFixed(1) }}h</span>
       </div>
     </div>
-    
-    <div v-else class="text-gray-500 text-center py-8">
-      No data available
-    </div>
+
+    <div v-else class="text-gray-500 text-center py-8">No data available</div>
   </UCard>
 </template>
 
 <script setup lang="ts">
-const props = defineProps<{
-  metric: any
-}>()
+  const props = defineProps<{
+    metric: any
+  }>()
 
-const recoveryColor = computed(() => {
-  const score = props.metric?.recoveryScore || 0
-  if (score < 33) return 'text-red-600'
-  if (score < 67) return 'text-yellow-600'
-  return 'text-green-600'
-})
+  const recoveryColor = computed(() => {
+    const score = props.metric?.recoveryScore || 0
+    if (score < 33) return 'text-red-600'
+    if (score < 67) return 'text-yellow-600'
+    return 'text-green-600'
+  })
 </script>
 ```
 
 `components/dashboard/CoachSuggestion.vue`:
+
 ```vue
 <template>
   <UCard v-if="suggestion">
@@ -1188,7 +1234,7 @@ const recoveryColor = computed(() => {
         <h3 class="font-semibold">Coach Suggestion</h3>
       </div>
     </template>
-    
+
     <div class="space-y-2">
       <p class="font-medium">{{ actionText }}</p>
       <p class="text-sm text-gray-600">{{ suggestion.reason }}</p>
@@ -1200,22 +1246,27 @@ const recoveryColor = computed(() => {
 </template>
 
 <script setup lang="ts">
-const props = defineProps<{
-  suggestion: any
-}>()
+  const props = defineProps<{
+    suggestion: any
+  }>()
 
-const actionText = computed(() => {
-  switch (props.suggestion?.action) {
-    case 'rest': return '🛌 Rest Day Recommended'
-    case 'reduce_intensity': return '📉 Reduce Intensity'
-    case 'modify': return '🔄 Modify Workout'
-    default: return '✅ Proceed as Planned'
-  }
-})
+  const actionText = computed(() => {
+    switch (props.suggestion?.action) {
+      case 'rest':
+        return '🛌 Rest Day Recommended'
+      case 'reduce_intensity':
+        return '📉 Reduce Intensity'
+      case 'modify':
+        return '🔄 Modify Workout'
+      default:
+        return '✅ Proceed as Planned'
+    }
+  })
 </script>
 ```
 
 **Validation:**
+
 - [ ] Dashboard renders with layout
 - [ ] Today's metrics display
 - [ ] Recent workouts list
@@ -1229,6 +1280,7 @@ const actionText = computed(() => {
 **Goal:** Create report viewing page with markdown rendering
 
 **Instructions:**
+
 1. Create `/reports/[id].vue` page
 2. Fetch report by ID
 3. Render markdown using `@nuxtjs/mdc`
@@ -1236,6 +1288,7 @@ const actionText = computed(() => {
 5. Add download PDF button (placeholder)
 
 **Commands:**
+
 ```bash
 pnpm add @nuxtjs/mdc
 ```
@@ -1243,6 +1296,7 @@ pnpm add @nuxtjs/mdc
 **Configuration:**
 
 `nuxt.config.ts`:
+
 ```typescript
 export default defineNuxtConfig({
   modules: ['@nuxt/ui', '@sidebase/nuxt-auth', '@nuxtjs/mdc']
@@ -1252,25 +1306,24 @@ export default defineNuxtConfig({
 **Implementation:**
 
 `pages/reports/[id].vue`:
+
 ```vue
 <template>
   <div class="container mx-auto p-6 max-w-4xl">
     <div v-if="pending" class="flex justify-center py-20">
       <UIcon name="i-heroicons-arrow-path" class="w-8 h-8 animate-spin" />
     </div>
-    
+
     <div v-else-if="report">
       <!-- Header -->
       <div class="mb-6">
-        <NuxtLink to="/reports" class="text-blue-600 hover:underline">
-          ← Back to Reports
-        </NuxtLink>
+        <NuxtLink to="/reports" class="text-blue-600 hover:underline"> ← Back to Reports </NuxtLink>
         <h1 class="text-3xl font-bold mt-4">{{ reportTitle }}</h1>
         <p class="text-gray-600 mt-2">
           {{ formatDateRange(report.dateRangeStart, report.dateRangeEnd) }}
         </p>
       </div>
-      
+
       <!-- Status -->
       <UAlert
         v-if="report.status !== 'COMPLETED'"
@@ -1278,31 +1331,21 @@ export default defineNuxtConfig({
         :title="statusText"
         class="mb-6"
       />
-      
+
       <!-- Content -->
       <UCard v-if="report.status === 'COMPLETED'" class="prose prose-lg max-w-none">
         <MDC :value="report.markdown" />
       </UCard>
-      
+
       <!-- Actions -->
       <div class="mt-6 flex gap-4">
-        <UButton
-          color="gray"
-          @click="downloadPDF"
-          :disabled="!report.pdfUrl"
-        >
+        <UButton color="gray" @click="downloadPDF" :disabled="!report.pdfUrl">
           Download PDF
         </UButton>
-        <UButton
-          color="gray"
-          variant="outline"
-          @click="shareReport"
-        >
-          Share
-        </UButton>
+        <UButton color="gray" variant="outline" @click="shareReport"> Share </UButton>
       </div>
     </div>
-    
+
     <div v-else class="text-center py-20">
       <p class="text-gray-600">Report not found</p>
     </div>
@@ -1310,110 +1353,112 @@ export default defineNuxtConfig({
 </template>
 
 <script setup lang="ts">
-const route = useRoute()
-const reportId = route.params.id as string
+  const route = useRoute()
+  const reportId = route.params.id as string
 
-const { data: report, pending } = await useFetch(`/api/reports/${reportId}`)
+  const { data: report, pending } = await useFetch(`/api/reports/${reportId}`)
 
-const reportTitle = computed(() => {
-  if (!report.value) return ''
-  const types = {
-    'WEEKLY_ANALYSIS': 'Weekly Training Analysis',
-    'RACE_PREP': 'Race Preparation Report',
-    'DAILY_SUGGESTION': 'Daily Coaching Brief'
+  const reportTitle = computed(() => {
+    if (!report.value) return ''
+    const types = {
+      WEEKLY_ANALYSIS: 'Weekly Training Analysis',
+      RACE_PREP: 'Race Preparation Report',
+      DAILY_SUGGESTION: 'Daily Coaching Brief'
+    }
+    return types[report.value.type] || 'Report'
+  })
+
+  const statusColor = computed(() => {
+    const colors = {
+      PENDING: 'yellow',
+      PROCESSING: 'blue',
+      FAILED: 'red',
+      COMPLETED: 'green'
+    }
+    return colors[report.value?.status] || 'gray'
+  })
+
+  const statusText = computed(() => {
+    const texts = {
+      PENDING: 'Report generation queued...',
+      PROCESSING: 'Analyzing your training data...',
+      FAILED: 'Report generation failed. Please try again.',
+      COMPLETED: 'Report ready!'
+    }
+    return texts[report.value?.status] || ''
+  })
+
+  const formatDateRange = (start: string, end: string) => {
+    const startDate = new Date(start).toLocaleDateString()
+    const endDate = new Date(end).toLocaleDateString()
+    return `${startDate} - ${endDate}`
   }
-  return types[report.value.type] || 'Report'
-})
 
-const statusColor = computed(() => {
-  const colors = {
-    'PENDING': 'yellow',
-    'PROCESSING': 'blue',
-    'FAILED': 'red',
-    'COMPLETED': 'green'
+  const downloadPDF = () => {
+    if (report.value?.pdfUrl) {
+      window.open(report.value.pdfUrl, '_blank')
+    } else {
+      // Fallback: print to PDF
+      window.print()
+    }
   }
-  return colors[report.value?.status] || 'gray'
-})
 
-const statusText = computed(() => {
-  const texts = {
-    'PENDING': 'Report generation queued...',
-    'PROCESSING': 'Analyzing your training data...',
-    'FAILED': 'Report generation failed. Please try again.',
-    'COMPLETED': 'Report ready!'
+  const shareReport = () => {
+    // TODO: Implement sharing functionality
+    alert('Sharing functionality coming soon!')
   }
-  return texts[report.value?.status] || ''
-})
-
-const formatDateRange = (start: string, end: string) => {
-  const startDate = new Date(start).toLocaleDateString()
-  const endDate = new Date(end).toLocaleDateString()
-  return `${startDate} - ${endDate}`
-}
-
-const downloadPDF = () => {
-  if (report.value?.pdfUrl) {
-    window.open(report.value.pdfUrl, '_blank')
-  } else {
-    // Fallback: print to PDF
-    window.print()
-  }
-}
-
-const shareReport = () => {
-  // TODO: Implement sharing functionality
-  alert('Sharing functionality coming soon!')
-}
 </script>
 
 <style>
-/* Custom prose styles for markdown */
-.prose h2 {
-  @apply mt-8 mb-4 text-2xl font-bold;
-}
+  /* Custom prose styles for markdown */
+  .prose h2 {
+    @apply mt-8 mb-4 text-2xl font-bold;
+  }
 
-.prose h3 {
-  @apply mt-6 mb-3 text-xl font-semibold;
-}
+  .prose h3 {
+    @apply mt-6 mb-3 text-xl font-semibold;
+  }
 
-.prose p {
-  @apply my-4;
-}
+  .prose p {
+    @apply my-4;
+  }
 
-.prose ul {
-  @apply my-4 list-disc list-inside;
-}
+  .prose ul {
+    @apply my-4 list-disc list-inside;
+  }
 </style>
 ```
 
 **API Endpoint:**
 
 `server/api/reports/[id].get.ts`:
+
 ```typescript
 export default defineEventHandler(async (event) => {
   const id = getRouterParam(event, 'id')
   const session = await getServerSession(event)
-  
+
   if (!session?.user) {
     throw createError({ statusCode: 401 })
   }
-  
+
   const report = await prisma.report.findFirst({
     where: {
       id,
       userId: session.user.id
     }
   })
-  
+
   if (!report) {
     throw createError({ statusCode: 404, message: 'Report not found' })
   }
-  
+
   return report
 })
 ```
 
 **Validation:**
+
 - [ ] Report fetches by ID
 - [ ] Markdown renders correctly
 - [ ] Typography styling applied
@@ -1429,6 +1474,7 @@ export default defineEventHandler(async (event) => {
 **Goal:** Create settings page with integration management
 
 **Instructions:**
+
 1. Create `/settings` page
 2. Display user profile info
 3. Create "Connections" card
@@ -1438,51 +1484,50 @@ export default defineEventHandler(async (event) => {
 **Implementation:**
 
 `pages/settings.vue`:
+
 ```vue
 <template>
   <div class="container mx-auto p-6 max-w-4xl">
     <h1 class="text-3xl font-bold mb-6">Settings</h1>
-    
+
     <div class="space-y-6">
       <!-- Profile -->
       <UCard>
         <template #header>
           <h2 class="text-xl font-semibold">Profile</h2>
         </template>
-        
+
         <UForm :state="profile" @submit="saveProfile">
           <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
             <UFormGroup label="FTP (Watts)">
               <UInput v-model.number="profile.ftp" type="number" />
             </UFormGroup>
-            
+
             <UFormGroup label="Max HR">
               <UInput v-model.number="profile.maxHr" type="number" />
             </UFormGroup>
-            
+
             <UFormGroup label="Weight (kg)">
               <UInput v-model.number="profile.weight" type="number" step="0.1" />
             </UFormGroup>
-            
+
             <UFormGroup label="Date of Birth">
               <UInput v-model="profile.dob" type="date" />
             </UFormGroup>
           </div>
-          
+
           <div class="mt-4">
-            <UButton type="submit" :loading="saving">
-              Save Profile
-            </UButton>
+            <UButton type="submit" :loading="saving"> Save Profile </UButton>
           </div>
         </UForm>
       </UCard>
-      
+
       <!-- Connections -->
       <UCard>
         <template #header>
           <h2 class="text-xl font-semibold">Connections</h2>
         </template>
-        
+
         <div class="space-y-4">
           <IntegrationCard
             provider="intervals"
@@ -1490,7 +1535,7 @@ export default defineEventHandler(async (event) => {
             @connect="connectIntegration('intervals')"
             @disconnect="disconnectIntegration('intervals')"
           />
-          
+
           <IntegrationCard
             provider="whoop"
             :integration="integrations?.whoop"
@@ -1504,60 +1549,57 @@ export default defineEventHandler(async (event) => {
 </template>
 
 <script setup lang="ts">
-definePageMeta({
-  middleware: 'auth'
-})
-
-const { data: user } = await useFetch('/api/user')
-const { data: integrations } = await useFetch('/api/integrations')
-
-const profile = ref({
-  ftp: user.value?.ftp,
-  maxHr: user.value?.maxHr,
-  weight: user.value?.weight,
-  dob: user.value?.dob?.split('T')[0]
-})
-
-const saving = ref(false)
-
-const saveProfile = async () => {
-  saving.value = true
-  try {
-    await $fetch('/api/user', {
-      method: 'PUT',
-      body: profile.value
-    })
-    // Show success message
-  } finally {
-    saving.value = false
-  }
-}
-
-const connectIntegration = (provider: string) => {
-  // Redirect to OAuth flow
-  window.location.href = `/api/integrations/connect?provider=${provider}`
-}
-
-const disconnectIntegration = async (provider: string) => {
-  await $fetch(`/api/integrations/${provider}`, {
-    method: 'DELETE'
+  definePageMeta({
+    middleware: 'auth'
   })
-  // Refresh integrations
-  await refreshNuxtData('integrations')
-}
+
+  const { data: user } = await useFetch('/api/user')
+  const { data: integrations } = await useFetch('/api/integrations')
+
+  const profile = ref({
+    ftp: user.value?.ftp,
+    maxHr: user.value?.maxHr,
+    weight: user.value?.weight,
+    dob: user.value?.dob?.split('T')[0]
+  })
+
+  const saving = ref(false)
+
+  const saveProfile = async () => {
+    saving.value = true
+    try {
+      await $fetch('/api/user', {
+        method: 'PUT',
+        body: profile.value
+      })
+      // Show success message
+    } finally {
+      saving.value = false
+    }
+  }
+
+  const connectIntegration = (provider: string) => {
+    // Redirect to OAuth flow
+    window.location.href = `/api/integrations/connect?provider=${provider}`
+  }
+
+  const disconnectIntegration = async (provider: string) => {
+    await $fetch(`/api/integrations/${provider}`, {
+      method: 'DELETE'
+    })
+    // Refresh integrations
+    await refreshNuxtData('integrations')
+  }
 </script>
 ```
 
 `components/integrations/IntegrationCard.vue`:
+
 ```vue
 <template>
   <div class="flex items-center justify-between p-4 border rounded-lg">
     <div class="flex items-center gap-4">
-      <img
-        :src="providerLogo"
-        :alt="providerName"
-        class="w-12 h-12 rounded"
-      />
+      <img :src="providerLogo" :alt="providerName" class="w-12 h-12 rounded" />
       <div>
         <h3 class="font-semibold">{{ providerName }}</h3>
         <p class="text-sm text-gray-600">{{ providerDescription }}</p>
@@ -1566,80 +1608,74 @@ const disconnectIntegration = async (provider: string) => {
         </p>
       </div>
     </div>
-    
-    <UButton
-      v-if="!integration"
-      @click="$emit('connect')"
-    >
-      Connect
-    </UButton>
-    
+
+    <UButton v-if="!integration" @click="$emit('connect')"> Connect </UButton>
+
     <div v-else class="flex gap-2">
       <UBadge :color="statusColor">{{ integration.syncStatus }}</UBadge>
-      <UButton
-        color="gray"
-        variant="outline"
-        @click="$emit('disconnect')"
-      >
-        Disconnect
-      </UButton>
+      <UButton color="gray" variant="outline" @click="$emit('disconnect')"> Disconnect </UButton>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-const props = defineProps<{
-  provider: string
-  integration: any
-}>()
+  const props = defineProps<{
+    provider: string
+    integration: any
+  }>()
 
-defineEmits(['connect', 'disconnect'])
+  defineEmits(['connect', 'disconnect'])
 
-const providerInfo = {
-  intervals: {
-    name: 'Intervals.icu',
-    description: 'Power data and training calendar',
-    logo: '/images/intervals-logo.png'
-  },
-  whoop: {
-    name: 'Whoop',
-    description: 'Recovery, HRV, and sleep tracking',
-    logo: '/images/logos/whoop_square.svg'
+  const providerInfo = {
+    intervals: {
+      name: 'Intervals.icu',
+      description: 'Power data and training calendar',
+      logo: '/images/intervals-logo.png'
+    },
+    whoop: {
+      name: 'Whoop',
+      description: 'Recovery, HRV, and sleep tracking',
+      logo: '/images/logos/whoop_square.svg'
+    }
   }
-}
 
-const providerName = providerInfo[props.provider]?.name
-const providerDescription = providerInfo[props.provider]?.description
-const providerLogo = providerInfo[props.provider]?.logo
+  const providerName = providerInfo[props.provider]?.name
+  const providerDescription = providerInfo[props.provider]?.description
+  const providerLogo = providerInfo[props.provider]?.logo
 
-const statusColor = computed(() => {
-  switch (props.integration?.syncStatus) {
-    case 'SUCCESS': return 'green'
-    case 'SYNCING': return 'blue'
-    case 'FAILED': return 'red'
-    default: return 'gray'
+  const statusColor = computed(() => {
+    switch (props.integration?.syncStatus) {
+      case 'SUCCESS':
+        return 'green'
+      case 'SYNCING':
+        return 'blue'
+      case 'FAILED':
+        return 'red'
+      default:
+        return 'gray'
+    }
+  })
+
+  const formatDate = (date: string) => {
+    return date ? new Date(date).toLocaleString() : 'Never'
   }
-})
-
-const formatDate = (date: string) => {
-  return date ? new Date(date).toLocaleString() : 'Never'
-}
 </script>
 ```
 
 **OAuth Endpoints:**
 
 `server/api/integrations/connect.get.ts`:
+
 ```typescript
 export default defineEventHandler(async (event) => {
   const query = getQuery(event)
   const provider = query.provider as string
   const session = await getServerSession(event)
-  
+
   if (!session?.user) {
     throw createError({ statusCode: 401 })
   }
-  
+
   // OAuth configuration
   const configs = {
     intervals: {
@@ -1655,12 +1691,12 @@ export default defineEventHandler(async (event) => {
       scope: 'read:recovery read:sleep'
     }
   }
-  
+
   const config = configs[provider]
   if (!config) {
     throw createError({ statusCode: 400, message: 'Invalid provider' })
   }
-  
+
   // Build OAuth URL
   const authUrl = new URL(config.authUrl)
   authUrl.searchParams.set('client_id', config.clientId!)
@@ -1668,30 +1704,32 @@ export default defineEventHandler(async (event) => {
   authUrl.searchParams.set('response_type', 'code')
   authUrl.searchParams.set('scope', config.scope)
   authUrl.searchParams.set('state', session.user.id) // CSRF protection
-  
+
   // Redirect to OAuth provider
   return sendRedirect(event, authUrl.toString())
 })
 ```
 
 `server/api/integrations/callback.get.ts`:
+
 ```typescript
 export default defineEventHandler(async (event) => {
   const query = getQuery(event)
   const provider = query.provider as string
   const code = query.code as string
   const state = query.state as string // userId
-  
+
   // Exchange code for token
   // Store in Integration table
   // Trigger initial sync
-  
+
   // Redirect back to settings
   return sendRedirect(event, '/settings?connected=true')
 })
 ```
 
 **Validation:**
+
 - [ ] Settings page renders
 - [ ] Profile form works
 - [ ] Integration cards display
@@ -1729,11 +1767,13 @@ After completing all phases:
 ### Common Issues
 
 1. **Prisma Client not generated:**
+
    ```bash
    npx prisma generate
    ```
 
 2. **Database migrations fail:**
+
    ```bash
    npx prisma migrate reset
    npx prisma migrate dev
@@ -1785,6 +1825,7 @@ NODE_ENV=development
 This implementation guide provides a complete roadmap for building Coach Watts. Follow each phase sequentially, validating work at each step before proceeding. The modular structure allows for parallel development of different components once the foundation is established.
 
 For questions or issues, refer to:
+
 - [Architecture Documentation](./architecture.md)
 - [Database Schema](./database-schema.md)
 - [Project Structure](./project-structure.md)

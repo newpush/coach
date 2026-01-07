@@ -1,10 +1,8 @@
+import { Command } from 'commander'
+import backupCommand from './backup'
 
-import { Command } from 'commander';
-import backupCommand from './backup';
+const dbCommand = new Command('db').description('Database commands')
 
-const dbCommand = new Command('db')
-    .description('Database commands');
+dbCommand.addCommand(backupCommand)
 
-dbCommand.addCommand(backupCommand);
-
-export default dbCommand;
+export default dbCommand

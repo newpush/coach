@@ -61,7 +61,7 @@ export default defineEventHandler(async (event) => {
 
   const query = getQuery(event)
   const days = parseInt(query.days as string) || 30
-  const groupBy = query.groupBy as string || 'operation' // operation, date, model
+  const groupBy = (query.groupBy as string) || 'operation' // operation, date, model
 
   const user = await prisma.user.findUnique({
     where: { email: session.user.email }
@@ -99,11 +99,18 @@ export default defineEventHandler(async (event) => {
   const failedCalls = totalCalls - successfulCalls
   const totalCost = usageData.reduce((sum: number, u: any) => sum + (u.estimatedCost || 0), 0)
   const totalTokens = usageData.reduce((sum: number, u: any) => sum + (u.totalTokens || 0), 0)
-  const totalPromptTokens = usageData.reduce((sum: number, u: any) => sum + (u.promptTokens || 0), 0)
-  const totalCompletionTokens = usageData.reduce((sum: number, u: any) => sum + (u.completionTokens || 0), 0)
-  const avgDuration = usageData.length > 0
-    ? usageData.reduce((sum: number, u: any) => sum + (u.durationMs || 0), 0) / usageData.length
-    : 0
+  const totalPromptTokens = usageData.reduce(
+    (sum: number, u: any) => sum + (u.promptTokens || 0),
+    0
+  )
+  const totalCompletionTokens = usageData.reduce(
+    (sum: number, u: any) => sum + (u.completionTokens || 0),
+    0
+  )
+  const avgDuration =
+    usageData.length > 0
+      ? usageData.reduce((sum: number, u: any) => sum + (u.durationMs || 0), 0) / usageData.length
+      : 0
   const totalRetries = usageData.reduce((sum: number, u: any) => sum + u.retryCount, 0)
 
   // Group data based on groupBy parameter
@@ -127,10 +134,11 @@ export default defineEventHandler(async (event) => {
       groupedData[key].tokens += usage.totalTokens || 0
       groupedData[key].durations.push(usage.durationMs || 0)
     })
-    
+
     // Calculate averages
     Object.values(groupedData).forEach((group: any) => {
-      group.avgDuration = group.durations.reduce((a: number, b: number) => a + b, 0) / group.durations.length
+      group.avgDuration =
+        group.durations.reduce((a: number, b: number) => a + b, 0) / group.durations.length
       delete group.durations
     })
   } else if (groupBy === 'date') {

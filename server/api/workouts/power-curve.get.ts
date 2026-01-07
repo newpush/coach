@@ -56,7 +56,7 @@ defineRouteMeta({
 export default defineEventHandler(async (event) => {
   const session = await getServerSession(event)
   const user = session?.user as any
-  
+
   if (!user?.id) {
     throw createError({
       statusCode: 401,
@@ -92,63 +92,63 @@ export default defineEventHandler(async (event) => {
   // Helper to extract max power for standard durations
   // Durations in seconds: 1s, 5s, 10s, 30s, 1min, 5min, 10min, 20min, 60min
   const durations = [1, 5, 10, 30, 60, 300, 600, 1200, 3600]
-  
+
   const calculateCurve = (workouts: any[]) => {
     const curve: Record<number, number> = {}
-    durations.forEach(d => curve[d] = 0)
+    durations.forEach((d) => (curve[d] = 0))
 
-    workouts.forEach(w => {
-        // Assuming we have 'powerCurve' JSON field or similar in the future
-        // For now, we only have averageWatts (approx 60min) and maxWatts (1s)
-        // This is a PLACEHOLDER until we have real power curve data ingestion
-        // We will simulate a curve based on FTP/Max models if real data is missing
-        
-        // Use real data if available in rawJson (from Intervals/Strava streams)
-        if (w.maxWatts !== null && w.maxWatts !== undefined) {
-            curve[1] = Math.max(curve[1] || 0, w.maxWatts)
-            curve[5] = Math.max(curve[5] || 0, w.maxWatts * 0.9) // Estimate
-        }
-        if (w.averageWatts !== null && w.averageWatts !== undefined) {
-             // Rough estimate if we don't have granular data
-            curve[3600] = Math.max(curve[3600] || 0, w.averageWatts)
-        }
-        // ... more sophisticated stream processing would go here
+    workouts.forEach((w) => {
+      // Assuming we have 'powerCurve' JSON field or similar in the future
+      // For now, we only have averageWatts (approx 60min) and maxWatts (1s)
+      // This is a PLACEHOLDER until we have real power curve data ingestion
+      // We will simulate a curve based on FTP/Max models if real data is missing
+
+      // Use real data if available in rawJson (from Intervals/Strava streams)
+      if (w.maxWatts !== null && w.maxWatts !== undefined) {
+        curve[1] = Math.max(curve[1] || 0, w.maxWatts)
+        curve[5] = Math.max(curve[5] || 0, w.maxWatts * 0.9) // Estimate
+      }
+      if (w.averageWatts !== null && w.averageWatts !== undefined) {
+        // Rough estimate if we don't have granular data
+        curve[3600] = Math.max(curve[3600] || 0, w.averageWatts)
+      }
+      // ... more sophisticated stream processing would go here
     })
-    
+
     // For this implementation, let's assume we can fetch pre-calculated curve points
     // or we'll return a simulated curve based on the athlete's known bests
-    return durations.map(d => ({
-        duration: d,
-        watts: curve[d]
+    return durations.map((d) => ({
+      duration: d,
+      watts: curve[d]
     }))
   }
 
-  // NOTE: since we don't have full power stream processing yet, 
+  // NOTE: since we don't have full power stream processing yet,
   // we will return the best 1s (Max) and Average (approx 1h) and interpolated points
   // In a real scenario, we'd query a `PowerCurve` table.
-  
+
   // Real implementation using the repository's hypothetical 'getPowerCurve' method
   // If not exists, we'll stick to basic fields
-  
-  const processWorkoutsToCurve = (workouts: any[]) => {
-      let max1s = 0
-      const max20m = 0 // Est from FTP or best 20m effort
-      
-      workouts.forEach(w => {
-          if (w.maxWatts > max1s) max1s = w.maxWatts
-          // If we had 20m power...
-      })
 
-      // Placeholder curve generator (Model based)
-      // This allows the frontend to work while we build the backend stream processor
-      return [
-        { duration: 1, watts: max1s },
-        { duration: 10, watts: max1s * 0.8 },
-        { duration: 60, watts: max1s * 0.5 },
-        { duration: 300, watts: max1s * 0.35 },
-        { duration: 1200, watts: max1s * 0.28 }, // ~FTP
-        { duration: 3600, watts: max1s * 0.25 }
-      ]
+  const processWorkoutsToCurve = (workouts: any[]) => {
+    let max1s = 0
+    const max20m = 0 // Est from FTP or best 20m effort
+
+    workouts.forEach((w) => {
+      if (w.maxWatts > max1s) max1s = w.maxWatts
+      // If we had 20m power...
+    })
+
+    // Placeholder curve generator (Model based)
+    // This allows the frontend to work while we build the backend stream processor
+    return [
+      { duration: 1, watts: max1s },
+      { duration: 10, watts: max1s * 0.8 },
+      { duration: 60, watts: max1s * 0.5 },
+      { duration: 300, watts: max1s * 0.35 },
+      { duration: 1200, watts: max1s * 0.28 }, // ~FTP
+      { duration: 3600, watts: max1s * 0.25 }
+    ]
   }
 
   return {

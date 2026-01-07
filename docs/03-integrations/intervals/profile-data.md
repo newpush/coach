@@ -7,6 +7,7 @@ This document describes the athlete profile data available from Intervals.icu AP
 Created: `scripts/test-intervals-profile.js`
 
 Usage:
+
 ```bash
 node scripts/test-intervals-profile.js
 ```
@@ -14,9 +15,11 @@ node scripts/test-intervals-profile.js
 ## Available Profile Data
 
 ### 1. Basic Athlete Information
+
 **Endpoint:** `GET /api/v1/athlete/{athleteId}`
 
 **Key Fields:**
+
 - `name` - Athlete's display name
 - `email` - Email address
 - `sex` - Gender (M/F)
@@ -27,12 +30,16 @@ node scripts/test-intervals-profile.js
 - `measurement_preference` - Units (meters/imperial)
 
 ### 2. Physical Metrics
+
 **From Athlete Endpoint:**
+
 - `icu_weight` - Current weight (kg)
 - `icu_resting_hr` - Resting heart rate (bpm)
 
 ### 3. Performance Metrics
+
 **From `icu_type_settings` array (per activity type):**
+
 - `ftp` - Functional Threshold Power (watts) for cycling
 - `lthr` - Lactate Threshold Heart Rate (bpm)
 - `max_hr` - Maximum heart rate (bpm)
@@ -41,9 +48,11 @@ node scripts/test-intervals-profile.js
 **Note:** These are configured per activity type (Ride, Run, Swim, etc.)
 
 ### 4. Recent Wellness Data
+
 **Endpoint:** `GET /api/v1/athlete/{athleteId}/wellness/{date}`
 
 **Key Fields:**
+
 - `hrv` - Heart Rate Variability (ms)
 - `hrvSDNN` - HRV SDNN metric
 - `restingHR` - Daily resting heart rate
@@ -83,18 +92,22 @@ node scripts/test-intervals-profile.js
 ## Implementation Notes
 
 ### FTP Detection Strategy
+
 Since FTP is stored per activity type in `icu_type_settings`:
+
 1. First look for cycling types (Ride, VirtualRide)
 2. Fall back to first activity type with FTP configured
 3. If no FTP found, display as "Not configured"
 
 ### HRV Strategy
+
 - Fetch last 7 days of wellness data
 - Display most recent HRV value
 - Calculate 7-day average for trend
 - Handle missing data gracefully (some days may not have HRV)
 
 ### Weight Data
+
 - Use `icu_weight` as primary source (athlete profile level)
 - Fall back to most recent wellness data entry with weight
 - Track from wellness data for historical trends
@@ -102,6 +115,7 @@ Since FTP is stored per activity type in `icu_type_settings`:
 ## Dashboard Display Recommendations
 
 ### Athlete Profile Card
+
 Display on `/dashboard` when Intervals.icu is connected:
 
 ```
@@ -148,13 +162,16 @@ Display on `/dashboard` when Intervals.icu is connected:
    - Refresh on data sync
 
 ## Authentication
+
 Uses same Basic Auth as other Intervals.icu endpoints:
+
 ```javascript
 const auth = Buffer.from(`API_KEY:${apiKey}`).toString('base64')
 headers: { 'Authorization': `Basic ${auth}` }
 ```
 
 ## Rate Limiting Considerations
+
 - Profile data changes infrequently
 - Can cache for 1 hour
 - Wellness data can be fetched once per day

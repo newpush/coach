@@ -1,4 +1,3 @@
-
 import { $fetch } from 'ofetch'
 
 async function checkSession() {

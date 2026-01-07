@@ -5,7 +5,7 @@ import { prisma } from '../../utils/db'
 defineRouteMeta({
   openAPI: {
     tags: ['Recommendations'],
-    summary: 'Get today\'s recommendation',
+    summary: "Get today's recommendation",
     description: 'Returns the daily activity recommendation for the current date.',
     responses: {
       200: {
@@ -37,19 +37,19 @@ defineRouteMeta({
 
 export default defineEventHandler(async (event) => {
   const session = await getServerSession(event)
-  
+
   if (!session?.user) {
-    throw createError({ 
+    throw createError({
       statusCode: 401,
-      message: 'Unauthorized' 
+      message: 'Unauthorized'
     })
   }
-  
+
   const userId = (session.user as any).id
-  
+
   const timezone = await getUserTimezone(userId)
   const today = getUserLocalDate(timezone)
-  
+
   // Find most recent recommendation for today
   const recommendation = await prisma.activityRecommendation.findFirst({
     where: {
@@ -61,6 +61,6 @@ export default defineEventHandler(async (event) => {
     },
     orderBy: { createdAt: 'desc' }
   })
-  
+
   return recommendation
 })

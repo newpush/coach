@@ -4,7 +4,7 @@ import { prisma } from '../../utils/db'
 
 export default defineEventHandler(async (event) => {
   const session = await getServerSession(event)
-  
+
   // Strict admin check
   if (!session?.user?.isAdmin) {
     throw createError({
@@ -24,7 +24,7 @@ export default defineEventHandler(async (event) => {
     `
 
     // Convert BigInt to string/number because JSON.stringify doesn't handle BigInt
-    const formattedStats = (stats as any[]).map(stat => ({
+    const formattedStats = (stats as any[]).map((stat) => ({
       table_name: stat.table_name,
       row_count: Number(stat.row_count),
       total_size_bytes: Number(stat.total_size_bytes)

@@ -82,7 +82,9 @@ async function backfillScores() {
     try {
       await tasks.trigger('analyze-workout', { workoutId: workout.id })
       workoutCount++
-      console.log(`✓ Triggered analysis for workout: ${workout.title} (${new Date(workout.date).toLocaleDateString()})`)
+      console.log(
+        `✓ Triggered analysis for workout: ${workout.title} (${new Date(workout.date).toLocaleDateString()})`
+      )
     } catch (error) {
       console.error(`✗ Failed to trigger workout ${workout.id}:`, error)
     }
@@ -94,7 +96,9 @@ async function backfillScores() {
     try {
       await tasks.trigger('analyze-nutrition', { nutritionId: nutrition.id })
       nutritionCount++
-      console.log(`✓ Triggered analysis for nutrition: ${new Date(nutrition.date).toLocaleDateString()}`)
+      console.log(
+        `✓ Triggered analysis for nutrition: ${new Date(nutrition.date).toLocaleDateString()}`
+      )
     } catch (error) {
       console.error(`✗ Failed to trigger nutrition ${nutrition.id}:`, error)
     }

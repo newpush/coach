@@ -5,7 +5,7 @@ import { getUserTimezone, getUserLocalDate } from '../../../utils/date'
 defineRouteMeta({
   openAPI: {
     tags: ['Workouts'],
-    summary: 'Get today\'s planned workout',
+    summary: "Get today's planned workout",
     description: 'Returns the planned workout for the current date.',
     responses: {
       200: {
@@ -35,20 +35,20 @@ defineRouteMeta({
 
 export default defineEventHandler(async (event) => {
   const session = await getServerSession(event)
-  
+
   if (!session?.user) {
     throw createError({ statusCode: 401, message: 'Unauthorized' })
   }
-  
+
   const userId = (session.user as any).id
-  
+
   // Get user's timezone-aware "today" (UTC midnight of their local date)
   const timezone = await getUserTimezone(userId)
   const today = getUserLocalDate(timezone)
-  
+
   const nextDay = new Date(today)
   nextDay.setDate(nextDay.getDate() + 1)
-  
+
   const workout = await prisma.plannedWorkout.findFirst({
     where: {
       userId,
@@ -59,6 +59,6 @@ export default defineEventHandler(async (event) => {
     },
     orderBy: { createdAt: 'desc' } // Get the most recently created one if duplicates
   })
-  
+
   return workout
 })

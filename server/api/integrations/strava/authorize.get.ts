@@ -14,7 +14,7 @@ defineRouteMeta({
 
 export default defineEventHandler(async (event) => {
   const session = await getServerSession(event)
-  
+
   if (!session?.user?.email) {
     throw createError({
       statusCode: 401,
@@ -44,8 +44,9 @@ export default defineEventHandler(async (event) => {
   }
 
   // Generate a random state parameter for CSRF protection
-  const state = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15)
-  
+  const state =
+    Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15)
+
   // Store state in a secure cookie
   setCookie(event, 'strava_oauth_state', state, {
     httpOnly: true,

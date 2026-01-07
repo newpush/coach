@@ -64,7 +64,11 @@ export default defineEventHandler(async (event) => {
   }
 
   setResponseHeader(event, 'Content-Type', contentType)
-  setResponseHeader(event, 'Content-Disposition', `attachment; filename="${workoutData.title.replace(/[^a-z0-9]/gi, '_')}.${fileExt}"`)
+  setResponseHeader(
+    event,
+    'Content-Disposition',
+    `attachment; filename="${workoutData.title.replace(/[^a-z0-9]/gi, '_')}.${fileExt}"`
+  )
 
   return fileData
 })

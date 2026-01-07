@@ -14,7 +14,7 @@ defineRouteMeta({
 
 export default defineEventHandler(async (event) => {
   const session = await getServerSession(event)
-  
+
   if (!session?.user?.email) {
     throw createError({
       statusCode: 401,
@@ -34,8 +34,9 @@ export default defineEventHandler(async (event) => {
   }
 
   // Generate a random state parameter for CSRF protection
-  const state = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15)
-  
+  const state =
+    Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15)
+
   // Store state in a secure cookie
   setCookie(event, 'whoop_oauth_state', state, {
     httpOnly: true,
@@ -50,7 +51,10 @@ export default defineEventHandler(async (event) => {
   authUrl.searchParams.set('client_id', clientId)
   authUrl.searchParams.set('redirect_uri', redirectUri)
   authUrl.searchParams.set('response_type', 'code')
-  authUrl.searchParams.set('scope', 'offline read:recovery read:cycles read:sleep read:workout read:profile read:body_measurement')
+  authUrl.searchParams.set(
+    'scope',
+    'offline read:recovery read:cycles read:sleep read:workout read:profile read:body_measurement'
+  )
   authUrl.searchParams.set('state', state)
 
   // Redirect to WHOOP authorization page

@@ -1,124 +1,124 @@
 Architectural Blueprint for the "Goal-Driven Training System" in Coach-Wattz1. Introduction: The Evolution of Digital Endurance CoachingThe digitization of endurance coaching represents a significant leap from static logging tools to dynamic, inferential systems capable of managing the biological complexity of athletic adaptation. Historically, digital platforms served as passive repositories for data—digital filing cabinets where athletes stored files from heart rate monitors and power meters. However, the modern objective, and the specific mandate for coach-wattz, is to transition from this passive state to an active, prescriptive system. This "Goal-Driven Training System" must not merely record what has happened but must intelligently prescribe what should happen, dynamically adjusting to the chaotic reality of human life.The core challenge addressed in this architectural blueprint is the translation of Periodization—the systematic planning of athletic or physical training—into a rigid software architecture. While human coaches intuitively grasp the "rhythm" of training (the necessary oscillation between physiological stress and recovery), representing this flux in a deterministic relational database and enforcing it through stochastic Artificial Intelligence (AI) generation requires a robust structural backbone. We are essentially tasked with teaching a machine to understand the "General Adaptation Syndrome" proposed by Hans Selye, translating biological stress-response curves into database rows and JSON objects.This report outlines a comprehensive architecture for this system, designed specifically for a modern technology stack utilizing Nuxt 3, Node.js, Trigger.dev, and Prisma/PostgreSQL. The proposed solution relies on three architectural pillars: a Hierarchical Periodization Data Model that enforces the physiological structure of Macrocycles, Mesocycles, and Microcycles; an Atomic Workout Protocol (AWP) that standardizes the definition of interval training into a machine-readable JSON schema; and a "Negotiator" Adaptation Engine that mediates between the user's constraints and physiological reality.By adhering to this blueprint, coach-wattz will avoid the common pitfalls of AI training generators, such as "hallucinating" random workouts that lack progression or failing to account for the cumulative fatigue that leads to overtraining. The system allows users to define a goal and receive a fully periodized, dynamic plan that adapts to missed workouts, illness, and biometric feedback, ultimately democratizing access to elite-level coaching logic.2. The Biological Imperative: Modeling PeriodizationThe foundation of any endurance platform is its model of time and stress. "Random acts of exercise" do not lead to peak performance; only progressive overload structured in phases does.1 To support an AI that generates coherent long-term plans, we must explicitly model these phases in the database. The AI cannot be trusted to implicit "remember" the user is in a Build phase over a context window of several months; the database must enforce this state explicitly.2.1 Theoretical Foundations of Periodization ModelsBefore defining the database schema, it is crucial to understand the periodization models the system must support. Research identifies three primary models widely used in cycling and endurance sports: Linear, Undulating, and Block Periodization.1Linear Periodization is the most traditional model, characterized by a gradual increase in intensity and a decrease in volume over the macrocycle. It is ideal for beginners or athletes preparing for a single major event. In this model, the athlete progresses through distinct phases: a high-volume/low-intensity "Base" phase, moving toward a lower-volume/high-intensity "Peak" phase.2 The database must support this by enforcing a unidirectional flow of block types.Undulating (Non-Linear) Periodization involves frequent changes in training intensity and volume, often within the same week (microcycle).3 For example, an athlete might perform a VO2 max workout on Tuesday, an endurance ride on Wednesday, and a threshold session on Saturday. This model is often superior for maintaining multiple fitness characteristics simultaneously but requires more complex logic to ensure recovery.4Block Periodization is a more advanced approach that concentrates highly specific training loads into shorter "blocks" (Mesocycles) of 2-4 weeks.1 This method focuses on one energy system (e.g., VO2 max) to the exclusion of others, followed by a restitution block. Research suggests this can provide superior training effects in trained cyclists.4For coach-wattz, the architecture must be agnostic enough to support all three, but structured enough to prevent "mixed signals" where the AI schedules conflicting physiological stimuli. We achieve this by defining the Mesocycle (Training Block) as the primary container of intent.2.2 The Physiological Hierarchy: Macro, Meso, MicroTo translate these theories into a relational database, we map the standard physiological hierarchy directly to database entities.3The top level is the Macrocycle, or the "Season." This is the container defined by the primary outcome goal (e.g., "Unbound Gravel 200"). It dictates the overall duration of the plan, typically spanning 6 to 12 months.7 This entity is responsible for the long-term vision and linking the athlete's biometrics at the start of the season to their desired state at the end.Beneath the Macrocycle lies the Mesocycle, or "Training Block." This is the most critical missing piece in many basic training apps. A Mesocycle lasts 3 to 6 weeks and has a distinct physiological focus, such as "Base 1," "Build," or "Peak".1 It acts as a semantic wrapper for a group of weeks, carrying the specific instructions for the AI regarding progression. For instance, a "Build" block instructs the AI to increase the complexity and intensity of intervals, whereas a "Base" block instructs it to increase duration while capping intensity.The atomic unit of planning is the Microcycle, or "Week." Typically 7 days, this unit manages the acute balance between stress and recovery. The Microcycle must be linked to a parent Mesocycle to inherit its physiological focus. Without this link, the AI sees only a sequence of days; with it, the AI understands that "Week 3 of Block 2" requires a functional overreaching stimulus before the recovery week.62.3 Detailed Prisma Schema ArchitectureTo implement this hierarchy in PostgreSQL via Prisma, we must define rigorous relationships. The TrainingBlock serves as the "container of intent," linking weeks to a specific physiological goal. The schema below introduces enumerated types for BlockType and BlockFocus, which are essential for constraining the Large Language Model's (LLM) output. By forcing the AI to select from SWEET_SPOT or VO2_MAX rather than generating free text, we ensure the plan remains biologically valid.The TrainingPlan model serves as the Macrocycle, linking the User to their Goal. It contains the startDate and targetDate, establishing the temporal boundaries of the season. Crucially, the TrainingBlock model includes an order field, allowing the system to sequence phases logically (e.g., Base must precede Build). The recoveryWeekIndex is a specific logic parameter that tells the generation engine when to schedule a deload week—typically every 4th week in a standard 3:1 loading pattern.9Code snippet// Comprehensive Prisma Schema for Periodization
 
 model TrainingPlan {
-  id          String   @id @default(uuid())
-  userId      String
-  user        User     @relation(fields: [userId], references: [id])
-  goalId      String
-  goal        Goal     @relation(fields: [goalId], references: [id])
-  startDate   DateTime
-  targetDate  DateTime
-  
-  // The plan is composed of blocks (Mesocycles)
-  blocks      TrainingBlock
-  
-  // Metadata for the overall strategy
-  strategy    PlanStrategy @default(LINEAR)
-  
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+id String @id @default(uuid())
+userId String
+user User @relation(fields: [userId], references: [id])
+goalId String
+goal Goal @relation(fields: [goalId], references: [id])
+startDate DateTime
+targetDate DateTime
+
+// The plan is composed of blocks (Mesocycles)
+blocks TrainingBlock
+
+// Metadata for the overall strategy
+strategy PlanStrategy @default(LINEAR)
+
+createdAt DateTime @default(now())
+updatedAt DateTime @updatedAt
 }
 
 enum PlanStrategy {
-  LINEAR
-  UNDULATING
-  BLOCK
-  POLARIZED
+LINEAR
+UNDULATING
+BLOCK
+POLARIZED
 }
 
 model TrainingBlock {
-  id              String         @id @default(uuid())
-  trainingPlanId  String
-  plan            TrainingPlan   @relation(fields: [trainingPlanId], references: [id])
-  
-  order           Int            // 1, 2, 3... Sequence in the season
-  name            String         // "Base Phase 1"
-  type            BlockType      // BASE
-  primaryFocus    BlockFocus     // SWEET_SPOT
-  
-  startDate       DateTime
-  durationWeeks   Int            // e.g., 4 weeks
-  
-  // Rules for this block
-  recoveryWeekIndex Int?         // e.g., 4 (meaning every 4th week is recovery)
-  progressionLogic  String?      // Description of how overload is applied (e.g., "Increase interval duration by 10% weekly")
-  
-  weeks           TrainingWeek
+id String @id @default(uuid())
+trainingPlanId String
+plan TrainingPlan @relation(fields: [trainingPlanId], references: [id])
+
+order Int // 1, 2, 3... Sequence in the season
+name String // "Base Phase 1"
+type BlockType // BASE
+primaryFocus BlockFocus // SWEET_SPOT
+
+startDate DateTime
+durationWeeks Int // e.g., 4 weeks
+
+// Rules for this block
+recoveryWeekIndex Int? // e.g., 4 (meaning every 4th week is recovery)
+progressionLogic String? // Description of how overload is applied (e.g., "Increase interval duration by 10% weekly")
+
+weeks TrainingWeek
 }
 
 enum BlockType {
-  PREP
-  BASE
-  BUILD
-  PEAK
-  RACE
-  TRANSITION
+PREP
+BASE
+BUILD
+PEAK
+RACE
+TRANSITION
 }
 
 enum BlockFocus {
-  AEROBIC_ENDURANCE
-  TEMPO
-  SWEET_SPOT
-  THRESHOLD
-  VO2_MAX
-  ANAEROBIC_CAPACITY
-  NEUROMUSCULAR_POWER
+AEROBIC_ENDURANCE
+TEMPO
+SWEET_SPOT
+THRESHOLD
+VO2_MAX
+ANAEROBIC_CAPACITY
+NEUROMUSCULAR_POWER
 }
 
 model TrainingWeek {
-  id              String         @id @default(uuid())
-  blockId         String
-  block           TrainingBlock  @relation(fields: [blockId], references: [id])
-  
-  weekNumber      Int            // 1, 2, 3 within the block
-  startDate       DateTime
-  volumeTargetMinutes Int        // Planned volume
-  tssTarget       Int            // Planned Training Stress Score
-  isRecovery      Boolean        @default(false)
-  focus           BlockFocus?    // Optional override for week-specific focus
-  
-  // The actual workouts
-  workouts        PlannedWorkout
+id String @id @default(uuid())
+blockId String
+block TrainingBlock @relation(fields: [blockId], references: [id])
+
+weekNumber Int // 1, 2, 3 within the block
+startDate DateTime
+volumeTargetMinutes Int // Planned volume
+tssTarget Int // Planned Training Stress Score
+isRecovery Boolean @default(false)
+focus BlockFocus? // Optional override for week-specific focus
+
+// The actual workouts
+workouts PlannedWorkout
 }
 This schema explicitly decouples the "plan" from the "workout." By interposing the TrainingBlock and TrainingWeek entities, we create a structure that allows for "Just-In-Time" generation. The system can sketch out the Macrocycle (e.g., "12 weeks of Base") without generating the specific interval sessions for week 12 until the user actually reaches that phase. This saves computational resources and allows the plan to adapt based on the user's progress in weeks 1 through 11.2.4 Algorithmic Logic: The "Rhythm" of ProgressionThe TrainingBlock entity allows us to define the "rhythm" of training before the AI generates a single workout. The standard logic for endurance sports follows a loading/unloading paradigm, typically 3:1 or 2:1.1 This means three weeks of progressive overload followed by one week of recovery to shed fatigue and realize fitness gains (supercompensation).To represent this rhythm to the AI, we use a technique called Iterative Block Generation. We do not prompt the AI to "generate a 12-week plan" in a single pass. The context window of current LLMs would likely drift, losing coherence by week 8. Instead, the logic follows a rigid algorithm:Macro Definition: The backend calculates the weeks between Start and Event.Segmentation: The total duration is divided into chunks of 3-4 weeks. For a 12-week plan, this results in three distinct blocks.Archetype Assignment: Based on the PlanStrategy, archetypes are assigned.Block 1 (Weeks 1-4): Base (Focus: Aerobic/Tempo).Block 2 (Weeks 5-8): Build (Focus: Threshold/VO2).Block 3 (Weeks 9-12): Specialty (Focus: Race Specific).Generative Execution: The system prompts the AI to generate one block at a time, passing specific constraints for that phase.System Prompt Strategy for Block Progression:When generating "Block 2 (Build Phase)," the prompt must explicitly enforce the 3:1 rhythm."You are designing Block 2 (Build Phase) for a cyclist.Constraints:Duration: 4 Weeks.Rhythm: 3 weeks loading, 1 week recovery.Primary Focus: Threshold (raise FTP).Starting CTL (Fitness): 65.Target CTL Rise: +5 per week.Task: Output a JSON structure for 4 TrainingWeeks. For the loading weeks (1-3), prioritize interval sessions like 'Over-Unders' and increase total time in zone by 10% each week. For the recovery week (4), reduce volume by 50% and limit intensity to Zone 2."This "Divide and Conquer" approach ensures the AI adheres to the specific physiological goals of Build vs. Base, preventing the common issue where AI generates "muddy" plans that mix too many energy systems randomly.2 It ensures that the "Recovery Week" is not just a random occurrence but a structural necessity enforced by the recoveryWeekIndex field in the database.3. The Atomic Unit: Granular Workout ArchitectureMoving from the season view to the daily view, we encounter the challenge of "Structured Workouts." A simple text description (e.g., "Do 2x20 mins") is insufficient for a modern platform. We need a machine-readable format that can be visualized as a graph in the UI, exported to head units (Garmin/Wahoo), and executed by smart trainers.3.1 Research on Data Standards and File FormatsThe endurance industry utilizes several legacy formats, each with distinct advantages and limitations. Understanding these is crucial for designing a superior internal standard.ZWO (Zwift Workout): This XML-based format is highly structured and widely used in the virtual cycling space. It supports complex interval definitions, including ramps, steady-state intervals, and free-ride sections.10 ZWO files also support <TextEvent> tags, which allow creators to embed on-screen instructions that trigger at specific times—a feature highly valued for coaching guidance.11 However, the XML syntax is verbose and harder to parse in a web-native JavaScript environment compared to JSON.MRC (Multi-Rider Coaching) and ERG: These are simple text/columnar formats often used by TrainerRoad and legacy compu-trainers. They define workouts as a series of time/power pairs (Minutes, %FTP).12 While excellent for raw power data definition, they lack metadata capabilities. You cannot easily embed instructional text, cadence targets, or complex nested loops (e.g., "Repeat this set 3 times") without non-standard extensions.14FIT (Flexible and Interoperable Data Transfer): This binary format is the gold standard for transporting activity data between devices (e.g., from a Garmin head unit to Strava). It is highly compact and efficient but notoriously difficult to generate or edit directly without specialized SDKs.15 It is generally an output format rather than a storage format for a web platform.Wahoo PLAN JSON: Wahoo utilizes a JSON-based format for their cloud API, which includes arrays of targets (power, cadence, heart rate) and supports distinct interval types like active, recover, and warmup.17 This format is the closest to a modern web standard but is proprietary to their ecosystem.3.2 The "Atomic Workout Protocol" (AWP)For coach-wattz, we recommend creating a Native JSON Schema that acts as a superset of ZWO features but utilizes the flexibility of JSON. This serves as the platform's "source of truth." You can then write simple transformer functions (adapters) to export this JSON to .zwo, .mrc, or .fit when the user downloads a file.The proposed schema must support Nested Repetitions. Complex workouts often involve sets of intervals (e.g., "3 sets of (5x 1min ON, 1min OFF)"). Storing this flatly (listing every single 1-minute interval) makes the data bloated and hard to edit. Storing it as a nested structure preserves the logic of the workout.Proposed Unified Workout JSON Schema:JSON{
-  "schemaVersion": "1.0",
-  "meta": {
-    "title": "Threshold Ladders",
-    "description": "Building tolerance at FTP with varying cadence.",
-    "author": "Coach-Wattz AI",
-    "totalDurationSeconds": 3600,
-    "estimatedTSS": 65
-  },
-  "steps":
-    },
-    {
-      "type": "Cooldown",
-      "duration": 600,
-      "power": { "type": "ramp", "start": 0.50, "end": 0.40 },
-      "instruction": "Easy spin to finish."
-    }
-  ]
+"schemaVersion": "1.0",
+"meta": {
+"title": "Threshold Ladders",
+"description": "Building tolerance at FTP with varying cadence.",
+"author": "Coach-Wattz AI",
+"totalDurationSeconds": 3600,
+"estimatedTSS": 65
+},
+"steps":
+},
+{
+"type": "Cooldown",
+"duration": 600,
+"power": { "type": "ramp", "start": 0.50, "end": 0.40 },
+"instruction": "Easy spin to finish."
+}
+]
 }
 This JSON structure is robust. It handles ramps (start/end power), steady states, and nested loops via the Repeat type. The content array within a Repeat block allows for infinite nesting depth, though 1-2 levels are standard.Visualizing the Data Structure:Understanding how this JSON translates to a workout graph is critical. The Repeat object in the JSON functions as a logic container. When the frontend renders this workout, the rendering engine "unrolls" this loop. For example, if the JSON specifies "Repeat 2 times:" with "Rest Between: 5 mins", the visual graph will generate the sequence: Interval A -> Interval B -> Rest (5m) -> Interval A -> Interval B. The database stores the compact, nested definition, while the UI displays the linear timeline. This separation of "Logical Definition" and "Visual Representation" is key to efficient storage and editing.3.3 Storage Strategy: JSONB vs. Relational TablesA critical architectural decision is whether to store these workout steps in a separate relational table (e.g., WorkoutStep with foreign keys) or as a JSON blob within the PlannedWorkout table.Research into database performance for this specific use case favors a Hybrid Approach.18The Case for JSONB:Storing the workout structure as JSONB in PostgreSQL is superior for several reasons:Read Performance: When a user loads their calendar, the app needs to fetch 30-40 workouts. If each workout has 20 steps, a relational model would require joining and fetching 800+ rows. JSONB allows fetching 40 rows with the complete structure embedded.Flexibility: Workout structures change. Adding a new parameter like "Torque Target" to a JSON schema is trivial; adding a column to a WorkoutStep table with millions of rows is a migration headache.20App Compatibility: The frontend (Nuxt) and the AI both speak JSON. Storing it as JSON eliminates the need for Object-Relational Mapping (ORM) translation layers.The Case for Relational Columns:However, pure JSON makes analytics difficult. If you want to query "How many minutes did the user spend in Zone 5 across all workouts?", parsing JSON blobs is slow.18Recommendation: Use JSONB for the detailed structure (the recipe) but extract key metadata into relational columns for analytics.Prisma Implementation:Code snippetmodel PlannedWorkout {
-  id             String        @id @default(uuid())
-  trainingWeekId String
-  trainingWeek   TrainingWeek  @relation(fields:, references: [id])
-  
-  dayOfWeek      Int           // 0=Sun, 1=Mon...
-  scheduledDate  DateTime
-  
-  // High Level Metadata (Relational for Analytics)
-  title          String        // "Threshold Ladders"
-  description    String?
-  totalDuration  Int           // Seconds
-  tssEstimate    Int
-  ifEstimate     Float         // Intensity Factor
-  primaryZone    Int           // e.g., 4 (Threshold)
-  
-  // The Structure (JSONB for Flexibility)
-  // Contains the detailed steps, intervals, and instructions
-  structuredData Json          
-  
-  completionStatus CompletionStatus @default(PENDING)
+id String @id @default(uuid())
+trainingWeekId String
+trainingWeek TrainingWeek @relation(fields:, references: [id])
+
+dayOfWeek Int // 0=Sun, 1=Mon...
+scheduledDate DateTime
+
+// High Level Metadata (Relational for Analytics)
+title String // "Threshold Ladders"
+description String?
+totalDuration Int // Seconds
+tssEstimate Int
+ifEstimate Float // Intensity Factor
+primaryZone Int // e.g., 4 (Threshold)
+
+// The Structure (JSONB for Flexibility)
+// Contains the detailed steps, intervals, and instructions
+structuredData Json
+
+completionStatus CompletionStatus @default(PENDING)
 }
-3.4 Generative AI Strategy: Schema-Constrained PromptingLarge Language Models (LLMs) are powerful creative engines but poor mathematicians. They often struggle with strict arithmetic constraints, such as ensuring that the sum of interval durations equals the total workout duration.21 To generate valid structured intervals, we must use Schema-Constrained Generation.We should not ask the LLM for the final JSON directly in a single open-ended prompt. Instead, we employ a Chain-of-Thought strategy combined with Grammar Enforcement (e.g., using OpenAI's "Structured Outputs" or JSON mode).22Step 1: Strategic Reasoning:First, ask the LLM to design the workout strategy in plain text.Prompt: "Design a VO2 Max workout for an athlete with 60 minutes. The goal is to accumulate 15 minutes of time-in-zone. Suggest the interval structure (e.g., 5x3min)."Output: "I recommend a warm-up of 15 minutes, followed by 5 intervals of 3 minutes at 115% FTP with 3 minutes recovery..."Step 2: Codification:Next, ask the LLM to translate that specific strategy into the strict JSON schema, providing the TypeScript interface in the prompt context.System Prompt: "You are a JSON generator. You must output valid JSON matching this TypeScript interface: interface Workout {... }. Ensure totalDuration equals the sum of all steps."Validation Layer:Before saving to the database, the Node.js backend must validate the AI output using a schema validation library like Zod or Ajv. This validation step acts as a firewall.Syntax Check: Is it valid JSON?Schema Check: Does it have steps? Do steps have duration?Logic Check: Sum all step.duration * step.repeats. Does it match totalDuration?Self-Correction Loop: If validation fails, the error message is fed back to the LLM in a new prompt: "Error: Total duration sums to 55 minutes, but 60 was requested. Please adjust the warmup/cooldown to fix this." This allows the system to self-heal before the user ever sees a glitch.4. The "Plan Wizard" & UX: Onboarding the AthleteThe complexity of periodization must be abstracted behind an intuitive User Interface (UX). The "Plan Wizard" is the most crucial frontend component, as it determines the quality of the data the AI receives. It must capture Constraints, Context, and Capabilities.4.1 Capturing Constraints: The "Negotiation" BeginsMost training apps fail because they assume a "perfect" user with unlimited time. Real users have job stress, limited days, and changing schedules. Therefore, the onboarding wizard should not just ask "How many hours per week?" but should ask for a Weekly Template.24The Availability Grid:The wizard should present a standard weekly calendar where the user "paints" their availability.Input: "Tuesdays/Thursdays = 60 mins max (Indoor). Saturdays = 4 hours (Outdoor). Mondays = Rest."Data: This translates to an availability array: [{day: 1, mins: 0}, {day: 2, mins: 60},...].Insight: This allows the AI to place the long endurance rides on the correct days automatically, respecting the user's life rhythm.4.2 Course Profiling UIFor event-based goals, knowing the demands of the event is key. If the user is training for a mountainous Gran Fondo, the plan must emphasize "Climbing" and "Muscular Endurance." Conversely, a flat criterium requires "Sprint Power" and "Repeatability."The "Event Profiler" Feature:The system should allow users to upload a GPX route of their target event or select from a database of popular races (similar to Best Bike Split).25 The system then parses this file to extract the "Power Profile" of the race.The data derived from this profile (e.g., "40% of time spent at 6-8% gradient") is fed into the AI's system prompt. This allows the generator to customize the Specialty Phase (Block 3). For a hilly course, the AI will generate "Low Cadence / High Torque" intervals. For a flat course, it will focus on "High Kinetic Energy / Aero Position" intervals.5. The User Interface as a Negotiation LayerSafety and trust are paramount in AI coaching. A user should never feel "locked in" to a rigid plan generated by a black box. They must be able to negotiate changes safely, understanding the consequences of their actions.5.1 The "Impact Analysis" EngineWhen a user tries to move a workout, the system should not just passively accept the drag-and-drop action; it should inform the user of the consequences.27Scenario: A user drags a "4-hour Endurance Ride" from Saturday to a Tuesday (where they previously defined a 60-minute availability limit).The UI Interaction:Detection: The frontend (Nuxt) detects a constraint conflict: WorkoutDuration (240m) > DailyAvailability (60m).The Prompt: A modal appears: "This workout is 4 hours, but you usually only have 60 mins on Tuesdays. What would you like to do?"Option A: "Scale it Down" - The AI rewrites the workout to a 60-minute version, preserving the intensity (e.g., keeping the intervals) but cutting the recovery and endurance volume.Option B: "Move to Sunday" - Swap with Sunday's rest/recovery ride.Option C: "Force it" - The user confirms they have extra time this specific Tuesday.Implementation:This requires the TrainingWeek entity to have "slots" with availabilityMinutes attributes. The frontend checks constraints locally before even calling the API, providing instant feedback. This "Negotiation" builds trust because the AI acts as a partner respecting the user's life, rather than a dictator ignoring it.6. The Adaptive Brain: Dynamic Plan LogicThe "killer feature" of coach-wattz is its ability to self-repair. Static PDF plans fail because they cannot adjust when a user gets sick or misses a workout. An adaptive system succeeds because it constantly re-evaluates the path to the goal.6.1 Triggers for RegenerationTo enable dynamic adaptation, we need a background orchestration layer (Trigger.dev) that monitors for "Plan Deviation Events".24Primary Trigger Events:Missed "Key" Workout: Skipping a 30-minute recovery spin is negligible. Skipping a "3x20min Threshold" session represents a loss of critical training stimulus. The system must distinguish between these.Biometric Red Flag: If Heart Rate Variability (HRV) drops below the user's baseline for 3 consecutive days, it indicates accumulated fatigue or impending illness.9User Input: The user explicitly marks themselves as "Sick" or "Injured" in the app.6.2 Failed vs. Skipped LogicA crucial distinction in adaptive logic is the difference between a "Failed" workout and a "Skipped" workout.31 They require opposite reactions from the AI.Skipped Workout: The user did not attempt the workout (0% completion). The cause is usually logistical (busy, traveling). The physiological capacity is unknown, but the stimulus is missed.Failed Workout: The user attempted the workout but stopped early or reduced intensity (partial completion). The cause is usually physiological (fatigue, intensity too high).Logic Table for Adaptation Actions:Event ScenarioUser Feedback (Survey)AI Adaptation ActionSkipped (0% Compliance)"Busy / No Time"Reschedule: Move this key workout to the next available slot. Bump other workouts forward. Do not reduce intensity.Skipped (0% Compliance)"Sick"Deload: Delete workout. Change next 3 days to "Recovery/Z1" or "Rest." Recalculate Block end date.Failed (Stopped early)"Too Hard / Fatigue"Regress: This indicates the "Progression Level" is too high. Lower the intensity of the next similar workout by 5-10% (e.g., reduce interval power targets).Failed (Stopped early)"Ran out of time"No Change: Intensity was appropriate, but logistics failed. Keep future targets the same.Success (Completed)"Easy" (RPE < 4)Progress: Increase intensity/duration of the next key workout slightly faster than planned (Accelerated Progression).6.3 Technical Implementation with Trigger.devThis logic is orchestrated via background jobs. We define a nightly-plan-audit job in Trigger.dev.Step 1: Fetch all users with a workout scheduled for "Yesterday."Step 2: Query the database (or external API like Strava) for the actual execution data.Step 3: Compare PlannedWorkout.structuredData with ActualActivity.data.Compliance Check: Did they meet the power targets? Did they complete the duration?Step 4: If status!== completed AND workout.priority === KEY, insert a "Plan Repair Task" into the queue.Step 5: The Repair Task calls the LLM with a specific context: "User missed their Threshold workout due to being busy. Current plan is... Please regenerate the next 7 days to accommodate this missed physiological stimulus."7. Implementation Roadmap7.1 Phase 1: Foundation (Weeks 1-4)Database Migration: Implement the TrainingPlan, TrainingBlock, and TrainingWeek entities in Prisma.Schema Definition: Finalize the AWP (Atomic Workout Protocol) JSON schema and write the Zod validator.Frontend: Build the "Availability Grid" component in Nuxt 3, as this data is the constraint engine for all AI generation.7.2 Phase 2: The Generator (Weeks 5-8)AI Service: Build the Node.js service that interfaces with the LLM (OpenAI/Anthropic). Implement the "Block-by-Block" generation logic.Validation: Hook up the Zod validator to the AI output. Ensure generated workouts are mathematically valid.7.3 Phase 3: The Negotiator (Weeks 9-12)Impact Analysis: Implement the frontend logic that warns users when they drag workouts to invalid days.Trigger.dev: Set up the nightly-plan-audit job to handle missed workouts and automatic plan repairs.By following this architectural blueprint, coach-wattz will position itself not just as a workout logger, but as an intelligent, adaptive coaching partner. It respects the biological realities of training (Periodization), the technical realities of web development (JSON/Prisma), and the chaotic realities of human life (Dynamic Adaptation). This triangulation is the key to building a platform that delivers real athletic results.
+3.4 Generative AI Strategy: Schema-Constrained PromptingLarge Language Models (LLMs) are powerful creative engines but poor mathematicians. They often struggle with strict arithmetic constraints, such as ensuring that the sum of interval durations equals the total workout duration.21 To generate valid structured intervals, we must use Schema-Constrained Generation.We should not ask the LLM for the final JSON directly in a single open-ended prompt. Instead, we employ a Chain-of-Thought strategy combined with Grammar Enforcement (e.g., using OpenAI's "Structured Outputs" or JSON mode).22Step 1: Strategic Reasoning:First, ask the LLM to design the workout strategy in plain text.Prompt: "Design a VO2 Max workout for an athlete with 60 minutes. The goal is to accumulate 15 minutes of time-in-zone. Suggest the interval structure (e.g., 5x3min)."Output: "I recommend a warm-up of 15 minutes, followed by 5 intervals of 3 minutes at 115% FTP with 3 minutes recovery..."Step 2: Codification:Next, ask the LLM to translate that specific strategy into the strict JSON schema, providing the TypeScript interface in the prompt context.System Prompt: "You are a JSON generator. You must output valid JSON matching this TypeScript interface: interface Workout {... }. Ensure totalDuration equals the sum of all steps."Validation Layer:Before saving to the database, the Node.js backend must validate the AI output using a schema validation library like Zod or Ajv. This validation step acts as a firewall.Syntax Check: Is it valid JSON?Schema Check: Does it have steps? Do steps have duration?Logic Check: Sum all step.duration \* step.repeats. Does it match totalDuration?Self-Correction Loop: If validation fails, the error message is fed back to the LLM in a new prompt: "Error: Total duration sums to 55 minutes, but 60 was requested. Please adjust the warmup/cooldown to fix this." This allows the system to self-heal before the user ever sees a glitch.4. The "Plan Wizard" & UX: Onboarding the AthleteThe complexity of periodization must be abstracted behind an intuitive User Interface (UX). The "Plan Wizard" is the most crucial frontend component, as it determines the quality of the data the AI receives. It must capture Constraints, Context, and Capabilities.4.1 Capturing Constraints: The "Negotiation" BeginsMost training apps fail because they assume a "perfect" user with unlimited time. Real users have job stress, limited days, and changing schedules. Therefore, the onboarding wizard should not just ask "How many hours per week?" but should ask for a Weekly Template.24The Availability Grid:The wizard should present a standard weekly calendar where the user "paints" their availability.Input: "Tuesdays/Thursdays = 60 mins max (Indoor). Saturdays = 4 hours (Outdoor). Mondays = Rest."Data: This translates to an availability array: [{day: 1, mins: 0}, {day: 2, mins: 60},...].Insight: This allows the AI to place the long endurance rides on the correct days automatically, respecting the user's life rhythm.4.2 Course Profiling UIFor event-based goals, knowing the demands of the event is key. If the user is training for a mountainous Gran Fondo, the plan must emphasize "Climbing" and "Muscular Endurance." Conversely, a flat criterium requires "Sprint Power" and "Repeatability."The "Event Profiler" Feature:The system should allow users to upload a GPX route of their target event or select from a database of popular races (similar to Best Bike Split).25 The system then parses this file to extract the "Power Profile" of the race.The data derived from this profile (e.g., "40% of time spent at 6-8% gradient") is fed into the AI's system prompt. This allows the generator to customize the Specialty Phase (Block 3). For a hilly course, the AI will generate "Low Cadence / High Torque" intervals. For a flat course, it will focus on "High Kinetic Energy / Aero Position" intervals.5. The User Interface as a Negotiation LayerSafety and trust are paramount in AI coaching. A user should never feel "locked in" to a rigid plan generated by a black box. They must be able to negotiate changes safely, understanding the consequences of their actions.5.1 The "Impact Analysis" EngineWhen a user tries to move a workout, the system should not just passively accept the drag-and-drop action; it should inform the user of the consequences.27Scenario: A user drags a "4-hour Endurance Ride" from Saturday to a Tuesday (where they previously defined a 60-minute availability limit).The UI Interaction:Detection: The frontend (Nuxt) detects a constraint conflict: WorkoutDuration (240m) > DailyAvailability (60m).The Prompt: A modal appears: "This workout is 4 hours, but you usually only have 60 mins on Tuesdays. What would you like to do?"Option A: "Scale it Down" - The AI rewrites the workout to a 60-minute version, preserving the intensity (e.g., keeping the intervals) but cutting the recovery and endurance volume.Option B: "Move to Sunday" - Swap with Sunday's rest/recovery ride.Option C: "Force it" - The user confirms they have extra time this specific Tuesday.Implementation:This requires the TrainingWeek entity to have "slots" with availabilityMinutes attributes. The frontend checks constraints locally before even calling the API, providing instant feedback. This "Negotiation" builds trust because the AI acts as a partner respecting the user's life, rather than a dictator ignoring it.6. The Adaptive Brain: Dynamic Plan LogicThe "killer feature" of coach-wattz is its ability to self-repair. Static PDF plans fail because they cannot adjust when a user gets sick or misses a workout. An adaptive system succeeds because it constantly re-evaluates the path to the goal.6.1 Triggers for RegenerationTo enable dynamic adaptation, we need a background orchestration layer (Trigger.dev) that monitors for "Plan Deviation Events".24Primary Trigger Events:Missed "Key" Workout: Skipping a 30-minute recovery spin is negligible. Skipping a "3x20min Threshold" session represents a loss of critical training stimulus. The system must distinguish between these.Biometric Red Flag: If Heart Rate Variability (HRV) drops below the user's baseline for 3 consecutive days, it indicates accumulated fatigue or impending illness.9User Input: The user explicitly marks themselves as "Sick" or "Injured" in the app.6.2 Failed vs. Skipped LogicA crucial distinction in adaptive logic is the difference between a "Failed" workout and a "Skipped" workout.31 They require opposite reactions from the AI.Skipped Workout: The user did not attempt the workout (0% completion). The cause is usually logistical (busy, traveling). The physiological capacity is unknown, but the stimulus is missed.Failed Workout: The user attempted the workout but stopped early or reduced intensity (partial completion). The cause is usually physiological (fatigue, intensity too high).Logic Table for Adaptation Actions:Event ScenarioUser Feedback (Survey)AI Adaptation ActionSkipped (0% Compliance)"Busy / No Time"Reschedule: Move this key workout to the next available slot. Bump other workouts forward. Do not reduce intensity.Skipped (0% Compliance)"Sick"Deload: Delete workout. Change next 3 days to "Recovery/Z1" or "Rest." Recalculate Block end date.Failed (Stopped early)"Too Hard / Fatigue"Regress: This indicates the "Progression Level" is too high. Lower the intensity of the next similar workout by 5-10% (e.g., reduce interval power targets).Failed (Stopped early)"Ran out of time"No Change: Intensity was appropriate, but logistics failed. Keep future targets the same.Success (Completed)"Easy" (RPE < 4)Progress: Increase intensity/duration of the next key workout slightly faster than planned (Accelerated Progression).6.3 Technical Implementation with Trigger.devThis logic is orchestrated via background jobs. We define a nightly-plan-audit job in Trigger.dev.Step 1: Fetch all users with a workout scheduled for "Yesterday."Step 2: Query the database (or external API like Strava) for the actual execution data.Step 3: Compare PlannedWorkout.structuredData with ActualActivity.data.Compliance Check: Did they meet the power targets? Did they complete the duration?Step 4: If status!== completed AND workout.priority === KEY, insert a "Plan Repair Task" into the queue.Step 5: The Repair Task calls the LLM with a specific context: "User missed their Threshold workout due to being busy. Current plan is... Please regenerate the next 7 days to accommodate this missed physiological stimulus."7. Implementation Roadmap7.1 Phase 1: Foundation (Weeks 1-4)Database Migration: Implement the TrainingPlan, TrainingBlock, and TrainingWeek entities in Prisma.Schema Definition: Finalize the AWP (Atomic Workout Protocol) JSON schema and write the Zod validator.Frontend: Build the "Availability Grid" component in Nuxt 3, as this data is the constraint engine for all AI generation.7.2 Phase 2: The Generator (Weeks 5-8)AI Service: Build the Node.js service that interfaces with the LLM (OpenAI/Anthropic). Implement the "Block-by-Block" generation logic.Validation: Hook up the Zod validator to the AI output. Ensure generated workouts are mathematically valid.7.3 Phase 3: The Negotiator (Weeks 9-12)Impact Analysis: Implement the frontend logic that warns users when they drag workouts to invalid days.Trigger.dev: Set up the nightly-plan-audit job to handle missed workouts and automatic plan repairs.By following this architectural blueprint, coach-wattz will position itself not just as a workout logger, but as an intelligent, adaptive coaching partner. It respects the biological realities of training (Periodization), the technical realities of web development (JSON/Prisma), and the chaotic realities of human life (Dynamic Adaptation). This triangulation is the key to building a platform that delivers real athletic results.

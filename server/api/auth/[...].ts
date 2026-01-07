@@ -46,11 +46,11 @@ const syncIntervalsIntegration = async (user: any, account: any) => {
       }
     })
     console.log('Successfully synced Intervals.icu integration')
-    
+
     // Trigger initial sync (last 365 days)
     const endDate = new Date().toISOString()
     const startDate = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString()
-    
+
     await tasks.trigger('ingest-intervals', {
       userId: user.id,
       startDate,
@@ -69,7 +69,7 @@ export default NuxtAuthHandler({
     GoogleProvider.default({
       clientId: process.env.GOOGLE_CLIENT_ID!,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
-      allowDangerousEmailAccountLinking: true,
+      allowDangerousEmailAccountLinking: true
     }),
     {
       id: 'intervals',
@@ -92,7 +92,7 @@ export default NuxtAuthHandler({
           id: profile.id,
           name: profile.name,
           email: profile.email,
-          image: profile.profile_medium || profile.profile,
+          image: profile.profile_medium || profile.profile
         }
       }
     }
@@ -106,7 +106,7 @@ export default NuxtAuthHandler({
         session.user.timezone = user.timezone || null
       }
       return session
-    },
+    }
   },
   events: {
     async linkAccount({ user, account }: any) {

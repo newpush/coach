@@ -9,7 +9,9 @@ The Yazio integration had an issue where AI-captured food entries (using their A
 The problem was in how nutrients were being extracted from different types of Yazio entries:
 
 ### 1. **AI-Generated Entries** (`simple_products`)
+
 These entries have nutrients in a nested structure:
+
 ```json
 {
   "id": "...",
@@ -26,7 +28,9 @@ These entries have nutrients in a nested structure:
 ```
 
 ### 2. **Manual Entries** (`products`)
+
 These entries have nutrients per gram/serving in `product_nutrients`:
+
 ```json
 {
   "id": "...",
@@ -55,6 +59,7 @@ This meant the nutrition analysis couldn't access the nutrient data properly, re
 Updated [`server/utils/yazio.ts`](server/utils/yazio.ts) to properly extract and transform nutrients:
 
 ### For AI-Generated Entries (lines 114-173)
+
 ```typescript
 // Extract nutrients from the nested structure
 const nutrients = item.nutrients || {}
@@ -79,6 +84,7 @@ const transformedItem = {
 ```
 
 ### For Manual Entries (lines 104-142)
+
 ```typescript
 // For regular products, nutrients are in product_nutrients and need to be multiplied by amount
 const productNutrients = (item as any).product_nutrients || {}
@@ -105,6 +111,7 @@ const enrichedItem = {
 ## Result
 
 Now both AI-captured and manual food entries:
+
 1. Have their nutrients properly extracted from their respective data structures
 2. Store nutrient values in top-level fields (`calories`, `protein`, `carbs`, `fat`, etc.)
 3. Are accessible by the nutrition analysis code in [`trigger/analyze-nutrition.ts`](trigger/analyze-nutrition.ts)
@@ -113,6 +120,7 @@ Now both AI-captured and manual food entries:
 ## Testing
 
 To verify the fix works:
+
 1. Sync Yazio data that includes AI-captured food entries
 2. Check that both AI-generated and manual entries show up in the nutrition log
 3. Verify that the daily totals (calories, protein, carbs, fat) are calculated correctly

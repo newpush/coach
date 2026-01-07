@@ -110,7 +110,7 @@ export default defineEventHandler(async (event) => {
   const totalPages = Math.ceil(total / pageSize)
 
   return {
-    items: items.map(item => ({
+    items: items.map((item) => ({
       id: item.id,
       operation: item.operation,
       model: item.model,

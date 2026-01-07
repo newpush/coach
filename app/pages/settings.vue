@@ -70,24 +70,27 @@
 </template>
 
 <script setup lang="ts">
-const route = useRoute()
+  const route = useRoute()
 
-definePageMeta({
-  middleware: 'auth'
-})
+  definePageMeta({
+    middleware: 'auth'
+  })
 
-useHead({
-  title: 'Settings',
-  meta: [
-    { name: 'description', content: 'Manage your Coach Watts account, connected apps, and AI preferences.' }
-  ]
-})
+  useHead({
+    title: 'Settings',
+    meta: [
+      {
+        name: 'description',
+        content: 'Manage your Coach Watts account, connected apps, and AI preferences.'
+      }
+    ]
+  })
 
-function isActive(path: string): boolean {
-  return route.path === path
-}
+  function isActive(path: string): boolean {
+    return route.path === path
+  }
 
-const isFullWidth = computed(() => {
-  return route.path === '/settings/ai' || route.path.startsWith('/settings/llm')
-})
+  const isFullWidth = computed(() => {
+    return route.path === '/settings/ai' || route.path.startsWith('/settings/llm')
+  })
 </script>

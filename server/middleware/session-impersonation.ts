@@ -19,7 +19,7 @@ export default defineEventHandler(async (event) => {
 
   // Check for impersonation cookie
   const impersonatedUserId = getCookie(event, 'auth.impersonated_user_id')
-  
+
   if (!impersonatedUserId) {
     return // No impersonation active
   }

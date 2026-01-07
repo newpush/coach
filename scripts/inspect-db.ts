@@ -3,31 +3,36 @@ import { PrismaClient } from '@prisma/client'
 import { PrismaPg } from '@prisma/adapter-pg'
 import pg from 'pg'
 
-const pool = new pg.Pool({ connectionString: "postgresql://coach:3JXkrGaUZURywjZk@185.112.156.142:4426/coach" })
+const pool = new pg.Pool({
+  connectionString: 'postgresql://coach:3JXkrGaUZURywjZk@185.112.156.142:4426/coach'
+})
 const adapter = new PrismaPg(pool)
 const prisma = new PrismaClient({ adapter })
 
 async function main() {
   console.log('Inspecting FULL database schema...')
-  
+
   try {
     // Get all tables
-    const tables = await prisma.$queryRaw`
+    const tables = (await prisma.$queryRaw`
       SELECT table_name
       FROM information_schema.tables
       WHERE table_schema = 'public';
-    ` as any[]
-    
-    console.log('Tables found:', tables.map(t => t.table_name))
+    `) as any[]
+
+    console.log(
+      'Tables found:',
+      tables.map((t) => t.table_name)
+    )
 
     // Get all columns for all tables
-    const columns = await prisma.$queryRaw`
+    const columns = (await prisma.$queryRaw`
       SELECT table_name, column_name, data_type, is_nullable, column_default
       FROM information_schema.columns
       WHERE table_schema = 'public'
       ORDER BY table_name, ordinal_position;
-    ` as any[]
-    
+    `) as any[]
+
     // Group by table for easier reading
     const schema: Record<string, any[]> = {}
     for (const col of columns) {
@@ -41,7 +46,7 @@ async function main() {
         default: col.column_default
       })
     }
-    
+
     console.log(JSON.stringify(schema, null, 2))
 
     // Check pending migrations
@@ -55,7 +60,7 @@ async function main() {
 }
 
 main()
-  .catch(e => {
+  .catch((e) => {
     console.error('Error:', e)
     process.exit(1)
   })

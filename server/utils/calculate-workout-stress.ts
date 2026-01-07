@@ -43,10 +43,7 @@ export async function calculateWorkoutStress(
       userId,
       date: { lt: workout.date },
       isDuplicate: false,
-      OR: [
-        { ctl: { not: null } },
-        { atl: { not: null } }
-      ]
+      OR: [{ ctl: { not: null } }, { atl: { not: null } }]
     },
     orderBy: { date: 'desc' },
     select: { ctl: true, atl: true }
@@ -58,56 +55,62 @@ export async function calculateWorkoutStress(
 
   // Calculate stress score
   let tss = getStressScore(workout)
-  console.log(`[calculateWorkoutStress] Workout ${workout.id}: Initial TSS=${tss} (from DB=${workout.tss}, TRIMP=${workout.trimp})`)
+  console.log(
+    `[calculateWorkoutStress] Workout ${workout.id}: Initial TSS=${tss} (from DB=${workout.tss}, TRIMP=${workout.trimp})`
+  )
 
   if (tss === 0) {
     // If TSS is 0, try to calculate it from streams if available
     // This handles cases where TSS wasn't in the FIT file header but can be derived
-    
+
     // REFACTOR: Use userRepository to get the FTP correct for THIS workout's date
     const ftp = await userRepository.getFtpForDate(userId, workout.date)
-    console.log(`[calculateWorkoutStress] Using FTP ${ftp}W for date ${workout.date.toISOString().split('T')[0]}`)
-    
+    console.log(
+      `[calculateWorkoutStress] Using FTP ${ftp}W for date ${workout.date.toISOString().split('T')[0]}`
+    )
+
     if (ftp > 0) {
       const workoutWithStreams = await prisma.workout.findUnique({
         where: { id: workoutId },
         include: { streams: true }
       })
-      
+
       if (workoutWithStreams?.streams?.watts && Array.isArray(workoutWithStreams.streams.watts)) {
         // Simple TSS calculation: (sec * NP * IF) / (FTP * 3600) * 100
         // Need NP first. For now, let's use Average Power as a rough proxy if NP is missing
         // or re-implement simple NP calculation here
         const watts = workoutWithStreams.streams.watts as number[]
         const avgPower = watts.reduce((a, b) => a + b, 0) / watts.length
-        
+
         // Simple normalized power approximation (often ~5-10% higher than avg for variable rides)
         // Ideally we'd do the real 30s rolling avg calculation
-        const np = (workout as any).normalizedPower || avgPower 
-        
+        const np = (workout as any).normalizedPower || avgPower
+
         const intensity = np / ftp
         const durationSec = watts.length // assuming 1s recording
-        
-        const calculatedTss = (durationSec * np * intensity) / (ftp * 3600) * 100
-        console.log(`[calculateWorkoutStress] Calculated TSS fallback: ${calculatedTss} (FTP=${ftp}, NP=${np}, IF=${intensity}, Duration=${durationSec})`)
-        
+
+        const calculatedTss = ((durationSec * np * intensity) / (ftp * 3600)) * 100
+        console.log(
+          `[calculateWorkoutStress] Calculated TSS fallback: ${calculatedTss} (FTP=${ftp}, NP=${np}, IF=${intensity}, Duration=${durationSec})`
+        )
+
         if (calculatedTss > 0) {
-            // Update workout with calculated TSS
-            await prisma.workout.update({
-                where: { id: workoutId },
-                data: { 
-                  tss: Math.round(calculatedTss * 10) / 10,
-                  ftp: ftp // Store the FTP used for calculation!
-                }
-            })
-            // Use this new TSS for CTL/ATL
-            tss = Math.round(calculatedTss * 10) / 10
+          // Update workout with calculated TSS
+          await prisma.workout.update({
+            where: { id: workoutId },
+            data: {
+              tss: Math.round(calculatedTss * 10) / 10,
+              ftp: ftp // Store the FTP used for calculation!
+            }
+          })
+          // Use this new TSS for CTL/ATL
+          tss = Math.round(calculatedTss * 10) / 10
         }
       } else {
         console.log(`[calculateWorkoutStress] No watts stream available for TSS calculation`)
       }
     } else {
-        console.log(`[calculateWorkoutStress] User ${userId} has no FTP set, cannot calculate TSS`)
+      console.log(`[calculateWorkoutStress] User ${userId} has no FTP set, cannot calculate TSS`)
     }
   }
 
@@ -128,10 +131,7 @@ export async function calculateWorkoutStress(
  * Recalculate CTL/ATL for all workouts after a specific date
  * Useful when a workout is deleted or modified
  */
-export async function recalculateStressAfterDate(
-  userId: string,
-  afterDate: Date
-): Promise<number> {
+export async function recalculateStressAfterDate(userId: string, afterDate: Date): Promise<number> {
   // Get the CTL/ATL just before the affected date
   const lastGoodWorkout = await prisma.workout.findFirst({
     where: {

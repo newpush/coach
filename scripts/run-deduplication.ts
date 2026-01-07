@@ -1,4 +1,4 @@
-import { tasks } from "@trigger.dev/sdk/v3"
+import { tasks } from '@trigger.dev/sdk/v3'
 
 /**
  * Manual script to run workout deduplication
@@ -15,12 +15,12 @@ if (!userEmail) {
 
 async function runDeduplication() {
   console.log(`🧹 Starting deduplication for user: ${userEmail}`)
-  
+
   try {
     const handle = await tasks.trigger('deduplicate-workouts', {
       userId: userEmail
     })
-    
+
     console.log('✅ Deduplication task triggered successfully!')
     console.log(`📋 Task ID: ${handle.id}`)
     console.log('\nThe task is now running in the background.')

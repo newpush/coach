@@ -79,7 +79,7 @@ export default defineEventHandler(async (event) => {
   }
 
   // Find the file part
-  const filePart = body.find(part => part.name === 'file')
+  const filePart = body.find((part) => part.name === 'file')
   if (!filePart) {
     throw createError({
       statusCode: 400,
@@ -97,7 +97,7 @@ export default defineEventHandler(async (event) => {
   }
 
   const fileData = filePart.data
-  
+
   // Calculate hash
   const hash = crypto.createHash('sha256').update(fileData).digest('hex')
 
@@ -126,12 +126,16 @@ export default defineEventHandler(async (event) => {
   })
 
   // Trigger ingestion task
-  await tasks.trigger('ingest-fit-file', {
-    userId: user.id,
-    fitFileId: fitFile.id
-  }, {
-    concurrencyKey: user.id
-  })
+  await tasks.trigger(
+    'ingest-fit-file',
+    {
+      userId: user.id,
+      fitFileId: fitFile.id
+    },
+    {
+      concurrencyKey: user.id
+    }
+  )
 
   return {
     success: true,

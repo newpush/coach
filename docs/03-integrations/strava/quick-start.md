@@ -14,6 +14,7 @@ npx tsx scripts/test-strava-pacing.ts
 ```
 
 This will:
+
 - Find a Strava integration
 - Fetch a recent workout
 - Ingest pacing data
@@ -25,7 +26,7 @@ This will:
 #### Option A: Via Trigger.dev Job
 
 ```typescript
-import { tasks } from "@trigger.dev/sdk/v3"
+import { tasks } from '@trigger.dev/sdk/v3'
 
 await tasks.trigger('ingest-strava-streams', {
   userId: 'user-uuid',
@@ -47,6 +48,7 @@ const integration = await prisma.integration.findFirst({
 const streams = await fetchStravaActivityStreams(integration, activityId)
 const lapSplits = calculateLapSplits(streams.time.data, streams.distance.data)
 ```
+
 ### 3. Backfill Existing Workouts
 
 To add pacing data to **older workouts** that were synced before this feature:
@@ -66,16 +68,17 @@ npx tsx scripts/backfill-strava-pacing.ts --batch-size 20
 ```
 
 The script will:
+
 - Find all Run/Ride/Walk/Hike workouts without pacing data
 - Process them in batches to respect rate limits
 - Show progress and handle errors gracefully
 - Continue processing in background via Trigger.dev
 
 **Rate Limiting:**
+
 - Processes 10 workouts per batch by default
 - 10-second pause between batches
 - Safe for large workout histories
-
 
 ### 3. Display Pacing Data in UI
 
@@ -85,14 +88,14 @@ Add the component to any workout page:
 <template>
   <div>
     <h1>{{ workout.title }}</h1>
-    
+
     <!-- Add pacing analysis -->
     <PacingAnalysis :workout-id="workout.id" />
   </div>
 </template>
 
 <script setup>
-import PacingAnalysis from '~/components/PacingAnalysis.vue'
+  import PacingAnalysis from '~/components/PacingAnalysis.vue'
 </script>
 ```
 
@@ -103,14 +106,15 @@ import PacingAnalysis from '~/components/PacingAnalysis.vue'
 const response = await fetch(`/api/workouts/${workoutId}/streams`)
 const streams = await response.json()
 
-console.log(streams.avgPacePerKm)      // 4.5 (min/km)
-console.log(streams.lapSplits)         // Array of lap objects
-console.log(streams.pacingStrategy)    // {strategy: "negative_split", ...}
+console.log(streams.avgPacePerKm) // 4.5 (min/km)
+console.log(streams.lapSplits) // Array of lap objects
+console.log(streams.pacingStrategy) // {strategy: "negative_split", ...}
 ```
 
 ## 📊 What You Get
 
 ### Metrics Calculated
+
 - ✅ Lap splits (1km intervals)
 - ✅ Average pace (min/km)
 - ✅ Pace variability (consistency)
@@ -119,6 +123,7 @@ console.log(streams.pacingStrategy)    // {strategy: "negative_split", ...}
 - ✅ Surge detection
 
 ### UI Components
+
 - ✅ Metrics dashboard
 - ✅ Color-coded lap splits table
 - ✅ First/second half comparison
@@ -128,6 +133,7 @@ console.log(streams.pacingStrategy)    // {strategy: "negative_split", ...}
 ## 📁 Files Created/Modified
 
 ### New Files
+
 ```
 server/utils/pacing.ts                    # Pacing calculation utilities
 server/api/workouts/[id]/streams.get.ts   # API endpoint
@@ -139,6 +145,7 @@ docs/strava-pacing-usage.md               # Usage documentation
 ```
 
 ### Modified Files
+
 ```
 server/utils/strava.ts                    # Added fetchStravaActivityStreams()
 prisma/schema.prisma                      # Added WorkoutStream model
@@ -148,18 +155,22 @@ prisma/migrations/                        # Database migration
 ## ⚠️ Important Notes
 
 ### Rate Limits
+
 Strava allows:
+
 - 100 requests per 15 minutes
 - 1,000 requests per day
 
 **Strategy**: Only fetch streams for important activities (races, key workouts)
 
 ### Data Availability
+
 - Pacing data only available for GPS-tracked activities (Run, Ride, Walk)
 - Treadmill/indoor activities without GPS won't have pacing data
 - Manual activities won't have streams
 
 ### Best Practices
+
 1. **Cache aggressively** - Never refetch the same activity
 2. **User control** - Add manual "Fetch Pacing Data" button
 3. **Selective ingestion** - Only fetch for important workouts
@@ -177,20 +188,25 @@ Strava allows:
 ## 🔧 Troubleshooting
 
 ### "Streams data not available"
+
 Run the ingestion job for that workout first.
 
 ### "Rate limit exceeded"
+
 Wait 15 minutes before making more Strava API requests.
 
 ### TypeScript errors
+
 Regenerate Prisma client: `npx prisma generate`
 
 ### "Cannot find module"
+
 Restart your dev server after adding new files.
 
 ## 📚 Documentation
 
 Full documentation available in:
+
 - [`docs/strava-pacing-data-implementation.md`](./strava-pacing-data-implementation.md) - Technical implementation details
 - [`docs/strava-pacing-usage.md`](./strava-pacing-usage.md) - Complete usage guide
 - [`docs/strava-integration.md`](./strava-integration.md) - General Strava integration
@@ -206,16 +222,19 @@ Full documentation available in:
 ## 💡 Example Use Cases
 
 ### For Athletes
+
 - "Did I pace my race evenly?"
 - "How consistent was my interval training?"
 - "Where did I slow down during the marathon?"
 
 ### For Coaches
+
 - "Is this athlete pacing correctly?"
 - "Track progression in pacing consistency"
 - "Identify pacing weaknesses"
 
 ### For AI Analysis
+
 - "Your pacing was 15% more consistent than last month"
 - "Recommend starting 10s/km slower based on your tendency to positive split"
 - "Your best performances came with even pacing"

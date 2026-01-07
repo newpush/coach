@@ -3,6 +3,7 @@
 ## Error Overview
 
 **Error Message:**
+
 ```
 Invalid prisma.account.findUnique() invocation
 The column `(not available)` does not exist in the current database
@@ -71,7 +72,7 @@ Found account: {
 ### Index Structure
 
 ```sql
-CREATE UNIQUE INDEX "Account_pkey" ON public."Account" 
+CREATE UNIQUE INDEX "Account_pkey" ON public."Account"
 USING btree (provider, "providerAccountId")
 ```
 
@@ -111,6 +112,7 @@ pm2 restart coach-wattz  # or your process manager command
 Ensure your deployment pipeline includes Prisma Client generation:
 
 **In `package.json` scripts:**
+
 ```json
 {
   "scripts": {
@@ -121,6 +123,7 @@ Ensure your deployment pipeline includes Prisma Client generation:
 ```
 
 **For Docker deployments**, ensure `Dockerfile` includes:
+
 ```dockerfile
 RUN pnpm prisma generate
 ```
@@ -190,6 +193,7 @@ The adapter expects Prisma to support composite unique lookups using the `provid
 ### Why "(not available)" Appears
 
 When the Prisma Client's metadata is stale:
+
 1. It tries to construct the WHERE clause for the composite key
 2. It can't find the proper column mapping in its metadata
 3. It falls back to `(not available)` as a placeholder
@@ -209,12 +213,14 @@ When the Prisma Client's metadata is stale:
 ## Verification Steps After Fix
 
 1. **Test OAuth Login**
+
    ```bash
    # Navigate to your app and try Google OAuth login
    # Should successfully authenticate without errors
    ```
 
 2. **Check Application Logs**
+
    ```bash
    pm2 logs coach-wattz --lines 50
    # Should not show "Invalid prisma.account.findUnique() invocation" errors

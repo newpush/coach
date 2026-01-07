@@ -6,9 +6,9 @@ This document outlines the standards and procedures for creating and managing Gi
 
 We categorize issues into the following primary types:
 
-*   **Bug Report**: Something isn't working as expected.
-*   **Feature Request**: A suggestion for a new feature or improvement.
-*   **Maintenance**: Refactoring, technical debt, dependencies, or documentation updates.
+- **Bug Report**: Something isn't working as expected.
+- **Feature Request**: A suggestion for a new feature or improvement.
+- **Maintenance**: Refactoring, technical debt, dependencies, or documentation updates.
 
 ## 2. Issue Templates
 
@@ -17,30 +17,37 @@ When creating an issue, please adhere to the following templates.
 ### 🐛 Bug Report Template
 
 **Title**: `[Area/Component] Concise description of the bug`
-*   *Example*: `[Dashboard] Recent activities widget is not clickable`
+
+- _Example_: `[Dashboard] Recent activities widget is not clickable`
 
 **Body**:
 
 ```markdown
 ### 📝 Description
+
 A clear and concise description of what the bug is.
 
 ### 👣 Steps to Reproduce
+
 1. Go to '...'
 2. Click on '...'
 3. Scroll down to '...'
 4. See error
 
 ### 😯 Expected Behavior
+
 A clear and concise description of what you expected to happen.
 
 ### 🐛 Actual Behavior
+
 A clear and concise description of what actually happened.
 
 ### 🖼️ Screenshots / Logs
+
 If applicable, add screenshots or copy-paste error logs to help explain your problem.
 
 ### 💻 Environment
+
 - **Browser/Device**: [e.g. Chrome 120, iPhone 14]
 - **OS**: [e.g. macOS Sonoma, iOS 17]
 - **User ID (if known)**:
@@ -49,44 +56,53 @@ If applicable, add screenshots or copy-paste error logs to help explain your pro
 ### ✨ Feature Request Template
 
 **Title**: `[Area/Component] Concise description of the feature`
-*   *Example*: `[Training Plan] Add "Training Availability" section`
+
+- _Example_: `[Training Plan] Add "Training Availability" section`
 
 **Body**:
 
 ```markdown
 ### 💡 Summary
+
 A clear and concise description of the proposed feature.
 
 ### 🤷 Motivation / Use Case
+
 Why is this feature needed? What problem does it solve for the user?
 
 ### 📋 Detailed Requirements
-*   [ ] Requirement 1
-*   [ ] Requirement 2
-*   [ ] Requirement 3
+
+- [ ] Requirement 1
+- [ ] Requirement 2
+- [ ] Requirement 3
 
 ### ✅ Acceptance Criteria
-*   The user can...
-*   The system should...
+
+- The user can...
+- The system should...
 ```
 
 ### 🛠️ Maintenance / Tech Debt
 
 **Title**: `[Tech/Docs] Concise description of the task`
-*   *Example*: `[Docs] Update API documentation for v2 endpoints`
+
+- _Example_: `[Docs] Update API documentation for v2 endpoints`
 
 **Body**:
 
 ```markdown
 ### 🎯 Goal
+
 What needs to be done?
 
 ### ❓ Why
+
 Why is this maintenance necessary?
 
 ### 🔄 Tasks
-*   [ ] Task 1
-*   [ ] Task 2
+
+- [ ] Task 1
+- [ ] Task 2
 ```
 
 ## 3. Labeling Strategy
@@ -94,34 +110,38 @@ Why is this maintenance necessary?
 We use a specific set of labels to categorize issues. Please apply at least one label from each category where applicable.
 
 ### Type Labels
-*   `bug`: Something isn't working.
-*   `enhancement`: New feature or request.
-*   `documentation`: Improvements or additions to documentation.
-*   `maintenance`: Technical debt, refactoring, dependencies.
-*   `question`: Further information is requested.
+
+- `bug`: Something isn't working.
+- `enhancement`: New feature or request.
+- `documentation`: Improvements or additions to documentation.
+- `maintenance`: Technical debt, refactoring, dependencies.
+- `question`: Further information is requested.
 
 ### Priority Labels
-*   `priority: critical`: Blocker, needs immediate attention.
-*   `priority: high`: Important functionality is broken or missing.
-*   `priority: medium`: Standard priority.
-*   `priority: low`: Nice to have, minor issue.
+
+- `priority: critical`: Blocker, needs immediate attention.
+- `priority: high`: Important functionality is broken or missing.
+- `priority: medium`: Standard priority.
+- `priority: low`: Nice to have, minor issue.
 
 ### Status Labels (Optional - Managed via Board)
-*   `status: pending`: Waiting for triage.
-*   `status: in-progress`: Currently being worked on.
-*   `status: blocked`: Waiting on something else.
-*   `status: review`: Pull request submitted.
+
+- `status: pending`: Waiting for triage.
+- `status: in-progress`: Currently being worked on.
+- `status: blocked`: Waiting on something else.
+- `status: review`: Pull request submitted.
 
 ### Functional Area Labels
-*   `dashboard`: Main dashboard.
-*   `activities`: Activities list/details.
-*   `performance`: Analytics and charts.
-*   `training-plan`: Planning features.
-*   `workouts`: Workout execution and details.
-*   `integrations`: External APIs (Strava, Whoop, etc.).
-*   `ai`: Gemini/LLM related logic.
-*   `ui/ux`: Visual design and user experience.
-*   `backend`: Server-side logic and database.
+
+- `dashboard`: Main dashboard.
+- `activities`: Activities list/details.
+- `performance`: Analytics and charts.
+- `training-plan`: Planning features.
+- `workouts`: Workout execution and details.
+- `integrations`: External APIs (Strava, Whoop, etc.).
+- `ai`: Gemini/LLM related logic.
+- `ui/ux`: Visual design and user experience.
+- `backend`: Server-side logic and database.
 
 ## 4. Best Practices
 

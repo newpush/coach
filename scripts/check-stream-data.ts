@@ -1,4 +1,3 @@
-
 import 'dotenv/config'
 import { prisma } from '../server/utils/db'
 
@@ -37,10 +36,10 @@ async function main() {
   })
 
   console.log('\nSample Stream Analysis:')
-  
+
   for (const stream of streams) {
     console.log(`\nWorkout: ${stream.workout.title} (${stream.workout.source})`)
-    
+
     const analyzeField = (name: string, data: any) => {
       if (!data) return `${name}: NULL`
       if (Array.isArray(data)) {
@@ -59,7 +58,7 @@ async function main() {
 }
 
 main()
-  .catch(e => {
+  .catch((e) => {
     console.error(e)
     process.exit(1)
   })

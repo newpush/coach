@@ -73,9 +73,9 @@ export default defineEventHandler(async (event) => {
 
   // Filter for workouts that have both Power and HR (needed for Efficiency Factor)
   // And filter for workouts that have Normalized Power (needed for Decoupling usually, or use Avg Power if NP missing)
-  const relevantWorkouts = workouts.filter(w => 
-    (w.averageWatts || w.normalizedPower) && w.averageHr && w.averageHr > 0
-  ).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+  const relevantWorkouts = workouts
+    .filter((w) => (w.averageWatts || w.normalizedPower) && w.averageHr && w.averageHr > 0)
+    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
 
   // Calculate EF for each workout
   // EF = Normalized Power / Average Heart Rate
@@ -83,23 +83,23 @@ export default defineEventHandler(async (event) => {
   // If we don't have decoupling pre-calculated, we can't accurately calc it from summary stats alone
   // So we'll check if 'efficiencyFactor' or 'decoupling' is in rawJson, or estimate EF.
 
-  const data = relevantWorkouts.map(w => {
+  const data = relevantWorkouts.map((w) => {
     // Try to get advanced metrics from rawJson or dedicated columns if we had them
     // For now, calculate simple EF
     const power = w.normalizedPower || w.averageWatts || 0
     const hr = w.averageHr || 1
-    
+
     // Simple EF calculation
     const ef = power / hr
-    
+
     // Decoupling (Pw:Hr) - Placeholder or extract from rawJson if available
     // We'll return null if not available, frontend handles it
     let decoupling = null
     if (w.rawJson && typeof w.rawJson === 'object') {
-        // @ts-expect-error - dynamic property access
-        if (w.rawJson.decoupling) decoupling = w.rawJson.decoupling
-        // @ts-expect-error - dynamic property access
-        if (w.rawJson.aerobic_decoupling) decoupling = w.rawJson.aerobic_decoupling
+      // @ts-expect-error - dynamic property access
+      if (w.rawJson.decoupling) decoupling = w.rawJson.decoupling
+      // @ts-expect-error - dynamic property access
+      if (w.rawJson.aerobic_decoupling) decoupling = w.rawJson.aerobic_decoupling
     }
 
     return {

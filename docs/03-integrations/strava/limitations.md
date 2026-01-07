@@ -36,6 +36,7 @@ When fetching activities from Intervals.icu API, Strava-sourced activities retur
 ### 1. Filter Incomplete Activities (Backend)
 
 Modified [`trigger/ingest-intervals.ts`](../trigger/ingest-intervals.ts) to:
+
 - Detect Strava activities with incomplete data
 - Filter them out before saving to database
 - Log skipped activities for monitoring
@@ -43,20 +44,21 @@ Modified [`trigger/ingest-intervals.ts`](../trigger/ingest-intervals.ts) to:
 
 ```typescript
 // Filter out incomplete Strava activities
-const activities = allActivities.filter(activity => {
-  const isIncompleteStrava = activity.source === 'STRAVA' && 
-    activity._note?.includes('not available via the API');
+const activities = allActivities.filter((activity) => {
+  const isIncompleteStrava =
+    activity.source === 'STRAVA' && activity._note?.includes('not available via the API')
   if (isIncompleteStrava) {
-    logger.log(`Skipping incomplete Strava activity: ${activity.id}`);
-    return false;
+    logger.log(`Skipping incomplete Strava activity: ${activity.id}`)
+    return false
   }
-  return true;
-});
+  return true
+})
 ```
 
 ### 2. User Notifications (Frontend)
 
 Added clear messaging in [`app/pages/settings.vue`](../app/pages/settings.vue):
+
 - Warning note under Intervals.icu integration
 - Toast notification when syncing explains the limitation
 - Suggests connecting Strava directly for complete data
@@ -64,6 +66,7 @@ Added clear messaging in [`app/pages/settings.vue`](../app/pages/settings.vue):
 ### 3. Cleanup Script
 
 Created [`scripts/cleanup-incomplete-strava.js`](../scripts/cleanup-incomplete-strava.js) to:
+
 - Identify existing incomplete Strava activities in database
 - Remove them to clean up data
 - Executed successfully, removing 69 incomplete records
@@ -71,15 +74,18 @@ Created [`scripts/cleanup-incomplete-strava.js`](../scripts/cleanup-incomplete-s
 ## Recommendations for Users
 
 ### Option 1: Connect Strava Directly (Recommended)
+
 - Implement direct Strava integration
 - Provides full access to all workout details
 - No API limitations
 
 ### Option 2: Use Intervals.icu for Non-Strava Activities
+
 - Zwift, TrainerRoad, and manually entered workouts work fine
 - Only Strava-synced activities are affected
 
 ### Option 3: Manual Data Entry
+
 - Enter important workouts manually in Intervals.icu
 - These will be accessible via the API
 
@@ -94,6 +100,7 @@ Created [`scripts/cleanup-incomplete-strava.js`](../scripts/cleanup-incomplete-s
 ## Testing
 
 Run diagnostics:
+
 ```bash
 # Check recent activities
 node scripts/test-recent-intervals.js

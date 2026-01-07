@@ -57,45 +57,45 @@ defineRouteMeta({
 
 export default defineEventHandler(async (event) => {
   const session = await getServerSession(event)
-  
+
   if (!session?.user) {
     throw createError({
       statusCode: 401,
       message: 'Unauthorized'
     })
   }
-  
+
   const userId = (session.user as any).id
   const workoutId = event.context.params?.id
   const body = await readBody(event)
-  
+
   if (!workoutId) {
     throw createError({
       statusCode: 400,
       message: 'Workout ID is required'
     })
   }
-  
+
   try {
     // Check if workout exists and belongs to user
     const existing = await prisma.plannedWorkout.findUnique({
       where: { id: workoutId }
     })
-    
+
     if (!existing) {
       throw createError({
         statusCode: 404,
         message: 'Workout not found'
       })
     }
-    
+
     if (existing.userId !== userId) {
       throw createError({
         statusCode: 403,
         message: 'Not authorized to update this workout'
       })
     }
-    
+
     // Update workout locally first (optimistic update)
     const updated = await prisma.plannedWorkout.update({
       where: { id: workoutId },
@@ -112,7 +112,7 @@ export default defineEventHandler(async (event) => {
         syncStatus: 'PENDING'
       }
     })
-    
+
     // Attempt sync to Intervals.icu
     const syncResult = await syncPlannedWorkoutToIntervals(
       'UPDATE',
@@ -128,7 +128,7 @@ export default defineEventHandler(async (event) => {
       },
       userId
     )
-    
+
     // Update sync status based on result
     const finalWorkout = await prisma.plannedWorkout.update({
       where: { id: workoutId },
@@ -138,7 +138,7 @@ export default defineEventHandler(async (event) => {
         syncError: syncResult.error || null
       }
     })
-    
+
     return {
       success: true,
       workout: finalWorkout,

@@ -46,19 +46,19 @@ export default defineEventHandler(async (event) => {
   if (event.method === 'HEAD') {
     return 'OK'
   }
-  
+
   // 2. Parse Payload
   // The notification payload is sent as form-data or urlencoded
   const body = await readBody(event)
   const query = getQuery(event)
   const headers = getRequestHeaders(event)
-  
+
   // Combine body and query (Withings can send params in either depending on setup)
   // Usually notifications are POST with body params
   const params = { ...query, ...(typeof body === 'object' ? body : {}) }
-  
+
   const { userid, appli, startdate, enddate } = params
-  
+
   const log = await logWebhookRequest({
     provider: 'withings',
     eventType: 'NOTIFICATION', // Withings sends generic notifications
@@ -66,9 +66,9 @@ export default defineEventHandler(async (event) => {
     headers,
     status: 'PENDING'
   })
-  
+
   console.log('[Withings Webhook] Received notification:', params)
-  
+
   if (!userid) {
     if (log) await updateWebhookStatus(log.id, 'FAILED', 'Missing userid')
     throw createError({
@@ -88,7 +88,12 @@ export default defineEventHandler(async (event) => {
 
   if (!integration) {
     console.warn(`[Withings Webhook] Integration not found for external user ${userid}`)
-    if (log) await updateWebhookStatus(log.id, 'IGNORED', `Integration not found for external user ${userid}`)
+    if (log)
+      await updateWebhookStatus(
+        log.id,
+        'IGNORED',
+        `Integration not found for external user ${userid}`
+      )
     // Return 200 to acknowledge receipt even if we can't process it (to prevent retries)
     return 'OK'
   }
@@ -97,28 +102,35 @@ export default defineEventHandler(async (event) => {
   // We'll trigger the ingestion task for the specific range
   // Default to today if no dates provided (though notifications usually include them)
   const now = new Date()
-  const start = startdate ? new Date(parseInt(startdate) * 1000) : new Date(now.setHours(0,0,0,0))
-  const end = enddate ? new Date(parseInt(enddate) * 1000) : new Date(now.setHours(23,59,59,999))
-  
+  const start = startdate
+    ? new Date(parseInt(startdate) * 1000)
+    : new Date(now.setHours(0, 0, 0, 0))
+  const end = enddate ? new Date(parseInt(enddate) * 1000) : new Date(now.setHours(23, 59, 59, 999))
+
   // Add a buffer to start/end to ensure we catch everything around the event
   // e.g. -1 day for start, +1 day for end
   const bufferStart = new Date(start.getTime() - 24 * 60 * 60 * 1000)
   const bufferEnd = new Date(end.getTime() + 24 * 60 * 60 * 1000)
 
   try {
-    await tasks.trigger("ingest-withings", {
-      userId: integration.userId,
-      startDate: bufferStart.toISOString(),
-      endDate: bufferEnd.toISOString()
-    }, {
-      concurrencyKey: integration.userId
-    })
-    
+    await tasks.trigger(
+      'ingest-withings',
+      {
+        userId: integration.userId,
+        startDate: bufferStart.toISOString(),
+        endDate: bufferEnd.toISOString()
+      },
+      {
+        concurrencyKey: integration.userId
+      }
+    )
+
     console.log(`[Withings Webhook] Triggered ingestion for user ${integration.userId}`)
     if (log) await updateWebhookStatus(log.id, 'PROCESSED')
   } catch (error: any) {
     console.error('[Withings Webhook] Failed to trigger ingestion:', error)
-    if (log) await updateWebhookStatus(log.id, 'FAILED', error.message || 'Failed to trigger ingestion')
+    if (log)
+      await updateWebhookStatus(log.id, 'FAILED', error.message || 'Failed to trigger ingestion')
     // Still return 200 so Withings doesn't retry indefinitely
   }
 

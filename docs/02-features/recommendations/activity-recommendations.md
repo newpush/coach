@@ -7,9 +7,11 @@ AI-powered workout recommendation system that analyzes athlete's current recover
 ## Feature Components
 
 ### Phase 1: Today's Activity Recommendation
+
 **User Story:** As an athlete, I want AI to analyze my current recovery and today's planned workout to recommend whether I should proceed as planned, modify the workout, or take a rest day.
 
 ### Phase 2: Weekly Planning
+
 **User Story:** As an athlete, I want AI to review my week's training plan and suggest optimizations based on my fitness trends, recovery patterns, and training goals.
 
 ---
@@ -19,6 +21,7 @@ AI-powered workout recommendation system that analyzes athlete's current recover
 ### Requirements
 
 #### Data Inputs
+
 1. **Today's Planned Workout** (from Intervals.icu)
    - Duration, intensity, TSS, type
    - Structured intervals/zones
@@ -34,14 +37,15 @@ AI-powered workout recommendation system that analyzes athlete's current recover
    - Last 7 days workouts
    - Recent TSS/load
    - CTL/ATL trends (fitness/fatigue)
-   
 4. **Athlete Profile**
    - FTP, weight, max HR
    - Training goals/preferences
    - Historical recovery patterns
 
 #### AI Analysis Output
+
 Structured JSON with:
+
 ```json
 {
   "recommendation": "proceed" | "modify" | "reduce_intensity" | "rest",
@@ -77,6 +81,7 @@ Structured JSON with:
 ### Technical Implementation
 
 #### 1. Backend API Endpoint
+
 **File:** `server/api/recommendations/today.post.ts`
 
 ```typescript
@@ -85,17 +90,17 @@ Structured JSON with:
 export default defineEventHandler(async (event) => {
   const session = await getServerSession(event)
   const userId = (session.user as any).id
-  
+
   // Trigger background job
   const handle = await tasks.trigger('recommend-today-activity', {
     userId,
     date: new Date()
   })
-  
+
   return {
     success: true,
     jobId: handle.id,
-    message: 'Generating today\'s recommendation'
+    message: "Generating today's recommendation"
   }
 })
 ```
@@ -110,7 +115,7 @@ export default defineEventHandler(async (event) => {
   const userId = (session.user as any).id
   const today = new Date()
   today.setHours(0, 0, 0, 0)
-  
+
   // Find most recent recommendation for today
   const recommendation = await prisma.activityRecommendation.findFirst({
     where: {
@@ -119,47 +124,49 @@ export default defineEventHandler(async (event) => {
     },
     orderBy: { createdAt: 'desc' }
   })
-  
+
   return recommendation
 })
 ```
 
 #### 2. Database Schema Addition
+
 **File:** `prisma/schema.prisma`
 
 Add new model:
+
 ```prisma
 model ActivityRecommendation {
   id          String   @id @default(uuid())
   userId      String
   date        DateTime @db.Date
-  
+
   // Analysis results
   recommendation String   // proceed, modify, reduce_intensity, rest
   confidence     Float    // 0.0 to 1.0
   reasoning      String   @db.Text
-  
+
   // Structured JSON with full analysis
   analysisJson   Json?
-  
+
   // Linked planned workout (if exists)
   plannedWorkoutId String?
   plannedWorkout   PlannedWorkout? @relation(fields: [plannedWorkoutId], references: [id])
-  
+
   // Status tracking
   status      String   @default("PENDING") // PENDING, PROCESSING, COMPLETED, FAILED
   modelVersion String?
-  
+
   // User actions
   userAccepted Boolean? // Did user accept the recommendation?
   userModified Boolean? // Did user modify before accepting?
   appliedToIntervals Boolean? @default(false) // Synced to Intervals.icu?
-  
+
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
+
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
-  
+
   @@index([userId, date])
 }
 
@@ -177,68 +184,69 @@ model User {
 ```
 
 #### 3. Trigger Job
+
 **File:** `trigger/recommend-today-activity.ts`
 
 ```typescript
-import { logger, task } from "@trigger.dev/sdk/v3";
-import { generateStructuredAnalysis, buildWorkoutSummary } from "../server/utils/gemini";
-import { prisma } from "../server/utils/db";
+import { logger, task } from '@trigger.dev/sdk/v3'
+import { generateStructuredAnalysis, buildWorkoutSummary } from '../server/utils/gemini'
+import { prisma } from '../server/utils/db'
 
 const recommendationSchema = {
-  type: "object",
+  type: 'object',
   properties: {
     recommendation: {
-      type: "string",
-      enum: ["proceed", "modify", "reduce_intensity", "rest"]
+      type: 'string',
+      enum: ['proceed', 'modify', 'reduce_intensity', 'rest']
     },
-    confidence: { type: "number" },
-    reasoning: { type: "string" },
+    confidence: { type: 'number' },
+    reasoning: { type: 'string' },
     planned_workout: {
-      type: "object",
+      type: 'object',
       properties: {
-        original_title: { type: "string" },
-        original_tss: { type: "number" },
-        original_duration_min: { type: "number" }
+        original_title: { type: 'string' },
+        original_tss: { type: 'number' },
+        original_duration_min: { type: 'number' }
       }
     },
     suggested_modifications: {
-      type: "object",
+      type: 'object',
       properties: {
-        action: { type: "string" },
-        new_title: { type: "string" },
-        new_tss: { type: "number" },
-        new_duration_min: { type: "number" },
-        zone_adjustments: { type: "string" },
-        description: { type: "string" }
+        action: { type: 'string' },
+        new_title: { type: 'string' },
+        new_tss: { type: 'number' },
+        new_duration_min: { type: 'number' },
+        zone_adjustments: { type: 'string' },
+        description: { type: 'string' }
       }
     },
     recovery_analysis: {
-      type: "object",
+      type: 'object',
       properties: {
-        hrv_status: { type: "string" },
-        sleep_quality: { type: "string" },
-        fatigue_level: { type: "string" },
-        readiness_score: { type: "number" }
+        hrv_status: { type: 'string' },
+        sleep_quality: { type: 'string' },
+        fatigue_level: { type: 'string' },
+        readiness_score: { type: 'number' }
       }
     },
     key_factors: {
-      type: "array",
-      items: { type: "string" }
+      type: 'array',
+      items: { type: 'string' }
     }
   },
-  required: ["recommendation", "confidence", "reasoning"]
-};
+  required: ['recommendation', 'confidence', 'reasoning']
+}
 
 export const recommendTodayActivityTask = task({
-  id: "recommend-today-activity",
+  id: 'recommend-today-activity',
   maxDuration: 300,
   run: async (payload: { userId: string; date: Date }) => {
-    const { userId, date } = payload;
-    
+    const { userId, date } = payload
+
     // Set date to start of day
-    const today = new Date(date);
-    today.setHours(0, 0, 0, 0);
-    
+    const today = new Date(date)
+    today.setHours(0, 0, 0, 0)
+
     // Fetch all required data
     const [plannedWorkout, todayMetric, recentWorkouts, user] = await Promise.all([
       // Today's planned workout
@@ -246,12 +254,12 @@ export const recommendTodayActivityTask = task({
         where: { userId, date: today },
         orderBy: { createdAt: 'desc' }
       }),
-      
+
       // Today's recovery metrics
       prisma.dailyMetric.findUnique({
         where: { userId_date: { userId, date: today } }
       }),
-      
+
       // Last 7 days of workouts for context
       prisma.workout.findMany({
         where: {
@@ -261,14 +269,14 @@ export const recommendTodayActivityTask = task({
         },
         orderBy: { date: 'desc' }
       }),
-      
+
       // User profile
       prisma.user.findUnique({
         where: { id: userId },
         select: { ftp: true, weight: true, maxHr: true }
       })
-    ]);
-    
+    ])
+
     // Build comprehensive prompt
     const prompt = `You are an expert cycling coach analyzing today's training for your athlete.
 
@@ -278,21 +286,29 @@ ATHLETE PROFILE:
 - Max HR: ${user?.maxHr || 'Unknown'} bpm
 
 TODAY'S PLANNED WORKOUT:
-${plannedWorkout ? `
+${
+  plannedWorkout
+    ? `
 - Title: ${plannedWorkout.title}
 - Duration: ${plannedWorkout.durationSec ? Math.round(plannedWorkout.durationSec / 60) : 'Unknown'} minutes
 - TSS: ${plannedWorkout.tss || 'Unknown'}
 - Type: ${plannedWorkout.type || 'Unknown'}
 - Description: ${plannedWorkout.description || 'None'}
-` : 'No workout planned for today'}
+`
+    : 'No workout planned for today'
+}
 
 TODAY'S RECOVERY METRICS:
-${todayMetric ? `
+${
+  todayMetric
+    ? `
 - Recovery Score: ${todayMetric.recoveryScore}%
 - HRV: ${todayMetric.hrv} ms
 - Resting HR: ${todayMetric.restingHr} bpm
 - Sleep: ${todayMetric.hoursSlept?.toFixed(1)} hours (Score: ${todayMetric.sleepScore}%)
-` : 'No recovery data available'}
+`
+    : 'No recovery data available'
+}
 
 RECENT TRAINING (Last 7 days):
 ${recentWorkouts.length > 0 ? buildWorkoutSummary(recentWorkouts) : 'No recent workouts'}
@@ -311,15 +327,15 @@ DECISION CRITERIA:
 - Poor sleep (< 6 hours): Reduce volume/intensity
 - High recent TSS (> 400 in 3 days): Consider recovery
 
-Provide specific, actionable recommendations with clear reasoning.`;
+Provide specific, actionable recommendations with clear reasoning.`
 
     // Generate recommendation
     const analysis = await generateStructuredAnalysis(
       prompt,
       recommendationSchema,
       'pro' // Use thinking model for important decisions
-    );
-    
+    )
+
     // Save to database
     const recommendation = await prisma.activityRecommendation.create({
       data: {
@@ -333,23 +349,24 @@ Provide specific, actionable recommendations with clear reasoning.`;
         status: 'COMPLETED',
         modelVersion: 'gemini-2.0-flash-thinking-exp-1219'
       }
-    });
-    
-    logger.log("Recommendation generated", {
+    })
+
+    logger.log('Recommendation generated', {
       recommendationId: recommendation.id,
       decision: analysis.recommendation
-    });
-    
+    })
+
     return {
       success: true,
       recommendationId: recommendation.id,
       recommendation: analysis.recommendation
-    };
+    }
   }
-});
+})
 ```
 
 #### 4. Intervals.icu Update API
+
 **File:** `server/api/integrations/intervals/update-workout.post.ts`
 
 ```typescript
@@ -359,62 +376,63 @@ export default defineEventHandler(async (event) => {
   const session = await getServerSession(event)
   const userId = (session.user as any).id
   const body = await readBody(event)
-  
+
   const { workoutId, updates } = body
   // updates: { title?, description?, tss?, durationSec?, ... }
-  
+
   // Get Intervals.icu integration
   const integration = await prisma.integration.findFirst({
     where: { userId, provider: 'intervals' }
   })
-  
+
   if (!integration) {
     throw createError({ statusCode: 400, message: 'Intervals.icu not connected' })
   }
-  
+
   // Get planned workout
   const workout = await prisma.plannedWorkout.findUnique({
     where: { id: workoutId }
   })
-  
+
   if (!workout || workout.userId !== userId) {
     throw createError({ statusCode: 404, message: 'Workout not found' })
   }
-  
+
   // Update in Intervals.icu via API
   const intervalsAPI = `https://intervals.icu/api/v1/athlete/${integration.externalUserId}`
   const response = await fetch(`${intervalsAPI}/events/${workout.externalId}`, {
     method: 'PUT',
     headers: {
-      'Authorization': `Basic ${Buffer.from(`API_KEY:${integration.accessToken}`).toString('base64')}`,
+      Authorization: `Basic ${Buffer.from(`API_KEY:${integration.accessToken}`).toString('base64')}`,
       'Content-Type': 'application/json'
     },
     body: JSON.stringify({
       name: updates.title || workout.title,
       description: updates.description || workout.description,
-      movingTime: updates.durationSec || workout.durationSec,
+      movingTime: updates.durationSec || workout.durationSec
       // Add other fields as needed
     })
   })
-  
+
   if (!response.ok) {
     throw createError({
       statusCode: response.status,
       message: 'Failed to update workout in Intervals.icu'
     })
   }
-  
+
   // Update local database
   await prisma.plannedWorkout.update({
     where: { id: workoutId },
     data: updates
   })
-  
+
   return { success: true, message: 'Workout updated successfully' }
 })
 ```
 
 #### 5. Dashboard UI Addition
+
 **File:** `app/pages/dashboard.vue`
 
 Add new card after Athlete Profile:
@@ -574,114 +592,114 @@ Add script methods:
 
 ```vue
 <script setup lang="ts">
-// ... existing code ...
+  // ... existing code ...
 
-const showRecommendationModal = ref(false)
-const todayRecommendation = ref<any>(null)
-const loadingRecommendation = ref(false)
-const generatingRecommendation = ref(false)
-const applyingRecommendation = ref(false)
+  const showRecommendationModal = ref(false)
+  const todayRecommendation = ref<any>(null)
+  const loadingRecommendation = ref(false)
+  const generatingRecommendation = ref(false)
+  const applyingRecommendation = ref(false)
 
-// Fetch today's recommendation on load
-async function fetchTodayRecommendation() {
-  if (!intervalsConnected.value) return
-  
-  try {
-    loadingRecommendation.value = true
-    todayRecommendation.value = await $fetch('/api/recommendations/today')
-  } catch (error) {
-    console.error('Error fetching recommendation:', error)
-  } finally {
-    loadingRecommendation.value = false
+  // Fetch today's recommendation on load
+  async function fetchTodayRecommendation() {
+    if (!intervalsConnected.value) return
+
+    try {
+      loadingRecommendation.value = true
+      todayRecommendation.value = await $fetch('/api/recommendations/today')
+    } catch (error) {
+      console.error('Error fetching recommendation:', error)
+    } finally {
+      loadingRecommendation.value = false
+    }
   }
-}
 
-// Generate new recommendation
-async function generateTodayRecommendation() {
-  generatingRecommendation.value = true
-  try {
-    await $fetch('/api/recommendations/today', { method: 'POST' })
-    
-    // Poll for result
-    setTimeout(async () => {
-      await fetchTodayRecommendation()
+  // Generate new recommendation
+  async function generateTodayRecommendation() {
+    generatingRecommendation.value = true
+    try {
+      await $fetch('/api/recommendations/today', { method: 'POST' })
+
+      // Poll for result
+      setTimeout(async () => {
+        await fetchTodayRecommendation()
+        generatingRecommendation.value = false
+      }, 5000)
+    } catch (error) {
+      console.error('Error generating recommendation:', error)
       generatingRecommendation.value = false
-    }, 5000)
-  } catch (error) {
-    console.error('Error generating recommendation:', error)
-    generatingRecommendation.value = false
+    }
   }
-}
 
-// Apply recommendation to Intervals.icu
-async function applyRecommendation() {
-  if (!todayRecommendation.value?.plannedWorkoutId) return
-  
-  applyingRecommendation.value = true
-  try {
-    const modifications = todayRecommendation.value.analysisJson.suggested_modifications
-    
-    await $fetch('/api/integrations/intervals/update-workout', {
-      method: 'POST',
-      body: {
-        workoutId: todayRecommendation.value.plannedWorkoutId,
-        updates: {
-          title: modifications.new_title,
-          description: modifications.description,
-          durationSec: modifications.new_duration_min * 60,
-          // Add TSS and other fields as needed
+  // Apply recommendation to Intervals.icu
+  async function applyRecommendation() {
+    if (!todayRecommendation.value?.plannedWorkoutId) return
+
+    applyingRecommendation.value = true
+    try {
+      const modifications = todayRecommendation.value.analysisJson.suggested_modifications
+
+      await $fetch('/api/integrations/intervals/update-workout', {
+        method: 'POST',
+        body: {
+          workoutId: todayRecommendation.value.plannedWorkoutId,
+          updates: {
+            title: modifications.new_title,
+            description: modifications.description,
+            durationSec: modifications.new_duration_min * 60
+            // Add TSS and other fields as needed
+          }
         }
-      }
-    })
-    
-    // Update local state
-    await prisma.activityRecommendation.update({
-      where: { id: todayRecommendation.value.id },
-      data: { 
-        userAccepted: true,
-        appliedToIntervals: true 
-      }
-    })
-    
-    showRecommendationModal.value = false
-    // Show success toast
-  } catch (error) {
-    console.error('Error applying recommendation:', error)
-    // Show error toast
-  } finally {
-    applyingRecommendation.value = false
+      })
+
+      // Update local state
+      await prisma.activityRecommendation.update({
+        where: { id: todayRecommendation.value.id },
+        data: {
+          userAccepted: true,
+          appliedToIntervals: true
+        }
+      })
+
+      showRecommendationModal.value = false
+      // Show success toast
+    } catch (error) {
+      console.error('Error applying recommendation:', error)
+      // Show error toast
+    } finally {
+      applyingRecommendation.value = false
+    }
   }
-}
 
-function openRecommendationModal() {
-  showRecommendationModal.value = true
-}
-
-function getRecommendationColor(rec: string) {
-  const colors: Record<string, string> = {
-    'proceed': 'success',
-    'modify': 'warning',
-    'reduce_intensity': 'warning',
-    'rest': 'error'
+  function openRecommendationModal() {
+    showRecommendationModal.value = true
   }
-  return colors[rec] || 'neutral'
-}
 
-function getRecommendationLabel(rec: string) {
-  const labels: Record<string, string> = {
-    'proceed': '✓ Proceed as Planned',
-    'modify': '⟳ Modify Workout',
-    'reduce_intensity': '↓ Reduce Intensity',
-    'rest': '⏸ Rest Day'
+  function getRecommendationColor(rec: string) {
+    const colors: Record<string, string> = {
+      proceed: 'success',
+      modify: 'warning',
+      reduce_intensity: 'warning',
+      rest: 'error'
+    }
+    return colors[rec] || 'neutral'
   }
-  return labels[rec] || rec
-}
 
-// Fetch on mount
-onMounted(async () => {
-  // ... existing onMounted code ...
-  await fetchTodayRecommendation()
-})
+  function getRecommendationLabel(rec: string) {
+    const labels: Record<string, string> = {
+      proceed: '✓ Proceed as Planned',
+      modify: '⟳ Modify Workout',
+      reduce_intensity: '↓ Reduce Intensity',
+      rest: '⏸ Rest Day'
+    }
+    return labels[rec] || rec
+  }
+
+  // Fetch on mount
+  onMounted(async () => {
+    // ... existing onMounted code ...
+    await fetchTodayRecommendation()
+  })
 </script>
 ```
 
@@ -692,6 +710,7 @@ onMounted(async () => {
 ### Requirements
 
 #### Data Inputs
+
 1. **Week's Planned Workouts** (7 days)
 2. **Recent Training History** (last 3-4 weeks)
 3. **Current Fitness Metrics** (CTL, ATL, TSB)
@@ -699,7 +718,9 @@ onMounted(async () => {
 5. **Athlete Goals** (event dates, focus areas)
 
 #### AI Analysis Output
+
 Structured JSON with array of workout recommendations:
+
 ```json
 {
   "week_overview": {
@@ -729,6 +750,7 @@ Structured JSON with array of workout recommendations:
 ### Implementation Notes
 
 Similar structure to Phase 1 but with:
+
 - `trigger/recommend-weekly-plan.ts`
 - `server/api/recommendations/week.post.ts`
 - `server/api/recommendations/week.get.ts`
@@ -751,6 +773,7 @@ npx prisma migrate dev --name add_activity_recommendations
 ## Testing Checklist
 
 ### Phase 1
+
 - [ ] Generate recommendation with no planned workout
 - [ ] Generate recommendation with planned workout
 - [ ] Test with various recovery scores (low, medium, high)
@@ -762,6 +785,7 @@ npx prisma migrate dev --name add_activity_recommendations
 - [ ] Test recommendation refresh
 
 ### Phase 2
+
 - [ ] Generate weekly plan with full schedule
 - [ ] Generate plan with partial schedule
 - [ ] Test selective workout updates

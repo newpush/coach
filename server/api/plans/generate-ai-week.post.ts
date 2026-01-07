@@ -1,5 +1,5 @@
 import { prisma } from '../../utils/db'
-import { tasks } from "@trigger.dev/sdk/v3"
+import { tasks } from '@trigger.dev/sdk/v3'
 import { getServerSession } from '../../utils/session'
 
 export default defineEventHandler(async (event) => {
@@ -16,7 +16,7 @@ export default defineEventHandler(async (event) => {
 
   // Verify ownership
   const block = await prisma.trainingBlock.findFirst({
-    where: { 
+    where: {
       id: blockId,
       plan: { userId: session.user.id }
     }
@@ -33,7 +33,7 @@ export default defineEventHandler(async (event) => {
       blockId: blockId
     }
   })
-  
+
   if (!week) {
     throw createError({ statusCode: 404, message: 'Week not found' })
   }
@@ -47,8 +47,8 @@ export default defineEventHandler(async (event) => {
     trainingWeekId: week.id // Pass the specific training week ID to link to
   })
 
-  return { 
-    success: true, 
-    jobId: handle.id 
+  return {
+    success: true,
+    jobId: handle.id
   }
 })

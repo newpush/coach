@@ -3,39 +3,39 @@ import { prisma } from '../server/utils/db'
 
 async function main() {
   console.log('=== Auth Bypass Debug Tool ===\n')
-  
+
   const bypassEmail = process.env.AUTH_BYPASS_USER
-  
+
   if (!bypassEmail) {
     console.error('❌ AUTH_BYPASS_USER not set')
     return
   }
-  
+
   console.log(`Bypass Email: ${bypassEmail}\n`)
-  
+
   // 1. Check user
   const user = await prisma.user.findUnique({
     where: { email: bypassEmail }
   })
-  
+
   if (!user) {
     console.error('❌ User not found!')
     return
   }
-  
+
   console.log('✓ User found:', {
     id: user.id,
     name: user.name,
     email: user.email,
     isAdmin: user.isAdmin
   })
-  
+
   // 2. Check sessions
   const sessions = await prisma.session.findMany({
     where: { userId: user.id },
     orderBy: { expires: 'desc' }
   })
-  
+
   console.log(`\nFound ${sessions.length} session(s):`)
   sessions.forEach((session, i) => {
     const isValid = session.expires > new Date()
@@ -44,17 +44,17 @@ async function main() {
     console.log(`    Expires: ${session.expires.toISOString()}`)
     console.log(`    Status: ${isValid ? '✓ VALID' : '✗ EXPIRED'}`)
   })
-  
+
   // 3. Check accounts
   const accounts = await prisma.account.findMany({
     where: { userId: user.id }
   })
-  
+
   console.log(`\nFound ${accounts.length} connected account(s):`)
   accounts.forEach((account: any) => {
     console.log(`  - ${account.provider} (${account.providerAccountId})`)
   })
-  
+
   // 4. Test session query (simulating what next-auth does)
   console.log('\n=== Testing Session Lookup ===')
   if (sessions.length > 0) {
@@ -63,13 +63,13 @@ async function main() {
       where: { sessionToken: testSession.sessionToken },
       include: { user: true }
     })
-    
+
     console.log('Session lookup result:', lookupResult ? '✓ Found' : '✗ Not found')
     if (lookupResult) {
       console.log('  User from session:', lookupResult.user.email)
     }
   }
-  
+
   console.log('\n=== Recommendations ===')
   console.log('1. Check browser DevTools > Application > Cookies for localhost:3099')
   console.log('   Looking for: next-auth.session-token')

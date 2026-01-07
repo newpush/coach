@@ -13,7 +13,7 @@ async function checkScores() {
         profileLastUpdated: true
       }
     })
-    
+
     console.log('User Profile Scores:')
     console.log(JSON.stringify(user, null, 2))
   } catch (error) {

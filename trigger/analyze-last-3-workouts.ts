@@ -1,103 +1,105 @@
-import { logger, task } from "@trigger.dev/sdk/v3";
-import { generateStructuredAnalysis, buildWorkoutSummary } from "../server/utils/gemini";
-import { prisma } from "../server/utils/db";
-import { workoutRepository } from "../server/utils/repositories/workoutRepository";
-import { userReportsQueue } from "./queues";
-import { getUserTimezone, formatUserDate, getStartOfDaysAgoUTC } from "../server/utils/date";
+import { logger, task } from '@trigger.dev/sdk/v3'
+import { generateStructuredAnalysis, buildWorkoutSummary } from '../server/utils/gemini'
+import { prisma } from '../server/utils/db'
+import { workoutRepository } from '../server/utils/repositories/workoutRepository'
+import { userReportsQueue } from './queues'
+import { getUserTimezone, formatUserDate, getStartOfDaysAgoUTC } from '../server/utils/date'
 
 // Reuse the flexible analysis schema (same as workout analysis)
 const analysisSchema = {
-  type: "object",
+  type: 'object',
   properties: {
     type: {
-      type: "string",
-      description: "Type of analysis: workout, weekly_report, planning, comparison",
-      enum: ["workout", "weekly_report", "planning", "comparison"]
+      type: 'string',
+      description: 'Type of analysis: workout, weekly_report, planning, comparison',
+      enum: ['workout', 'weekly_report', 'planning', 'comparison']
     },
     title: {
-      type: "string",
-      description: "Title of the analysis"
+      type: 'string',
+      description: 'Title of the analysis'
     },
     date: {
-      type: "string",
-      description: "Date or date range of the analysis"
+      type: 'string',
+      description: 'Date or date range of the analysis'
     },
     executive_summary: {
-      type: "string",
-      description: "2-3 sentence high-level summary of key findings"
+      type: 'string',
+      description: '2-3 sentence high-level summary of key findings'
     },
     sections: {
-      type: "array",
-      description: "Analysis sections with status and points",
+      type: 'array',
+      description: 'Analysis sections with status and points',
       items: {
-        type: "object",
+        type: 'object',
         properties: {
           title: {
-            type: "string",
-            description: "Section title (e.g., Training Progression, Recovery Patterns)"
+            type: 'string',
+            description: 'Section title (e.g., Training Progression, Recovery Patterns)'
           },
           status: {
-            type: "string",
-            description: "Overall assessment",
-            enum: ["excellent", "good", "moderate", "needs_improvement", "poor"]
+            type: 'string',
+            description: 'Overall assessment',
+            enum: ['excellent', 'good', 'moderate', 'needs_improvement', 'poor']
           },
           status_label: {
-            type: "string",
-            description: "Display label for status"
+            type: 'string',
+            description: 'Display label for status'
           },
           analysis_points: {
-            type: "array",
-            description: "Detailed analysis points for this section. Each point should be 1-2 sentences maximum as a separate array item. Do NOT combine multiple points into paragraph blocks.",
+            type: 'array',
+            description:
+              'Detailed analysis points for this section. Each point should be 1-2 sentences maximum as a separate array item. Do NOT combine multiple points into paragraph blocks.',
             items: {
-              type: "string"
+              type: 'string'
             }
           }
         },
-        required: ["title", "status", "status_label", "analysis_points"]
+        required: ['title', 'status', 'status_label', 'analysis_points']
       }
     },
     recommendations: {
-      type: "array",
-      description: "Actionable coaching recommendations",
+      type: 'array',
+      description: 'Actionable coaching recommendations',
       items: {
-        type: "object",
+        type: 'object',
         properties: {
           title: {
-            type: "string",
-            description: "Recommendation title"
+            type: 'string',
+            description: 'Recommendation title'
           },
           priority: {
-            type: "string",
-            description: "Priority level",
-            enum: ["high", "medium", "low"]
+            type: 'string',
+            description: 'Priority level',
+            enum: ['high', 'medium', 'low']
           },
           description: {
-            type: "string",
-            description: "Detailed recommendation"
+            type: 'string',
+            description: 'Detailed recommendation'
           }
         },
-        required: ["title", "priority", "description"]
+        required: ['title', 'priority', 'description']
       }
     },
     metrics_summary: {
-      type: "object",
-      description: "Key metrics across the workouts",
+      type: 'object',
+      description: 'Key metrics across the workouts',
       properties: {
-        total_duration_minutes: { type: "number" },
-        total_tss: { type: "number" },
-        avg_power: { type: "number" },
-        avg_heart_rate: { type: "number" },
-        total_distance_km: { type: "number" }
+        total_duration_minutes: { type: 'number' },
+        total_tss: { type: 'number' },
+        avg_power: { type: 'number' },
+        avg_heart_rate: { type: 'number' },
+        total_distance_km: { type: 'number' }
       }
     }
   },
-  required: ["type", "title", "executive_summary", "sections"]
+  required: ['type', 'title', 'executive_summary', 'sections']
 }
 
 function buildAnalysisPrompt(workouts: any[], user: any, timezone: string) {
-  const dateRange = workouts.length > 0 
-    ? `${formatUserDate(workouts[workouts.length - 1].date, timezone)} - ${formatUserDate(workouts[0].date, timezone)}`
-    : 'Unknown';
+  const dateRange =
+    workouts.length > 0
+      ? `${formatUserDate(workouts[workouts.length - 1].date, timezone)} - ${formatUserDate(workouts[0].date, timezone)}`
+      : 'Unknown'
 
   return `You are a friendly, supportive cycling coach analyzing your athlete's recent training progression.
 
@@ -132,66 +134,69 @@ OUTPUT: Generate a structured JSON analysis with:
 - Specific, actionable recommendations (3-5 items)
 - Metrics summary with aggregate data
 
-Be specific with numbers and trends. Highlight both strengths and areas for improvement.`;
+Be specific with numbers and trends. Highlight both strengths and areas for improvement.`
 }
 
 function convertStructuredToMarkdown(analysis: any): string {
-  let markdown = `# ${analysis.title}\n\n`;
-  markdown += `**Period**: ${analysis.date}\n\n`;
-  markdown += `## Quick Take\n\n${analysis.executive_summary}\n\n`;
-  
+  let markdown = `# ${analysis.title}\n\n`
+  markdown += `**Period**: ${analysis.date}\n\n`
+  markdown += `## Quick Take\n\n${analysis.executive_summary}\n\n`
+
   if (analysis.sections && analysis.sections.length > 0) {
-    markdown += `## Detailed Analysis\n\n`;
+    markdown += `## Detailed Analysis\n\n`
     for (const section of analysis.sections) {
-      markdown += `### ${section.title}\n\n`;
-      markdown += `**Status**: ${section.status_label}\n\n`;
+      markdown += `### ${section.title}\n\n`
+      markdown += `**Status**: ${section.status_label}\n\n`
       if (section.analysis_points && section.analysis_points.length > 0) {
         for (const point of section.analysis_points) {
-          markdown += `- ${point}\n`;
+          markdown += `- ${point}\n`
         }
-        markdown += '\n';
+        markdown += '\n'
       }
     }
   }
-  
+
   if (analysis.recommendations && analysis.recommendations.length > 0) {
-    markdown += `## Recommendations\n\n`;
+    markdown += `## Recommendations\n\n`
     for (const rec of analysis.recommendations) {
-      markdown += `### ${rec.title} (${rec.priority} priority)\n\n`;
-      markdown += `${rec.description}\n\n`;
+      markdown += `### ${rec.title} (${rec.priority} priority)\n\n`
+      markdown += `${rec.description}\n\n`
     }
   }
-  
+
   if (analysis.metrics_summary) {
-    markdown += `## Metrics Summary\n\n`;
-    const metrics = analysis.metrics_summary;
-    if (metrics.total_duration_minutes) markdown += `- **Total Duration**: ${Math.round(metrics.total_duration_minutes)} minutes\n`;
-    if (metrics.total_tss) markdown += `- **Total TSS**: ${Math.round(metrics.total_tss)}\n`;
-    if (metrics.avg_power) markdown += `- **Average Power**: ${Math.round(metrics.avg_power)}W\n`;
-    if (metrics.avg_heart_rate) markdown += `- **Average HR**: ${Math.round(metrics.avg_heart_rate)} bpm\n`;
-    if (metrics.total_distance_km) markdown += `- **Total Distance**: ${metrics.total_distance_km.toFixed(1)} km\n`;
+    markdown += `## Metrics Summary\n\n`
+    const metrics = analysis.metrics_summary
+    if (metrics.total_duration_minutes)
+      markdown += `- **Total Duration**: ${Math.round(metrics.total_duration_minutes)} minutes\n`
+    if (metrics.total_tss) markdown += `- **Total TSS**: ${Math.round(metrics.total_tss)}\n`
+    if (metrics.avg_power) markdown += `- **Average Power**: ${Math.round(metrics.avg_power)}W\n`
+    if (metrics.avg_heart_rate)
+      markdown += `- **Average HR**: ${Math.round(metrics.avg_heart_rate)} bpm\n`
+    if (metrics.total_distance_km)
+      markdown += `- **Total Distance**: ${metrics.total_distance_km.toFixed(1)} km\n`
   }
-  
-  return markdown;
+
+  return markdown
 }
 
 export const analyzeLast3WorkoutsTask = task({
-  id: "analyze-last-3-workouts",
+  id: 'analyze-last-3-workouts',
   maxDuration: 300, // 5 minutes for AI processing
   queue: userReportsQueue,
   run: async (payload: { userId: string; reportId: string }) => {
-    const { userId, reportId } = payload;
-    
-    logger.log("Starting Last 3 Workouts analysis", { userId, reportId });
-    
+    const { userId, reportId } = payload
+
+    logger.log('Starting Last 3 Workouts analysis', { userId, reportId })
+
     // Update report status to PROCESSING
     await prisma.report.update({
       where: { id: reportId },
       data: { status: 'PROCESSING' }
-    });
-    
+    })
+
     try {
-      const timezone = await getUserTimezone(userId);
+      const timezone = await getUserTimezone(userId)
       // Fetch last 3 cycling workouts
       // TODO: Repository needs support for 'type' filtering or dynamic where
       // We will use the repo getForUser and filter in memory if volume is low, OR extend repo.
@@ -205,61 +210,58 @@ export const analyzeLast3WorkoutsTask = task({
       // I'll add a 'getRecentCyclingWorkouts' method to repo or just use prisma here as an exception?
       // No, the rule is "No Direct Prisma Calls".
       // I will use getForUser and filter, assuming 20 recent workouts cover 3 cycling ones.
-      
+
       const recentWorkouts = await workoutRepository.getForUser(userId, {
         limit: 20,
         orderBy: { date: 'desc' }
-      });
-      
+      })
+
       const workouts = recentWorkouts
-        .filter(w => ['Ride', 'VirtualRide', 'Cycling'].includes(w.type || '') && w.durationSec > 0)
-        .slice(0, 3);
-      
+        .filter(
+          (w) => ['Ride', 'VirtualRide', 'Cycling'].includes(w.type || '') && w.durationSec > 0
+        )
+        .slice(0, 3)
+
       if (workouts.length === 0) {
-        throw new Error('No cycling workouts found for analysis');
+        throw new Error('No cycling workouts found for analysis')
       }
-      
-      logger.log("Workouts fetched", { 
+
+      logger.log('Workouts fetched', {
         count: workouts.length,
-        titles: workouts.map(w => w.title)
-      });
-      
+        titles: workouts.map((w) => w.title)
+      })
+
       // Fetch user profile for context
       const user = await prisma.user.findUnique({
         where: { id: userId },
         select: { ftp: true, weight: true, maxHr: true }
-      });
-      
+      })
+
       // Build the analysis prompt
-      const prompt = buildAnalysisPrompt(workouts, user, timezone);
-      
-      logger.log("Generating structured analysis with Gemini Flash");
-      
+      const prompt = buildAnalysisPrompt(workouts, user, timezone)
+
+      logger.log('Generating structured analysis with Gemini Flash')
+
       // Generate structured JSON analysis
-      const structuredAnalysis = await generateStructuredAnalysis(
-        prompt,
-        analysisSchema,
-        'flash',
-        {
-          userId,
-          operation: 'last_3_workouts_analysis',
-          entityType: 'Workout',
-          entityId: undefined
-        }
-      );
-      
+      const structuredAnalysis = await generateStructuredAnalysis(prompt, analysisSchema, 'flash', {
+        userId,
+        operation: 'last_3_workouts_analysis',
+        entityType: 'Workout',
+        entityId: undefined
+      })
+
       // Also generate markdown for fallback/export
-      const markdownAnalysis = convertStructuredToMarkdown(structuredAnalysis);
-      
-      logger.log("Analysis generated successfully", {
+      const markdownAnalysis = convertStructuredToMarkdown(structuredAnalysis)
+
+      logger.log('Analysis generated successfully', {
         sections: structuredAnalysis.sections?.length || 0,
         recommendations: structuredAnalysis.recommendations?.length || 0
-      });
-      
+      })
+
       // Calculate date range from workouts
-      const dateRangeStart = new Date(workouts[workouts.length - 1].date);
-      const dateRangeEnd = new Date(workouts[0].date);
-      
+      const dateRangeStart = new Date(workouts[workouts.length - 1].date)
+      const dateRangeEnd = new Date(workouts[0].date)
+
       // Save both formats to the database and link workouts
       await prisma.$transaction(async (tx) => {
         // Update the report
@@ -273,21 +275,21 @@ export const analyzeLast3WorkoutsTask = task({
             dateRangeStart,
             dateRangeEnd
           }
-        });
-        
+        })
+
         // Link the workouts to the report
         await tx.reportWorkout.createMany({
-          data: workouts.map(workout => ({
+          data: workouts.map((workout) => ({
             reportId,
             workoutId: workout.id
           }))
-        });
-      });
-      
-      logger.log("Report saved to database with workout links", {
+        })
+      })
+
+      logger.log('Report saved to database with workout links', {
         workoutsLinked: workouts.length
-      });
-      
+      })
+
       return {
         success: true,
         reportId,
@@ -295,16 +297,16 @@ export const analyzeLast3WorkoutsTask = task({
         workoutsAnalyzed: workouts.length,
         analysisLength: markdownAnalysis.length,
         sectionsCount: structuredAnalysis.sections?.length || 0
-      };
+      }
     } catch (error) {
-      logger.error("Error generating Last 3 Workouts analysis", { error });
-      
+      logger.error('Error generating Last 3 Workouts analysis', { error })
+
       await prisma.report.update({
         where: { id: reportId },
         data: { status: 'FAILED' }
-      });
-      
-      throw error;
+      })
+
+      throw error
     }
   }
-});
+})

@@ -19,7 +19,7 @@ defineRouteMeta({
 
 export default defineEventHandler(async (event) => {
   const session = await getServerSession(event)
-  
+
   if (!session?.user?.email) {
     throw createError({
       statusCode: 401,
@@ -31,12 +31,12 @@ export default defineEventHandler(async (event) => {
   const code = query.code as string
   const state = query.state as string
   const error = query.error as string
-  
+
   if (error) {
     console.error('WHOOP OAuth error:', error)
     return sendRedirect(event, '/settings?whoop_error=' + encodeURIComponent(error))
   }
-  
+
   // Verify state parameter for CSRF protection
   const storedState = getCookie(event, 'whoop_oauth_state')
   if (!state || !storedState || state !== storedState) {
@@ -45,10 +45,10 @@ export default defineEventHandler(async (event) => {
     deleteCookie(event, 'whoop_oauth_state')
     return sendRedirect(event, '/settings?whoop_error=invalid_state')
   }
-  
+
   // Clear the state cookie after validation
   deleteCookie(event, 'whoop_oauth_state')
-  
+
   if (!code) {
     return sendRedirect(event, '/settings?whoop_error=no_code')
   }
@@ -67,15 +67,15 @@ export default defineEventHandler(async (event) => {
     const tokenResponse = await fetch('https://api.prod.whoop.com/oauth/oauth2/token', {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
+        'Content-Type': 'application/x-www-form-urlencoded'
       },
       body: new URLSearchParams({
         grant_type: 'authorization_code',
         code,
         client_id: clientId,
         client_secret: clientSecret,
-        redirect_uri: redirectUri,
-      }).toString(),
+        redirect_uri: redirectUri
+      }).toString()
     })
 
     if (!tokenResponse.ok) {
@@ -148,6 +148,9 @@ export default defineEventHandler(async (event) => {
     return sendRedirect(event, '/settings?whoop_success=true')
   } catch (error: any) {
     console.error('Failed to connect WHOOP:', error)
-    return sendRedirect(event, '/settings?whoop_error=' + encodeURIComponent(error.message || 'connection_failed'))
+    return sendRedirect(
+      event,
+      '/settings?whoop_error=' + encodeURIComponent(error.message || 'connection_failed')
+    )
   }
 })

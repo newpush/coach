@@ -48,17 +48,17 @@ defineRouteMeta({
 
 export default defineEventHandler(async (event) => {
   const session = await getServerSession(event)
-  
+
   if (!session?.user) {
     throw createError({
       statusCode: 401,
       message: 'Unauthorized'
     })
   }
-  
+
   const userId = (session.user as any).id
   const body = await readBody(event)
-  
+
   // Validate required fields
   if (!body.date || !body.title) {
     throw createError({
@@ -66,7 +66,7 @@ export default defineEventHandler(async (event) => {
       message: 'Date and title are required'
     })
   }
-  
+
   try {
     // Get Intervals.icu integration
     const integration = await prisma.integration.findFirst({
@@ -75,14 +75,14 @@ export default defineEventHandler(async (event) => {
         provider: 'intervals'
       }
     })
-    
+
     if (!integration) {
       throw createError({
         statusCode: 400,
         message: 'Intervals.icu integration not found. Please connect your account first.'
       })
     }
-    
+
     // Create the workout in Intervals.icu
     const intervalsWorkout = await createIntervalsPlannedWorkout(integration, {
       date: new Date(body.date),
@@ -92,7 +92,7 @@ export default defineEventHandler(async (event) => {
       durationSec: body.durationSec,
       tss: body.tss
     })
-    
+
     // Create planned workout in our database with the Intervals.icu ID
     const plannedWorkout = await prisma.plannedWorkout.create({
       data: {
@@ -108,7 +108,7 @@ export default defineEventHandler(async (event) => {
         rawJson: intervalsWorkout
       }
     })
-    
+
     return {
       success: true,
       workout: plannedWorkout

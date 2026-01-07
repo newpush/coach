@@ -5,26 +5,26 @@ import { fetchIntervalsAthleteProfile } from '../../utils/intervals'
 
 export default defineEventHandler(async (event) => {
   const session = await getServerSession(event)
-  
+
   if (!session?.user?.email) {
     throw createError({
       statusCode: 401,
       statusMessage: 'Unauthorized'
     })
   }
-  
+
   try {
     const user = await prisma.user.findUnique({
       where: { email: session.user.email }
     })
-    
+
     if (!user) {
       throw createError({
         statusCode: 404,
         statusMessage: 'User not found'
       })
     }
-    
+
     // Check for Intervals.icu integration
     const integration = await prisma.integration.findFirst({
       where: {
@@ -32,20 +32,20 @@ export default defineEventHandler(async (event) => {
         provider: 'intervals'
       }
     })
-    
+
     if (!integration) {
       return {
         success: false,
         message: 'No supported integration found (Intervals.icu required)'
       }
     }
-    
+
     // Fetch profile from Intervals.icu
     const intervalsProfile = await fetchIntervalsAthleteProfile(integration)
-    
+
     // Detect if metrics changed
     const diff: any = {}
-    
+
     // Basic Metrics
     if (intervalsProfile.ftp && intervalsProfile.ftp !== user.ftp) {
       diff.ftp = intervalsProfile.ftp
@@ -65,16 +65,16 @@ export default defineEventHandler(async (event) => {
     if (intervalsProfile.restingHR && intervalsProfile.restingHR !== user.restingHr) {
       diff.restingHr = intervalsProfile.restingHR
     }
-    
+
     // Helper for comparing zones
     const areZonesDifferent = (current: any[], incoming: any[]) => {
       if (!current || !incoming) return true
       if (current.length !== incoming.length) return true
-      
+
       for (let i = 0; i < current.length; i++) {
         const c = current[i]
         const n = incoming[i]
-        
+
         // Compare essential fields (min, max, name)
         if (c.min !== n.min || c.max !== n.max || c.name !== n.name) {
           return true
@@ -85,26 +85,26 @@ export default defineEventHandler(async (event) => {
 
     // Zones Comparison
     if (intervalsProfile.hrZones) {
-      const currentHrZones = user.hrZones as any[] || []
+      const currentHrZones = (user.hrZones as any[]) || []
       const newHrZones = intervalsProfile.hrZones as any[]
-      
+
       if (areZonesDifferent(currentHrZones, newHrZones)) {
         diff.hrZones = newHrZones
       }
     }
-    
+
     if (intervalsProfile.powerZones) {
-      const currentPowerZones = user.powerZones as any[] || []
+      const currentPowerZones = (user.powerZones as any[]) || []
       const newPowerZones = intervalsProfile.powerZones as any[]
-      
+
       if (areZonesDifferent(currentPowerZones, newPowerZones)) {
         diff.powerZones = newPowerZones
       }
     }
-    
+
     // LTHR (not stored directly on User but useful to return or map if we add it later)
     // For now we ignore it unless we add lthr to User schema
-    
+
     // If no differences
     if (Object.keys(diff).length === 0) {
       return {
@@ -125,7 +125,6 @@ export default defineEventHandler(async (event) => {
       current: user,
       detected: intervalsProfile
     }
-    
   } catch (error: any) {
     console.error('Error autodetecting profile:', error)
     throw createError({

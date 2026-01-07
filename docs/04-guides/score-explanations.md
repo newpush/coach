@@ -1,11 +1,13 @@
 # Score Explanations Implementation Guide
 
 ## Overview
+
 This document tracks the implementation of clickable score cards with AI-generated explanations and actionable improvement guidance.
 
 ## Architecture
 
 ### Database Layer ✅ COMPLETED
+
 - **Migration**: `20251203223300_add_score_explanations`
 - **Added Fields**: 19 explanation TEXT fields across 4 tables
   - User: 4 athlete profile explanations
@@ -16,6 +18,7 @@ This document tracks the implementation of clickable score cards with AI-generat
 ### AI Analysis Layer ✅ PARTIALLY COMPLETED
 
 #### ✅ Completed Triggers
+
 1. **generate-athlete-profile.ts**
    - Schema updated with explanation fields
    - Extraction code saves explanations to User table
@@ -27,17 +30,19 @@ This document tracks the implementation of clickable score cards with AI-generat
    - Generates specific improvement recommendations
 
 #### 🔄 Remaining Triggers (Similar Pattern)
+
 3. **analyze-nutrition.ts**
    - Update schema to add explanation fields
    - Update extraction code to save explanations
    - Pattern: Same as workout (5 scores + 5 explanations)
 
 4. **generate-weekly-report.ts**
-   - Update schema to add explanation fields  
+   - Update schema to add explanation fields
    - Update extraction code to save explanations
    - Pattern: Same as workout (5 scores + 5 explanations)
 
 ### API Layer 🔄 IN PROGRESS
+
 - ✅ `server/api/scores/athlete-profile.get.ts` - Updated to select explanation fields
 - ⏳ Need to update to return explanations in response
 - ⏳ `server/api/scores/workout-trends.get.ts` - Need to include explanations
@@ -46,6 +51,7 @@ This document tracks the implementation of clickable score cards with AI-generat
 ### UI Layer ⏳ TODO
 
 #### Components to Create/Update
+
 1. **ScoreDetailModal.vue** (NEW)
    - Props: title, score, explanation, color
    - Shows score with color-coded bar
@@ -68,6 +74,7 @@ This document tracks the implementation of clickable score cards with AI-generat
 ## Explanation Format
 
 ### AI Generates (for each score):
+
 ```typescript
 {
   score: number,        // 1-10
@@ -79,36 +86,41 @@ This document tracks the implementation of clickable score cards with AI-generat
 ```
 
 ### Example Explanation:
+
 ```
-"Your recovery capacity scored 2/10 due to consistently low HRV 
-(avg 35ms, 25% below baseline) and poor sleep quality (avg 5.2 hours). 
-Contributing factors include training load spikes and insufficient 
-rest days. To improve: (1) Prioritize 8+ hours of sleep nightly, 
-(2) Add one full rest day per week, (3) Consider deload week every 
+"Your recovery capacity scored 2/10 due to consistently low HRV
+(avg 35ms, 25% below baseline) and poor sleep quality (avg 5.2 hours).
+Contributing factors include training load spikes and insufficient
+rest days. To improve: (1) Prioritize 8+ hours of sleep nightly,
+(2) Add one full rest day per week, (3) Consider deload week every
 3-4 weeks to allow adaptation."
 ```
 
 ## Implementation Steps
 
 ### Phase 1: Complete AI Analysis ✅ 50% DONE
+
 - [x] Update athlete profile schema & extraction
 - [x] Update workout analysis schema & extraction
 - [ ] Update nutrition analysis schema & extraction
 - [ ] Update report analysis schema & extraction
 
 ### Phase 2: API Updates ⏳ NEXT
+
 - [ ] Update athlete-profile.get.ts to return explanations
-- [ ] Update workout-trends.get.ts to return explanations  
+- [ ] Update workout-trends.get.ts to return explanations
 - [ ] Update nutrition-trends.get.ts to return explanations
 - [ ] Test API responses include all data
 
 ### Phase 3: UI Components ⏳ PENDING
+
 - [ ] Create ScoreDetailModal component
 - [ ] Update ScoreCard to be clickable
 - [ ] Update Performance page with modal
 - [ ] Test full click-through flow
 
 ### Phase 4: Testing & Refinement ⏳ PENDING
+
 - [ ] Regenerate athlete profile to get explanations
 - [ ] Re-analyze workouts to get explanations
 - [ ] Re-analyze nutrition to get explanations

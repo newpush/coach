@@ -1,5 +1,5 @@
 import { prisma } from '../../utils/db'
-import { tasks } from "@trigger.dev/sdk/v3"
+import { tasks } from '@trigger.dev/sdk/v3'
 
 export default defineEventHandler(async (event) => {
   const session = await getServerSession(event)
@@ -15,7 +15,7 @@ export default defineEventHandler(async (event) => {
 
   // Verify ownership
   const block = await prisma.trainingBlock.findFirst({
-    where: { 
+    where: {
       id: blockId,
       plan: { userId: session.user.id }
     }
@@ -30,8 +30,8 @@ export default defineEventHandler(async (event) => {
     blockId: blockId
   })
 
-  return { 
-    success: true, 
-    jobId: handle.id 
+  return {
+    success: true,
+    jobId: handle.id
   }
 })

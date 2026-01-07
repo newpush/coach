@@ -40,14 +40,14 @@ defineRouteMeta({
 
 export default defineEventHandler(async (event) => {
   const session = await getServerSession(event)
-  
+
   if (!session?.user?.email) {
     throw createError({
       statusCode: 401,
       statusMessage: 'Unauthorized'
     })
   }
-  
+
   try {
     // Get user by email with all profile fields
     const user = await prisma.user.findUnique({
@@ -79,14 +79,14 @@ export default defineEventHandler(async (event) => {
         powerZones: true
       }
     })
-    
+
     if (!user) {
       throw createError({
         statusCode: 404,
         statusMessage: 'User not found'
       })
     }
-    
+
     // Helper to format date as YYYY-MM-DD
     const formatDate = (date: Date | null) => {
       if (!date) return null

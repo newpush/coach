@@ -29,22 +29,22 @@ export default defineEventHandler(async (event) => {
 
   const id = getRouterParam(event, 'id')
   if (!id) throw createError({ statusCode: 400, message: 'Missing event ID' })
-  
+
   const body = await readBody(event)
   const result = eventSchema.safeParse(body)
-  
+
   if (!result.success) {
     throw createError({ statusCode: 400, message: 'Invalid input', data: result.error.issues })
   }
 
   const userId = session.user.id
-  
+
   try {
     const updatedEvent = await eventRepository.update(id, userId, {
       ...result.data,
       date: new Date(result.data.date)
     })
-    
+
     return { success: true, event: updatedEvent }
   } catch (error: any) {
     if (error.message.includes('Not authorized')) {

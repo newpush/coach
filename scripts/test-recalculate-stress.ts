@@ -5,12 +5,20 @@ import { userRepository } from '../server/utils/repositories/userRepository'
 
 async function main() {
   const workoutId = 'a98d6c77-0a84-4907-afab-394ff9144e89'
-  
+
   console.log(`Testing TSS Recalculation for Workout: ${workoutId}`)
-  
+
   const workout = await prisma.workout.findUnique({
     where: { id: workoutId },
-    select: { id: true, userId: true, date: true, tss: true, ftp: true, title: true, streams: { select: { watts: true } } }
+    select: {
+      id: true,
+      userId: true,
+      date: true,
+      tss: true,
+      ftp: true,
+      title: true,
+      streams: { select: { watts: true } }
+    }
   })
 
   if (!workout) {
@@ -19,16 +27,18 @@ async function main() {
   }
 
   console.log(`Found Workout: ${workout.title} (${workout.date.toISOString()})`)
-  
+
   if (workout.streams?.watts) {
-      console.log('Watts stream type:', typeof workout.streams.watts)
-      console.log('Is Array?', Array.isArray(workout.streams.watts))
-      // console.log('Sample:', (workout.streams.watts as any).slice(0, 5)) 
+    console.log('Watts stream type:', typeof workout.streams.watts)
+    console.log('Is Array?', Array.isArray(workout.streams.watts))
+    // console.log('Sample:', (workout.streams.watts as any).slice(0, 5))
   } else {
-      console.log('No watts stream found')
+    console.log('No watts stream found')
   }
 
-  console.log(`Current DB State -> TSS: ${workout.tss}, FTP: ${workout.ftp}, CTL: ${workout.ctl}, ATL: ${workout.atl}`)
+  console.log(
+    `Current DB State -> TSS: ${workout.tss}, FTP: ${workout.ftp}, CTL: ${workout.ctl}, ATL: ${workout.atl}`
+  )
 
   // Clear CTL/ATL to force recalculation logic
   console.log('Clearing CTL/ATL to force recalculation...')
@@ -44,7 +54,7 @@ async function main() {
   // Run the calculation logic
   console.log('Running calculateWorkoutStress...')
   const result = await calculateWorkoutStress(workoutId, workout.userId)
-  
+
   console.log('Calculation Result:', result)
 
   // Fetch updated state
@@ -61,7 +71,7 @@ async function main() {
 }
 
 main()
-  .catch(e => console.error(e))
+  .catch((e) => console.error(e))
   .finally(async () => {
     await prisma.$disconnect()
   })

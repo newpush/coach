@@ -1,5 +1,5 @@
 import { task, logger } from '@trigger.dev/sdk/v3'
-import { userIngestionQueue } from "./queues";
+import { userIngestionQueue } from './queues'
 import { IntervalsService } from '../server/utils/services/intervalsService'
 
 interface IngestStreamsPayload {
@@ -12,18 +12,18 @@ export const ingestIntervalsStreams = task({
   id: 'ingest-intervals-streams',
   queue: userIngestionQueue,
   run: async (payload: IngestStreamsPayload) => {
-    logger.log('Starting Intervals.icu stream ingestion', { 
-      workoutId: payload.workoutId, 
-      activityId: payload.activityId 
+    logger.log('Starting Intervals.icu stream ingestion', {
+      workoutId: payload.workoutId,
+      activityId: payload.activityId
     })
-    
+
     try {
       const result = await IntervalsService.syncActivityStream(
         payload.userId,
         payload.workoutId,
         payload.activityId
       )
-      
+
       if (!result) {
         return {
           success: true,
@@ -31,9 +31,9 @@ export const ingestIntervalsStreams = task({
           message: 'No stream data available'
         }
       }
-      
+
       logger.log('Stream data stored successfully', { streamId: result.id })
-      
+
       return {
         success: true,
         workoutId: payload.workoutId,

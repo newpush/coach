@@ -51,14 +51,16 @@ export const wellnessRepository = {
    * Get a single wellness entry by ID
    */
   async getById(id: string, userId: string) {
-    return prisma.wellness.findUnique({
-      where: { id }
-    }).then(wellness => {
-      if (wellness && wellness.userId === userId) {
-        return wellness
-      }
-      return null
-    })
+    return prisma.wellness
+      .findUnique({
+        where: { id }
+      })
+      .then((wellness) => {
+        if (wellness && wellness.userId === userId) {
+          return wellness
+        }
+        return null
+      })
   },
 
   /**
@@ -98,7 +100,7 @@ export const wellnessRepository = {
    * Find first wellness record matching criteria
    */
   async findFirst(
-    userId: string, 
+    userId: string,
     options: {
       date?: Date
       select?: Prisma.WellnessSelect

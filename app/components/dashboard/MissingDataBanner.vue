@@ -16,8 +16,9 @@
             Complete your profile for personalized insights
           </h3>
           <p class="mt-1 text-sm text-amber-700 dark:text-amber-300 font-medium">
-            We're missing: <span class="font-bold underline decoration-amber-500/30">{{ missingFieldsList }}</span>. 
-            Providing this information is critical for accurate coaching guidance.
+            We're missing:
+            <span class="font-bold underline decoration-amber-500/30">{{ missingFieldsList }}</span
+            >. Providing this information is critical for accurate coaching guidance.
           </p>
         </div>
       </div>
@@ -45,32 +46,32 @@
 </template>
 
 <script setup lang="ts">
-const props = defineProps<{
-  missingFields: string[]
-}>()
+  const props = defineProps<{
+    missingFields: string[]
+  }>()
 
-const isVisible = ref(true)
-const storageKey = 'profile-banner-dismissed'
+  const isVisible = ref(true)
+  const storageKey = 'profile-banner-dismissed'
 
-onMounted(() => {
-  const dismissed = localStorage.getItem(storageKey)
-  if (dismissed) {
+  onMounted(() => {
+    const dismissed = localStorage.getItem(storageKey)
+    if (dismissed) {
+      isVisible.value = false
+    }
+  })
+
+  const missingFieldsList = computed(() => {
+    if (props.missingFields.length === 0) return ''
+    if (props.missingFields.length === 1) return props.missingFields[0]
+    if (props.missingFields.length === 2) return props.missingFields.join(' and ')
+
+    const last = props.missingFields[props.missingFields.length - 1]
+    const others = props.missingFields.slice(0, -1).join(', ')
+    return `${others}, and ${last}`
+  })
+
+  function dismiss() {
     isVisible.value = false
+    localStorage.setItem(storageKey, 'true')
   }
-})
-
-const missingFieldsList = computed(() => {
-  if (props.missingFields.length === 0) return ''
-  if (props.missingFields.length === 1) return props.missingFields[0]
-  if (props.missingFields.length === 2) return props.missingFields.join(' and ')
-  
-  const last = props.missingFields[props.missingFields.length - 1]
-  const others = props.missingFields.slice(0, -1).join(', ')
-  return `${others}, and ${last}`
-})
-
-function dismiss() {
-  isVisible.value = false
-  localStorage.setItem(storageKey, 'true')
-}
 </script>

@@ -35,7 +35,7 @@ Unlike static dashboards, Coach Watts understands context—analyzing not just y
 - **🤖 AI Coach:**
   - **Workout Analysis:** Detailed breakdown of every session with execution scores.
   - **Daily Recommendations:** Smart suggestions ("Push hard" vs "Rest") based on HRV and sleep.
-  - **Interactive Chat:** Ask questions like *"How is my fatigue compared to last month?"* and get data-backed answers.
+  - **Interactive Chat:** Ask questions like _"How is my fatigue compared to last month?"_ and get data-backed answers.
 - **📈 Advanced Analytics:** Track Fitness (CTL), Fatigue (ATL), Form (TSB), and Power Curves with intuitive visualizations.
 - **🥗 Nutrition Tracking:** AI analysis of your macro intake vs. training demands.
 - **📅 Smart Planning:** Generate adaptive training plans that fit your schedule and goals.
@@ -44,23 +44,25 @@ Unlike static dashboards, Coach Watts understands context—analyzing not just y
 
 Coach Watts connects seamlessly with:
 
-| Platform | Features Synced |
-|----------|-----------------|
+| Platform          | Features Synced                                    |
+| ----------------- | -------------------------------------------------- |
 | **Intervals.icu** | Workouts, Calendar, Power Metrics, Fitness/Fatigue |
-| **Strava** | Activity Data, GPS Streams, Heart Rate |
-| **Whoop** | Recovery, HRV, Sleep, Strain |
-| **Yazio** | Nutrition Logs, Macros, Hydration |
-| **Withings** | Body Composition (Weight, Fat %), Sleep, Wellness |
-| **Hevy** | Strength Training, Exercises, Sets & Reps |
+| **Strava**        | Activity Data, GPS Streams, Heart Rate             |
+| **Whoop**         | Recovery, HRV, Sleep, Strain                       |
+| **Yazio**         | Nutrition Logs, Macros, Hydration                  |
+| **Withings**      | Body Composition (Weight, Fat %), Sleep, Wellness  |
+| **Hevy**          | Strength Training, Exercises, Sets & Reps          |
 
 ## ⚡ Quick Start
 
 ### Prerequisites
+
 - Node.js 20+
 - Docker (for PostgreSQL)
 - Google Cloud Account (for Auth & Gemini API)
 
 ### 1. Clone & Install
+
 ```bash
 git clone https://github.com/newpush/coach-wattz.git
 cd coach-wattz
@@ -68,28 +70,35 @@ pnpm install
 ```
 
 ### 2. Start Database
+
 ```bash
 docker-compose up -d
 # Starts PostgreSQL on port 5439
 ```
 
 ### 3. Configure Environment
+
 Copy the example env file and fill in your API keys:
+
 ```bash
 cp .env.example .env
 ```
+
 > **Note:** You will need API keys for Google (Auth & Gemini), and optionally Intervals.icu, Strava, etc. See [Getting Credentials](./docs/04-guides/implementation-guide.md#prerequisites).
 
 ### 4. Run Migrations
+
 ```bash
 pnpm prisma:generate
 npx prisma migrate dev
 ```
 
 ### 5. Launch Development Server
+
 ```bash
 pnpm dev
 ```
+
 Visit `http://localhost:3099` and log in!
 
 ## 📚 Documentation

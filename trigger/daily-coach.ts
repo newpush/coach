@@ -1,11 +1,19 @@
-import { logger, task } from "@trigger.dev/sdk/v3";
-import { generateStructuredAnalysis } from "../server/utils/gemini";
-import { prisma } from "../server/utils/db";
-import { workoutRepository } from "../server/utils/repositories/workoutRepository";
-import { wellnessRepository } from "../server/utils/repositories/wellnessRepository";
-import { userReportsQueue } from "./queues";
-import { generateTrainingContext, formatTrainingContextForPrompt } from "../server/utils/training-metrics";
-import { getUserLocalDate, getUserTimezone, getStartOfDaysAgoUTC, getEndOfDayUTC } from "../server/utils/date";
+import { logger, task } from '@trigger.dev/sdk/v3'
+import { generateStructuredAnalysis } from '../server/utils/gemini'
+import { prisma } from '../server/utils/db'
+import { workoutRepository } from '../server/utils/repositories/workoutRepository'
+import { wellnessRepository } from '../server/utils/repositories/wellnessRepository'
+import { userReportsQueue } from './queues'
+import {
+  generateTrainingContext,
+  formatTrainingContextForPrompt
+} from '../server/utils/training-metrics'
+import {
+  getUserLocalDate,
+  getUserTimezone,
+  getStartOfDaysAgoUTC,
+  getEndOfDayUTC
+} from '../server/utils/date'
 
 const suggestionSchema = {
   type: 'object',
@@ -15,51 +23,53 @@ const suggestionSchema = {
       enum: ['proceed', 'modify', 'rest', 'reduce_intensity'],
       description: 'The recommended action'
     },
-    reason: { 
+    reason: {
       type: 'string',
       description: 'Explanation for the recommendation'
     },
-    confidence: { 
+    confidence: {
       type: 'number',
       description: 'Confidence level from 0 to 1'
     },
-    modification: { 
+    modification: {
       type: 'string',
       description: 'Specific workout modification if applicable'
     }
   },
   required: ['action', 'reason', 'confidence']
-};
+}
 
 export const dailyCoachTask = task({
-  id: "daily-coach",
+  id: 'daily-coach',
   queue: userReportsQueue,
   run: async (payload: { userId: string }) => {
-    const { userId } = payload;
-    
-    logger.log("Starting daily coach analysis", { userId });
-    
-    const timezone = await getUserTimezone(userId);
-    const todayDateOnly = getUserLocalDate(timezone);
-    const yesterdayStart = getStartOfDaysAgoUTC(timezone, 1);
-    const yesterdayEnd = getEndOfDayUTC(timezone, yesterdayStart);
-    const todayStart = getStartOfDaysAgoUTC(timezone, 0);
-    const todayEnd = getEndOfDayUTC(timezone, todayStart);
-    
+    const { userId } = payload
+
+    logger.log('Starting daily coach analysis', { userId })
+
+    const timezone = await getUserTimezone(userId)
+    const todayDateOnly = getUserLocalDate(timezone)
+    const yesterdayStart = getStartOfDaysAgoUTC(timezone, 1)
+    const yesterdayEnd = getEndOfDayUTC(timezone, yesterdayStart)
+    const todayStart = getStartOfDaysAgoUTC(timezone, 0)
+    const todayEnd = getEndOfDayUTC(timezone, todayStart)
+
     // Fetch data
     const [yesterdayWorkout, todayMetric, user, athleteProfile, activeGoals] = await Promise.all([
-      workoutRepository.getForUser(userId, {
-        startDate: yesterdayStart,
-        endDate: yesterdayEnd,
-        limit: 1,
-        orderBy: { date: 'desc' }
-      }).then(workouts => workouts[0]),
+      workoutRepository
+        .getForUser(userId, {
+          startDate: yesterdayStart,
+          endDate: yesterdayEnd,
+          limit: 1,
+          orderBy: { date: 'desc' }
+        })
+        .then((workouts) => workouts[0]),
       wellnessRepository.getByDate(userId, todayDateOnly),
       prisma.user.findUnique({
         where: { id: userId },
         select: { ftp: true, weight: true, maxHr: true }
       }),
-      
+
       // Latest athlete profile
       prisma.report.findFirst({
         where: {
@@ -70,7 +80,7 @@ export const dailyCoachTask = task({
         orderBy: { createdAt: 'desc' },
         select: { analysisJson: true, createdAt: true }
       }),
-      
+
       // Active goals
       prisma.goal.findMany({
         where: {
@@ -87,28 +97,28 @@ export const dailyCoachTask = task({
           priority: true
         }
       })
-    ]);
-    
-    logger.log("Data fetched", {
+    ])
+
+    logger.log('Data fetched', {
       hasYesterdayWorkout: !!yesterdayWorkout,
       hasTodayMetric: !!todayMetric,
       hasAthleteProfile: !!athleteProfile,
       activeGoals: activeGoals.length
-    });
-    
+    })
+
     // Generate comprehensive training context (Last 30 Days)
-    const thirtyDaysAgo = getStartOfDaysAgoUTC(timezone, 30);
+    const thirtyDaysAgo = getStartOfDaysAgoUTC(timezone, 30)
     const trainingContext = await generateTrainingContext(userId, thirtyDaysAgo, todayEnd, {
       includeZones: false, // Skip expensive zone calculation for daily check
       period: 'Last 30 Days',
       timezone // Pass timezone for correct day alignment in metrics
-    });
-    const formattedContext = formatTrainingContextForPrompt(trainingContext);
+    })
+    const formattedContext = formatTrainingContextForPrompt(trainingContext)
 
     // Build athlete profile context
-    let athleteContext = '';
+    let athleteContext = ''
     if (athleteProfile?.analysisJson) {
-      const profile = athleteProfile.analysisJson as any;
+      const profile = athleteProfile.analysisJson as any
       athleteContext = `
 ATHLETE PROFILE (Generated ${new Date(athleteProfile.createdAt).toLocaleDateString()}):
 ${profile.executive_summary ? `Summary: ${profile.executive_summary}` : ''}
@@ -117,35 +127,41 @@ Current Fitness: ${profile.current_fitness?.status_label || 'Unknown'}
 Recovery Profile: ${profile.recovery_profile?.recovery_pattern || 'Unknown'}
 Recent Performance: ${profile.recent_performance?.trend || 'Unknown'}
 Current Focus: ${profile.planning_context?.current_focus || 'General training'}
-`;
+`
     } else {
       athleteContext = `
 USER INFO:
 - FTP: ${user?.ftp || 'Unknown'} watts
 - Weight: ${user?.weight || 'Unknown'} kg
 - Max HR: ${user?.maxHr || 'Unknown'} bpm
-`;
+`
     }
-    
+
     // Add goals context
     if (activeGoals.length > 0) {
       athleteContext += `
       
 CURRENT GOALS:
-${activeGoals.map(g => {
-  const daysToTarget = g.targetDate ? Math.ceil((new Date(g.targetDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24)) : null;
-  const daysToEvent = g.eventDate ? Math.ceil((new Date(g.eventDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24)) : null;
-  
-  let goalLine = `- [${g.priority}] ${g.title} (${g.type})`;
-  if (g.description) goalLine += ` - ${g.description}`;
-  if (daysToTarget) goalLine += ` | ${daysToTarget} days to target`;
-  if (daysToEvent) goalLine += ` | Event in ${daysToEvent} days`;
-  
-  return goalLine;
-}).join('\n')}
-`;
+${activeGoals
+  .map((g) => {
+    const daysToTarget = g.targetDate
+      ? Math.ceil((new Date(g.targetDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+      : null
+    const daysToEvent = g.eventDate
+      ? Math.ceil((new Date(g.eventDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+      : null
+
+    let goalLine = `- [${g.priority}] ${g.title} (${g.type})`
+    if (g.description) goalLine += ` - ${g.description}`
+    if (daysToTarget) goalLine += ` | ${daysToTarget} days to target`
+    if (daysToEvent) goalLine += ` | Event in ${daysToEvent} days`
+
+    return goalLine
+  })
+  .join('\n')}
+`
     }
-    
+
     // Build prompt with comprehensive context
     const prompt = `You are a cycling coach providing daily workout guidance.
 
@@ -154,18 +170,22 @@ ${athleteContext}
 ${formattedContext}
 
 YESTERDAY'S TRAINING:
-${yesterdayWorkout
-  ? `${yesterdayWorkout.title} - TSS: ${yesterdayWorkout.tss || 'N/A'}, Duration: ${Math.round(yesterdayWorkout.durationSec / 60)} min, Avg Power: ${yesterdayWorkout.averageWatts || 'N/A'}W`
-  : 'Rest day or no data'}
+${
+  yesterdayWorkout
+    ? `${yesterdayWorkout.title} - TSS: ${yesterdayWorkout.tss || 'N/A'}, Duration: ${Math.round(yesterdayWorkout.durationSec / 60)} min, Avg Power: ${yesterdayWorkout.averageWatts || 'N/A'}W`
+    : 'Rest day or no data'
+}
 
 TODAY'S RECOVERY:
-${todayMetric
-  ? `- Recovery Score: ${todayMetric.recoveryScore}%
+${
+  todayMetric
+    ? `- Recovery Score: ${todayMetric.recoveryScore}%
 - HRV: ${todayMetric.hrv} ms
 - Resting HR: ${todayMetric.restingHr} bpm
 - Sleep: ${todayMetric.sleepHours?.toFixed(1)} hours (Score: ${todayMetric.sleepScore}%)
 ${todayMetric.spO2 ? `- SpO2: ${todayMetric.spO2}%` : ''}`
-  : 'No recovery data available'}
+    : 'No recovery data available'
+}
 
 DECISION LOGIC:
 Use Training Stress Balance (TSB/Form) as primary indicator:
@@ -190,24 +210,19 @@ ${activeGoals.length > 0 ? `- Consider how today's recommendation impacts progre
 
 CRITICAL: Base your recommendation on the comprehensive training load data above, especially TSB (Form), not just today's recovery metrics.
 
-Provide a structured recommendation for today's training${activeGoals.length > 0 ? ', considering the athlete\'s current goals and training load' : ''}.`;
+Provide a structured recommendation for today's training${activeGoals.length > 0 ? ", considering the athlete's current goals and training load" : ''}.`
 
-    logger.log("Generating suggestion with Gemini Flash");
-    
-    const suggestion = await generateStructuredAnalysis(
-      prompt,
-      suggestionSchema,
-      'flash',
-      {
-        userId,
-        operation: 'daily_coach_suggestion',
-        entityType: 'Report',
-        entityId: undefined
-      }
-    );
-    
-    logger.log("Suggestion generated", { suggestion });
-    
+    logger.log('Generating suggestion with Gemini Flash')
+
+    const suggestion = await generateStructuredAnalysis(prompt, suggestionSchema, 'flash', {
+      userId,
+      operation: 'daily_coach_suggestion',
+      entityType: 'Report',
+      entityId: undefined
+    })
+
+    logger.log('Suggestion generated', { suggestion })
+
     // Save suggestion as report
     const report = await prisma.report.create({
       data: {
@@ -219,15 +234,15 @@ Provide a structured recommendation for today's training${activeGoals.length > 0
         modelVersion: 'gemini-2.0-flash-exp',
         suggestions: suggestion as any
       }
-    });
-    
-    logger.log("Suggestion saved", { reportId: report.id });
-    
+    })
+
+    logger.log('Suggestion saved', { reportId: report.id })
+
     return {
       success: true,
       reportId: report.id,
       userId,
       suggestion
-    };
+    }
   }
-});
+})

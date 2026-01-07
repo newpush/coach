@@ -48,15 +48,15 @@ defineRouteMeta({
 
 export default defineEventHandler(async (event) => {
   const session = await getServerSession(event)
-  
+
   if (!session?.user?.email) {
     throw createError({
       statusCode: 401,
       message: 'Unauthorized'
     })
   }
-  
-  const user = await prisma.user.findUnique({
+
+  const user = (await prisma.user.findUnique({
     where: { email: session.user.email },
     select: {
       id: true,
@@ -78,8 +78,8 @@ export default defineEventHandler(async (event) => {
       nutritionComplianceExplanationJson: true,
       trainingConsistencyExplanationJson: true
     }
-  }) as any
-  
+  })) as any
+
   if (!user) {
     throw createError({
       statusCode: 404,

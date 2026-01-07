@@ -10,7 +10,7 @@ jobs:
     name: Build Application
     runs-on: self-hosted
     env:
-      DATABASE_URL: "postgresql://dummy:dummy@localhost:5432/dummy"
+      DATABASE_URL: 'postgresql://dummy:dummy@localhost:5432/dummy'
 
     steps:
       - name: Checkout code
@@ -24,8 +24,8 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "22"
-          cache: "pnpm"
+          node-version: '22'
+          cache: 'pnpm'
 
       - name: Install dependencies
         run: pnpm install
@@ -41,7 +41,7 @@ jobs:
         if: always()
         with:
           webhook: ${{ secrets.DISCORD_WEBHOOK }}
-          title: "Build Status - ${{ github.repository }}"
+          title: 'Build Status - ${{ github.repository }}'
           description: |
             **Build:** ${{ job.status }}
             **Branch:** ${{ github.ref_name }}
@@ -56,12 +56,12 @@ jobs:
     with:
       environment: preview
       trigger-env: staging
-      trigger-version: "4.3.1"
-      node-version: "22"
+      trigger-version: '4.3.1'
+      node-version: '22'
       preview-branch: false
     secrets:
       TRIGGER_ACCESS_TOKEN: ${{ secrets.TRIGGER_ACCESS_TOKEN }}
       TRIGGER_API_URL: ${{ secrets.TRIGGER_API_URL }}
       TRIGGER_PROJECT_REF: ${{ secrets.TRIGGER_PROJECT_REF }}
-      DATABASE_URL: "postgresql://dummy:dummy@localhost:5432/dummy"
+      DATABASE_URL: 'postgresql://dummy:dummy@localhost:5432/dummy'
       DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}

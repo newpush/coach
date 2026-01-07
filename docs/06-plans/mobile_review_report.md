@@ -5,11 +5,13 @@ This report outlines the mobile compatibility status of key components and pages
 ## Layouts
 
 ### `app/layouts/default.vue`
+
 - **Current State**: Uses `UDashboardSidebar` which generally handles responsive behavior well. It has a collapsible state.
 - **Issue**: The sidebar might take up too much space on very small screens if not configured to collapse fully or be an overlay.
 - **Recommendation**: Verify `UDashboardSidebar` behavior on mobile breakpoints. Ensure it collapses into a hamburger menu or similar pattern. The current implementation uses a `UDashboardGroup`, which is good.
 
 ### `app/layouts/home.vue`
+
 - **Current State**: Uses a sticky header with `hidden md:flex` for desktop navigation links.
 - **Issue**: Mobile navigation seems to be missing entirely. The desktop links are hidden on mobile, but there is no hamburger menu or mobile dropdown to access "How it Works", "Pricing", or "Stories".
 - **Recommendation**: Implement a mobile menu (hamburger icon) that opens a slide-over or dropdown containing the navigation links.
@@ -17,16 +19,19 @@ This report outlines the mobile compatibility status of key components and pages
 ## Pages
 
 ### `app/pages/dashboard.vue`
+
 - **Current State**: Uses CSS Grid with `grid-cols-1 md:grid-cols-2 lg:grid-cols-3`.
 - **Status**: **Good**. The grid system naturally stacks cards on mobile devices (`grid-cols-1`).
 - **Potential Improvement**: Ensure padding and margins are not too large on mobile (currently `p-6`, might be better as `p-4` on mobile).
 
 ### `app/pages/index.vue`
+
 - **Current State**: Landing page components (Hero, Features, Pricing) are modular.
 - **Status**: Generally follows a responsive pattern. The final CTA section uses `px-6 py-24 sm:py-32`.
 - **Recommendation**: Review individual landing components (e.g., `LandingHero`, `LandingPricing`) to ensure text sizes and flex directions (column on mobile, row on desktop) are correct.
 
 ### `app/pages/login.vue`
+
 - **Current State**: Uses a split layout `lg:grid-cols-12`. Left side (marketing) spans 5 columns, right side (form) spans 7.
 - **Status**: **Good**. On mobile, it will stack because of `lg:grid-cols-12` (implied `grid-cols-1` default).
 - **Issue**: The left side marketing section might push the login form too far down if it's rendered first.
@@ -35,16 +40,19 @@ This report outlines the mobile compatibility status of key components and pages
 ## Components
 
 ### `app/components/WorkoutTimeline.vue`
+
 - **Current State**: Uses `vue-chartjs`. The chart container has a fixed height style: `style="height: 150px;"`.
 - **Status**: **Acceptable**. Fixed height usually works well on mobile for scrolling.
 - **Recommendation**: Ensure touch interactions (tooltips) work smoothly on charts.
 
 ### `app/components/TrendChart.vue`
+
 - **Current State**: Fixed height `style="height: 300px;"`.
 - **Status**: **Acceptable**.
 - **Recommendation**: Check if the legend (flex-wrap) consumes too much vertical space on small screens, potentially squeezing the chart.
 
 ### `app/components/CalendarDayCell.vue`
+
 - **Current State**: `min-h-[120px]`. This is a "month view" cell.
 - **Issue**: On mobile, a full month calendar grid (7 columns) is unusable. The cells will be tiny squished rectangles.
 - **Recommendation**:

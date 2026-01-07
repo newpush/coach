@@ -61,58 +61,58 @@ defineRouteMeta({
 
 export default defineEventHandler(async (event) => {
   const session = await getServerSession(event)
-  
+
   if (!session?.user) {
-    throw createError({ 
+    throw createError({
       statusCode: 401,
-      message: 'Unauthorized' 
+      message: 'Unauthorized'
     })
   }
-  
+
   const userId = (session.user as any).id
   const id = event.context.params?.id
-  
+
   if (!id) {
     throw createError({
       statusCode: 400,
       message: 'Goal ID is required'
     })
   }
-  
+
   // Verify the goal belongs to this user
   const existingGoal = await prisma.goal.findUnique({
     where: { id },
     include: { events: true }
   })
-  
+
   if (!existingGoal) {
     throw createError({
       statusCode: 404,
       message: 'Goal not found'
     })
   }
-  
+
   if (existingGoal.userId !== userId) {
     throw createError({
       statusCode: 403,
       message: 'Not authorized to edit this goal'
     })
   }
-  
+
   const body = await readBody(event)
-  
+
   // Handle Event updates
   const { eventData, eventId, eventIds, ...goalData } = body
   const data: any = { ...goalData }
-  
+
   if (eventIds && Array.isArray(eventIds)) {
     data.events = {
-      set: eventIds.map(id => ({ id }))
+      set: eventIds.map((id) => ({ id }))
     }
   } else if (eventId) {
     data.events = { set: [{ id: eventId }] }
   }
-  
+
   if (eventData) {
     const { externalId, source, title, date, ...details } = eventData
     if (externalId && source) {
@@ -193,13 +193,13 @@ export default defineEventHandler(async (event) => {
     data.eventDate = new Date(data.eventDate)
   }
   data.updatedAt = new Date()
-  
+
   try {
     const goal = await prisma.goal.update({
       where: { id },
       data
     })
-    
+
     return {
       success: true,
       goal

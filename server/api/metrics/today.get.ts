@@ -3,7 +3,7 @@ import { getServerSession } from '../../utils/session'
 defineRouteMeta({
   openAPI: {
     tags: ['Metrics'],
-    summary: 'Get today\'s wellness metrics',
+    summary: "Get today's wellness metrics",
     description: 'Returns the wellness and recovery metrics for the current day.',
     responses: {
       200: {
@@ -32,18 +32,18 @@ defineRouteMeta({
 
 export default defineEventHandler(async (event) => {
   const session = await getServerSession(event)
-  
+
   if (!session?.user) {
-    throw createError({ 
+    throw createError({
       statusCode: 401,
-      message: 'Unauthorized' 
+      message: 'Unauthorized'
     })
   }
 
   const userId = (session.user as any).id
   const timezone = await getUserTimezone(userId)
   const todayDateOnly = getUserLocalDate(timezone)
-  
+
   const metric = await prisma.wellness.findUnique({
     where: {
       userId_date: {
@@ -52,6 +52,6 @@ export default defineEventHandler(async (event) => {
       }
     }
   })
-  
+
   return metric
 })

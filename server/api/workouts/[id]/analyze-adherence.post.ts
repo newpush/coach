@@ -4,7 +4,7 @@ import { tasks } from '@trigger.dev/sdk/v3'
 
 export default defineEventHandler(async (event) => {
   const session = await getServerSession(event)
-  
+
   if (!session?.user) {
     throw createError({ statusCode: 401, message: 'Unauthorized' })
   }
@@ -15,7 +15,7 @@ export default defineEventHandler(async (event) => {
   }
 
   const workout = await prisma.workout.findUnique({
-    where: { 
+    where: {
       id: workoutId,
       userId: (session.user as any).id
     },

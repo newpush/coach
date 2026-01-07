@@ -5,6 +5,7 @@ Last Updated: December 1, 2025
 ## ✅ Completed Implementation (85%)
 
 ### Phase 1: Database & Infrastructure ✅
+
 - [x] Installed dependencies (@nuxt/ui, @prisma/client, prisma, @types/node)
 - [x] Created complete database schema with 9 models
 - [x] Applied initial migration (`init_schema`)
@@ -13,6 +14,7 @@ Last Updated: December 1, 2025
 - [x] Database running on Docker (postgres:16-alpine on port 5439)
 
 ### Phase 2: Authentication ✅
+
 - [x] Installed and configured NuxtAuth with Google OAuth
 - [x] Created auth handler with PrismaAdapter
 - [x] Implemented authentication middleware
@@ -23,6 +25,7 @@ Last Updated: December 1, 2025
 - [x] Type definitions for extended session
 
 ### Phase 3: Background Jobs & Data Ingestion ✅
+
 - [x] Installed Trigger.dev SDK (@trigger.dev/sdk)
 - [x] Created Trigger.dev configuration with proper settings
 - [x] Created Intervals.icu API client (`server/utils/intervals.ts`)
@@ -33,6 +36,7 @@ Last Updated: December 1, 2025
 - [x] Created test job (`trigger/hello-world.ts`)
 
 ### Phase 4: AI Integration ✅
+
 - [x] Installed Google Generative AI SDK
 - [x] Created Gemini AI client (`server/utils/gemini.ts`)
 - [x] Implemented analysis functions
@@ -42,6 +46,7 @@ Last Updated: December 1, 2025
 - [x] Helper functions for data formatting
 
 ### Phase 5: API Endpoints ✅
+
 - [x] Report endpoints:
   - [x] `POST /api/reports/generate` - Trigger report generation
   - [x] `GET /api/reports/[id]` - Get single report
@@ -53,6 +58,7 @@ Last Updated: December 1, 2025
   - [x] `GET /api/metrics/today` - Get today's recovery metrics
 
 ### Phase 6: UI Components ✅
+
 - [x] Installed @nuxtjs/mdc for markdown rendering
 - [x] Created reports list page (`pages/reports/index.vue`)
 - [x] Created report detail page with MDC (`pages/reports/[id].vue`)
@@ -158,6 +164,7 @@ coach-watts/
    - Wire up "Connect" buttons in settings to OAuth flow
 
 **Required Environment Variables (Not Yet Added):**
+
 ```env
 INTERVALS_CLIENT_ID=
 INTERVALS_CLIENT_SECRET=
@@ -270,6 +277,7 @@ npx trigger.dev@latest test --task-id hello-world
 ## 🔑 Environment Variables Summary
 
 ### ✅ Configured
+
 - `DATABASE_URL` - PostgreSQL connection
 - `GOOGLE_CLIENT_ID` - Google OAuth
 - `GOOGLE_CLIENT_SECRET` - Google OAuth
@@ -281,6 +289,7 @@ npx trigger.dev@latest test --task-id hello-world
 - `TRIGGER_SECRET_KEY` - Trigger.dev secret
 
 ### ❌ Still Needed (For Integration OAuth)
+
 - `INTERVALS_CLIENT_ID`
 - `INTERVALS_CLIENT_SECRET`
 - `WHOOP_CLIENT_ID`
@@ -290,7 +299,9 @@ npx trigger.dev@latest test --task-id hello-world
 ## 🐛 Known Issues
 
 ### TypeScript Warnings (Expected, Non-Blocking)
+
 The following TypeScript errors appear in the IDE but don't affect runtime:
+
 - `Cannot find name 'useAuth'` - Nuxt auto-imports
 - `Cannot find name 'navigateTo'` - Nuxt auto-imports
 - `Cannot find name 'definePageMeta'` - Nuxt auto-imports
@@ -299,12 +310,14 @@ The following TypeScript errors appear in the IDE but don't affect runtime:
 These are IDE-only warnings and don't affect functionality.
 
 ### Peer Dependency Warnings
+
 - `magicast@^0.3.5` vs `0.5.1` - Safe to ignore
 - `next-auth@~4.21.1` vs `4.24.13` - Compatible
 
 ## 🚀 Next Steps for Complete Implementation
 
 ### Immediate (1-2 hours)
+
 1. **Get Integration OAuth Credentials**
    - Register app with Intervals.icu
    - Register app with Whoop
@@ -317,6 +330,7 @@ These are IDE-only warnings and don't affect functionality.
    - Test full OAuth flow
 
 ### Short Term (2-4 hours)
+
 3. **Test End-to-End Flows**
    - Connect Intervals account
    - Trigger sync job
@@ -332,6 +346,7 @@ These are IDE-only warnings and don't affect functionality.
    - Add data visualizations
 
 ### Medium Term (4-8 hours)
+
 5. **Polish & UX**
    - Add loading states everywhere
    - Implement notifications
@@ -362,6 +377,7 @@ These are IDE-only warnings and don't affect functionality.
 **Overall Progress:** 85% Complete
 
 **What Works:**
+
 - ✅ Full authentication system
 - ✅ Database schema and migrations
 - ✅ All API endpoints
@@ -371,6 +387,7 @@ These are IDE-only warnings and don't affect functionality.
 - ✅ Modern, responsive UI
 
 **What's Missing:**
+
 - ❌ Integration OAuth flows (15% of work)
 - ❌ Real data connections
 - ❌ Some polish and UX improvements

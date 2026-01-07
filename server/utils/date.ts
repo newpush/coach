@@ -9,7 +9,7 @@ export const DEFAULT_TIMEZONE = 'UTC'
  */
 export async function getUserTimezone(userId: string): Promise<string> {
   if (!userId) return DEFAULT_TIMEZONE
-  
+
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: { timezone: true }
@@ -20,7 +20,7 @@ export async function getUserTimezone(userId: string): Promise<string> {
 /**
  * Get the start of the day in UTC for a specific timezone.
  * Useful for DB queries: "Give me all records that happened 'today' in Tokyo"
- * 
+ *
  * Example:
  * If it's 10:00 AM UTC (19:00 Tokyo), getting start of day for Tokyo
  * will return 15:00 UTC previous day (00:00 Tokyo).
@@ -56,7 +56,11 @@ export function getEndOfDayUTC(timezone: string, date: Date = new Date()): Date 
 /**
  * Get the start of the day N days ago in UTC for a specific timezone.
  */
-export function getStartOfDaysAgoUTC(timezone: string, days: number, date: Date = new Date()): Date {
+export function getStartOfDaysAgoUTC(
+  timezone: string,
+  days: number,
+  date: Date = new Date()
+): Date {
   try {
     const zonedDate = toZonedTime(date, timezone)
     const pastDate = subDays(zonedDate, days)
@@ -81,7 +85,11 @@ export function formatUserTime(date: Date, timezone: string, formatStr: string =
 /**
  * Format a full date in the user's timezone
  */
-export function formatUserDate(date: Date, timezone: string, formatStr: string = 'yyyy-MM-dd'): string {
+export function formatUserDate(
+  date: Date,
+  timezone: string,
+  formatStr: string = 'yyyy-MM-dd'
+): string {
   try {
     return format(toZonedTime(date, timezone), formatStr, { timeZone: timezone })
   } catch (e) {

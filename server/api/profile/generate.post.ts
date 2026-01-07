@@ -31,20 +31,20 @@ defineRouteMeta({
 
 export default defineEventHandler(async (event) => {
   const session = await getServerSession(event)
-  
+
   if (!session?.user) {
-    throw createError({ 
+    throw createError({
       statusCode: 401,
-      message: 'Unauthorized' 
+      message: 'Unauthorized'
     })
   }
-  
+
   const userId = (session.user as any).id
-  
+
   // Create a report entry for the athlete profile
   const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
   const now = new Date()
-  
+
   const report = await prisma.report.create({
     data: {
       userId,
@@ -54,15 +54,19 @@ export default defineEventHandler(async (event) => {
       dateRangeEnd: now
     }
   })
-  
+
   // Trigger the background job with per-user concurrency
-  const handle = await tasks.trigger('generate-athlete-profile', {
-    userId,
-    reportId: report.id
-  }, {
-    concurrencyKey: userId
-  })
-  
+  const handle = await tasks.trigger(
+    'generate-athlete-profile',
+    {
+      userId,
+      reportId: report.id
+    },
+    {
+      concurrencyKey: userId
+    }
+  )
+
   return {
     success: true,
     reportId: report.id,

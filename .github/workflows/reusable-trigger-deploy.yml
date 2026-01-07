@@ -14,12 +14,12 @@ on:
       trigger-version:
         description: Trigger.dev CLI version to use
         type: string
-        default: "4.1.2"
+        default: '4.1.2'
         required: false
       node-version:
         description: Node.js version to use
         type: string
-        default: "22"
+        default: '22'
         required: false
       preview-branch:
         description: Enable preview branch deployment (auto-detects from git branch)
@@ -69,7 +69,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ inputs.node-version }}
-          cache: "pnpm"
+          cache: 'pnpm'
 
       - name: Install dependencies
         run: |
@@ -202,7 +202,7 @@ jobs:
         if: always() && env.DISCORD_WEBHOOK != ''
         with:
           webhook: ${{ secrets.DISCORD_WEBHOOK }}
-          title: "Deploy Status - ${{ github.repository }}"
+          title: 'Deploy Status - ${{ github.repository }}'
           description: |
             **Deploy:** ${{ job.status }}
             **Environment:** ${{ inputs.environment }}

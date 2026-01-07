@@ -25,9 +25,10 @@ The scoring system relies on the following components:
 ## 🔄 Backfilling Scores
 
 The backfill process is useful when:
-*   You have imported historical data.
-*   You have added new scoring metrics to the schema.
-*   You want to re-analyze items that failed previously (if status is reset).
+
+- You have imported historical data.
+- You have added new scoring metrics to the schema.
+- You want to re-analyze items that failed previously (if status is reset).
 
 ### Running the Backfill
 
@@ -41,10 +42,10 @@ The backfill process is useful when:
     pnpm backfill-scores
     ```
 4.  The script will:
-    *   Scan for workouts/nutrition with `overallScore: null`.
-    *   Show a count of items to be processed.
-    *   Ask for confirmation.
-    *   Trigger background jobs for each item.
+    - Scan for workouts/nutrition with `overallScore: null`.
+    - Show a count of items to be processed.
+    - Ask for confirmation.
+    - Trigger background jobs for each item.
 
 ## 📊 Monitoring
 
@@ -60,12 +61,12 @@ Scores are generated asynchronously. You can monitor progress in:
 
 ## 🐛 Troubleshooting
 
-| Issue | Possible Cause | Solution |
-|-------|----------------|----------|
-| **Script fails to connect** | Database or Trigger.dev connectivity issues | Check `.env` variables and ensure DB/Trigger dev server is running. |
-| **Tasks triggered but fail** | AI API errors or Prompt issues | Check Trigger.dev logs for specific error messages (e.g., Gemini API quota, invalid prompts). |
-| **Scores remain null** | Analysis jobs not completing | Verify that `aiAnalysisStatus` is being updated to `COMPLETED` in the jobs. |
+| Issue                        | Possible Cause                              | Solution                                                                                      |
+| ---------------------------- | ------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| **Script fails to connect**  | Database or Trigger.dev connectivity issues | Check `.env` variables and ensure DB/Trigger dev server is running.                           |
+| **Tasks triggered but fail** | AI API errors or Prompt issues              | Check Trigger.dev logs for specific error messages (e.g., Gemini API quota, invalid prompts). |
+| **Scores remain null**       | Analysis jobs not completing                | Verify that `aiAnalysisStatus` is being updated to `COMPLETED` in the jobs.                   |
 
 ## 🔗 Related Documentation
 
-*   [Scoring System Features](../02-features/analytics/scoring-system.md) - Detailed explanation of scoring logic and metrics.
+- [Scoring System Features](../02-features/analytics/scoring-system.md) - Detailed explanation of scoring logic and metrics.

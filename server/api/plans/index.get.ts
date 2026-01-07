@@ -27,10 +27,7 @@ export default defineEventHandler(async (event) => {
       // Let's fetch everything that is NOT active (since active is on /plan)
       // OR fetch templates separately?
       // Let's fetch all non-active plans + templates
-      OR: [
-        { status: { not: 'ACTIVE' } },
-        { isTemplate: true }
-      ]
+      OR: [{ status: { not: 'ACTIVE' } }, { isTemplate: true }]
     },
     orderBy: { createdAt: 'desc' },
     include: {

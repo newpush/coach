@@ -1,4 +1,3 @@
-
 import { PrismaClient } from '@prisma/client'
 import { PrismaPg } from '@prisma/adapter-pg'
 import pg from 'pg'
@@ -6,7 +5,7 @@ import { athleteMetricsService } from '../server/utils/athleteMetricsService'
 
 const prismaClientSingleton = () => {
   const pool = new pg.Pool({
-    connectionString: process.env.DATABASE_URL,
+    connectionString: process.env.DATABASE_URL
   })
   const adapter = new PrismaPg(pool)
   return new PrismaClient({ adapter })
@@ -29,15 +28,15 @@ async function main() {
 
   // Simulate update
   const newMaxHr = 195
-  
+
   await prisma.user.update({
     where: { id: user.id },
     data: { maxHr: newMaxHr }
   })
-  
+
   const updatedUser = await prisma.user.findUnique({ where: { id: user.id } })
   console.log('After Update:', { maxHr: updatedUser?.maxHr })
-  
+
   // Revert
   await prisma.user.update({
     where: { id: user.id },
@@ -47,7 +46,7 @@ async function main() {
 }
 
 main()
-  .catch(e => {
+  .catch((e) => {
     console.error(e)
     process.exit(1)
   })

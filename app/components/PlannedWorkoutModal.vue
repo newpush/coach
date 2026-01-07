@@ -1,12 +1,12 @@
 <template>
-  <UModal 
-    v-model:open="isOpen" 
+  <UModal
+    v-model:open="isOpen"
     :dismissible="!loading"
     title="Planned Workout"
     :close="loading ? false : undefined"
   >
     <!-- Hidden trigger - modal is controlled programmatically -->
-    <span class="hidden"/>
+    <span class="hidden" />
 
     <template #body>
       <div v-if="plannedWorkout" class="space-y-4">
@@ -24,15 +24,21 @@
             </div>
             <div class="flex justify-between">
               <span class="text-sm text-gray-600 dark:text-gray-400">Date:</span>
-              <span class="text-sm font-medium">{{ formatDate(plannedWorkout.date, 'EEEE, MMMM d, yyyy') }}</span>
+              <span class="text-sm font-medium">{{
+                formatDate(plannedWorkout.date, 'EEEE, MMMM d, yyyy')
+              }}</span>
             </div>
             <div v-if="plannedWorkout.durationSec" class="flex justify-between">
               <span class="text-sm text-gray-600 dark:text-gray-400">Duration:</span>
-              <span class="text-sm font-medium">{{ formatDuration(plannedWorkout.durationSec) }}</span>
+              <span class="text-sm font-medium">{{
+                formatDuration(plannedWorkout.durationSec)
+              }}</span>
             </div>
             <div v-if="plannedWorkout.distanceMeters" class="flex justify-between">
               <span class="text-sm text-gray-600 dark:text-gray-400">Distance:</span>
-              <span class="text-sm font-medium">{{ (plannedWorkout.distanceMeters / 1000).toFixed(2) }} km</span>
+              <span class="text-sm font-medium"
+                >{{ (plannedWorkout.distanceMeters / 1000).toFixed(2) }} km</span
+              >
             </div>
             <div v-if="plannedWorkout.tss" class="flex justify-between">
               <span class="text-sm text-gray-600 dark:text-gray-400">TSS:</span>
@@ -45,33 +51,48 @@
         <div v-if="plannedWorkout.description">
           <h4 class="font-semibold text-sm text-gray-500 dark:text-gray-400 mb-2">Description</h4>
           <div class="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
-            <p class="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap">{{ plannedWorkout.description }}</p>
+            <p class="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap">
+              {{ plannedWorkout.description }}
+            </p>
           </div>
         </div>
 
         <!-- Coach Instructions -->
-        <div v-if="plannedWorkout.structuredWorkout?.coachInstructions" class="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4 border border-blue-100 dark:border-blue-800">
+        <div
+          v-if="plannedWorkout.structuredWorkout?.coachInstructions"
+          class="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4 border border-blue-100 dark:border-blue-800"
+        >
           <div class="flex items-start gap-3">
             <div class="p-2 bg-blue-100 dark:bg-blue-800 rounded-full">
-              <UIcon name="i-heroicons-chat-bubble-bottom-center-text" class="w-5 h-5 text-blue-600 dark:text-blue-300" />
+              <UIcon
+                name="i-heroicons-chat-bubble-bottom-center-text"
+                class="w-5 h-5 text-blue-600 dark:text-blue-300"
+              />
             </div>
             <div>
               <h4 class="font-semibold text-sm text-blue-900 dark:text-blue-100">Coach's Advice</h4>
-              <p class="text-sm text-blue-800 dark:text-blue-200 mt-1 italic">"{{ plannedWorkout.structuredWorkout.coachInstructions }}"</p>
+              <p class="text-sm text-blue-800 dark:text-blue-200 mt-1 italic">
+                "{{ plannedWorkout.structuredWorkout.coachInstructions }}"
+              </p>
             </div>
           </div>
         </div>
 
         <!-- Workout Visualization -->
-        <div v-if="plannedWorkout.structuredWorkout" class="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+        <div
+          v-if="plannedWorkout.structuredWorkout"
+          class="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700"
+        >
           <div class="flex justify-between items-center mb-2">
-            <h4 class="font-semibold text-sm text-gray-500 dark:text-gray-400">Workout Structure</h4>
-            <UButton 
-              size="xs" 
-              color="neutral" 
-              variant="ghost" 
-              icon="i-heroicons-arrow-path" 
-              :loading="generating" 
+            <h4 class="font-semibold text-sm text-gray-500 dark:text-gray-400">
+              Workout Structure
+            </h4>
+            <UButton
+              size="xs"
+              color="neutral"
+              variant="ghost"
+              icon="i-heroicons-arrow-path"
+              :loading="generating"
               @click="generateStructure"
             >
               Regenerate
@@ -81,7 +102,10 @@
         </div>
 
         <!-- Coaching Messages Timeline -->
-        <div v-if="plannedWorkout.structuredWorkout?.messages?.length" class="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+        <div
+          v-if="plannedWorkout.structuredWorkout?.messages?.length"
+          class="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700"
+        >
           <WorkoutMessagesTimeline :workout="plannedWorkout.structuredWorkout" />
         </div>
 
@@ -95,16 +119,11 @@
 
         <!-- Mark Complete Section -->
         <div v-if="!plannedWorkout.completed && !showWorkoutSelector" class="flex flex-col gap-2">
-          <UButton
-            color="success"
-            block
-            :loading="loading"
-            @click="markCompleteWithoutActivity"
-          >
+          <UButton color="success" block :loading="loading" @click="markCompleteWithoutActivity">
             <UIcon name="i-heroicons-check" class="w-4 h-4" />
             Mark as Done (No Activity)
           </UButton>
-          
+
           <UButton
             color="primary"
             variant="outline"
@@ -124,7 +143,8 @@
               Select Completed Workout
             </h4>
             <p class="text-xs text-gray-500 dark:text-gray-400 mb-3">
-              Choose which workout on {{ formatDate(plannedWorkout.date, 'EEEE, MMMM d, yyyy') }} completed this plan
+              Choose which workout on
+              {{ formatDate(plannedWorkout.date, 'EEEE, MMMM d, yyyy') }} completed this plan
             </p>
           </div>
 
@@ -140,11 +160,7 @@
               No workouts found for this date.
             </p>
             <div class="flex gap-2 justify-center">
-              <UButton
-                color="primary"
-                size="sm"
-                @click="showManualEntry = true"
-              >
+              <UButton color="primary" size="sm" @click="showManualEntry = true">
                 Create Manual Entry
               </UButton>
               <UButton
@@ -188,8 +204,12 @@
                     </UBadge>
                   </div>
                   <div class="flex items-center gap-3 text-xs text-gray-500 dark:text-gray-400">
-                    <span v-if="workout.durationSec">{{ formatDuration(workout.durationSec) }}</span>
-                    <span v-if="workout.distanceMeters">{{ (workout.distanceMeters / 1000).toFixed(1) }} km</span>
+                    <span v-if="workout.durationSec">{{
+                      formatDuration(workout.durationSec)
+                    }}</span>
+                    <span v-if="workout.distanceMeters"
+                      >{{ (workout.distanceMeters / 1000).toFixed(1) }} km</span
+                    >
                     <span v-if="workout.tss">{{ Math.round(workout.tss) }} TSS</span>
                   </div>
                 </div>
@@ -224,7 +244,7 @@
           <!-- Or Create Manual Entry -->
           <div v-if="availableWorkouts.length > 0" class="relative">
             <div class="absolute inset-0 flex items-center">
-              <div class="w-full border-t border-gray-200 dark:border-gray-700"/>
+              <div class="w-full border-t border-gray-200 dark:border-gray-700" />
             </div>
             <div class="relative flex justify-center text-xs">
               <span class="bg-white dark:bg-gray-900 px-2 text-gray-500">or</span>
@@ -250,12 +270,7 @@
             <h4 class="font-semibold text-sm text-gray-500 dark:text-gray-400">
               Create Manual Workout
             </h4>
-            <UButton
-              color="neutral"
-              variant="ghost"
-              size="xs"
-              @click="showManualEntry = false"
-            >
+            <UButton color="neutral" variant="ghost" size="xs" @click="showManualEntry = false">
               Back
             </UButton>
           </div>
@@ -264,21 +279,14 @@
             <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">
               Title <span class="text-red-500">*</span>
             </label>
-            <UInput
-              v-model="manualWorkout.title"
-              placeholder="e.g., Morning Run"
-            />
+            <UInput v-model="manualWorkout.title" placeholder="e.g., Morning Run" />
           </div>
 
           <div class="space-y-2">
             <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">
               Duration (minutes) <span class="text-red-500">*</span>
             </label>
-            <UInput
-              v-model="manualWorkout.durationMinutes"
-              type="number"
-              placeholder="60"
-            />
+            <UInput v-model="manualWorkout.durationMinutes" type="number" placeholder="60" />
           </div>
 
           <div class="space-y-2">
@@ -297,24 +305,14 @@
             <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">
               TSS / Load
             </label>
-            <UInput
-              v-model="manualWorkout.tss"
-              type="number"
-              placeholder="85"
-            />
+            <UInput v-model="manualWorkout.tss" type="number" placeholder="85" />
           </div>
 
           <div class="space-y-2">
             <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">
               RPE (1-10)
             </label>
-            <UInput
-              v-model="manualWorkout.rpe"
-              type="number"
-              min="1"
-              max="10"
-              placeholder="7"
-            />
+            <UInput v-model="manualWorkout.rpe" type="number" min="1" max="10" placeholder="7" />
           </div>
 
           <div class="space-y-2">
@@ -338,12 +336,7 @@
             >
               Create & Mark Complete
             </UButton>
-            <UButton
-              color="neutral"
-              variant="ghost"
-              :disabled="loading"
-              @click="cancelManualEntry"
-            >
+            <UButton color="neutral" variant="ghost" :disabled="loading" @click="cancelManualEntry">
               Cancel
             </UButton>
           </div>
@@ -363,21 +356,12 @@
           <UIcon name="i-heroicons-trash" class="w-4 h-4" />
           Delete
         </UButton>
-        <div class="flex-1"/>
+        <div class="flex-1" />
         <div class="flex gap-2">
-          <UButton
-            v-if="plannedWorkout"
-            color="primary"
-            @click="viewFullPlannedWorkout"
-          >
+          <UButton v-if="plannedWorkout" color="primary" @click="viewFullPlannedWorkout">
             View Details
           </UButton>
-          <UButton
-            color="neutral"
-            variant="ghost"
-            :disabled="loading"
-            @click="closeModal"
-          >
+          <UButton color="neutral" variant="ghost" :disabled="loading" @click="closeModal">
             Close
           </UButton>
         </div>
@@ -387,257 +371,259 @@
 </template>
 
 <script setup lang="ts">
-import WorkoutChart from '~/components/workouts/WorkoutChart.vue'
-import WorkoutMessagesTimeline from '~/components/workouts/WorkoutMessagesTimeline.vue'
+  import WorkoutChart from '~/components/workouts/WorkoutChart.vue'
+  import WorkoutMessagesTimeline from '~/components/workouts/WorkoutMessagesTimeline.vue'
 
-const { formatDate } = useFormat()
+  const { formatDate } = useFormat()
 
-const props = defineProps<{
-  plannedWorkout: any | null
-  modelValue: boolean
-}>()
+  const props = defineProps<{
+    plannedWorkout: any | null
+    modelValue: boolean
+  }>()
 
-const emit = defineEmits<{
-  'update:modelValue': [value: boolean]
-  'completed': []
-  'deleted': []
-}>()
+  const emit = defineEmits<{
+    'update:modelValue': [value: boolean]
+    completed: []
+    deleted: []
+  }>()
 
-const isOpen = computed({
-  get: () => props.modelValue,
-  set: (value) => emit('update:modelValue', value)
-})
+  const isOpen = computed({
+    get: () => props.modelValue,
+    set: (value) => emit('update:modelValue', value)
+  })
 
-const loading = ref(false)
-const showWorkoutSelector = ref(false)
-const selectedWorkoutId = ref<string | null>(null)
-const availableWorkouts = ref<any[]>([])
-const loadingWorkouts = ref(false)
-const generating = ref(false)
-const showManualEntry = ref(false)
+  const loading = ref(false)
+  const showWorkoutSelector = ref(false)
+  const selectedWorkoutId = ref<string | null>(null)
+  const availableWorkouts = ref<any[]>([])
+  const loadingWorkouts = ref(false)
+  const generating = ref(false)
+  const showManualEntry = ref(false)
 
-async function generateStructure() {
-  if (!props.plannedWorkout) return
-  
-  generating.value = true
-  try {
-    await $fetch(`/api/planned-workouts/${props.plannedWorkout.id}/generate-structure`, {
-      method: 'POST' as any
-    })
-    
-    // Refresh planned workout data
-    const updated = await $fetch(`/api/planned-workouts/${props.plannedWorkout.id}`)
-    if (updated) {
+  async function generateStructure() {
+    if (!props.plannedWorkout) return
+
+    generating.value = true
+    try {
+      await $fetch(`/api/planned-workouts/${props.plannedWorkout.id}/generate-structure`, {
+        method: 'POST' as any
+      })
+
+      // Refresh planned workout data
+      const updated = await $fetch(`/api/planned-workouts/${props.plannedWorkout.id}`)
+      if (updated) {
         // We can't directly mutate props, so we might need a local copy or emit an event
         // For now, let's just refresh the parent
         emit('completed') // Using this to trigger refresh in parent
+      }
+    } catch (error) {
+      console.error('Error generating workout structure:', error)
+    } finally {
+      generating.value = false
     }
-  } catch (error) {
-    console.error('Error generating workout structure:', error)
-  } finally {
-    generating.value = false
   }
-}
 
-const manualWorkout = ref({
-  title: '',
-  durationMinutes: '',
-  distanceKm: '',
-  tss: '',
-  rpe: '',
-  description: ''
-})
-
-const isManualWorkoutValid = computed(() => {
-  return manualWorkout.value.title.trim() !== '' &&
-         manualWorkout.value.durationMinutes !== '' &&
-         parseInt(manualWorkout.value.durationMinutes) > 0
-})
-
-// Watch for workout selector opening
-watch(showWorkoutSelector, async (show) => {
-  if (show && props.plannedWorkout) {
-    await fetchAvailableWorkouts()
-  }
-})
-
-// Reset state when modal closes
-watch(isOpen, (open) => {
-  if (!open) {
-    showWorkoutSelector.value = false
-    selectedWorkoutId.value = null
-    availableWorkouts.value = []
-    showManualEntry.value = false
-    resetManualWorkout()
-  }
-})
-
-function resetManualWorkout() {
-  manualWorkout.value = {
+  const manualWorkout = ref({
     title: '',
     durationMinutes: '',
     distanceKm: '',
     tss: '',
     rpe: '',
     description: ''
-  }
-}
+  })
 
-function cancelManualEntry() {
-  showManualEntry.value = false
-  showWorkoutSelector.value = true
-  resetManualWorkout()
-}
+  const isManualWorkoutValid = computed(() => {
+    return (
+      manualWorkout.value.title.trim() !== '' &&
+      manualWorkout.value.durationMinutes !== '' &&
+      parseInt(manualWorkout.value.durationMinutes) > 0
+    )
+  })
 
-async function fetchAvailableWorkouts() {
-  if (!props.plannedWorkout) return
-  
-  loadingWorkouts.value = true
-  try {
-    const date = new Date(props.plannedWorkout.date).toISOString().split('T')[0]
-    const response = await $fetch(`/api/workouts/by-date?date=${date}`)
-    availableWorkouts.value = response as any[]
-  } catch (error) {
-    console.error('Error fetching workouts:', error)
-  } finally {
-    loadingWorkouts.value = false
-  }
-}
+  // Watch for workout selector opening
+  watch(showWorkoutSelector, async (show) => {
+    if (show && props.plannedWorkout) {
+      await fetchAvailableWorkouts()
+    }
+  })
 
-function selectWorkout(workoutId: string) {
-  selectedWorkoutId.value = workoutId
-}
+  // Reset state when modal closes
+  watch(isOpen, (open) => {
+    if (!open) {
+      showWorkoutSelector.value = false
+      selectedWorkoutId.value = null
+      availableWorkouts.value = []
+      showManualEntry.value = false
+      resetManualWorkout()
+    }
+  })
 
-async function markComplete() {
-  if (!selectedWorkoutId.value || !props.plannedWorkout) return
-  
-  loading.value = true
-  try {
-    await $fetch(`/api/planned-workouts/${props.plannedWorkout.id}/complete`, {
-      method: 'POST',
-      body: {
-        workoutId: selectedWorkoutId.value
-      }
-    })
-    
-    emit('completed')
-    closeModal()
-  } catch (error: any) {
-    console.error('Error marking complete:', error)
-    alert(error?.data?.message || 'Failed to mark workout complete')
-  } finally {
-    loading.value = false
-  }
-}
-
-async function markCompleteWithoutActivity() {
-  if (!props.plannedWorkout) return
-  
-  if (!confirm('Are you sure you want to mark this as done without linking an activity?')) {
-    return
+  function resetManualWorkout() {
+    manualWorkout.value = {
+      title: '',
+      durationMinutes: '',
+      distanceKm: '',
+      tss: '',
+      rpe: '',
+      description: ''
+    }
   }
 
-  loading.value = true
-  try {
-    await $fetch(`/api/planned-workouts/${props.plannedWorkout.id}/complete`, {
-      method: 'POST',
-      body: {} // No workoutId
-    })
-    
-    emit('completed')
-    closeModal()
-  } catch (error: any) {
-    console.error('Error marking complete:', error)
-    alert(error?.data?.message || 'Failed to mark workout complete')
-  } finally {
-    loading.value = false
+  function cancelManualEntry() {
+    showManualEntry.value = false
+    showWorkoutSelector.value = true
+    resetManualWorkout()
   }
-}
 
-async function createManualWorkout() {
-  if (!isManualWorkoutValid.value || !props.plannedWorkout) return
-  
-  loading.value = true
-  try {
-    const durationSec = parseInt(manualWorkout.value.durationMinutes) * 60
-    const distanceMeters = manualWorkout.value.distanceKm
-      ? parseFloat(manualWorkout.value.distanceKm) * 1000
-      : null
-    
-    await $fetch('/api/workouts/manual', {
-      method: 'POST',
-      body: {
-        title: manualWorkout.value.title,
-        type: props.plannedWorkout.type || 'Activity',
-        date: props.plannedWorkout.date,
-        durationSec,
-        distanceMeters,
-        tss: manualWorkout.value.tss ? parseFloat(manualWorkout.value.tss) : null,
-        rpe: manualWorkout.value.rpe ? parseInt(manualWorkout.value.rpe) : null,
-        description: manualWorkout.value.description || null,
-        plannedWorkoutId: props.plannedWorkout.id
-      }
-    })
-    
-    emit('completed')
-    closeModal()
-  } catch (error: any) {
-    console.error('Error creating manual workout:', error)
-    alert(error?.data?.message || 'Failed to create manual workout')
-  } finally {
-    loading.value = false
+  async function fetchAvailableWorkouts() {
+    if (!props.plannedWorkout) return
+
+    loadingWorkouts.value = true
+    try {
+      const date = new Date(props.plannedWorkout.date).toISOString().split('T')[0]
+      const response = await $fetch(`/api/workouts/by-date?date=${date}`)
+      availableWorkouts.value = response as any[]
+    } catch (error) {
+      console.error('Error fetching workouts:', error)
+    } finally {
+      loadingWorkouts.value = false
+    }
   }
-}
 
-async function confirmDelete() {
-  if (!props.plannedWorkout) return
-  
-  if (!confirm('Are you sure you want to delete this planned workout?')) {
-    return
+  function selectWorkout(workoutId: string) {
+    selectedWorkoutId.value = workoutId
   }
-  
-  loading.value = true
-  try {
-    await $fetch(`/api/planned-workouts/${props.plannedWorkout.id}`, {
-      method: 'DELETE'
-    })
-    
-    emit('deleted')
-    closeModal()
-  } catch (error: any) {
-    console.error('Error deleting planned workout:', error)
-    alert(error?.data?.message || 'Failed to delete planned workout')
-  } finally {
-    loading.value = false
+
+  async function markComplete() {
+    if (!selectedWorkoutId.value || !props.plannedWorkout) return
+
+    loading.value = true
+    try {
+      await $fetch(`/api/planned-workouts/${props.plannedWorkout.id}/complete`, {
+        method: 'POST',
+        body: {
+          workoutId: selectedWorkoutId.value
+        }
+      })
+
+      emit('completed')
+      closeModal()
+    } catch (error: any) {
+      console.error('Error marking complete:', error)
+      alert(error?.data?.message || 'Failed to mark workout complete')
+    } finally {
+      loading.value = false
+    }
   }
-}
 
-function closeModal() {
-  isOpen.value = false
-}
+  async function markCompleteWithoutActivity() {
+    if (!props.plannedWorkout) return
 
-function viewFullPlannedWorkout() {
-  if (props.plannedWorkout?.id) {
-    navigateTo(`/workouts/planned/${props.plannedWorkout.id}`)
+    if (!confirm('Are you sure you want to mark this as done without linking an activity?')) {
+      return
+    }
+
+    loading.value = true
+    try {
+      await $fetch(`/api/planned-workouts/${props.plannedWorkout.id}/complete`, {
+        method: 'POST',
+        body: {} // No workoutId
+      })
+
+      emit('completed')
+      closeModal()
+    } catch (error: any) {
+      console.error('Error marking complete:', error)
+      alert(error?.data?.message || 'Failed to mark workout complete')
+    } finally {
+      loading.value = false
+    }
   }
-}
 
-function formatDuration(seconds: number): string {
-  const h = Math.floor(seconds / 3600)
-  const m = Math.floor((seconds % 3600) / 60)
-  
-  if (h > 0) {
-    return `${h}h ${m}m`
+  async function createManualWorkout() {
+    if (!isManualWorkoutValid.value || !props.plannedWorkout) return
+
+    loading.value = true
+    try {
+      const durationSec = parseInt(manualWorkout.value.durationMinutes) * 60
+      const distanceMeters = manualWorkout.value.distanceKm
+        ? parseFloat(manualWorkout.value.distanceKm) * 1000
+        : null
+
+      await $fetch('/api/workouts/manual', {
+        method: 'POST',
+        body: {
+          title: manualWorkout.value.title,
+          type: props.plannedWorkout.type || 'Activity',
+          date: props.plannedWorkout.date,
+          durationSec,
+          distanceMeters,
+          tss: manualWorkout.value.tss ? parseFloat(manualWorkout.value.tss) : null,
+          rpe: manualWorkout.value.rpe ? parseInt(manualWorkout.value.rpe) : null,
+          description: manualWorkout.value.description || null,
+          plannedWorkoutId: props.plannedWorkout.id
+        }
+      })
+
+      emit('completed')
+      closeModal()
+    } catch (error: any) {
+      console.error('Error creating manual workout:', error)
+      alert(error?.data?.message || 'Failed to create manual workout')
+    } finally {
+      loading.value = false
+    }
   }
-  return `${m}m`
-}
 
-function getActivityIcon(type: string) {
-  const t = (type || '').toLowerCase()
-  if (t.includes('ride') || t.includes('cycle')) return 'i-heroicons-bolt'
-  if (t.includes('run')) return 'i-heroicons-fire'
-  if (t.includes('swim')) return 'i-heroicons-beaker'
-  if (t.includes('weight') || t.includes('strength')) return 'i-heroicons-trophy'
-  return 'i-heroicons-check-circle'
-}
+  async function confirmDelete() {
+    if (!props.plannedWorkout) return
+
+    if (!confirm('Are you sure you want to delete this planned workout?')) {
+      return
+    }
+
+    loading.value = true
+    try {
+      await $fetch(`/api/planned-workouts/${props.plannedWorkout.id}`, {
+        method: 'DELETE'
+      })
+
+      emit('deleted')
+      closeModal()
+    } catch (error: any) {
+      console.error('Error deleting planned workout:', error)
+      alert(error?.data?.message || 'Failed to delete planned workout')
+    } finally {
+      loading.value = false
+    }
+  }
+
+  function closeModal() {
+    isOpen.value = false
+  }
+
+  function viewFullPlannedWorkout() {
+    if (props.plannedWorkout?.id) {
+      navigateTo(`/workouts/planned/${props.plannedWorkout.id}`)
+    }
+  }
+
+  function formatDuration(seconds: number): string {
+    const h = Math.floor(seconds / 3600)
+    const m = Math.floor((seconds % 3600) / 60)
+
+    if (h > 0) {
+      return `${h}h ${m}m`
+    }
+    return `${m}m`
+  }
+
+  function getActivityIcon(type: string) {
+    const t = (type || '').toLowerCase()
+    if (t.includes('ride') || t.includes('cycle')) return 'i-heroicons-bolt'
+    if (t.includes('run')) return 'i-heroicons-fire'
+    if (t.includes('swim')) return 'i-heroicons-beaker'
+    if (t.includes('weight') || t.includes('strength')) return 'i-heroicons-trophy'
+    return 'i-heroicons-check-circle'
+  }
 </script>

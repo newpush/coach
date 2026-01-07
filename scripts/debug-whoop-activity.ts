@@ -5,7 +5,7 @@ config()
 
 async function debugWhoop() {
   console.log('Environment variables loaded.')
-  
+
   // Dynamically import modules to ensure env vars are available when they initialize
   const { prisma } = await import('../server/utils/db')
   const { refreshWhoopToken } = await import('../server/utils/whoop')
@@ -34,10 +34,13 @@ async function debugWhoop() {
   }
 
   console.log('Found integration, ensuring valid token...')
-  
+
   // Ensure token is valid
   let validIntegration = integration
-  if (integration.expiresAt && new Date() >= new Date(integration.expiresAt.getTime() - 5 * 60 * 1000)) {
+  if (
+    integration.expiresAt &&
+    new Date() >= new Date(integration.expiresAt.getTime() - 5 * 60 * 1000)
+  ) {
     console.log('Refreshing expired token...')
     validIntegration = await refreshWhoopToken(integration)
   }
@@ -48,7 +51,7 @@ async function debugWhoop() {
     // Double checking docs... it seems the endpoint might be slightly different or user has no data.
     // The previous error was 404, which suggests the endpoint path might be wrong for "collection" or my usage.
     // Docs say: GET /developer/v1/activity/workout
-    
+
     // Let's try listing all activities collection (collection)
     // Actually the docs say: GET /activity/workout/collection
     // But commonly APIs use plural or collection names.
@@ -57,10 +60,10 @@ async function debugWhoop() {
     // Wait, the docs in docs/whoop-integration.md say:
     // - read:workout - Workout activity Strain and average heart rate
     // But doesn't list the endpoint explicitly for workouts, only recovery and user profile.
-    
+
     // Let's try to list workouts using the standard endpoint pattern if it exists.
     // The previous 404 suggests /activity/workout might be wrong or require an ID.
-    
+
     // Let's try to get ALL cycles first, maybe workouts are attached to cycles?
     // https://api.prod.whoop.com/developer/v1/cycle
     const url = new URL('https://api.prod.whoop.com/developer/v1/cycle')
@@ -72,14 +75,14 @@ async function debugWhoop() {
 
     const response = await fetch(url.toString(), {
       headers: {
-        'Authorization': `Bearer ${validIntegration.accessToken}`
+        Authorization: `Bearer ${validIntegration.accessToken}`
       }
     })
 
     if (!response.ok) {
-        const errorText = await response.text()
-        console.error('Whoop API Error:', response.status, errorText)
-        return
+      const errorText = await response.text()
+      console.error('Whoop API Error:', response.status, errorText)
+      return
     }
 
     const data = await response.json()
@@ -88,26 +91,25 @@ async function debugWhoop() {
     console.log(`Found ${workouts.length} workouts in Whoop for this date range.`)
 
     for (const workout of workouts) {
-        console.log('\n--- Whoop Workout ---')
-        console.log(`ID: ${workout.id}`)
-        console.log(`Created At: ${workout.created_at}`)
-        console.log(`Updated At: ${workout.updated_at}`)
-        console.log(`Start: ${workout.start}`)
-        console.log(`End: ${workout.end}`)
-        console.log(`Timezone Offset: ${workout.timezone_offset}`)
-        console.log(`Sport ID: ${workout.sport_id}`)
-        
-        if (workout.score) {
-            console.log(`Strain: ${workout.score.strain}`)
-            console.log(`Avg HR: ${workout.score.average_heart_rate}`)
-            console.log(`Max HR: ${workout.score.max_heart_rate}`)
-            console.log(`Kilojoules: ${workout.score.kilojoule}`)
-            console.log(`Zone Duration (ms):`, workout.score.zone_duration)
-        } else {
-            console.log('No Score (Strain/HR) data available.')
-        }
-    }
+      console.log('\n--- Whoop Workout ---')
+      console.log(`ID: ${workout.id}`)
+      console.log(`Created At: ${workout.created_at}`)
+      console.log(`Updated At: ${workout.updated_at}`)
+      console.log(`Start: ${workout.start}`)
+      console.log(`End: ${workout.end}`)
+      console.log(`Timezone Offset: ${workout.timezone_offset}`)
+      console.log(`Sport ID: ${workout.sport_id}`)
 
+      if (workout.score) {
+        console.log(`Strain: ${workout.score.strain}`)
+        console.log(`Avg HR: ${workout.score.average_heart_rate}`)
+        console.log(`Max HR: ${workout.score.max_heart_rate}`)
+        console.log(`Kilojoules: ${workout.score.kilojoule}`)
+        console.log(`Zone Duration (ms):`, workout.score.zone_duration)
+      } else {
+        console.log('No Score (Strain/HR) data available.')
+      }
+    }
   } catch (error) {
     console.error('Error fetching from Whoop:', error)
   } finally {

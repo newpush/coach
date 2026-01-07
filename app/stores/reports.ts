@@ -5,10 +5,10 @@ export const useReportStore = defineStore('report', () => {
   const status = ref<'idle' | 'pending' | 'success' | 'error'>('idle')
   const generating = ref(false)
   const toast = useToast()
-  
+
   // Cache for single reports
   const currentReport = ref<any>(null)
-  
+
   async function fetchReports() {
     status.value = 'pending'
     try {
@@ -22,17 +22,17 @@ export const useReportStore = defineStore('report', () => {
   }
 
   async function fetchReport(id: string) {
-      // Return cached if available
-      if (currentReport.value?.id === id) return currentReport.value
-      
-      try {
-        const data = await $fetch(`/api/reports/${id}`)
-        currentReport.value = data
-        return data
-      } catch (error) {
-          console.error(`Error fetching report ${id}:`, error)
-          throw error
-      }
+    // Return cached if available
+    if (currentReport.value?.id === id) return currentReport.value
+
+    try {
+      const data = await $fetch(`/api/reports/${id}`)
+      currentReport.value = data
+      return data
+    } catch (error) {
+      console.error(`Error fetching report ${id}:`, error)
+      throw error
+    }
   }
 
   async function generateReport(type: string, config?: any) {
@@ -52,10 +52,10 @@ export const useReportStore = defineStore('report', () => {
         color: 'success',
         icon: 'i-heroicons-check-circle'
       })
-      
+
       // Refresh list to show new pending report
       await fetchReports()
-      
+
       return result.reportId
     } catch (error: any) {
       toast.add({

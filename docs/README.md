@@ -7,9 +7,11 @@ Welcome to the Coach Watts documentation. This comprehensive guide covers the sy
 The documentation is now organized into the following sections. Please refer to the [Index](./INDEX.md) for a complete list of documents.
 
 ### [Architecture](./01-architecture/system-overview.md)
+
 **System design and technical decisions**
 
 Learn about the high-level system architecture, including:
+
 - Technology stack and component selection
 - Core functional modules (Data Ingestion, AI Agents)
 - Data flow and background job processing
@@ -20,9 +22,11 @@ Learn about the high-level system architecture, including:
 **Read this first** to understand the overall system design and how different components work together.
 
 ### [Database Schema](./01-architecture/database-schema.md)
+
 **Complete database structure and design**
 
 Detailed documentation of the PostgreSQL database schema:
+
 - All tables and relationships
 - Field descriptions and data types
 - Indexes and performance optimization
@@ -34,9 +38,11 @@ Detailed documentation of the PostgreSQL database schema:
 **Essential reading** for understanding data models and database interactions.
 
 ### [Chat Feature](./02-features/chat/overview.md)
+
 **AI Chat System Architecture**
 
 Guide to the chat implementation:
+
 - Architecture and components
 - Database schema for chat
 - API endpoints and data flow
@@ -44,9 +50,11 @@ Guide to the chat implementation:
 - AI integration details
 
 ### [Project Structure](./01-architecture/project-structure.md)
+
 **File organization and code conventions**
 
 Complete guide to the project's file system organization:
+
 - Directory structure with explanations
 - Naming conventions
 - File locations for different components
@@ -58,9 +66,11 @@ Complete guide to the project's file system organization:
 **Reference this** when creating new files or organizing code.
 
 ### [Implementation Guide](./04-guides/implementation-guide.md)
+
 **Step-by-step build instructions**
 
 Sequential implementation guide with detailed prompts:
+
 - Phase 1: Scaffold & Database
 - Phase 2: Authentication
 - Phase 3: Integration Logic
@@ -69,6 +79,7 @@ Sequential implementation guide with detailed prompts:
 - Phase 6: Polish
 
 Each phase includes:
+
 - Clear goals and objectives
 - Detailed code examples
 - Commands to execute
@@ -101,13 +112,13 @@ graph TB
         A[Nuxt 3 Pages] --> B[Vue Components]
         B --> C[API Client]
     end
-    
+
     subgraph Backend
         C --> D[Nuxt API Routes]
         D --> E[Prisma ORM]
         E --> F[(PostgreSQL)]
     end
-    
+
     subgraph Background
         G[Trigger.dev Jobs] --> H[Data Ingestion]
         G --> I[AI Processing]
@@ -115,13 +126,13 @@ graph TB
         I --> J[Google Gemini]
         I --> F
     end
-    
+
     subgraph External
         K[Intervals.icu] --> H
         L[Whoop] --> H
         M[Google OAuth] --> D
     end
-    
+
     style A fill:#e1f5ff
     style D fill:#ffe1e1
     style G fill:#e1ffe1
@@ -131,18 +142,21 @@ graph TB
 ## 🎯 Key Features
 
 ### Data Ingestion
+
 - **Intervals.icu Integration:** Workout data, power metrics, training calendar
 - **Whoop Integration:** Recovery scores, HRV, sleep tracking
 - **Automatic Sync:** Background jobs keep data fresh
 - **Normalized Storage:** Unified data format from multiple sources
 
 ### AI Coaching
+
 - **Retrospective Analysis:** Deep weekly/monthly reports using Gemini Pro
 - **Prescriptive Guidance:** Daily workout suggestions using Gemini Flash
 - **Chain-of-Thought Reasoning:** Comprehensive analysis of training trends
 - **Structured Recommendations:** JSON-formatted actionable advice
 
 ### User Experience
+
 - **Dashboard:** Real-time readiness and activity overview
 - **Reports:** Markdown-formatted analysis with PDF export
 - **Settings:** Profile management and integration connections
@@ -150,22 +164,23 @@ graph TB
 
 ## 🛠️ Technology Stack
 
-| Layer | Technology | Purpose |
-|-------|-----------|---------|
-| **Frontend** | Nuxt 3 | Full-stack framework |
-| **UI Library** | Nuxt UI | Component library |
-| **Database** | PostgreSQL | Data persistence |
-| **ORM** | Prisma | Type-safe database access |
-| **Auth** | NuxtAuth | Authentication & sessions |
-| **Jobs** | Trigger.dev | Background processing |
-| **AI** | Google Gemini 2.5 | Analysis & recommendations |
-| **Language** | TypeScript | Type safety throughout |
+| Layer          | Technology        | Purpose                    |
+| -------------- | ----------------- | -------------------------- |
+| **Frontend**   | Nuxt 3            | Full-stack framework       |
+| **UI Library** | Nuxt UI           | Component library          |
+| **Database**   | PostgreSQL        | Data persistence           |
+| **ORM**        | Prisma            | Type-safe database access  |
+| **Auth**       | NuxtAuth          | Authentication & sessions  |
+| **Jobs**       | Trigger.dev       | Background processing      |
+| **AI**         | Google Gemini 2.5 | Analysis & recommendations |
+| **Language**   | TypeScript        | Type safety throughout     |
 
 ## 📋 Prerequisites
 
 Before starting development, ensure you have:
 
 ### Required
+
 - Node.js 18+
 - pnpm, npm, or yarn
 - PostgreSQL database
@@ -173,6 +188,7 @@ Before starting development, ensure you have:
 - Google OAuth credentials
 
 ### Optional (for full functionality)
+
 - Intervals.icu account and API access
 - Whoop account and API access
 - Trigger.dev account
@@ -254,24 +270,28 @@ npx trigger.dev@latest deploy  # Deploy jobs to production
 ## 🎨 Code Style Guidelines
 
 ### TypeScript
+
 - Use explicit types for function parameters and return values
 - Leverage type inference where obvious
 - Prefer interfaces over type aliases for object shapes
 - Use enums for fixed sets of values
 
 ### Vue Components
+
 - Use `<script setup>` syntax
 - Co-locate related logic
 - Keep components focused and reusable
 - Use composables for shared logic
 
 ### API Design
+
 - Follow RESTful conventions
 - Return consistent response formats
 - Use proper HTTP status codes
 - Include error messages
 
 ### Naming Conventions
+
 - Components: `PascalCase.vue`
 - Files: `kebab-case.ts`
 - Functions: `camelCase`
@@ -281,16 +301,19 @@ npx trigger.dev@latest deploy  # Deploy jobs to production
 ## 🧪 Testing Strategy
 
 ### Unit Tests
+
 - Utilities and calculations
 - Pure functions
 - Data transformations
 
 ### Integration Tests
+
 - API endpoints
 - Database operations
 - External API clients
 
 ### E2E Tests
+
 - Critical user flows
 - Authentication
 - Report generation
@@ -298,18 +321,21 @@ npx trigger.dev@latest deploy  # Deploy jobs to production
 ## 📊 Performance Considerations
 
 ### Frontend
+
 - Lazy load components
 - Optimize images
 - Use pagination for lists
 - Cache API responses
 
 ### Backend
+
 - Database indexes on frequently queried fields
 - Connection pooling
 - API rate limiting
 - Query optimization
 
 ### Background Jobs
+
 - Batch processing where possible
 - Efficient data fetching
 - Proper error handling
@@ -318,18 +344,21 @@ npx trigger.dev@latest deploy  # Deploy jobs to production
 ## 🔒 Security Best Practices
 
 ### Authentication
+
 - Secure session management
 - HTTPS everywhere
 - CSRF protection
 - Rate limiting
 
 ### Data Protection
+
 - Encrypt sensitive tokens
 - Sanitize user input
 - Use parameterized queries
 - Regular security audits
 
 ### API Security
+
 - Authentication required for protected routes
 - Authorization checks
 - Input validation
@@ -338,12 +367,14 @@ npx trigger.dev@latest deploy  # Deploy jobs to production
 ## 📈 Monitoring and Observability
 
 ### Application Monitoring
+
 - Error tracking (Sentry)
 - Performance monitoring
 - User analytics
 - API metrics
 
 ### Background Jobs
+
 - Trigger.dev dashboard
 - Job execution logs
 - Failure alerts
@@ -352,11 +383,13 @@ npx trigger.dev@latest deploy  # Deploy jobs to production
 ## 🚢 Deployment
 
 ### Recommended Hosting
+
 - **Frontend/API:** Vercel, Netlify, or Railway
 - **Database:** Neon, Supabase, or managed PostgreSQL
 - **Background Jobs:** Trigger.dev cloud
 
 ### Deployment Checklist
+
 - [ ] Environment variables configured
 - [ ] Database migrations applied
 - [ ] SSL certificates configured
@@ -379,6 +412,7 @@ npx trigger.dev@latest deploy  # Deploy jobs to production
 ### Documentation Updates
 
 When updating documentation:
+
 - Keep examples current
 - Update diagrams if architecture changes
 - Maintain consistent formatting
@@ -389,6 +423,7 @@ When updating documentation:
 ### Common Issues
 
 **Database Connection Fails**
+
 ```bash
 # Check DATABASE_URL is correct
 echo $DATABASE_URL
@@ -398,11 +433,13 @@ npx prisma db pull
 ```
 
 **Prisma Client Out of Sync**
+
 ```bash
 npx prisma generate
 ```
 
 **Background Jobs Not Running**
+
 ```bash
 # Check Trigger.dev is running
 npx trigger.dev@latest dev
@@ -411,6 +448,7 @@ npx trigger.dev@latest dev
 ```
 
 **OAuth Callback Fails**
+
 - Verify redirect URIs match exactly
 - Check client ID and secret
 - Ensure proper scopes requested
@@ -418,12 +456,14 @@ npx trigger.dev@latest dev
 ## 📞 Support
 
 ### Resources
+
 - [Nuxt Documentation](https://nuxt.com/docs)
 - [Prisma Documentation](https://www.prisma.io/docs)
 - [Trigger.dev Documentation](https://trigger.dev/docs)
 - [Google Gemini API](https://ai.google.dev/docs)
 
 ### Community
+
 - GitHub Issues (for bug reports)
 - GitHub Discussions (for questions)
 - Discord Server (for real-time help)
@@ -431,6 +471,7 @@ npx trigger.dev@latest dev
 ## 🗺️ Roadmap
 
 ### Phase 1 (MVP)
+
 - [x] Architecture design
 - [x] Database schema
 - [x] Documentation
@@ -440,12 +481,14 @@ npx trigger.dev@latest dev
 - [ ] Dashboard UI
 
 ### Phase 2
+
 - [ ] Advanced analytics
 - [ ] Race preparation mode
 - [ ] Training plan builder
 - [ ] Mobile-responsive design
 
 ### Phase 3
+
 - [ ] Strava integration
 - [ ] Garmin integration
 - [ ] Community features

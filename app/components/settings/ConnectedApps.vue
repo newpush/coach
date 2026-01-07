@@ -9,22 +9,26 @@
         <!-- Intervals.icu -->
         <UCard :ui="{ body: 'flex flex-col h-full justify-between gap-4' }">
           <div class="flex items-start gap-4">
-            <div class="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center shrink-0 overflow-hidden">
-              <img src="/images/logos/intervals.png" alt="Intervals.icu Logo" class="w-8 h-8 object-contain" >
+            <div
+              class="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center shrink-0 overflow-hidden"
+            >
+              <img
+                src="/images/logos/intervals.png"
+                alt="Intervals.icu Logo"
+                class="w-8 h-8 object-contain"
+              />
             </div>
             <div>
               <h3 class="font-semibold">Intervals.icu</h3>
               <p class="text-sm text-muted">Power data and training calendar</p>
             </div>
           </div>
-          
-          <div class="flex items-center justify-end gap-2 pt-4 border-t border-gray-100 dark:border-gray-800 mt-auto">
+
+          <div
+            class="flex items-center justify-end gap-2 pt-4 border-t border-gray-100 dark:border-gray-800 mt-auto"
+          >
             <div v-if="!intervalsConnected" class="flex flex-col items-end gap-2">
-              <UButton
-                color="neutral"
-                variant="outline"
-                @click="signIn('intervals')"
-              >
+              <UButton color="neutral" variant="outline" @click="signIn('intervals')">
                 Connect
               </UButton>
               <UButton
@@ -74,8 +78,14 @@
         <!-- WHOOP -->
         <UCard :ui="{ body: 'flex flex-col h-full justify-between gap-4' }">
           <div class="flex items-start gap-4">
-            <div class="w-12 h-12 bg-white rounded-lg flex items-center justify-center shrink-0 overflow-hidden ring-1 ring-gray-200 dark:ring-gray-700">
-              <img src="/images/logos/whoop_square.svg" alt="WHOOP Logo" class="w-8 h-8 object-contain" >
+            <div
+              class="w-12 h-12 bg-white rounded-lg flex items-center justify-center shrink-0 overflow-hidden ring-1 ring-gray-200 dark:ring-gray-700"
+            >
+              <img
+                src="/images/logos/whoop_square.svg"
+                alt="WHOOP Logo"
+                class="w-8 h-8 object-contain"
+              />
             </div>
             <div>
               <h3 class="font-semibold">WHOOP</h3>
@@ -83,9 +93,11 @@
             </div>
           </div>
 
-          <div class="flex flex-col gap-2 pt-4 border-t border-gray-100 dark:border-gray-800 mt-auto">
+          <div
+            class="flex flex-col gap-2 pt-4 border-t border-gray-100 dark:border-gray-800 mt-auto"
+          >
             <div v-if="whoopConnected" class="flex justify-end mb-2">
-               <div class="flex items-center gap-2">
+              <div class="flex items-center gap-2">
                 <span class="text-xs text-muted">Ingest Workouts</span>
                 <USwitch
                   :model-value="whoopIngestWorkouts"
@@ -96,11 +108,7 @@
             </div>
             <div class="flex items-center justify-end gap-2">
               <div v-if="!whoopConnected">
-                <UButton
-                  color="neutral"
-                  variant="outline"
-                  @click="navigateTo('/connect-whoop')"
-                >
+                <UButton color="neutral" variant="outline" @click="navigateTo('/connect-whoop')">
                   Connect
                 </UButton>
               </div>
@@ -132,8 +140,14 @@
         <!-- Withings -->
         <UCard :ui="{ body: 'flex flex-col h-full justify-between gap-4' }">
           <div class="flex items-start gap-4">
-            <div class="w-12 h-12 bg-white rounded-lg flex items-center justify-center shrink-0 overflow-hidden ring-1 ring-gray-200 dark:ring-gray-700">
-              <img src="/images/logos/withings.png" alt="Withings Logo" class="w-8 h-8 object-contain" >
+            <div
+              class="w-12 h-12 bg-white rounded-lg flex items-center justify-center shrink-0 overflow-hidden ring-1 ring-gray-200 dark:ring-gray-700"
+            >
+              <img
+                src="/images/logos/withings.png"
+                alt="Withings Logo"
+                class="w-8 h-8 object-contain"
+              />
             </div>
             <div>
               <h3 class="font-semibold">Withings</h3>
@@ -141,13 +155,11 @@
             </div>
           </div>
 
-          <div class="flex items-center justify-end gap-2 pt-4 border-t border-gray-100 dark:border-gray-800 mt-auto">
+          <div
+            class="flex items-center justify-end gap-2 pt-4 border-t border-gray-100 dark:border-gray-800 mt-auto"
+          >
             <div v-if="!withingsConnected">
-              <UButton
-                color="neutral"
-                variant="outline"
-                @click="navigateTo('/connect-withings')"
-              >
+              <UButton color="neutral" variant="outline" @click="navigateTo('/connect-withings')">
                 Connect
               </UButton>
             </div>
@@ -178,8 +190,14 @@
         <!-- Yazio -->
         <UCard :ui="{ body: 'flex flex-col h-full justify-between gap-4' }">
           <div class="flex items-start gap-4">
-            <div class="w-12 h-12 bg-white rounded-lg flex items-center justify-center shrink-0 overflow-hidden ring-1 ring-gray-200 dark:ring-gray-700">
-              <img src="/images/logos/yazio_square.webp" alt="Yazio Logo" class="w-8 h-8 object-contain" >
+            <div
+              class="w-12 h-12 bg-white rounded-lg flex items-center justify-center shrink-0 overflow-hidden ring-1 ring-gray-200 dark:ring-gray-700"
+            >
+              <img
+                src="/images/logos/yazio_square.webp"
+                alt="Yazio Logo"
+                class="w-8 h-8 object-contain"
+              />
             </div>
             <div>
               <h3 class="font-semibold">Yazio</h3>
@@ -187,13 +205,11 @@
             </div>
           </div>
 
-          <div class="flex items-center justify-end gap-2 pt-4 border-t border-gray-100 dark:border-gray-800 mt-auto">
+          <div
+            class="flex items-center justify-end gap-2 pt-4 border-t border-gray-100 dark:border-gray-800 mt-auto"
+          >
             <div v-if="!yazioConnected">
-              <UButton
-                color="neutral"
-                variant="outline"
-                @click="navigateTo('/connect-yazio')"
-              >
+              <UButton color="neutral" variant="outline" @click="navigateTo('/connect-yazio')">
                 Connect
               </UButton>
             </div>
@@ -224,8 +240,14 @@
         <!-- Hevy -->
         <UCard :ui="{ body: 'flex flex-col h-full justify-between gap-4' }">
           <div class="flex items-start gap-4">
-            <div class="w-12 h-12 bg-white rounded-lg flex items-center justify-center shrink-0 overflow-hidden ring-1 ring-gray-200 dark:ring-gray-700">
-              <img src="/images/logos/hevy-icon.png" alt="Hevy Logo" class="w-8 h-8 object-contain" >
+            <div
+              class="w-12 h-12 bg-white rounded-lg flex items-center justify-center shrink-0 overflow-hidden ring-1 ring-gray-200 dark:ring-gray-700"
+            >
+              <img
+                src="/images/logos/hevy-icon.png"
+                alt="Hevy Logo"
+                class="w-8 h-8 object-contain"
+              />
             </div>
             <div>
               <h3 class="font-semibold">Hevy</h3>
@@ -233,23 +255,16 @@
             </div>
           </div>
 
-          <div class="flex items-center justify-end gap-2 pt-4 border-t border-gray-100 dark:border-gray-800 mt-auto">
+          <div
+            class="flex items-center justify-end gap-2 pt-4 border-t border-gray-100 dark:border-gray-800 mt-auto"
+          >
             <div v-if="!hevyConnected">
-              <UButton
-                color="neutral"
-                variant="outline"
-                @click="navigateTo('/connect-hevy')"
-              >
+              <UButton color="neutral" variant="outline" @click="navigateTo('/connect-hevy')">
                 Connect
               </UButton>
             </div>
             <div v-else class="flex items-center gap-2">
-              <UButton
-                color="error"
-                variant="ghost"
-                size="xs"
-                @click="$emit('disconnect', 'hevy')"
-              >
+              <UButton color="error" variant="ghost" size="xs" @click="$emit('disconnect', 'hevy')">
                 Disconnect
               </UButton>
               <UButton
@@ -270,8 +285,14 @@
         <!-- Strava -->
         <UCard :ui="{ body: 'flex flex-col h-full justify-between gap-4' }">
           <div class="flex items-start gap-4">
-            <div class="w-12 h-12 bg-white rounded-lg flex items-center justify-center shrink-0 overflow-hidden ring-1 ring-gray-200 dark:ring-gray-700">
-              <img src="/images/logos/strava.svg" alt="Strava Logo" class="w-8 h-8 object-contain" >
+            <div
+              class="w-12 h-12 bg-white rounded-lg flex items-center justify-center shrink-0 overflow-hidden ring-1 ring-gray-200 dark:ring-gray-700"
+            >
+              <img
+                src="/images/logos/strava.svg"
+                alt="Strava Logo"
+                class="w-8 h-8 object-contain"
+              />
             </div>
             <div>
               <h3 class="font-semibold">Strava</h3>
@@ -279,10 +300,16 @@
             </div>
           </div>
 
-          <div class="flex items-center justify-end gap-2 pt-4 border-t border-gray-100 dark:border-gray-800 mt-auto">
+          <div
+            class="flex items-center justify-end gap-2 pt-4 border-t border-gray-100 dark:border-gray-800 mt-auto"
+          >
             <div v-if="!stravaConnected">
               <UTooltip
-                :text="isStravaDisabled ? 'Strava integration is temporarily unavailable on coachwatts.com' : ''"
+                :text="
+                  isStravaDisabled
+                    ? 'Strava integration is temporarily unavailable on coachwatts.com'
+                    : ''
+                "
                 :popper="{ placement: 'top' }"
               >
                 <UButton
@@ -323,10 +350,7 @@
     <UModal v-model:open="advancedSyncModalOpen" title="Advanced Sync">
       <template #body>
         <div class="space-y-4">
-          <p>
-            Select how many days of historical data you would like to sync from
-            Intervals.icu.
-          </p>
+          <p>Select how many days of historical data you would like to sync from Intervals.icu.</p>
           <USelectMenu
             v-model="selectedDays"
             :items="[30, 90, 180, 365]"
@@ -337,11 +361,7 @@
 
       <template #footer>
         <div class="flex justify-end gap-2">
-          <UButton
-            color="neutral"
-            variant="outline"
-            @click="advancedSyncModalOpen = false"
-          >
+          <UButton color="neutral" variant="outline" @click="advancedSyncModalOpen = false">
             Cancel
           </UButton>
           <UButton
@@ -363,29 +383,29 @@
 </template>
 
 <script setup lang="ts">
-const { signIn } = useAuth()
-const advancedSyncModalOpen = ref(false)
-const selectedDays = ref<number | undefined>()
+  const { signIn } = useAuth()
+  const advancedSyncModalOpen = ref(false)
+  const selectedDays = ref<number | undefined>()
 
-const isStravaDisabled = computed(() => {
-  if (import.meta.server) return false
-  return window.location.hostname === 'coachwatts.com'
-})
+  const isStravaDisabled = computed(() => {
+    if (import.meta.server) return false
+    return window.location.hostname === 'coachwatts.com'
+  })
 
-defineProps<{
-  intervalsConnected: boolean
-  whoopConnected: boolean
-  whoopIngestWorkouts: boolean
-  withingsConnected: boolean
-  yazioConnected: boolean
-  stravaConnected: boolean
-  hevyConnected: boolean
-  syncingProviders: Set<string>
-}>()
+  defineProps<{
+    intervalsConnected: boolean
+    whoopConnected: boolean
+    whoopIngestWorkouts: boolean
+    withingsConnected: boolean
+    yazioConnected: boolean
+    stravaConnected: boolean
+    hevyConnected: boolean
+    syncingProviders: Set<string>
+  }>()
 
-defineEmits<{
-  disconnect: [provider: string]
-  sync: [provider: string, days?: number]
-  updateSetting: [provider: string, setting: string, value: any]
-}>()
+  defineEmits<{
+    disconnect: [provider: string]
+    sync: [provider: string, days?: number]
+    updateSetting: [provider: string, setting: string, value: any]
+  }>()
 </script>

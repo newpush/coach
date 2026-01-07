@@ -10,6 +10,7 @@ Automatically generate comprehensive, professional bug reports and post them dir
 ## Purpose
 
 This skill automates the creation of detailed bug reports that include:
+
 - Clear, concise issue titles
 - Step-by-step reproduction instructions
 - Technical analysis and root cause insights
@@ -19,6 +20,7 @@ This skill automates the creation of detailed bug reports that include:
 ## When to Use This Skill
 
 Use this skill when:
+
 - Documenting a bug discovered during development or testing
 - Creating a GitHub Issue to track a problem
 - Generating a professional bug report with reproduction steps
@@ -30,6 +32,7 @@ Use this skill when:
 ### 1. Repository Detection
 
 Detect the Git repository in the current working directory:
+
 - Extract the repository owner and name from the remote origin URL
 - Validate that the repository is a GitHub repository
 - Handle both HTTPS and SSH remote URL formats
@@ -42,22 +45,26 @@ Create a comprehensive bug report following this structure:
 
 **Issue Body**:
 
-```markdown
+````markdown
 ## Summary
+
 [Clear description of the issue including what went wrong and expected behavior]
 
 ## Reproduction Steps
+
 1. [First step to reproduce]
 2. [Second step to reproduce]
 3. [Third step to reproduce]
-...
+   ...
 
 ## Environment
+
 - **OS**: [Operating system and version]
 - **Browser/Runtime**: [Browser or Node.js version]
 - **Version**: [Application or package version]
 
 ## Technical Details
+
 - **Component**: [Affected component/module/file]
 - **Severity**: [Critical/High/Medium/Low]
 - **Affected Users**: [Scope of impact]
@@ -65,15 +72,19 @@ Create a comprehensive bug report following this structure:
 ## Findings and Insights
 
 ### Root Cause Analysis
+
 [Detailed technical analysis from the debugging session, explaining why the bug occurs]
 
 ### Code Locations
+
 [Specific files, functions, and line numbers where the issue manifests]
 
 ### Potential Impact
+
 [Description of how this bug affects users and system behavior]
 
 ### Dependencies Affected
+
 [Other components or systems that may be impacted]
 
 ## Recommended E2E Test
@@ -82,32 +93,36 @@ Create a comprehensive bug report following this structure:
 describe('Bug Fix Verification', () => {
   it('should [expected behavior after fix]', async () => {
     // Arrange: Set up test conditions
-
     // Act: Execute the action that previously triggered the bug
-
     // Assert: Verify the bug is fixed
-  });
-});
+  })
+})
 ```
+````
 
 ## Additional Context
 
 ### Error Messages
+
 ```
 [Relevant error messages from logs or console]
 ```
 
 ### Stack Trace
+
 ```
 [Stack trace if available]
 ```
 
 ### Related Issues
+
 [Links to related GitHub issues if applicable]
 
 ### Screenshots/Logs
+
 [Additional context like screenshots or log snippets]
-```
+
+````
 
 ### 3. GitHub Issue Creation
 
@@ -115,9 +130,10 @@ Use the `scripts/create_issue.sh` script to create the GitHub issue:
 
 ```bash
 scripts/create_issue.sh "<title>" "<body>" "<labels>"
-```
+````
 
 The script:
+
 - Authenticates using GitHub CLI (`gh`)
 - Validates repository permissions
 - Creates the issue with specified labels
@@ -126,6 +142,7 @@ The script:
 ### 4. Result Presentation
 
 Display the created issue information:
+
 - Issue number
 - Direct link to the GitHub Issue
 - Confirmation of successful creation
@@ -157,11 +174,13 @@ scripts/create_issue.sh "<issue-title>" "<issue-body>" "bug,priority:high"
 ```
 
 **Parameters:**
+
 - `title`: Issue title (required, max 80 characters recommended)
 - `body`: Full issue body in markdown format (required)
 - `labels`: Comma-separated list of labels (optional, defaults to "bug")
 
 **Features:**
+
 - Validates `gh` CLI installation and authentication
 - Detects repository information automatically
 - Handles both SSH and HTTPS remote URLs
@@ -170,6 +189,7 @@ scripts/create_issue.sh "<issue-title>" "<issue-body>" "bug,priority:high"
 - Provides colored output for better visibility
 
 **Error Handling:**
+
 - Checks for `gh` CLI installation
 - Verifies GitHub authentication status
 - Confirms Git repository presence
@@ -182,6 +202,7 @@ scripts/create_issue.sh "<issue-title>" "<issue-body>" "bug,priority:high"
 Template for generating consistent bug report bodies. Use this template to structure bug reports before passing them to the script.
 
 The template includes placeholders for:
+
 - `{{SUMMARY}}`: Brief description of the bug
 - `{{REPRODUCTION_STEPS}}`: Numbered steps to reproduce
 - `{{OS}}`, `{{RUNTIME}}`, `{{VERSION}}`: Environment details
@@ -195,6 +216,7 @@ The template includes placeholders for:
 - `{{RELATED_ISSUES}}`, `{{ADDITIONAL_CONTEXT}}`: Extra context
 
 To use the template:
+
 1. Read the template from `assets/issue_template.md`
 2. Replace placeholders with actual values
 3. Pass the formatted body to `scripts/create_issue.sh`
@@ -215,11 +237,13 @@ To use the template:
 ## Example Usage
 
 **Simple invocation:**
+
 ```
 Use the report-bug skill to create an issue for the login button not responding to clicks
 ```
 
 **Detailed invocation:**
+
 ```
 Use report-bug to document the memory leak in the UserProfile component.
 Include the findings from today's debugging session about the event listener not being cleaned up.
@@ -227,6 +251,7 @@ Recommend a test that validates proper cleanup on component unmount.
 ```
 
 **With specific severity:**
+
 ```
 Use report-bug to create a critical issue for the payment processing failure.
 Include the error logs and stack trace from the production incident.
@@ -237,25 +262,30 @@ Include the error logs and stack trace from the production incident.
 ### Common Issues
 
 **"gh: command not found"**
+
 - Install GitHub CLI: `brew install gh` (macOS) or visit https://cli.github.com
 - Verify installation: `gh --version`
 
 **"authentication required"**
+
 - Run: `gh auth login`
 - Follow the authentication flow
 - Ensure the `repo` scope is granted
 
 **"permission denied"**
+
 - Verify write access to the repository
 - Check GitHub authentication scope includes `repo`
 - Confirm repository ownership or collaborator status
 
 **"not a git repository"**
+
 - Ensure execution from within a Git repository directory
 - Run `git remote -v` to verify remote is configured
 - Check for `.git` directory in current or parent directories
 
 **Issue creation fails**
+
 - Check GitHub API rate limits: `gh api rate_limit`
 - Verify network connectivity to GitHub
 - Ensure issue title is not empty and body is valid markdown
@@ -291,6 +321,7 @@ The issue has been posted with:
 ## Integration
 
 This skill integrates with:
+
 - **Git**: Repository detection and remote URL parsing
 - **GitHub CLI**: Issue creation and authentication
 - **Claude Code**: Session context and findings extraction

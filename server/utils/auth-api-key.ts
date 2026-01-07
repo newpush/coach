@@ -3,12 +3,12 @@ import type { H3Event } from 'h3'
 /**
  * Validates an API key from the request headers.
  * Looks for 'X-API-Key' header.
- * 
+ *
  * @returns The user associated with the key if valid, null otherwise.
  */
 export async function validateApiKey(event: H3Event) {
   const apiKey = getHeader(event, 'X-API-Key')
-  
+
   if (!apiKey) {
     return null
   }
@@ -35,10 +35,12 @@ export async function validateApiKey(event: H3Event) {
   }
 
   // Update last used timestamp (async, don't block)
-  prisma.apiKey.update({
-    where: { id: keyRecord.id },
-    data: { lastUsedAt: new Date() }
-  }).catch(err => console.error('Failed to update API key lastUsedAt:', err))
+  prisma.apiKey
+    .update({
+      where: { id: keyRecord.id },
+      data: { lastUsedAt: new Date() }
+    })
+    .catch((err) => console.error('Failed to update API key lastUsedAt:', err))
 
   return keyRecord.user
 }

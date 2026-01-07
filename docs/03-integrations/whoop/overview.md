@@ -39,6 +39,7 @@ For production, set the `NUXT_PUBLIC_SITE_URL` environment variable to your prod
 ### API Endpoints
 
 #### 1. Authorization Endpoint
+
 - **URL**: `GET /api/integrations/whoop/authorize`
 - **Purpose**: Initiates the OAuth flow by redirecting to WHOOP's authorization page at `https://api.prod.whoop.com/oauth/oauth2/auth`
 - **Scopes Requested**:
@@ -50,6 +51,7 @@ For production, set the `NUXT_PUBLIC_SITE_URL` environment variable to your prod
   - `read:body_measurement` - Body measurements (height, weight, max heart rate)
 
 #### 2. Callback Endpoint
+
 - **URL**: `GET /api/integrations/whoop/callback`
 - **Purpose**: Receives the authorization code from WHOOP and exchanges it for access tokens via `https://api.prod.whoop.com/oauth/oauth2/token`
 - **Process**:
@@ -60,12 +62,14 @@ For production, set the `NUXT_PUBLIC_SITE_URL` environment variable to your prod
   5. Redirects back to settings page with success/error message
 
 #### 3. Disconnect Endpoint
+
 - **URL**: `DELETE /api/integrations/[provider]/disconnect`
 - **Purpose**: Removes the integration and associated tokens from the database
 
 ### Frontend Components
 
 #### 1. Connect WHOOP Page
+
 - **Route**: `/connect-whoop`
 - **File**: [`app/pages/connect-whoop.vue`](../app/pages/connect-whoop.vue)
 - **Features**:
@@ -75,6 +79,7 @@ For production, set the `NUXT_PUBLIC_SITE_URL` environment variable to your prod
   - Initiates OAuth flow on button click
 
 #### 2. Settings Page Integration
+
 - **Route**: `/settings`
 - **File**: [`app/pages/settings.vue`](../app/pages/settings.vue)
 - **Features**:
@@ -88,12 +93,14 @@ For production, set the `NUXT_PUBLIC_SITE_URL` environment variable to your prod
 ### Prerequisites
 
 1. Ensure your `.env` file has valid WHOOP credentials:
+
    ```bash
    WHOOP_CLIENT_ID=8e6b159b-f683-4b06-b1d0-fd866baeb35c
    WHOOP_CLIENT_SECRET=ad268ca50130041489dedfd7cebaf7401fc9f027610e7c382ba7e83014baabfe
    ```
 
 2. Make sure your WHOOP Developer Portal callback URL is set to:
+
    ```
    http://localhost:3099/api/integrations/whoop/callback
    ```
@@ -139,15 +146,18 @@ For production, set the `NUXT_PUBLIC_SITE_URL` environment variable to your prod
 ### Troubleshooting
 
 #### OAuth Redirect Issues
+
 - Ensure the callback URL in WHOOP Developer Portal matches exactly: `http://localhost:3099/api/integrations/whoop/callback`
 - Check that `NUXT_PUBLIC_SITE_URL` is set correctly if not using localhost
 
 #### Token Exchange Failures
+
 - Verify client ID and secret are correct
 - Check server logs for detailed error messages
 - Ensure your WHOOP app has the correct scopes enabled
 
 #### Database Integration Not Saved
+
 - Check that the user is properly authenticated
 - Verify database connection is working
 - Check server logs for Prisma errors

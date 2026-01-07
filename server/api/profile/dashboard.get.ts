@@ -3,14 +3,14 @@ import { prisma } from '../../utils/db'
 
 export default defineEventHandler(async (event) => {
   const session = await getServerSession(event)
-  
+
   if (!session?.user?.email) {
     throw createError({
       statusCode: 401,
       message: 'Unauthorized'
     })
   }
-  
+
   try {
     // Get user with cached profile data
     const user = await prisma.user.findUnique({
@@ -28,17 +28,17 @@ export default defineEventHandler(async (event) => {
         hrZones: true
       }
     })
-    
+
     if (!user) {
       throw createError({
         statusCode: 404,
         message: 'User not found'
       })
     }
-    
+
     // Query the most recent wellness data available with actual values
     const wellness = await prisma.wellness.findFirst({
-      where: { 
+      where: {
         userId: user.id,
         restingHr: { not: null }
       },
@@ -56,7 +56,7 @@ export default defineEventHandler(async (event) => {
 
     // Also check DailyMetric as fallback
     const dailyMetric = await prisma.dailyMetric.findFirst({
-      where: { 
+      where: {
         userId: user.id,
         restingHr: { not: null }
       },
@@ -107,7 +107,7 @@ export default defineEventHandler(async (event) => {
       }
       wellnessDate = dailyMetric.date
     }
-    
+
     // Calculate age from date of birth
     const calculateAge = (dob: Date): number | null => {
       if (!dob) return null
@@ -122,7 +122,7 @@ export default defineEventHandler(async (event) => {
 
     const age = user.dob ? calculateAge(user.dob) : null
     const estimatedMaxHR = age ? 220 - age : null
-    
+
     // Use the wellness data we found
     const recentRestingHR = wellnessData?.restingHr ?? null
     const recentHRV = wellnessData?.hrv ?? null
@@ -130,13 +130,13 @@ export default defineEventHandler(async (event) => {
     const recentSleep = wellnessData?.sleepHours ?? null
     const recentRecoveryScore = wellnessData?.recoveryScore ?? null
     const latestWellnessDate = wellnessDate
-    
+
     // Calculate 7-day HRV average if we have wellness data
     let avgRecentHRV = null
     if (wellnessDate) {
       const sevenDaysAgo = new Date(wellnessDate)
       sevenDaysAgo.setDate(wellnessDate.getDate() - 7)
-      
+
       const weekWellness = await wellnessRepository.getForUser(user.id, {
         startDate: sevenDaysAgo,
         endDate: wellnessDate,
@@ -144,16 +144,14 @@ export default defineEventHandler(async (event) => {
           hrv: true
         }
       })
-      
-      const hrvValues = weekWellness
-        .map(w => w.hrv)
-        .filter(v => v != null) as number[]
-      
+
+      const hrvValues = weekWellness.map((w) => w.hrv).filter((v) => v != null) as number[]
+
       if (hrvValues.length > 0) {
         avgRecentHRV = hrvValues.reduce((a, b) => a + b, 0) / hrvValues.length
       }
     }
-    
+
     // Check if user has any reports
     const reportCount = await prisma.report.count({
       where: {
@@ -161,7 +159,7 @@ export default defineEventHandler(async (event) => {
         status: 'COMPLETED'
       }
     })
-    
+
     // Get user's integrations
     const integrations = await prisma.integration.findMany({
       where: { userId: user.id },
@@ -170,19 +168,19 @@ export default defineEventHandler(async (event) => {
         lastSyncAt: true
       }
     })
-    
+
     // Check data sync status for different categories
     const [workoutCount, nutritionCount, wellnessCount] = await Promise.all([
       workoutRepository.count(user.id, { includeDuplicates: true }), // Match original behavior counting all
       nutritionRepository.count(user.id),
       wellnessRepository.count(user.id)
     ])
-    
+
     // Determine which integrations provide data for each category
     const workoutProviders: string[] = []
     const nutritionProviders: string[] = []
     const wellnessProviders: string[] = []
-    
+
     for (const integration of integrations) {
       switch (integration.provider) {
         case 'intervals':
@@ -207,7 +205,7 @@ export default defineEventHandler(async (event) => {
     if (!user.weight) missingFields.push('Weight')
     if (!user.maxHr || !user.restingHr) missingFields.push('Heart Rate Settings (HRR)')
     if (!user.hrZones) missingFields.push('Custom Zones')
-    
+
     const response = {
       connected: true,
       hasReports: reportCount > 0,
@@ -240,7 +238,7 @@ export default defineEventHandler(async (event) => {
         latestWellnessDate: latestWellnessDate?.toISOString() ?? null
       }
     }
-    
+
     return response
   } catch (error) {
     console.error('Error fetching dashboard profile:', error)

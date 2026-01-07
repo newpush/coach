@@ -11,7 +11,7 @@ All trigger.dev tasks in this project are configured with **per-user queue concu
 We've defined three shared queues in [`trigger/queues.ts`](../trigger/queues.ts):
 
 1. **`userAnalysisQueue`** - For workout and nutrition analysis tasks
-2. **`userReportsQueue`** - For report generation tasks  
+2. **`userReportsQueue`** - For report generation tasks
 3. **`userBackgroundQueue`** - For background tasks like deduplication and planning
 
 Each queue has a `concurrencyLimit: 2`, which limits concurrent executions **per unique `concurrencyKey`**.
@@ -21,13 +21,11 @@ Each queue has a `concurrencyLimit: 2`, which limits concurrent executions **per
 The key to per-user concurrency is the `concurrencyKey` parameter. When you trigger a task:
 
 ```typescript
-await analyzeWorkoutTask.trigger(
-  { workoutId: "workout-123" },
-  { concurrencyKey: userId }
-);
+await analyzeWorkoutTask.trigger({ workoutId: 'workout-123' }, { concurrencyKey: userId })
 ```
 
 **What happens:**
+
 - Trigger.dev creates a separate queue instance for each unique `concurrencyKey` value
 - Each queue instance has its own concurrency limit of 2
 - User A can have 2 jobs running while User B also has 2 jobs running
@@ -38,41 +36,38 @@ await analyzeWorkoutTask.trigger(
 ### Triggering Workout Analysis
 
 ```typescript
-import { analyzeWorkoutTask } from "~/trigger/analyze-workout";
+import { analyzeWorkoutTask } from '~/trigger/analyze-workout'
 
 export default defineEventHandler(async (event) => {
-  const { workoutId } = await readBody(event);
-  const userId = event.context.auth.userId;
-  
-  const handle = await analyzeWorkoutTask.trigger(
-    { workoutId },
-    { concurrencyKey: userId }
-  );
-  
-  return { id: handle.id };
-});
+  const { workoutId } = await readBody(event)
+  const userId = event.context.auth.userId
+
+  const handle = await analyzeWorkoutTask.trigger({ workoutId }, { concurrencyKey: userId })
+
+  return { id: handle.id }
+})
 ```
 
 ### Triggering Nutrition Analysis
 
 ```typescript
-import { analyzeNutritionTask } from "~/trigger/analyze-nutrition";
+import { analyzeNutritionTask } from '~/trigger/analyze-nutrition'
 
 const handle = await analyzeNutritionTask.trigger(
-  { nutritionId: "nutrition-456" },
+  { nutritionId: 'nutrition-456' },
   { concurrencyKey: userId }
-);
+)
 ```
 
 ### Triggering Report Generation
 
 ```typescript
-import { generateWeeklyReportTask } from "~/trigger/generate-weekly-report";
+import { generateWeeklyReportTask } from '~/trigger/generate-weekly-report'
 
 const handle = await generateWeeklyReportTask.trigger(
   { userId, reportId },
   { concurrencyKey: userId }
-);
+)
 ```
 
 ### Batch Triggering Multiple Tasks
@@ -81,11 +76,11 @@ When triggering multiple tasks for the same user, they'll automatically queue:
 
 ```typescript
 const handles = await Promise.all([
-  analyzeWorkoutTask.trigger({ workoutId: "w1" }, { concurrencyKey: userId }),
-  analyzeWorkoutTask.trigger({ workoutId: "w2" }, { concurrencyKey: userId }),
-  analyzeWorkoutTask.trigger({ workoutId: "w3" }, { concurrencyKey: userId }),
-  analyzeNutritionTask.trigger({ nutritionId: "n1" }, { concurrencyKey: userId }),
-]);
+  analyzeWorkoutTask.trigger({ workoutId: 'w1' }, { concurrencyKey: userId }),
+  analyzeWorkoutTask.trigger({ workoutId: 'w2' }, { concurrencyKey: userId }),
+  analyzeWorkoutTask.trigger({ workoutId: 'w3' }, { concurrencyKey: userId }),
+  analyzeNutritionTask.trigger({ nutritionId: 'n1' }, { concurrencyKey: userId })
+])
 ```
 
 Result: First 2 jobs start immediately, others wait in queue
@@ -93,10 +88,12 @@ Result: First 2 jobs start immediately, others wait in queue
 ## Task Queue Assignments
 
 ### userAnalysisQueue (concurrencyLimit: 2)
+
 - [`analyzeWorkoutTask`](../trigger/analyze-workout.ts)
 - [`analyzeNutritionTask`](../trigger/analyze-nutrition.ts)
 
 ### userReportsQueue (concurrencyLimit: 2)
+
 - [`generateWeeklyReportTask`](../trigger/generate-weekly-report.ts)
 - [`generateAthleteProfileTask`](../trigger/generate-athlete-profile.ts)
 - [`dailyCoachTask`](../trigger/daily-coach.ts)
@@ -105,6 +102,7 @@ Result: First 2 jobs start immediately, others wait in queue
 - [`analyzeLast7NutritionTask`](../trigger/analyze-last-7-nutrition.ts)
 
 ### userBackgroundQueue (concurrencyLimit: 2)
+
 - [`deduplicateWorkoutsTask`](../trigger/deduplicate-workouts.ts)
 - [`generateWeeklyPlanTask`](../trigger/generate-weekly-plan.ts)
 
@@ -113,11 +111,13 @@ Result: First 2 jobs start immediately, others wait in queue
 ### ✅ DO
 
 1. **Always provide `concurrencyKey`** when triggering tasks:
+
    ```typescript
-   await task.trigger(payload, { concurrencyKey: userId });
+   await task.trigger(payload, { concurrencyKey: userId })
    ```
 
 2. **Use consistent user IDs** - Always use the same userId format (don't mix email and ID):
+
    ```typescript
    concurrencyKey: user.id
    ```
@@ -127,14 +127,16 @@ Result: First 2 jobs start immediately, others wait in queue
 ### ❌ DON'T
 
 1. **Don't trigger without `concurrencyKey`**:
+
    ```typescript
-   await task.trigger({ workoutId });
+   await task.trigger({ workoutId })
    ```
 
 2. **Don't use different keys for the same user**:
+
    ```typescript
-   await task.trigger(payload, { concurrencyKey: user.email });
-   await task.trigger(payload, { concurrencyKey: user.id });
+   await task.trigger(payload, { concurrencyKey: user.email })
+   await task.trigger(payload, { concurrencyKey: user.id })
    ```
 
 3. **Don't manually implement queueing logic** - The concurrency system handles this
@@ -144,6 +146,7 @@ Result: First 2 jobs start immediately, others wait in queue
 ### Check Queue Status
 
 You can check the status of queued runs in the Trigger.dev dashboard:
+
 - View pending/running/completed runs per queue
 - Monitor per-user queue depth
 - Identify if users are hitting concurrency limits
@@ -151,49 +154,50 @@ You can check the status of queued runs in the Trigger.dev dashboard:
 ### Common Patterns
 
 **User hits limit:**
+
 - User has 2 jobs running
 - 3rd job waits in queue
 - As soon as one completes, the 3rd job starts
 
 **Multiple users:**
+
 - User A: 2 jobs running
-- User B: 2 jobs running  
+- User B: 2 jobs running
 - User C: 0 jobs running
 - Total: 4 concurrent jobs across all users ✅
 
 ## Migration Notes
 
 ### Before (Old Approach)
+
 ```typescript
 export const analyzeWorkoutTask = task({
-  id: "analyze-workout",
+  id: 'analyze-workout',
   queue: {
-    concurrencyLimit: 2,
+    concurrencyLimit: 2
   },
   run: async (payload) => {
-    return { success: true };
+    return { success: true }
   }
-});
+})
 
-await analyzeWorkoutTask.trigger({ workoutId });
+await analyzeWorkoutTask.trigger({ workoutId })
 ```
 
 **Problem:** Only 2 workouts could be analyzed at a time across ALL users.
 
 ### After (Current Approach)
+
 ```typescript
 export const analyzeWorkoutTask = task({
-  id: "analyze-workout",
+  id: 'analyze-workout',
   queue: userAnalysisQueue,
   run: async (payload) => {
-    return { success: true };
+    return { success: true }
   }
-});
+})
 
-await analyzeWorkoutTask.trigger(
-  { workoutId },
-  { concurrencyKey: userId }
-);
+await analyzeWorkoutTask.trigger({ workoutId }, { concurrencyKey: userId })
 ```
 
 **Solution:** Each user gets their own queue with limit of 2.

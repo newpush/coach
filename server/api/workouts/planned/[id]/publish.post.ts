@@ -1,5 +1,8 @@
 import { prisma } from '../../../../utils/db'
-import { createIntervalsPlannedWorkout, updateIntervalsPlannedWorkout } from '../../../../utils/intervals'
+import {
+  createIntervalsPlannedWorkout,
+  updateIntervalsPlannedWorkout
+} from '../../../../utils/intervals'
 import { WorkoutConverter } from '../../../../utils/workout-converter'
 
 export default defineEventHandler(async (event) => {
@@ -38,7 +41,10 @@ export default defineEventHandler(async (event) => {
   }
 
   // Check if already published/synced
-  const isLocal = workout.syncStatus === 'LOCAL_ONLY' || workout.externalId.startsWith('ai_gen_') || workout.externalId.startsWith('ai-gen-')
+  const isLocal =
+    workout.syncStatus === 'LOCAL_ONLY' ||
+    workout.externalId.startsWith('ai_gen_') ||
+    workout.externalId.startsWith('ai-gen-')
 
   // Prepare workout data
   let workoutDoc = ''
@@ -54,8 +60,8 @@ export default defineEventHandler(async (event) => {
   }
 
   try {
-    let resultWorkout;
-    let message = '';
+    let resultWorkout
+    let message = ''
 
     if (isLocal) {
       // CREATE
@@ -69,10 +75,10 @@ export default defineEventHandler(async (event) => {
         tss: workout.tss ?? undefined,
         workout_doc: workoutDoc
       })
-      
+
       resultWorkout = intervalsWorkout
       message = 'Workout published successfully'
-      
+
       // Update local record with new external ID
       await prisma.plannedWorkout.update({
         where: { id },
@@ -84,21 +90,28 @@ export default defineEventHandler(async (event) => {
       })
     } else {
       // UPDATE
-      console.log('[Publish] Updating existing workout on Intervals.icu:', { localId: workout.id, externalId: workout.externalId })
+      console.log('[Publish] Updating existing workout on Intervals.icu:', {
+        localId: workout.id,
+        externalId: workout.externalId
+      })
       try {
-        const intervalsWorkout = await updateIntervalsPlannedWorkout(integration, workout.externalId, {
-          date: workout.date,
-          title: workout.title,
-          description: workout.description || '',
-          type: workout.type || 'Ride',
-          durationSec: workout.durationSec || 3600,
-          tss: workout.tss ?? undefined,
-          workout_doc: workoutDoc
-        })
-        
+        const intervalsWorkout = await updateIntervalsPlannedWorkout(
+          integration,
+          workout.externalId,
+          {
+            date: workout.date,
+            title: workout.title,
+            description: workout.description || '',
+            type: workout.type || 'Ride',
+            durationSec: workout.durationSec || 3600,
+            tss: workout.tss ?? undefined,
+            workout_doc: workoutDoc
+          }
+        )
+
         resultWorkout = intervalsWorkout
         message = 'Workout updated on Intervals.icu'
-        
+
         // Update local sync status
         await prisma.plannedWorkout.update({
           where: { id },
@@ -109,9 +122,14 @@ export default defineEventHandler(async (event) => {
         })
       } catch (updateError: any) {
         // If the event was deleted on Intervals.icu (404), we should recreate it
-        if (updateError.message && (updateError.message.includes('404') || updateError.message.includes('Event not found'))) {
-          console.warn('[Publish] Workout not found on Intervals.icu (404), recreating it:', { localId: workout.id })
-          
+        if (
+          updateError.message &&
+          (updateError.message.includes('404') || updateError.message.includes('Event not found'))
+        ) {
+          console.warn('[Publish] Workout not found on Intervals.icu (404), recreating it:', {
+            localId: workout.id
+          })
+
           const intervalsWorkout = await createIntervalsPlannedWorkout(integration, {
             date: workout.date,
             title: workout.title,
@@ -121,10 +139,10 @@ export default defineEventHandler(async (event) => {
             tss: workout.tss ?? undefined,
             workout_doc: workoutDoc
           })
-          
+
           resultWorkout = intervalsWorkout
           message = 'Workout recreated on Intervals.icu'
-          
+
           // Update local record with new external ID
           await prisma.plannedWorkout.update({
             where: { id },
@@ -151,14 +169,14 @@ export default defineEventHandler(async (event) => {
     }
   } catch (error: any) {
     console.error('Error publishing/updating workout:', error)
-    
+
     if (error.code === 'P2002') {
-       throw createError({ statusCode: 409, message: 'A workout with this ID already exists' })
+      throw createError({ statusCode: 409, message: 'A workout with this ID already exists' })
     }
 
-    throw createError({ 
-      statusCode: 500, 
-      message: error.message || 'Failed to sync workout with Intervals.icu' 
+    throw createError({
+      statusCode: 500,
+      message: error.message || 'Failed to sync workout with Intervals.icu'
     })
   }
 })

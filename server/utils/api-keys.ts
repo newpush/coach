@@ -5,7 +5,7 @@ export const generateApiKey = () => {
   const buffer = randomBytes(32)
   const key = `cw_${buffer.toString('hex')}`
   const prefix = key.slice(0, 7) // cw_ + 4 chars
-  
+
   return {
     key,
     prefix

@@ -4,12 +4,7 @@
       <UDashboardNavbar title="Upload Workout">
         <template #leading>
           <UDashboardSidebarCollapse />
-          <UButton
-            to="/data"
-            color="neutral"
-            variant="ghost"
-            icon="i-heroicons-arrow-left"
-          >
+          <UButton to="/data" color="neutral" variant="ghost" icon="i-heroicons-arrow-left">
             Back to Data
           </UButton>
         </template>
@@ -40,15 +35,10 @@
               class="hidden"
               accept=".fit"
               @change="handleFileSelect"
-            >
-            
+            />
+
             <div v-if="!selectedFile" class="text-center">
-              <UButton
-                color="primary"
-                variant="soft"
-                class="mb-4"
-                @click="fileInput?.click()"
-              >
+              <UButton color="primary" variant="soft" class="mb-4" @click="fileInput?.click()">
                 Select File
               </UButton>
               <p class="text-xs text-gray-500">or drag and drop here</p>
@@ -66,20 +56,23 @@
                   @click="clearFile"
                 />
               </div>
-              
-              <UButton
-                :loading="uploading"
-                color="primary"
-                block
-                @click="uploadFile"
-              >
+
+              <UButton :loading="uploading" color="primary" block @click="uploadFile">
                 {{ uploading ? 'Uploading...' : 'Upload Workout' }}
               </UButton>
             </div>
           </div>
         </UCard>
 
-        <div v-if="uploadResult" class="rounded-md p-4" :class="uploadResult.success ? 'bg-green-50 dark:bg-green-900/20' : 'bg-red-50 dark:bg-red-900/20'">
+        <div
+          v-if="uploadResult"
+          class="rounded-md p-4"
+          :class="
+            uploadResult.success
+              ? 'bg-green-50 dark:bg-green-900/20'
+              : 'bg-red-50 dark:bg-red-900/20'
+          "
+        >
           <div class="flex">
             <div class="flex-shrink-0">
               <UIcon
@@ -89,11 +82,24 @@
               />
             </div>
             <div class="ml-3">
-              <h3 class="text-sm font-medium" :class="uploadResult.success ? 'text-green-800 dark:text-green-200' : 'text-red-800 dark:text-red-200'">
+              <h3
+                class="text-sm font-medium"
+                :class="
+                  uploadResult.success
+                    ? 'text-green-800 dark:text-green-200'
+                    : 'text-red-800 dark:text-red-200'
+                "
+              >
                 {{ uploadResult.message }}
               </h3>
-              <div v-if="uploadResult.success" class="mt-2 text-sm text-green-700 dark:text-green-300">
-                <p>Processing has started in the background. It may take a minute to appear in your dashboard.</p>
+              <div
+                v-if="uploadResult.success"
+                class="mt-2 text-sm text-green-700 dark:text-green-300"
+              >
+                <p>
+                  Processing has started in the background. It may take a minute to appear in your
+                  dashboard.
+                </p>
               </div>
             </div>
           </div>
@@ -104,89 +110,86 @@
 </template>
 
 <script setup lang="ts">
-definePageMeta({
-  middleware: 'auth'
-})
+  definePageMeta({
+    middleware: 'auth'
+  })
 
-const fileInput = ref<HTMLInputElement | null>(null)
-const isDragging = ref(false)
-const selectedFile = ref<File | null>(null)
-const uploading = ref(false)
-const uploadResult = ref<{ success: boolean; message: string } | null>(null)
+  const fileInput = ref<HTMLInputElement | null>(null)
+  const isDragging = ref(false)
+  const selectedFile = ref<File | null>(null)
+  const uploading = ref(false)
+  const uploadResult = ref<{ success: boolean; message: string } | null>(null)
 
-function handleDrop(e: DragEvent) {
-  isDragging.value = false
-  const files = e.dataTransfer?.files
-  if (files?.length && files[0]) {
-    validateAndSelectFile(files[0])
-  }
-}
-
-function handleFileSelect(e: Event) {
-  const files = (e.target as HTMLInputElement).files
-  if (files?.length && files[0]) {
-    validateAndSelectFile(files[0])
-  }
-}
-
-function validateAndSelectFile(file: File) {
-  if (!file.name.toLowerCase().endsWith('.fit')) {
-    useToast().add({
-      title: 'Invalid File',
-      description: 'Please upload a valid .fit file',
-      color: 'error'
-    })
-    return
-  }
-  selectedFile.value = file
-  uploadResult.value = null
-}
-
-function clearFile() {
-  selectedFile.value = null
-  if (fileInput.value) {
-    fileInput.value.value = ''
-  }
-  uploadResult.value = null
-}
-
-async function uploadFile() {
-  if (!selectedFile.value) return
-
-  uploading.value = true
-  const formData = new FormData()
-  formData.append('file', selectedFile.value)
-
-  try {
-    const response = await $fetch('/api/workouts/upload-fit', {
-      method: 'POST',
-      body: formData
-    })
-
-    uploadResult.value = {
-      success: true,
-      message: response.message
+  function handleDrop(e: DragEvent) {
+    isDragging.value = false
+    const files = e.dataTransfer?.files
+    if (files?.length && files[0]) {
+      validateAndSelectFile(files[0])
     }
-    
-    // Clear file after successful upload
-    setTimeout(() => {
-      clearFile()
-    }, 2000)
-
-  } catch (error: any) {
-    uploadResult.value = {
-      success: false,
-      message: error.data?.message || 'Upload failed'
-    }
-  } finally {
-    uploading.value = false
   }
-}
 
-useHead({
-  title: 'Upload Workout',
-  meta: [
-    { name: 'description', content: 'Manually upload FIT files to your training history.' }
-  ]
-})
+  function handleFileSelect(e: Event) {
+    const files = (e.target as HTMLInputElement).files
+    if (files?.length && files[0]) {
+      validateAndSelectFile(files[0])
+    }
+  }
+
+  function validateAndSelectFile(file: File) {
+    if (!file.name.toLowerCase().endsWith('.fit')) {
+      useToast().add({
+        title: 'Invalid File',
+        description: 'Please upload a valid .fit file',
+        color: 'error'
+      })
+      return
+    }
+    selectedFile.value = file
+    uploadResult.value = null
+  }
+
+  function clearFile() {
+    selectedFile.value = null
+    if (fileInput.value) {
+      fileInput.value.value = ''
+    }
+    uploadResult.value = null
+  }
+
+  async function uploadFile() {
+    if (!selectedFile.value) return
+
+    uploading.value = true
+    const formData = new FormData()
+    formData.append('file', selectedFile.value)
+
+    try {
+      const response = await $fetch('/api/workouts/upload-fit', {
+        method: 'POST',
+        body: formData
+      })
+
+      uploadResult.value = {
+        success: true,
+        message: response.message
+      }
+
+      // Clear file after successful upload
+      setTimeout(() => {
+        clearFile()
+      }, 2000)
+    } catch (error: any) {
+      uploadResult.value = {
+        success: false,
+        message: error.data?.message || 'Upload failed'
+      }
+    } finally {
+      uploading.value = false
+    }
+  }
+
+  useHead({
+    title: 'Upload Workout',
+    meta: [{ name: 'description', content: 'Manually upload FIT files to your training history.' }]
+  })
 </script>

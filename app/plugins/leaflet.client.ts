@@ -9,16 +9,16 @@ export default defineNuxtPlugin(async (nuxtApp) => {
   type DefaultIcon = L.Icon.Default & {
     _getIconUrl?: string
   }
-  
+
   const icon = L.Icon.Default.prototype as DefaultIcon
   if (icon._getIconUrl) {
     delete icon._getIconUrl
   }
-  
+
   L.Icon.Default.mergeOptions({
     iconRetinaUrl: '/images/leaflet/marker-icon-2x.png',
     iconUrl: '/images/leaflet/marker-icon.png',
-    shadowUrl: '/images/leaflet/marker-shadow.png',
+    shadowUrl: '/images/leaflet/marker-shadow.png'
   })
 
   // Register components globally

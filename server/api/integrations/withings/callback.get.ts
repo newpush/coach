@@ -19,7 +19,7 @@ defineRouteMeta({
 
 export default defineEventHandler(async (event) => {
   const session = await getServerSession(event)
-  
+
   if (!session?.user?.email) {
     throw createError({
       statusCode: 401,
@@ -31,12 +31,12 @@ export default defineEventHandler(async (event) => {
   const code = query.code as string
   const state = query.state as string
   const error = query.error as string
-  
+
   if (error) {
     console.error('Withings OAuth error:', error)
     return sendRedirect(event, '/settings?withings_error=' + encodeURIComponent(error))
   }
-  
+
   // Verify state parameter for CSRF protection
   const storedState = getCookie(event, 'withings_oauth_state')
   if (!state || !storedState || state !== storedState) {
@@ -44,10 +44,10 @@ export default defineEventHandler(async (event) => {
     deleteCookie(event, 'withings_oauth_state')
     return sendRedirect(event, '/settings?withings_error=invalid_state')
   }
-  
+
   // Clear the state cookie after validation
   deleteCookie(event, 'withings_oauth_state')
-  
+
   if (!code) {
     return sendRedirect(event, '/settings?withings_error=no_code')
   }
@@ -66,7 +66,7 @@ export default defineEventHandler(async (event) => {
     const tokenResponse = await fetch('https://wbsapi.withings.net/v2/oauth2', {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
+        'Content-Type': 'application/x-www-form-urlencoded'
       },
       body: new URLSearchParams({
         action: 'requesttoken',
@@ -74,17 +74,17 @@ export default defineEventHandler(async (event) => {
         client_id: clientId,
         client_secret: clientSecret,
         code: code,
-        redirect_uri: redirectUri,
-      }).toString(),
+        redirect_uri: redirectUri
+      }).toString()
     })
 
     const tokenData = await tokenResponse.json()
-    
+
     if (tokenData.status !== 0) {
       console.error('Withings token exchange failed:', tokenData)
       throw new Error(`Failed to exchange authorization code: Status ${tokenData.status}`)
     }
-    
+
     const { access_token, refresh_token, expires_in, userid } = tokenData.body
 
     // Find the user
@@ -137,31 +137,31 @@ export default defineEventHandler(async (event) => {
         }
       })
     }
-    
+
     // Subscribe to notifications (webhook)
     try {
       const webhookUrl = `${config.public.siteUrl || 'http://localhost:3099'}/api/integrations/withings/webhook`
-      
+
       // Subscribe to weight (1), activity/workouts (4), and sleep (16)
       // Note: Withings requires separate subscriptions for each appli
       const applis = [1, 4, 16]
-      
+
       for (const appli of applis) {
         // We use fetch directly as we need to sign the request or use access_token
         // For 'subscribe', we can use access_token without signature if it's health data API
-        
+
         await fetch('https://wbsapi.withings.net/notify', {
-           method: 'POST',
-           headers: {
-             'Content-Type': 'application/x-www-form-urlencoded',
-             'Authorization': `Bearer ${access_token}`
-           },
-           body: new URLSearchParams({
-             action: 'subscribe',
-             callbackurl: webhookUrl,
-             appli: appli.toString()
-             // No need for signature/nonce if using access_token for user data
-           }).toString()
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            Authorization: `Bearer ${access_token}`
+          },
+          body: new URLSearchParams({
+            action: 'subscribe',
+            callbackurl: webhookUrl,
+            appli: appli.toString()
+            // No need for signature/nonce if using access_token for user data
+          }).toString()
         })
       }
       console.log('Successfully subscribed to Withings notifications')
@@ -174,6 +174,9 @@ export default defineEventHandler(async (event) => {
     return sendRedirect(event, '/settings?withings_success=true')
   } catch (error: any) {
     console.error('Failed to connect Withings:', error)
-    return sendRedirect(event, '/settings?withings_error=' + encodeURIComponent(error.message || 'connection_failed'))
+    return sendRedirect(
+      event,
+      '/settings?withings_error=' + encodeURIComponent(error.message || 'connection_failed')
+    )
   }
 })

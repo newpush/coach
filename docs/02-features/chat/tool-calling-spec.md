@@ -11,7 +11,7 @@ Google Gemini 2.0 has native function calling support. Implementation complexity
 ## Architecture
 
 ```
-User Message → Gemini (with tools) → Tool Call Request → Execute Query → 
+User Message → Gemini (with tools) → Tool Call Request → Execute Query →
 Send Results to Gemini → Final Response → Save & Return
 ```
 
@@ -26,9 +26,11 @@ Send Results to Gemini → Final Response → Save & Return
 ## Proposed Tools
 
 ### 1. `get_recent_workouts`
+
 Fetch recent workout summaries.
 
 **Parameters:**
+
 - `limit` (number, optional): Number of workouts (default: 5, max: 20)
 - `type` (string, optional): Workout type filter ("Ride", "Run", etc.)
 - `days` (number, optional): Only workouts from last N days
@@ -36,34 +38,42 @@ Fetch recent workout summaries.
 **Returns:** Array of workout summaries with key metrics
 
 ### 2. `get_workout_details`
+
 Get comprehensive details for a specific workout.
 
 **Parameters:**
+
 - `workout_id` (string, required): The workout ID
 
 **Returns:** Full workout data including all metrics, analysis, and stream data if available
 
 ### 3. `get_workout_analysis`
+
 Fetch AI analysis for a workout.
 
 **Parameters:**
+
 - `workout_id` (string, required): The workout ID
 
 **Returns:** AI-generated analysis JSON
 
 ### 4. `get_nutrition_log`
+
 Get nutrition data for specific dates.
 
 **Parameters:**
+
 - `start_date` (string, required): ISO date string
 - `end_date` (string, optional): ISO date string (defaults to start_date)
 
 **Returns:** Nutrition entries with macros and AI analysis
 
 ### 5. `get_wellness_metrics`
+
 Fetch wellness/recovery metrics.
 
 **Parameters:**
+
 - `start_date` (string, required): ISO date string
 - `end_date` (string, optional): ISO date string
 - `metrics` (array, optional): Specific metrics to fetch ["hrv", "recovery", "sleep"]
@@ -71,6 +81,7 @@ Fetch wellness/recovery metrics.
 **Returns:** Daily wellness metrics
 
 ### 6. `get_training_plan`
+
 Get current training plan.
 
 **Parameters:** None
@@ -78,9 +89,11 @@ Get current training plan.
 **Returns:** Current week's training plan with scheduled workouts
 
 ### 7. `search_workouts`
+
 Search workouts by criteria.
 
 **Parameters:**
+
 - `query` (string, optional): Text search in title/description
 - `min_duration` (number, optional): Minimum duration in minutes
 - `max_duration` (number, optional): Maximum duration in minutes
@@ -99,45 +112,45 @@ const tools = [
   {
     functionDeclarations: [
       {
-        name: "get_recent_workouts",
-        description: "Fetch recent workout summaries for the athlete",
+        name: 'get_recent_workouts',
+        description: 'Fetch recent workout summaries for the athlete',
         parameters: {
-          type: "object",
+          type: 'object',
           properties: {
             limit: {
-              type: "number",
-              description: "Number of workouts to fetch (max 20)",
+              type: 'number',
+              description: 'Number of workouts to fetch (max 20)',
               default: 5
             },
             type: {
-              type: "string",
-              description: "Filter by workout type (Ride, Run, etc.)",
-              enum: ["Ride", "Run", "Swim", "WeightTraining"]
+              type: 'string',
+              description: 'Filter by workout type (Ride, Run, etc.)',
+              enum: ['Ride', 'Run', 'Swim', 'WeightTraining']
             },
             days: {
-              type: "number",
-              description: "Only include workouts from last N days"
+              type: 'number',
+              description: 'Only include workouts from last N days'
             }
           }
         }
       },
       {
-        name: "get_workout_details",
-        description: "Get comprehensive details for a specific workout",
+        name: 'get_workout_details',
+        description: 'Get comprehensive details for a specific workout',
         parameters: {
-          type: "object",
+          type: 'object',
           properties: {
             workout_id: {
-              type: "string",
-              description: "The workout ID to fetch details for"
+              type: 'string',
+              description: 'The workout ID to fetch details for'
             }
           },
-          required: ["workout_id"]
+          required: ['workout_id']
         }
       }
     ]
   }
-];
+]
 ```
 
 ### Modified Chat Endpoint Logic
@@ -192,34 +205,30 @@ export default defineEventHandler(async (event) => {
     orderBy: { createdAt: 'desc' },
     take: 10
   })
-  
+
   const chronologicalHistory = history.reverse()
   const athleteContext = buildAthleteContext(userProfile)
   const systemPrompt = buildSystemPrompt(athleteContext)
-  
+
   const model = genAI.getGenerativeModel({
     model: 'gemini-2.0-flash-exp',
     tools: chatTools
-  });
-  
+  })
+
   const chat = model.startChat({
     history: buildChatHistory(chronologicalHistory),
     systemInstruction: systemPrompt,
     generationConfig: { maxOutputTokens: 2048 }
-  });
-  
-  let response = await chat.sendMessage(content);
-  let finalText = '';
-  
+  })
+
+  let response = await chat.sendMessage(content)
+  let finalText = ''
+
   while (response.functionCalls && response.functionCalls.length > 0) {
-    const functionCall = response.functionCalls[0];
-    
-    const toolResult = await executeToolCall(
-      functionCall.name,
-      functionCall.args,
-      session.user.id
-    );
-    
+    const functionCall = response.functionCalls[0]
+
+    const toolResult = await executeToolCall(functionCall.name, functionCall.args, session.user.id)
+
     response = await chat.sendMessage([
       {
         functionResponse: {
@@ -227,11 +236,11 @@ export default defineEventHandler(async (event) => {
           response: toolResult
         }
       }
-    ]);
+    ])
   }
-  
-  finalText = response.text();
-  
+
+  finalText = response.text()
+
   const aiMessage = await prisma.chatMessage.create({
     data: {
       content: finalText,
@@ -248,7 +257,10 @@ export default defineEventHandler(async (event) => {
     username: 'Coach Watts',
     avatar: '/media/logo.webp',
     date: new Date(aiMessage.createdAt).toLocaleDateString(),
-    timestamp: new Date(aiMessage.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    timestamp: new Date(aiMessage.createdAt).toLocaleTimeString([], {
+      hour: '2-digit',
+      minute: '2-digit'
+    }),
     system: false,
     saved: true,
     distributed: true,
@@ -256,56 +268,47 @@ export default defineEventHandler(async (event) => {
     disableActions: false,
     disableReactions: false
   }
-});
+})
 ```
 
 ### Tool Execution Handler
 
 ```typescript
-export async function executeToolCall(
-  toolName: string,
-  args: any,
-  userId: string
-) {
+export async function executeToolCall(toolName: string, args: any, userId: string) {
   switch (toolName) {
     case 'get_recent_workouts':
-      return await getRecentWorkouts(userId, args.limit, args.type, args.days);
-    
+      return await getRecentWorkouts(userId, args.limit, args.type, args.days)
+
     case 'get_workout_details':
-      return await getWorkoutDetails(userId, args.workout_id);
-    
+      return await getWorkoutDetails(userId, args.workout_id)
+
     case 'get_nutrition_log':
-      return await getNutritionLog(userId, args.start_date, args.end_date);
-    
+      return await getNutritionLog(userId, args.start_date, args.end_date)
+
     case 'get_wellness_metrics':
-      return await getWellnessMetrics(userId, args.start_date, args.end_date, args.metrics);
-    
+      return await getWellnessMetrics(userId, args.start_date, args.end_date, args.metrics)
+
     case 'get_training_plan':
-      return await getTrainingPlan(userId);
-    
+      return await getTrainingPlan(userId)
+
     case 'search_workouts':
-      return await searchWorkouts(userId, args);
-    
+      return await searchWorkouts(userId, args)
+
     default:
-      return { error: `Unknown tool: ${toolName}` };
+      return { error: `Unknown tool: ${toolName}` }
   }
 }
 
-async function getRecentWorkouts(
-  userId: string,
-  limit = 5,
-  type?: string,
-  days?: number
-) {
-  const where: any = { userId };
-  
-  if (type) where.type = type;
+async function getRecentWorkouts(userId: string, limit = 5, type?: string, days?: number) {
+  const where: any = { userId }
+
+  if (type) where.type = type
   if (days) {
-    const cutoff = new Date();
-    cutoff.setDate(cutoff.getDate() - days);
-    where.date = { gte: cutoff };
+    const cutoff = new Date()
+    cutoff.setDate(cutoff.getDate() - days)
+    where.date = { gte: cutoff }
   }
-  
+
   const workouts = await prisma.workout.findMany({
     where,
     orderBy: { date: 'desc' },
@@ -324,9 +327,9 @@ async function getRecentWorkouts(
       rpe: true,
       feel: true
     }
-  });
-  
-  return buildWorkoutSummary(workouts);
+  })
+
+  return buildWorkoutSummary(workouts)
 }
 
 async function getWorkoutDetails(userId: string, workoutId: string) {
@@ -338,13 +341,13 @@ async function getWorkoutDetails(userId: string, workoutId: string) {
     include: {
       aiAnalysis: true
     }
-  });
-  
+  })
+
   if (!workout) {
-    return { error: "Workout not found" };
+    return { error: 'Workout not found' }
   }
-  
-  return buildComprehensiveWorkoutSummary([workout], false);
+
+  return buildComprehensiveWorkoutSummary([workout], false)
 }
 ```
 
@@ -361,6 +364,7 @@ async function getWorkoutDetails(userId: string, workoutId: string) {
 **User:** "How did my last 3 rides compare?"
 
 **Behind the scenes:**
+
 1. Gemini calls: `get_recent_workouts(type: "Ride", limit: 3)`
 2. Returns: 3 ride summaries with power, HR, TSS
 3. Gemini analyzes and responds with comparison
@@ -368,6 +372,7 @@ async function getWorkoutDetails(userId: string, workoutId: string) {
 **User:** "Show me details on that 2-hour ride from last week"
 
 **Behind the scenes:**
+
 1. Gemini calls: `get_recent_workouts(type: "Ride", days: 7)`
 2. Finds workouts, identifies the 2-hour one
 3. Calls: `get_workout_details(workout_id: "xxx")`
@@ -393,7 +398,7 @@ async function getWorkoutDetails(userId: string, workoutId: string) {
 ## Estimated Effort
 
 - Tool schema definition: 1 hour
-- Tool execution handlers: 1-2 hours  
+- Tool execution handlers: 1-2 hours
 - Chat endpoint modifications: 1 hour
 - Testing and refinement: 1 hour
 
@@ -402,12 +407,14 @@ async function getWorkoutDetails(userId: string, workoutId: string) {
 ## Comparison to Current Approach
 
 ### Current (Static Context)
+
 - Athlete profile included in every message
 - No access to historical data
 - Cannot look up specific workouts
 - Generic responses based on profile scores only
 
 ### With Tool Calling
+
 - Dynamic access to any historical data
 - Can compare workouts, analyze trends
 - Fetch specific workout details on demand

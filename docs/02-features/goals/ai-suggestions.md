@@ -1,14 +1,17 @@
 # AI Goal Suggestions and Review Feature
 
 ## Overview
+
 This document describes the AI-powered goal suggestion and review features for the `/profile/goals` page. These features use Gemini AI to analyze the athlete's profile, workouts, and performance data to suggest achievable goals and review existing goals for rationality and achievability.
 
 ## Features
 
 ### 1. AI Goal Suggestions
+
 Analyzes the athlete's complete profile to suggest personalized, achievable goals.
 
 **What it analyzes:**
+
 - Athlete profile scores (fitness, recovery, nutrition, training consistency)
 - Recent workout data (last 30 days)
 - Recovery and wellness metrics
@@ -16,6 +19,7 @@ Analyzes the athlete's complete profile to suggest personalized, achievable goal
 - Recent reports and performance trends
 
 **What it provides:**
+
 - 3-5 suggested goals across different types
 - Clear rationale for each suggestion
 - Priority levels (HIGH, MEDIUM, LOW)
@@ -26,9 +30,11 @@ Analyzes the athlete's complete profile to suggest personalized, achievable goal
 - Potential goal conflicts
 
 ### 2. Goal Review
+
 Reviews existing active goals for rationality, achievability, and alignment with athlete profile.
 
 **What it analyzes:**
+
 - All active goals with their current progress
 - Alignment with athlete's profile and capabilities
 - Goal conflicts and resource competition
@@ -36,6 +42,7 @@ Reviews existing active goals for rationality, achievability, and alignment with
 - Balance across goal types
 
 **What it provides:**
+
 - Overall assessment (goal balance, alignment rating)
 - Individual reviews for each goal
 - Assessment categories: realistic, slightly_ambitious, too_ambitious, too_conservative, needs_adjustment
@@ -50,6 +57,7 @@ Reviews existing active goals for rationality, achievability, and alignment with
 ### Backend Components
 
 #### Triggers
+
 1. **`trigger/suggest-goals.ts`** - Goal suggestions task
    - Uses `userReportsQueue` for per-user concurrency
    - Max duration: 300 seconds
@@ -61,6 +69,7 @@ Reviews existing active goals for rationality, achievability, and alignment with
    - Analyzes active goals with detailed feedback
 
 #### API Endpoints
+
 1. **`POST /api/goals/suggest`**
    - Triggers goal suggestion generation
    - Returns job ID for polling
@@ -74,9 +83,11 @@ Reviews existing active goals for rationality, achievability, and alignment with
 ### Frontend Components
 
 #### Updated Files
+
 - **`app/pages/profile/goals.vue`** - Enhanced with AI features
 
 #### New UI Elements
+
 1. **AI Feature Buttons**
    - "AI Suggest Goals" button - triggers suggestion generation
    - "Review Goals" button - triggers goal review (only shown if active goals exist)
@@ -108,6 +119,7 @@ Reviews existing active goals for rationality, achievability, and alignment with
 ## Data Flow
 
 ### Goal Suggestions Flow
+
 ```
 User clicks "AI Suggest Goals"
     ↓
@@ -137,6 +149,7 @@ User can accept suggestions to create goals
 ```
 
 ### Goal Review Flow
+
 ```
 User clicks "Review Goals"
     ↓
@@ -172,6 +185,7 @@ Displays review results in UI
 ## JSON Schemas
 
 ### Goal Suggestions Schema
+
 ```typescript
 {
   type: "goal_suggestions",
@@ -210,6 +224,7 @@ Displays review results in UI
 ```
 
 ### Goal Review Schema
+
 ```typescript
 {
   type: "goal_review",
@@ -266,20 +281,25 @@ Displays review results in UI
 ## Setup Instructions
 
 ### 1. Database Migration
+
 The Goal model already exists in the schema. No migration needed.
 
 ### 2. Prisma Client Generation
+
 ```bash
 npx prisma generate
 ```
 
 ### 3. Deploy Trigger Tasks
+
 ```bash
 npx trigger.dev@latest deploy
 ```
 
 ### 4. Environment Variables
+
 Ensure these are set:
+
 ```
 GEMINI_API_KEY=your_gemini_api_key
 TRIGGER_PROJECT_REF=your_trigger_project_ref
@@ -309,6 +329,7 @@ DATABASE_URL=your_database_url
 ### For Developers
 
 #### Testing Locally
+
 ```bash
 # Start dev server
 npm run dev
@@ -318,12 +339,16 @@ npx trigger.dev@latest dev
 ```
 
 #### Customizing Prompts
+
 Edit the prompt strings in:
+
 - `trigger/suggest-goals.ts` - Line ~460
 - `trigger/review-goals.ts` - Line ~180
 
 #### Adjusting Schemas
+
 Modify the JSON schemas at the top of each trigger file:
+
 - `goalSuggestionsSchema` in `suggest-goals.ts`
 - `goalReviewSchema` in `review-goals.ts`
 
@@ -369,4 +394,5 @@ Modify the JSON schemas at the top of each trigger file:
 - [Athlete Profile Generation](./architecture.md#athlete-profile)
 
 ## Last Updated
+
 2025-12-09

@@ -23,35 +23,35 @@ defineRouteMeta({
 
 export default defineEventHandler(async (event) => {
   const session = await getServerSession(event)
-  
+
   if (!session?.user?.email) {
     throw createError({
       statusCode: 401,
       message: 'Unauthorized'
     })
   }
-  
+
   const userId = session.user.email
-  
+
   // Set SSE headers
   setHeader(event, 'Content-Type', 'text/event-stream')
   setHeader(event, 'Cache-Control', 'no-cache')
   setHeader(event, 'Connection', 'keep-alive')
-  
+
   // Create a response stream
   const stream = new ReadableStream({
     start(controller) {
       const encoder = new TextEncoder()
-      
+
       // Function to send data
       const sendData = (data: any) => {
         const message = `data: ${JSON.stringify(data)}\n\n`
         controller.enqueue(encoder.encode(message))
       }
-      
+
       // Get sync state if it exists
       const syncState = activeSyncs.get(userId)
-      
+
       if (syncState) {
         // Send current state
         sendData({
@@ -59,10 +59,10 @@ export default defineEventHandler(async (event) => {
           states: syncState.states,
           startTime: syncState.startTime
         })
-        
+
         // Add this connection as a subscriber
         syncState.subscribers.add(sendData)
-        
+
         // Clean up on close
         event.node.req.on('close', () => {
           syncState.subscribers.delete(sendData)
@@ -76,7 +76,7 @@ export default defineEventHandler(async (event) => {
         })
         controller.close()
       }
-      
+
       // Keep-alive ping every 30 seconds
       const keepAlive = setInterval(() => {
         try {
@@ -85,13 +85,13 @@ export default defineEventHandler(async (event) => {
           clearInterval(keepAlive)
         }
       }, 30000)
-      
+
       // Clean up keep-alive on close
       event.node.req.on('close', () => {
         clearInterval(keepAlive)
       })
     }
   })
-  
+
   return stream
 })

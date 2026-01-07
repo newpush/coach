@@ -6,7 +6,8 @@ defineRouteMeta({
   openAPI: {
     tags: ['Profile'],
     summary: 'Delete all athlete profiles',
-    description: 'Removes all AI-generated athlete profiles and clears cached scores from the user record.',
+    description:
+      'Removes all AI-generated athlete profiles and clears cached scores from the user record.',
     responses: {
       200: {
         description: 'Success',
@@ -29,16 +30,16 @@ defineRouteMeta({
 
 export default defineEventHandler(async (event) => {
   const session = await getServerSession(event)
-  
+
   if (!session?.user) {
-    throw createError({ 
+    throw createError({
       statusCode: 401,
-      message: 'Unauthorized' 
+      message: 'Unauthorized'
     })
   }
-  
+
   const userId = (session.user as any).id
-  
+
   // 1. Delete all reports of type ATHLETE_PROFILE
   const result = await prisma.report.deleteMany({
     where: {
@@ -46,7 +47,7 @@ export default defineEventHandler(async (event) => {
       type: 'ATHLETE_PROFILE'
     }
   })
-  
+
   // 2. Clear cached scores and explanations in the User record
   await prisma.user.update({
     where: { id: userId },
@@ -66,7 +67,7 @@ export default defineEventHandler(async (event) => {
       profileLastUpdated: null
     }
   })
-  
+
   return {
     success: true,
     count: result.count

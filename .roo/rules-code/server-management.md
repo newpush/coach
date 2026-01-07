@@ -13,6 +13,7 @@ The agent should **NEVER** run the node development server (e.g., `pnpm dev`, et
 ### What This Means
 
 When making changes to the codebase:
+
 - Make file edits directly using the Edit or Write tools
 - Do not start, stop, or restart the development server
 - Trust that the user's running server will automatically reflect the changes

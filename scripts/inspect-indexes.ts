@@ -9,18 +9,18 @@ const prisma = new PrismaClient({ adapter })
 
 async function main() {
   console.log('Inspecting indexes...')
-  
+
   const indexes = await prisma.$queryRawUnsafe(`
     SELECT tablename, indexname 
     FROM pg_indexes 
     WHERE tablename IN ('ApiKey', 'Workout', 'PlannedWorkout', 'CoachingRelationship')
   `)
-  
+
   console.log(JSON.stringify(indexes, null, 2))
 }
 
 main()
-  .catch(e => {
+  .catch((e) => {
     console.error('Error:', e)
     process.exit(1)
   })

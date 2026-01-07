@@ -1,16 +1,16 @@
-import { logger, task } from "@trigger.dev/sdk/v3";
-import { userIngestionQueue } from "./queues";
-import { prisma } from "../server/utils/db";
-import { workoutRepository } from "../server/utils/repositories/workoutRepository";
-import { calculateWorkoutStress } from "../server/utils/calculate-workout-stress";
-import { getUserTimezone, getStartOfDayUTC } from "../server/utils/date";
+import { logger, task } from '@trigger.dev/sdk/v3'
+import { userIngestionQueue } from './queues'
+import { prisma } from '../server/utils/db'
+import { workoutRepository } from '../server/utils/repositories/workoutRepository'
+import { calculateWorkoutStress } from '../server/utils/calculate-workout-stress'
+import { getUserTimezone, getStartOfDayUTC } from '../server/utils/date'
 
 export const ingestHevyTask = task({
   id: 'ingest-hevy',
   queue: userIngestionQueue,
-  run: async (payload: { userId: string, fullSync?: boolean }) => {
+  run: async (payload: { userId: string; fullSync?: boolean }) => {
     const { userId, fullSync } = payload
-    
+
     // 1. Get Integration
     const integration = await prisma.integration.findUnique({
       where: {
@@ -74,17 +74,17 @@ export const ingestHevyTask = task({
 
           // Normalize and Upsert Workout
           const normalized = normalizeHevyWorkout(hevyWorkout, userId)
-          
+
           // Calculate total volume (tonnage)
           let totalVolume = 0
-          hevyWorkout.exercises.forEach(ex => {
-            ex.sets.forEach(set => {
+          hevyWorkout.exercises.forEach((ex) => {
+            ex.sets.forEach((set) => {
               if (set.weight_kg && set.reps) {
                 totalVolume += set.weight_kg * set.reps
               }
             })
           })
-          
+
           // Add notes to description if present in exercises? No, keep separate.
 
           const workout = await prisma.workout.upsert({
@@ -98,8 +98,8 @@ export const ingestHevyTask = task({
             update: {
               ...normalized,
               // Update stats that might change
-              kilojoules: Math.round(totalVolume / 100) // Rough proxy or just store somewhere else? 
-              // Using kilojoules for Volume (load) is confusing but common hack if field missing. 
+              kilojoules: Math.round(totalVolume / 100) // Rough proxy or just store somewhere else?
+              // Using kilojoules for Volume (load) is confusing but common hack if field missing.
               // Better to maybe put in notes or rawJson for now.
             },
             create: normalized
@@ -122,7 +122,10 @@ export const ingestHevyTask = task({
             if (!exercise) {
               try {
                 // Fetch template details
-                const template = await fetchHevyExerciseTemplate(apiKey, hevyExercise.exercise_template_id)
+                const template = await fetchHevyExerciseTemplate(
+                  apiKey,
+                  hevyExercise.exercise_template_id
+                )
                 exercise = await prisma.exercise.create({
                   data: {
                     externalId: template.id,
@@ -137,7 +140,7 @@ export const ingestHevyTask = task({
                 exercise = await prisma.exercise.create({
                   data: {
                     externalId: hevyExercise.exercise_template_id,
-                    title: hevyExercise.title || 'Unknown Exercise',
+                    title: hevyExercise.title || 'Unknown Exercise'
                   }
                 })
               }
@@ -171,9 +174,9 @@ export const ingestHevyTask = task({
             }
           }
         }
-        
+
         totalSynced += workouts.length
-        
+
         // Safety limit or date check could be added here
         if (workouts.length < pageSize) {
           keepFetching = false
@@ -197,10 +200,9 @@ export const ingestHevyTask = task({
         count: totalSynced,
         new: newWorkouts
       }
-
     } catch (error: any) {
       console.error('Hevy Sync Error:', error)
-      
+
       await prisma.integration.update({
         where: { id: integration.id },
         data: {
@@ -208,7 +210,7 @@ export const ingestHevyTask = task({
           errorMessage: error.message || 'Unknown error'
         }
       })
-      
+
       throw error
     }
   }

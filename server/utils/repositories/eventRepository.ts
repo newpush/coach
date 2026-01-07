@@ -7,10 +7,7 @@ export const eventRepository = {
   async getForUser(userId: string, options: { includePublic?: boolean } = {}) {
     return prisma.event.findMany({
       where: {
-        OR: [
-          { userId },
-          options.includePublic ? { isPublic: true } : {}
-        ]
+        OR: [{ userId }, options.includePublic ? { isPublic: true } : {}]
       },
       orderBy: {
         date: 'asc'
@@ -49,14 +46,16 @@ export const eventRepository = {
    */
   async create(userId: string, data: any) {
     const { goalIds, ...eventData } = data
-    
+
     return prisma.event.create({
       data: {
         ...eventData,
         userId,
-        goals: goalIds ? {
-          connect: goalIds.map((id: string) => ({ id }))
-        } : undefined
+        goals: goalIds
+          ? {
+              connect: goalIds.map((id: string) => ({ id }))
+            }
+          : undefined
       }
     })
   },
@@ -81,9 +80,11 @@ export const eventRepository = {
       where: { id },
       data: {
         ...eventData,
-        goals: goalIds ? {
-          set: goalIds.map((id: string) => ({ id }))
-        } : undefined
+        goals: goalIds
+          ? {
+              set: goalIds.map((id: string) => ({ id }))
+            }
+          : undefined
       }
     })
   },

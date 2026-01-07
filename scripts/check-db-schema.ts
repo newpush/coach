@@ -9,7 +9,7 @@ const prisma = new PrismaClient({ adapter })
 
 async function main() {
   console.log('Connecting to database...')
-  
+
   try {
     // Check if Goal table exists
     console.log('Checking Goal table...')
@@ -35,20 +35,20 @@ async function main() {
   } catch (error: any) {
     console.error('Error accessing User table columns:', error.message)
   }
-    
-    try {
+
+  try {
     // Check LlmUsage table columns
     console.log('Checking LlmUsage table columns...')
     const llm = await prisma.llmUsage.findFirst({
-        select: {
-            id: true,
-            promptFull: true
-        }
+      select: {
+        id: true,
+        promptFull: true
+      }
     })
     console.log('LlmUsage table new columns accessible')
-    } catch (error: any) {
-        console.error('Error accessing LlmUsage table columns:', error.message)
-    }
+  } catch (error: any) {
+    console.error('Error accessing LlmUsage table columns:', error.message)
+  }
 
   try {
     // Check Integration table columns - specifically initialSyncCompleted
@@ -64,11 +64,10 @@ async function main() {
   } catch (error: any) {
     console.error('Error accessing Integration table columns:', error.message)
   }
-
 }
 
 main()
-  .catch(e => {
+  .catch((e) => {
     console.error('Error:', e)
     process.exit(1)
   })

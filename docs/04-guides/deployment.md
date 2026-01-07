@@ -36,6 +36,7 @@ NUXT_PUBLIC_SITE_URL="https://your-domain.com"
 #### Strava OAuth
 
 If using Strava integration, update the Authorization Callback Domain in [Strava API Settings](https://www.strava.com/settings/api):
+
 ```
 https://your-domain.com/api/integrations/strava/callback
 ```
@@ -43,6 +44,7 @@ https://your-domain.com/api/integrations/strava/callback
 #### WHOOP OAuth
 
 If using WHOOP integration, update the callback URL in your WHOOP Developer Portal:
+
 ```
 https://your-domain.com/api/integrations/whoop/callback
 ```
@@ -51,14 +53,16 @@ https://your-domain.com/api/integrations/whoop/callback
 
 **Problem**: Users are redirected to localhost after signing in on production.
 
-**Solution**: 
+**Solution**:
+
 1. Check that `NUXT_AUTH_ORIGIN` is set to your production URL (not localhost)
 2. Verify that OAuth provider callback URLs include your production domain
 3. Restart your production server after updating environment variables
 
 **Problem**: "Redirect URI mismatch" error from Google.
 
-**Solution**: 
+**Solution**:
+
 1. Ensure the exact callback URL is added to Google OAuth Console
 2. Match the protocol (http vs https) - production should use https
 3. Don't include trailing slashes

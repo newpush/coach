@@ -19,10 +19,11 @@ The Yazio integration syncs nutrition data from Yazio app to the local database.
 // Last 45 days of historical nutrition data
 const startDate = new Date()
 startDate.setDate(startDate.getDate() - 45)
-const endDate = new Date()  // Today
+const endDate = new Date() // Today
 ```
 
 **Important**:
+
 - Uses UTC dates to avoid timezone issues
 - Each date is formatted as `YYYY-MM-DD` string
 - Only syncs 45 days (vs 90 for other integrations) since nutrition tracking is typically shorter-term
@@ -31,11 +32,13 @@ const endDate = new Date()  // Today
 ## API Endpoints Used
 
 ### 1. Daily Summary
+
 ```typescript
 yazio.user.getDailySummary({ date: 'YYYY-MM-DD' })
 ```
 
 **Response Structure**:
+
 ```json
 {
   "summary": {
@@ -76,11 +79,13 @@ yazio.user.getDailySummary({ date: 'YYYY-MM-DD' })
 ```
 
 ### 2. Consumed Items
+
 ```typescript
 yazio.user.getConsumedItems({ date: 'YYYY-MM-DD' })
 ```
 
 **Response Structure**:
+
 ```json
 {
   "products": [
@@ -104,35 +109,37 @@ yazio.user.getConsumedItems({ date: 'YYYY-MM-DD' })
 
 ### Nutrition Table Schema
 
-| Database Field | Source | Notes |
-|----------------|--------|-------|
-| `date` | Date parameter | Converted to UTC Date object |
-| `calories` | Sum of `meals.*.nutrients['energy.energy']` | Total daily calories |
-| `protein` | Sum of `meals.*.nutrients['nutrient.protein']` | Grams |
-| `carbs` | Sum of `meals.*.nutrients['nutrient.carb']` | Grams |
-| `fat` | Sum of `meals.*.nutrients['nutrient.fat']` | Grams |
-| `fiber` | Sum of `meals.*.nutrients['nutrient.fiber']` | Grams (optional) |
-| `sugar` | Sum of `meals.*.nutrients['nutrient.sugar']` | Grams (optional) |
-| `waterMl` | `summary.water_intake` | Milliliters |
-| `caloriesGoal` | `summary.goals['energy.energy']` | Target calories |
-| `proteinGoal` | `summary.goals['nutrient.protein']` | Target protein (g) |
-| `carbsGoal` | `summary.goals['nutrient.carb']` | Target carbs (g) |
-| `fatGoal` | `summary.goals['nutrient.fat']` | Target fat (g) |
-| `breakfast` | Items with `daytime: "breakfast"` | JSON array |
-| `lunch` | Items with `daytime: "lunch"` | JSON array |
-| `dinner` | Items with `daytime: "dinner"` | JSON array |
-| `snacks` | Items with `daytime: "snack"` or other | JSON array |
-| `rawJson` | Complete API response | For debugging/reprocessing |
+| Database Field | Source                                         | Notes                        |
+| -------------- | ---------------------------------------------- | ---------------------------- |
+| `date`         | Date parameter                                 | Converted to UTC Date object |
+| `calories`     | Sum of `meals.*.nutrients['energy.energy']`    | Total daily calories         |
+| `protein`      | Sum of `meals.*.nutrients['nutrient.protein']` | Grams                        |
+| `carbs`        | Sum of `meals.*.nutrients['nutrient.carb']`    | Grams                        |
+| `fat`          | Sum of `meals.*.nutrients['nutrient.fat']`     | Grams                        |
+| `fiber`        | Sum of `meals.*.nutrients['nutrient.fiber']`   | Grams (optional)             |
+| `sugar`        | Sum of `meals.*.nutrients['nutrient.sugar']`   | Grams (optional)             |
+| `waterMl`      | `summary.water_intake`                         | Milliliters                  |
+| `caloriesGoal` | `summary.goals['energy.energy']`               | Target calories              |
+| `proteinGoal`  | `summary.goals['nutrient.protein']`            | Target protein (g)           |
+| `carbsGoal`    | `summary.goals['nutrient.carb']`               | Target carbs (g)             |
+| `fatGoal`      | `summary.goals['nutrient.fat']`                | Target fat (g)               |
+| `breakfast`    | Items with `daytime: "breakfast"`              | JSON array                   |
+| `lunch`        | Items with `daytime: "lunch"`                  | JSON array                   |
+| `dinner`       | Items with `daytime: "dinner"`                 | JSON array                   |
+| `snacks`       | Items with `daytime: "snack"` or other         | JSON array                   |
+| `rawJson`      | Complete API response                          | For debugging/reprocessing   |
 
 ### Meal Grouping Logic
 
 Items from `getConsumedItems()` are grouped by the `daytime` field:
+
 - `"breakfast"` → `breakfast` array
-- `"lunch"` → `lunch` array  
+- `"lunch"` → `lunch` array
 - `"dinner"` → `dinner` array
 - `"snack"` or anything else → `snacks` array
 
 Each item includes:
+
 - `id`: Unique item ID
 - `date`: Timestamp when logged
 - `amount`: Quantity in grams/ml
@@ -143,6 +150,7 @@ Each item includes:
 ## Authentication
 
 Yazio uses username/password authentication (no OAuth). Credentials are stored in the `Integration` table:
+
 - `accessToken` field → Username
 - `refreshToken` field → Password
 
@@ -197,7 +205,7 @@ model Nutrition {
   id                String   @id @default(uuid())
   userId            String
   date              DateTime @db.Date
-  
+
   // Daily Summary
   calories          Int?
   protein           Float?
@@ -205,30 +213,30 @@ model Nutrition {
   fat               Float?
   fiber             Float?
   sugar             Float?
-  
+
   // Meal Breakdown (JSON)
   breakfast         Json?
   lunch             Json?
   dinner            Json?
   snacks            Json?
-  
+
   // Goals
   caloriesGoal      Int?
   proteinGoal       Float?
   carbsGoal         Float?
   fatGoal           Float?
-  
+
   // Water
   waterMl           Int?
-  
+
   // Raw data
   rawJson           Json?
-  
+
   user              User     @relation(fields: [userId], references: [id])
-  
+
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
-  
+
   @@unique([userId, date])
   @@index([userId, date])
 }
@@ -239,6 +247,7 @@ model Nutrition {
 From actual Yazio data:
 
 ### Date: 2025-10-21
+
 - **Calories**: 1206 (Goal: 3588)
 - **Protein**: 73.96g (Goal: 209.45g)
 - **Carbs**: 151.24g (Goal: 183.27g)

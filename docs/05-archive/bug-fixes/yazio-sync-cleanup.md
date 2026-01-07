@@ -15,14 +15,16 @@ The [`ingest-yazio.ts`](../trigger/ingest-yazio.ts) task uses [`prisma.nutrition
 ## Example Scenario
 
 **Day 1 - Initial Sync:**
+
 ```
 - Breakfast: Oatmeal, Banana (500 cal)
 - AI Analysis: "Excellent fiber-rich breakfast with good carbs..."
 ```
 
 **Day 2 - User Changes Their Log:**
+
 ```
-- Breakfast: Bacon, Eggs (700 cal)  
+- Breakfast: Bacon, Eggs (700 cal)
 - AI Analysis: "Excellent fiber-rich breakfast with good carbs..." ❌ INCORRECT!
 ```
 
@@ -67,7 +69,7 @@ const result = await prisma.nutrition.upsert({
 ## What This Does
 
 1. **On Create**: New nutrition records are created without AI analysis (expected behavior)
-2. **On Update**: 
+2. **On Update**:
    - New nutrition data replaces old data ✓
    - All AI analysis fields are cleared and reset to `NOT_STARTED` ✓
    - All scores are cleared ✓
@@ -77,12 +79,14 @@ const result = await prisma.nutrition.upsert({
 ## Fields Cleared on Update
 
 ### Analysis Fields
+
 - `aiAnalysis` → `null`
 - `aiAnalysisJson` → `null`
 - `aiAnalysisStatus` → `'NOT_STARTED'`
 - `aiAnalyzedAt` → `null`
 
 ### Score Fields
+
 - `overallScore` → `null`
 - `macroBalanceScore` → `null`
 - `qualityScore` → `null`
@@ -90,6 +94,7 @@ const result = await prisma.nutrition.upsert({
 - `hydrationScore` → `null`
 
 ### Explanation Fields
+
 - `nutritionalBalanceExplanation` → `null`
 - `calorieAdherenceExplanation` → `null`
 - `macroDistributionExplanation` → `null`
@@ -115,6 +120,7 @@ const result = await prisma.nutrition.upsert({
 To verify this fix works correctly:
 
 1. **Initial Sync**: Sync Yazio data and analyze a nutrition record
+
    ```bash
    # The record will have AI analysis
    ```
@@ -122,6 +128,7 @@ To verify this fix works correctly:
 2. **Update in Yazio**: Change the meals in the Yazio app for the same date
 
 3. **Re-Sync**: Trigger another Yazio sync
+
    ```bash
    # Check that:
    # - New nutrition data is present
@@ -139,13 +146,16 @@ To verify this fix works correctly:
 During testing, we also discovered and fixed a timezone issue where nutrition dates were displaying incorrectly in the UI.
 
 ### Problem
+
 When a date string like `"2025-12-07"` was stored in the database (as UTC midnight) and then converted to a JavaScript Date object, it would be interpreted as UTC. When displayed in a different timezone (e.g., America/New_York, UTC-5), the date would shift to the previous day.
 
 Example:
+
 - Database: `2025-12-07` (stored as `2025-12-07T00:00:00.000Z`)
 - User in UTC-5: Sees "Dec 6, 2025" ❌
 
 ### Solution
+
 Fixed the [`formatDate()`](../app/pages/nutrition/index.vue:611) function in both nutrition pages to parse date strings as local dates rather than UTC:
 
 ```typescript
@@ -154,7 +164,7 @@ function formatDate(date: string | Date) {
   // If it's a string in YYYY-MM-DD format, parse it as local date
   if (typeof date === 'string' && date.includes('-')) {
     const parts = date.split('-').map(Number)
-    if (parts.length === 3 && parts.every(p => !isNaN(p))) {
+    if (parts.length === 3 && parts.every((p) => !isNaN(p))) {
       const [year, month, day] = parts
       return new Date(year, month - 1, day).toLocaleDateString('en-US', {
         year: 'numeric',
@@ -173,6 +183,7 @@ function formatDate(date: string | Date) {
 ```
 
 ### Files Fixed
+
 - [`app/pages/nutrition/index.vue:611-626`](../app/pages/nutrition/index.vue:611-626) - UI date display
 - [`app/pages/nutrition/[id].vue:567-585`](../app/pages/nutrition/[id].vue:567-585) - UI date display
 - [`trigger/analyze-nutrition.ts:326-349`](../trigger/analyze-nutrition.ts:326-349) - AI prompt date formatting
@@ -181,6 +192,7 @@ function formatDate(date: string | Date) {
 **Chat Tools Fix**: Added [`formatDateLocal()`](../server/utils/chat-tools.ts:14-21) helper function in [`server/utils/chat-tools.ts`](../server/utils/chat-tools.ts) to format dates in local timezone for AI consumption. This ensures the AI sees the same dates as the user (e.g., Dec 7 instead of Dec 6 when in UTC-5).
 
 Updated date formatting in:
+
 - Nutrition entries (line 717)
 - Wellness metrics (line 788)
 - Training summary dates (lines 852-853)

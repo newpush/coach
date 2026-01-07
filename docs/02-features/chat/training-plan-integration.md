@@ -76,6 +76,7 @@ This document outlines the architecture for integrating training plan management
 ### 2. Database Schema Changes
 
 #### New Table: SyncQueue
+
 ```prisma
 model SyncQueue {
   id            String   @id @default(uuid())
@@ -91,16 +92,18 @@ model SyncQueue {
   completedAt   DateTime?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
-  
+
   user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
+
   @@index([userId, status])
   @@index([status, createdAt])
 }
 ```
 
 #### Updates to PlannedWorkout
+
 Add these new fields to the existing PlannedWorkout model:
+
 ```prisma
 syncStatus      String?  @default("SYNCED")
 lastSyncedAt    DateTime?
@@ -111,6 +114,7 @@ modifiedLocally Boolean  @default(false)
 ### 3. New Chat Tools
 
 #### Tool 1: get_planned_workouts
+
 ```typescript
 {
   name: 'get_planned_workouts',
@@ -124,6 +128,7 @@ modifiedLocally Boolean  @default(false)
 ```
 
 **Returns**:
+
 ```typescript
 {
   count: number,
@@ -145,6 +150,7 @@ modifiedLocally Boolean  @default(false)
 ```
 
 #### Tool 2: create_planned_workout
+
 ```typescript
 {
   name: 'create_planned_workout',
@@ -163,6 +169,7 @@ modifiedLocally Boolean  @default(false)
 ```
 
 #### Tool 3: update_planned_workout
+
 ```typescript
 {
   name: 'update_planned_workout',
@@ -182,6 +189,7 @@ modifiedLocally Boolean  @default(false)
 ```
 
 #### Tool 4: delete_planned_workout
+
 ```typescript
 {
   name: 'delete_planned_workout',
@@ -194,6 +202,7 @@ modifiedLocally Boolean  @default(false)
 ```
 
 #### Tool 5: get_training_availability
+
 ```typescript
 {
   name: 'get_training_availability',
@@ -203,24 +212,26 @@ modifiedLocally Boolean  @default(false)
 ```
 
 **Returns**:
+
 ```typescript
 {
   availability: Array<{
-    day_of_week: number,
-    day_name: string,
-    morning: boolean,
-    afternoon: boolean,
-    evening: boolean,
-    bike_access: boolean,
-    gym_access: boolean,
-    indoor_only: boolean,
-    outdoor_only: boolean,
+    day_of_week: number
+    day_name: string
+    morning: boolean
+    afternoon: boolean
+    evening: boolean
+    bike_access: boolean
+    gym_access: boolean
+    indoor_only: boolean
+    outdoor_only: boolean
     notes: string
   }>
 }
 ```
 
 #### Tool 6: update_training_availability
+
 ```typescript
 {
   name: 'update_training_availability',
@@ -240,6 +251,7 @@ modifiedLocally Boolean  @default(false)
 ```
 
 #### Tool 7: generate_training_plan
+
 ```typescript
 {
   name: 'generate_training_plan',
@@ -254,6 +266,7 @@ modifiedLocally Boolean  @default(false)
 ```
 
 #### Tool 8: get_current_plan
+
 ```typescript
 {
   name: 'get_current_plan',
@@ -263,6 +276,7 @@ modifiedLocally Boolean  @default(false)
 ```
 
 **Returns**:
+
 ```typescript
 {
   plan: {
@@ -291,6 +305,7 @@ The initial system instruction will include:
 You have upcoming workouts scheduled:
 
 [For each planned workout:]
+
 - **{Date}** ({Day of Week}): {Title}
   - Type: {Type} | Duration: {Duration}min | TSS: {TSS}
   - Status: {Synced/Pending/Local Only}
@@ -302,6 +317,7 @@ You have upcoming workouts scheduled:
 Your weekly training schedule:
 
 [For each day:]
+
 - **{Day}**: {morning/afternoon/evening availability}
   - Equipment: {bike, gym, none}
   - Constraints: {indoor only, outdoor only, etc.}
@@ -309,11 +325,13 @@ Your weekly training schedule:
 ## Current Training Plan
 
 Active plan for {week range}:
+
 - Total TSS: {totalTSS}
 - Workouts: {count}
 - Focus: {plan summary}
 
 **IMPORTANT PLANNING CONTEXT:**
+
 - You can see the user's planned workouts and availability above
 - Use this context to give informed advice about their schedule
 - When user asks about "my schedule" or "what's planned", reference this data
@@ -325,6 +343,7 @@ Active plan for {week range}:
 #### Sync Strategy
 
 **Immediate Sync with Fallback**:
+
 ```typescript
 async function syncToIntervals(operation: string, data: any, userId: string) {
   try {
@@ -337,10 +356,10 @@ async function syncToIntervals(operation: string, data: any, userId: string) {
       data,
       error: error.message
     })
-    return { 
-      success: true, 
-      synced: false, 
-      message: 'Saved locally, will sync when connection is restored' 
+    return {
+      success: true,
+      synced: false,
+      message: 'Saved locally, will sync when connection is restored'
     }
   }
 }
@@ -349,9 +368,10 @@ async function syncToIntervals(operation: string, data: any, userId: string) {
 #### Retry Mechanism
 
 **Background Job** (Trigger.dev task):
+
 ```typescript
 task({
-  id: "sync-intervals-queue",
+  id: 'sync-intervals-queue',
   queue: syncQueue,
   run: async () => {
     const pending = await prisma.syncQueue.findMany({
@@ -362,7 +382,7 @@ task({
       orderBy: { createdAt: 'asc' },
       take: 50
     })
-    
+
     for (const item of pending) {
       try {
         await processSyncItem(item)
@@ -375,6 +395,7 @@ task({
 ```
 
 **Scheduled Execution**:
+
 - Every 5 minutes for failed items
 - After 3 failures, mark as permanently failed and notify user
 - User can manually trigger resync from UI
@@ -384,41 +405,43 @@ task({
 #### New Endpoints
 
 **GET /api/planned-workouts/:id**
+
 ```typescript
 export default defineEventHandler(async (event) => {
   const session = await getServerSession(event)
   const workoutId = event.context.params?.id
-  
+
   const workout = await prisma.plannedWorkout.findUnique({
     where: { id: workoutId },
     include: {
       user: { select: { name: true, ftp: true } }
     }
   })
-  
+
   if (workout.userId !== session.user.id) {
     throw createError({ statusCode: 403 })
   }
-  
+
   return workout
 })
 ```
 
 **PATCH /api/planned-workouts/:id**
+
 ```typescript
 export default defineEventHandler(async (event) => {
   const session = await getServerSession(event)
   const workoutId = event.context.params?.id
   const body = await readBody(event)
-  
+
   const existing = await prisma.plannedWorkout.findUnique({
     where: { id: workoutId }
   })
-  
+
   if (!existing || existing.userId !== session.user.id) {
     throw createError({ statusCode: 403 })
   }
-  
+
   const updated = await prisma.plannedWorkout.update({
     where: { id: workoutId },
     data: {
@@ -427,9 +450,9 @@ export default defineEventHandler(async (event) => {
       syncStatus: 'PENDING'
     }
   })
-  
+
   const syncResult = await syncToIntervals('update', updated, session.user.id)
-  
+
   await prisma.plannedWorkout.update({
     where: { id: workoutId },
     data: {
@@ -437,7 +460,7 @@ export default defineEventHandler(async (event) => {
       lastSyncedAt: syncResult.synced ? new Date() : undefined
     }
   })
-  
+
   return {
     success: true,
     workout: updated,
@@ -482,12 +505,14 @@ export default defineEventHandler(async (event) => {
 ```
 
 **AI Response Guidelines**:
+
 - Always inform user of sync status
 - If sync failed, explain it's saved locally and will retry
 - Provide actionable suggestions if there are conflicts
 - Celebrate successful operations naturally
 
 Example AI responses:
+
 ```
 ✅ Synced: "Done! I've moved your Tuesday ride to Wednesday and synced it to Intervals.icu."
 
@@ -499,6 +524,7 @@ Example AI responses:
 ### 8. Conflict Resolution
 
 #### Availability Conflicts
+
 When creating/modifying workouts, check against availability:
 
 ```typescript
@@ -508,25 +534,25 @@ async function validateWorkoutAgainstAvailability(
 ): Promise<ValidationResult> {
   const dayOfWeek = new Date(workout.date).getDay()
   const availability = await getAvailability(userId, dayOfWeek)
-  
+
   const conflicts = []
-  
+
   if (workout.timeOfDay === 'morning' && !availability.morning) {
     conflicts.push('You marked yourself unavailable in the morning on this day')
   }
-  
+
   if (workout.type === 'Ride' && !availability.bikeAccess) {
-    conflicts.push('You don\'t have bike access on this day')
+    conflicts.push("You don't have bike access on this day")
   }
-  
+
   if (workout.type === 'Gym' && !availability.gymAccess) {
-    conflicts.push('You don\'t have gym access on this day')
+    conflicts.push("You don't have gym access on this day")
   }
-  
+
   if (availability.indoorOnly && workout.location === 'outdoor') {
     conflicts.push('This day is marked indoor only')
   }
-  
+
   return {
     valid: conflicts.length === 0,
     conflicts,
@@ -536,6 +562,7 @@ async function validateWorkoutAgainstAvailability(
 ```
 
 **AI Handling**:
+
 - If conflicts exist, inform user and ask for confirmation
 - Suggest alternative dates/times that match availability
 - Allow user to override if they explicitly want to
@@ -549,17 +576,18 @@ async function handleGeneratePlan(args: any, userId: string) {
   if (!args.user_confirmed) {
     return {
       error: 'User confirmation required',
-      message: 'Please confirm that you want to generate a new training plan. This will replace your current plan.',
+      message:
+        'Please confirm that you want to generate a new training plan. This will replace your current plan.',
       require_confirmation: true
     }
   }
-  
+
   const handle = await tasks.trigger('generate-weekly-plan', {
     userId,
     startDate: args.start_date || new Date(),
     daysToPlann: args.days || 7
   })
-  
+
   return {
     success: true,
     job_id: handle.id,
@@ -570,6 +598,7 @@ async function handleGeneratePlan(args: any, userId: string) {
 ```
 
 **AI Conversation Pattern**:
+
 ```
 User: "Can you create a plan for next week?"
 AI: "I can generate a 7-day training plan for you starting Monday. Based on your current fitness and availability, I'll create a balanced mix of workouts. Should I go ahead and generate it?"
@@ -584,6 +613,7 @@ AI: [calls generate_training_plan with user_confirmed=true]
 ### 10. Implementation Sequence
 
 #### Phase 1: Database & API Foundation (Priority: HIGH)
+
 1. Create SyncQueue model and migration
 2. Update PlannedWorkout model with sync fields
 3. Create PATCH endpoint for planned workouts
@@ -591,6 +621,7 @@ AI: [calls generate_training_plan with user_confirmed=true]
 5. Implement sync retry mechanism utility functions
 
 #### Phase 2: Chat Tools Implementation (Priority: HIGH)
+
 6. Add get_planned_workouts tool
 7. Add create_planned_workout tool
 8. Add update_planned_workout tool
@@ -601,18 +632,21 @@ AI: [calls generate_training_plan with user_confirmed=true]
 13. Add get_current_plan tool
 
 #### Phase 3: Context Enhancement (Priority: HIGH)
+
 14. Fetch planned workouts in chat context (14 days ahead)
 15. Fetch training availability in chat context
 16. Fetch current training plan summary
 17. Update system instructions with planning capabilities
 
 #### Phase 4: Sync & Background Jobs (Priority: MEDIUM)
+
 18. Implement sync queue background task
 19. Set up scheduled sync retry job
 20. Add manual resync API endpoint
 21. Implement conflict resolution logic
 
 #### Phase 5: Testing & Refinement (Priority: MEDIUM)
+
 22. Test all tool calls with various scenarios
 23. Test sync retry mechanism
 24. Test conflict resolution
@@ -620,6 +654,7 @@ AI: [calls generate_training_plan with user_confirmed=true]
 26. UI feedback improvements
 
 #### Phase 6: Documentation & Polish (Priority: LOW)
+
 27. Update user documentation
 28. Add inline help text
 29. Create demo video/walkthrough

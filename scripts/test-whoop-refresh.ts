@@ -3,7 +3,7 @@ import { PrismaPg } from '@prisma/adapter-pg'
 import pg from 'pg'
 
 const pool = new pg.Pool({
-  connectionString: process.env.DATABASE_URL,
+  connectionString: process.env.DATABASE_URL
 })
 const adapter = new PrismaPg(pool)
 const prisma = new PrismaClient({ adapter })
@@ -55,15 +55,15 @@ async function testWhoopRefresh() {
       client_secret: clientSecret!,
       scope: 'offline'
     })
-    
+
     console.log('Request params:', params1.toString())
 
     const response1 = await fetch('https://api.prod.whoop.com/oauth/oauth2/token', {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
+        'Content-Type': 'application/x-www-form-urlencoded'
       },
-      body: params1.toString(),
+      body: params1.toString()
     })
 
     console.log('Response status:', response1.status)
@@ -73,11 +73,12 @@ async function testWhoopRefresh() {
     if (!response1.ok) {
       // Try with redirect_uri
       console.log('\n=== Attempting refresh WITH redirect_uri ===')
-      const siteUrl = process.env.NUXT_PUBLIC_SITE_URL || process.env.SITE_URL || 'http://localhost:3099'
+      const siteUrl =
+        process.env.NUXT_PUBLIC_SITE_URL || process.env.SITE_URL || 'http://localhost:3099'
       const redirectUri = `${siteUrl}/api/integrations/whoop/callback`
-      
+
       console.log('Using redirect_uri:', redirectUri)
-      
+
       const params2 = new URLSearchParams({
         grant_type: 'refresh_token',
         refresh_token: integration.refreshToken,
@@ -86,22 +87,21 @@ async function testWhoopRefresh() {
         scope: 'offline',
         redirect_uri: redirectUri
       })
-      
+
       console.log('Request params:', params2.toString())
 
       const response2 = await fetch('https://api.prod.whoop.com/oauth/oauth2/token', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
+          'Content-Type': 'application/x-www-form-urlencoded'
         },
-        body: params2.toString(),
+        body: params2.toString()
       })
 
       console.log('Response status:', response2.status)
       const result2 = await response2.text()
       console.log('Response:', result2)
     }
-
   } catch (error) {
     console.error('Error:', error)
   } finally {

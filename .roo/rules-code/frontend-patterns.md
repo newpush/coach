@@ -5,6 +5,7 @@
 We use Pinia for global state management. Always use the **Setup Store** syntax, as it aligns better with the Composition API used throughout the project.
 
 ### Structure
+
 - **Definition**: Use `defineStore` with a unique ID and a setup function.
 - **State**: Define state using `ref()`.
 - **Getters**: Define derived state using `computed()`.
@@ -54,6 +55,7 @@ export const useExampleStore = defineStore('example', () => {
 Composables are used to encapsulate reusable logic. They should be located in `app/composables/` and follow the "use" naming convention.
 
 ### Structure
+
 - **File Name**: `app/composables/useFeatureName.ts`
 - **Export**: Export a named `const` or `function` matching the file name.
 - **Return**: Return an object containing the reactive state and methods to be exposed.
@@ -93,7 +95,7 @@ Consistent loading states improve perceived performance and user experience.
 
 ### Example (Skeleton)
 
-```vue
+````vue
 <!-- Good: Layout remains stable -->
 <div v-if="pending" class="space-y-4">
   <div class="flex gap-4">
@@ -130,18 +132,18 @@ When building interactive modals with forms, follow these guidelines to ensure c
           <UFormField label="Type" name="type">
             <USelect v-model="form.type" :items="types" class="w-full" icon="i-heroicons-bolt" />
           </UFormField>
-          
+
           <UFormField label="Duration" name="duration">
              <UInput v-model="form.duration" type="number" class="w-full" icon="i-heroicons-clock" />
           </UFormField>
         </div>
-        
+
         <UFormField label="Notes" name="notes">
           <UTextarea v-model="form.notes" class="w-full" :rows="3" />
         </UFormField>
       </div>
     </template>
-    
+
     <template #footer>
       <div class="flex justify-end gap-2">
         <UButton color="neutral" variant="ghost" @click="isOpen = false">Cancel</UButton>
@@ -150,4 +152,4 @@ When building interactive modals with forms, follow these guidelines to ensure c
     </template>
   </UModal>
 </template>
-```
+````

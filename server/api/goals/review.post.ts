@@ -31,16 +31,16 @@ defineRouteMeta({
 
 export default defineEventHandler(async (event) => {
   const session = await getServerSession(event)
-  
+
   if (!session?.user) {
-    throw createError({ 
+    throw createError({
       statusCode: 401,
-      message: 'Unauthorized' 
+      message: 'Unauthorized'
     })
   }
-  
+
   const userId = (session.user as any).id
-  
+
   // Check if user has active goals
   const activeGoalsCount = await prisma.goal.count({
     where: {
@@ -48,22 +48,26 @@ export default defineEventHandler(async (event) => {
       status: 'ACTIVE'
     }
   })
-  
+
   if (activeGoalsCount === 0) {
     throw createError({
       statusCode: 400,
       message: 'No active goals to review. Create some goals first.'
     })
   }
-  
+
   try {
     // Trigger the goal review background job with per-user concurrency
-    const handle = await tasks.trigger('review-goals', {
-      userId
-    }, {
-      concurrencyKey: userId
-    })
-    
+    const handle = await tasks.trigger(
+      'review-goals',
+      {
+        userId
+      },
+      {
+        concurrencyKey: userId
+      }
+    )
+
     return {
       success: true,
       jobId: handle.id,

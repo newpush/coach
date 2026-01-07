@@ -156,6 +156,7 @@ Create a plist file at `~/Library/LaunchAgents/com.wattz.dbbackup.plist`:
 ```
 
 Load the job:
+
 ```bash
 launchctl load ~/Library/LaunchAgents/com.wattz.dbbackup.plist
 ```
@@ -186,6 +187,7 @@ chmod +x scripts/restore-database.sh
 ### DATABASE_URL not found
 
 Ensure your `.env` file contains:
+
 ```
 DATABASE_URL="postgresql://user:password@localhost:5439/dbname?connection_limit=20"
 ```

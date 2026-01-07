@@ -19,7 +19,7 @@ async function getTableSchema(connectionString: string, tableName: string) {
       ORDER BY column_name;
     `
     const result = await pool.query(query, [tableName])
-    
+
     const indexesQuery = `
         SELECT indexname, indexdef
         FROM pg_indexes
@@ -29,8 +29,8 @@ async function getTableSchema(connectionString: string, tableName: string) {
     const indexesResult = await pool.query(indexesQuery, [tableName])
 
     return {
-        columns: result.rows,
-        indexes: indexesResult.rows
+      columns: result.rows,
+      indexes: indexesResult.rows
     }
   } finally {
     await pool.end()
@@ -46,8 +46,8 @@ async function compareSchemas() {
 
     console.log('--- Columns Comparison ---')
     const allColumns = new Set([
-      ...localSchema.columns.map(c => c.column_name),
-      ...prodSchema.columns.map(c => c.column_name)
+      ...localSchema.columns.map((c) => c.column_name),
+      ...prodSchema.columns.map((c) => c.column_name)
     ])
 
     let hasDifferences = false
@@ -55,56 +55,64 @@ async function compareSchemas() {
     const columnTable: any[] = []
 
     for (const colName of Array.from(allColumns).sort()) {
-      const localCol = localSchema.columns.find(c => c.column_name === colName)
-      const prodCol = prodSchema.columns.find(c => c.column_name === colName)
+      const localCol = localSchema.columns.find((c) => c.column_name === colName)
+      const prodCol = prodSchema.columns.find((c) => c.column_name === colName)
 
-      const status = !localCol ? 'MISSING LOCAL' : !prodCol ? 'MISSING PROD' : 
-                     (localCol.data_type !== prodCol.data_type || localCol.is_nullable !== prodCol.is_nullable) ? 'MISMATCH' : 'MATCH'
-      
+      const status = !localCol
+        ? 'MISSING LOCAL'
+        : !prodCol
+          ? 'MISSING PROD'
+          : localCol.data_type !== prodCol.data_type || localCol.is_nullable !== prodCol.is_nullable
+            ? 'MISMATCH'
+            : 'MATCH'
+
       if (status !== 'MATCH') hasDifferences = true
 
       columnTable.push({
-          Column: colName,
-          Status: status,
-          Local: localCol ? `${localCol.data_type} (${localCol.is_nullable})` : '-',
-          Prod: prodCol ? `${prodCol.data_type} (${prodCol.is_nullable})` : '-'
+        Column: colName,
+        Status: status,
+        Local: localCol ? `${localCol.data_type} (${localCol.is_nullable})` : '-',
+        Prod: prodCol ? `${prodCol.data_type} (${prodCol.is_nullable})` : '-'
       })
     }
     console.table(columnTable)
 
     console.log('\n--- Indexes Comparison ---')
     const allIndexes = new Set([
-        ...localSchema.indexes.map(i => i.indexname),
-        ...prodSchema.indexes.map(i => i.indexname)
+      ...localSchema.indexes.map((i) => i.indexname),
+      ...prodSchema.indexes.map((i) => i.indexname)
     ])
-    
+
     const indexTable: any[] = []
 
     for (const indexName of Array.from(allIndexes).sort()) {
-        const localIndex = localSchema.indexes.find(i => i.indexname === indexName)
-        const prodIndex = prodSchema.indexes.find(i => i.indexname === indexName)
+      const localIndex = localSchema.indexes.find((i) => i.indexname === indexName)
+      const prodIndex = prodSchema.indexes.find((i) => i.indexname === indexName)
 
-        const status = !localIndex ? 'MISSING LOCAL' : !prodIndex ? 'MISSING PROD' :
-                       (localIndex.indexdef !== prodIndex.indexdef) ? 'MISMATCH' : 'MATCH'
-        
-        if (status !== 'MATCH') hasDifferences = true
-        
-        indexTable.push({
-            Index: indexName,
-            Status: status,
-            LocalDef: localIndex ? 'Exists' : '-', // abbreviating for readability
-            ProdDef: prodIndex ? 'Exists' : '-'
-        })
+      const status = !localIndex
+        ? 'MISSING LOCAL'
+        : !prodIndex
+          ? 'MISSING PROD'
+          : localIndex.indexdef !== prodIndex.indexdef
+            ? 'MISMATCH'
+            : 'MATCH'
+
+      if (status !== 'MATCH') hasDifferences = true
+
+      indexTable.push({
+        Index: indexName,
+        Status: status,
+        LocalDef: localIndex ? 'Exists' : '-', // abbreviating for readability
+        ProdDef: prodIndex ? 'Exists' : '-'
+      })
     }
     console.table(indexTable)
-
 
     if (hasDifferences) {
       console.log('\n❌ Differences detected between Local and Production schemas!')
     } else {
       console.log('\n✅ Local and Production schemas match perfectly.')
     }
-
   } catch (error) {
     console.error('Error comparing schemas:', error)
   }

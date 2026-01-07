@@ -19,15 +19,18 @@ The Coach Watts platform includes a comprehensive **1-10 scoring system** that e
 Evaluated for each individual workout session.
 
 #### Overall Score (1-10)
+
 Holistic assessment of workout quality considering all factors.
 
 **What it measures:**
+
 - Achievement of workout objectives
 - Quality of execution across all dimensions
 - Appropriate effort and intensity
 - Technical proficiency
 
 **Score breakdown:**
+
 - **9-10**: Exceptional, elite-level performance
 - **7-8**: Strong, solid execution with minor areas to improve
 - **5-6**: Adequate, met basic requirements but room for improvement
@@ -35,9 +38,11 @@ Holistic assessment of workout quality considering all factors.
 - **1-2**: Poor execution, significant issues to address
 
 #### Technical Score (1-10)
+
 Evaluation of form, technique, and efficiency.
 
 **What it measures:**
+
 - Power smoothness and consistency (for cycling)
 - Cadence optimization
 - L/R balance
@@ -46,51 +51,61 @@ Evaluation of form, technique, and efficiency.
 - Movement quality (for strength training)
 
 **Example high score factors:**
+
 - Low power variability index (<1.05)
 - Optimal cadence ranges maintained
 - Good L/R balance (48-52%)
 - Efficient movement patterns
 
 #### Effort Score (1-10)
+
 Assessment of effort appropriateness relative to workout goals.
 
 **What it measures:**
+
 - RPE vs. planned intensity alignment
 - Effort sustainability
 - Appropriate intensity for workout type
 - Energy system targeting
 
 **Example high score factors:**
+
 - Effort matched the workout goal
 - Sustainable intensity for workout duration
 - Appropriate recovery between intervals
 - RPE aligns with power/pace zones
 
 #### Pacing Score (1-10)
+
 Quality of pacing strategy and execution.
 
 **What it measures:**
+
 - Consistency of output
 - Surge control
 - Discipline in maintaining target zones
 - Strategic energy distribution
 
 **Example high score factors:**
+
 - Low variability in steady-state efforts
 - Controlled starts (no excessive surging)
 - Even splits or negative splits
 - Target zones maintained throughout
 
 #### Execution Score (1-10)
+
 How well the workout plan was executed.
 
 **What it measures:**
+
 - Interval target achievement
 - Rest period adherence
 - Workout structure completion
 - Plan vs. actual alignment
 
 **Example high score factors:**
+
 - All intervals completed as prescribed
 - Target power/pace achieved
 - Appropriate rest periods taken
@@ -103,44 +118,53 @@ How well the workout plan was executed.
 Evaluated for each day of nutrition tracking.
 
 #### Overall Nutrition Score (1-10)
+
 Holistic assessment of daily nutrition quality.
 
 **What it measures:**
+
 - Complete picture of nutrition quality
 - Balance across all dimensions
 - Appropriateness for training demands
 - Data completeness
 
 **Score adjustment factors:**
+
 - Incomplete data tracking reduces score
 - Training demands affect scoring context
 - Recovery needs influence targets
 
 #### Macro Balance Score (1-10)
+
 Appropriateness of protein/carbs/fat distribution for an athlete.
 
 **What it measures:**
+
 - Protein adequacy for recovery (1.6-2.2g/kg for athletes)
 - Carbohydrate sufficiency for training demands
 - Fat intake for hormonal health and energy
 - Ratio appropriateness for sport and goals
 
 **Example high score factors:**
+
 - 20-30% protein (adequate for recovery)
 - 45-65% carbs (sufficient for training)
 - 20-30% fat (hormonal health)
 - Adjusted for training volume
 
 #### Quality Score (1-10)
+
 Food quality, variety, and nutrient density.
 
 **What it measures:**
+
 - Whole food vs. processed food ratio
 - Variety of food sources
 - Micronutrient diversity
 - Food timing and meal distribution
 
 **Example high score factors:**
+
 - Predominantly whole foods
 - Colorful variety of vegetables
 - Multiple protein sources
@@ -148,30 +172,36 @@ Food quality, variety, and nutrient density.
 - Appropriate pre/post-workout nutrition
 
 #### Adherence Score (1-10)
+
 How well targets and goals were met.
 
 **What it measures:**
+
 - Calorie target achievement
 - Macro goal adherence
 - Consistency with nutrition plan
 - Goal appropriateness for training
 
 **Example high score factors:**
+
 - Within 5-10% of calorie target
 - Macro targets achieved
 - Consistent tracking
 - Goals align with training demands
 
 #### Hydration Score (1-10)
+
 Adequacy of water intake.
 
 **What it measures:**
+
 - Total water consumption
 - Appropriateness for activity level
 - Timing of hydration
 - Sweat loss replacement
 
 **Example high score factors:**
+
 - 2.5-3.5L daily for athletes
 - Increased on training days
 - Consistent throughout day
@@ -184,18 +214,22 @@ Adequacy of water intake.
 Evaluated for training periods (typically 7 days).
 
 #### Overall Period Score (1-10)
+
 Holistic assessment of the training period quality.
 
 **What it measures:**
+
 - Training load management
 - Recovery adequacy
 - Progress indicators
 - Consistency and adherence
 
 #### Training Load Score (1-10)
+
 Quality of training load management and distribution.
 
 **What it measures:**
+
 - Appropriate TSS distribution
 - Hard/easy day balance
 - Progressive overload
@@ -203,15 +237,18 @@ Quality of training load management and distribution.
 - Acute:Chronic load ratio
 
 **Example high score factors:**
+
 - 80/20 intensity distribution maintained
 - TSS appropriate for fitness level
 - Adequate recovery between hard sessions
 - Progressive load increases (not >10% weekly)
 
 #### Recovery Score (1-10)
+
 Recovery adequacy relative to training stress.
 
 **What it measures:**
+
 - HRV trends
 - Sleep quality and quantity
 - Subjective recovery markers
@@ -219,6 +256,7 @@ Recovery adequacy relative to training stress.
 - Recovery time between sessions
 
 **Example high score factors:**
+
 - Stable or rising HRV
 - 7-9 hours sleep nightly
 - Good subjective recovery scores
@@ -226,9 +264,11 @@ Recovery adequacy relative to training stress.
 - No signs of overreaching
 
 #### Progress Score (1-10)
+
 Evidence of improvement and positive adaptation.
 
 **What it measures:**
+
 - Performance improvements
 - Power/pace progression
 - Efficiency gains
@@ -236,6 +276,7 @@ Evidence of improvement and positive adaptation.
 - Workout quality trends
 
 **Example high score factors:**
+
 - Improved power at same RPE
 - Better efficiency metrics
 - CTL steadily rising
@@ -243,15 +284,18 @@ Evidence of improvement and positive adaptation.
 - Positive performance indicators
 
 #### Consistency Score (1-10)
+
 Training consistency and adherence to plan.
 
 **What it measures:**
+
 - Planned workouts completed
 - Training frequency
 - Schedule adherence
 - Long-term sustainability
 
 **Example high score factors:**
+
 - 90%+ workout completion
 - Regular training rhythm
 - Minimal unplanned gaps
@@ -264,9 +308,11 @@ Training consistency and adherence to plan.
 Long-term assessment updated periodically (typically monthly).
 
 #### Current Fitness Score (1-10)
+
 Overall fitness level based on recent training and performance.
 
 **What it measures:**
+
 - CTL (Chronic Training Load) / Fitness level
 - FTP and power output capabilities
 - Recent performance trends
@@ -274,15 +320,18 @@ Overall fitness level based on recent training and performance.
 - Current form vs. historical
 
 **Example high score factors:**
+
 - High FTP relative to weight
 - Strong CTL base (>80 for competitive cyclists)
 - Consistent high-quality workouts
 - Positive performance trends
 
 #### Recovery Capacity Score (1-10)
+
 Ability to recover from training stress.
 
 **What it measures:**
+
 - HRV baseline and trends
 - Sleep quality patterns
 - Resting heart rate trends
@@ -290,6 +339,7 @@ Ability to recover from training stress.
 - Time needed between hard sessions
 
 **Example high score factors:**
+
 - High HRV baseline (>60ms for trained athletes)
 - Consistent sleep quality
 - Low resting HR
@@ -297,9 +347,11 @@ Ability to recover from training stress.
 - Resilience to training load
 
 #### Nutrition Compliance Score (1-10)
+
 Overall nutrition quality and adherence.
 
 **What it measures:**
+
 - Tracking consistency
 - Average nutrition scores
 - Long-term dietary patterns
@@ -307,6 +359,7 @@ Overall nutrition quality and adherence.
 - Nutritional support for training
 
 **Example high score factors:**
+
 - Regular tracking habits
 - Consistently high nutrition scores
 - Appropriate fueling for training
@@ -314,9 +367,11 @@ Overall nutrition quality and adherence.
 - Hydration habits established
 
 #### Training Consistency Score (1-10)
+
 Training consistency and adherence over time.
 
 **What it measures:**
+
 - Training frequency
 - Long-term adherence patterns
 - Workout completion rates
@@ -324,6 +379,7 @@ Training consistency and adherence over time.
 - Sustainable training habits
 
 **Example high score factors:**
+
 - 4-6 weekly sessions maintained
 - High completion rates (>85%)
 - Consistent training blocks
@@ -367,6 +423,7 @@ ORDER BY dateRangeStart;
 ### Setting Goals
 
 Use scores to set specific, measurable goals:
+
 - "Improve average workout pacing score from 6 to 8"
 - "Achieve consistency score of 9+ for 4 consecutive weeks"
 - "Maintain nutrition quality score above 7"
@@ -374,6 +431,7 @@ Use scores to set specific, measurable goals:
 ### Visualizations
 
 Scores enable powerful visualizations:
+
 - Line charts showing score trends over time
 - Radar charts comparing different score dimensions
 - Heat maps showing score patterns
@@ -386,6 +444,7 @@ Scores enable powerful visualizations:
 ### AI-Generated Scores
 
 All scores are generated by AI analysis using:
+
 1. **Objective Metrics**: Hard data from workouts, nutrition, etc.
 2. **Comparative Analysis**: Performance relative to goals and capabilities
 3. **Context Awareness**: Training phase, recovery status, recent history
@@ -394,6 +453,7 @@ All scores are generated by AI analysis using:
 ### Consistency Standards
 
 To ensure meaningful tracking over time:
+
 - **Same Scale**: All scores use consistent 1-10 scale
 - **Clear Guidelines**: Specific criteria for each score level
 - **Realistic Ranges**: Scores reflect actual performance, not inflated
@@ -402,30 +462,35 @@ To ensure meaningful tracking over time:
 ### Score Interpretation
 
 **9-10 (Exceptional)**
+
 - Elite-level execution
 - Multiple areas of excellence
 - Sustainable and repeatable
 - Sets new personal standards
 
 **7-8 (Strong)**
+
 - Solid performance
 - Minor areas for improvement
 - Generally well-executed
 - Above average quality
 
 **5-6 (Adequate)**
+
 - Basic requirements met
 - Several areas needing work
 - Room for significant improvement
 - Average execution
 
 **3-4 (Needs Work)**
+
 - Multiple issues identified
 - Below expected standards
 - Requires focused attention
 - Clear improvement areas
 
 **1-2 (Poor)**
+
 - Significant problems
 - Far below standards
 - Immediate intervention needed
@@ -436,6 +501,7 @@ To ensure meaningful tracking over time:
 ## Database Schema
 
 ### Workout Scores
+
 ```prisma
 model Workout {
   overallScore    Int?  // 1-10 overall quality
@@ -447,6 +513,7 @@ model Workout {
 ```
 
 ### Nutrition Scores
+
 ```prisma
 model Nutrition {
   overallScore      Int?  // 1-10 overall quality
@@ -458,6 +525,7 @@ model Nutrition {
 ```
 
 ### Report Scores
+
 ```prisma
 model Report {
   overallScore       Int?  // 1-10 period assessment
@@ -469,6 +537,7 @@ model Report {
 ```
 
 ### Athlete Profile Scores
+
 ```prisma
 model User {
   currentFitnessScore       Int?       // 1-10 fitness level
@@ -525,16 +594,21 @@ Potential additions to the scoring system:
 ## Example Use Cases
 
 ### Use Case 1: Identifying Overtraining
+
 Monitor declining recovery scores combined with stable/declining performance scores to detect early overtraining signs.
 
 ### Use Case 2: Nutrition Optimization
+
 Track correlation between nutrition quality scores and workout performance scores to optimize fueling strategies.
 
 ### Use Case 3: Training Load Management
+
 Use training load scores to fine-tune weekly TSS distribution and intensity balance.
 
 ### Use Case 4: Progress Verification
+
 Document improvement with rising scores across multiple dimensions over training blocks.
 
 ### Use Case 5: Weakness Identification
+
 Identify consistently low-scoring areas (e.g., pacing, technical execution) for focused skill development.

@@ -2,7 +2,6 @@ import { defineEventHandler, createError, getRouterParam } from 'h3'
 import { getServerSession } from '../../../utils/session'
 import { prisma } from '../../../utils/db'
 
-
 defineRouteMeta({
   openAPI: {
     tags: ['Workouts'],
@@ -64,16 +63,16 @@ const DURATIONS = [5, 10, 30, 60, 120, 300, 600, 1200, 1800, 3600]
  */
 function calculateBestPowerForDuration(powerData: number[], duration: number): number {
   if (!powerData || powerData.length === 0) return 0
-  
+
   let maxAvg = 0
-  
+
   // Use sliding window to find best average
   for (let i = 0; i <= powerData.length - duration; i++) {
     const window = powerData.slice(i, i + duration)
     const avg = window.reduce((sum, p) => sum + p, 0) / duration
     maxAvg = Math.max(maxAvg, avg)
   }
-  
+
   return Math.round(maxAvg)
 }
 
@@ -134,7 +133,7 @@ export default defineEventHandler(async (event) => {
 
   // Parse power data
   const powerData = workout.streams.watts as number[]
-  
+
   if (!Array.isArray(powerData) || powerData.length === 0) {
     return {
       hasPowerData: false,
@@ -143,20 +142,20 @@ export default defineEventHandler(async (event) => {
   }
 
   // Calculate power curve for each duration
-  const powerCurve = DURATIONS.map(duration => {
+  const powerCurve = DURATIONS.map((duration) => {
     const power = calculateBestPowerForDuration(powerData, duration)
     return {
       duration,
       durationLabel: formatDuration(duration),
       power
     }
-  }).filter(point => point.power > 0)
+  }).filter((point) => point.power > 0)
 
   // Calculate summary stats
-  const peak5s = powerCurve.find(p => p.duration === 5)?.power || 0
-  const peak1min = powerCurve.find(p => p.duration === 60)?.power || 0
-  const peak5min = powerCurve.find(p => p.duration === 300)?.power || 0
-  const peak20min = powerCurve.find(p => p.duration === 1200)?.power || 0
+  const peak5s = powerCurve.find((p) => p.duration === 5)?.power || 0
+  const peak1min = powerCurve.find((p) => p.duration === 60)?.power || 0
+  const peak5min = powerCurve.find((p) => p.duration === 300)?.power || 0
+  const peak20min = powerCurve.find((p) => p.duration === 1200)?.power || 0
 
   // Estimate FTP from 20min power (typically 95% of 20min power)
   const estimatedFTP = peak20min > 0 ? Math.round(peak20min * 0.95) : null

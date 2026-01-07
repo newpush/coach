@@ -168,24 +168,25 @@ coach-watts/
 
 ### Root Level
 
-| File/Folder | Purpose |
-|-------------|---------|
-| `.env` | Environment variables (secrets, API keys) |
-| `nuxt.config.ts` | Nuxt framework configuration |
-| `tsconfig.json` | TypeScript compiler configuration |
-| `package.json` | Node.js dependencies and scripts |
+| File/Folder      | Purpose                                   |
+| ---------------- | ----------------------------------------- |
+| `.env`           | Environment variables (secrets, API keys) |
+| `nuxt.config.ts` | Nuxt framework configuration              |
+| `tsconfig.json`  | TypeScript compiler configuration         |
+| `package.json`   | Node.js dependencies and scripts          |
 
 ### `/prisma` - Database Layer
 
 **Purpose:** Database schema, migrations, and seeding
 
-| File | Purpose |
-|------|---------|
+| File            | Purpose                                       |
+| --------------- | --------------------------------------------- |
 | `schema.prisma` | Single source of truth for database structure |
-| `migrations/` | SQL migration history for version control |
-| `seed.ts` | Script to populate database with test data |
+| `migrations/`   | SQL migration history for version control     |
+| `seed.ts`       | Script to populate database with test data    |
 
 **Key Commands:**
+
 ```bash
 npx prisma migrate dev     # Create and apply migration
 npx prisma generate        # Generate Prisma Client
@@ -202,11 +203,13 @@ npx prisma db seed         # Run seed script
 **Convention:** File structure maps to URL routes
 
 Examples:
+
 - `api/workouts/index.ts` → `/api/workouts` (GET, POST)
 - `api/workouts/[id].ts` → `/api/workouts/:id` (GET, PUT, DELETE)
 - `api/auth/[...].ts` → `/api/auth/*` (Catch-all for NuxtAuth)
 
 **Route Handlers:**
+
 ```typescript
 // server/api/workouts/index.ts
 export default defineEventHandler(async (event) => {
@@ -222,15 +225,16 @@ export default defineEventHandler(async (event) => {
 
 **Purpose:** Reusable server-side functions
 
-| File | Purpose |
-|------|---------|
-| `db.ts` | Exports configured Prisma client instance |
-| `gemini.ts` | Wrapper for Google Gemini API calls |
-| `intervals.ts` | Intervals.icu API client with auth |
-| `whoop.ts` | Whoop API client with token refresh |
-| `auth.ts` | Helper functions for authentication |
+| File           | Purpose                                   |
+| -------------- | ----------------------------------------- |
+| `db.ts`        | Exports configured Prisma client instance |
+| `gemini.ts`    | Wrapper for Google Gemini API calls       |
+| `intervals.ts` | Intervals.icu API client with auth        |
+| `whoop.ts`     | Whoop API client with token refresh       |
+| `auth.ts`      | Helper functions for authentication       |
 
 **Example:**
+
 ```typescript
 // server/utils/db.ts
 import { PrismaClient } from '@prisma/client'
@@ -252,10 +256,10 @@ if (process.env.NODE_ENV !== 'production') globalThis.prisma = prisma
 
 **Purpose:** Request interceptors and processors
 
-| File | Purpose |
-|------|---------|
-| `auth.ts` | Verify JWT tokens, attach user to context |
-| `ratelimit.ts` | Prevent API abuse with rate limiting |
+| File           | Purpose                                   |
+| -------------- | ----------------------------------------- |
+| `auth.ts`      | Verify JWT tokens, attach user to context |
+| `ratelimit.ts` | Prevent API abuse with rate limiting      |
 
 ### `/trigger` - Background Jobs
 
@@ -273,6 +277,7 @@ if (process.env.NODE_ENV !== 'production') globalThis.prisma = prisma
    - `daily-coach.ts` - Quick suggestions (Gemini Flash)
 
 **Job Structure:**
+
 ```typescript
 // trigger/jobs/daily-coach.ts
 import { client } from '../client'
@@ -292,18 +297,19 @@ export const dailyCoach = client.defineJob({
 
 **Purpose:** File-based routing (each `.vue` file is a route)
 
-| Route | File | Purpose |
-|-------|------|---------|
-| `/` | `index.vue` | Landing page |
-| `/login` | `login.vue` | Authentication |
-| `/dashboard` | `dashboard.vue` | Main app view |
-| `/settings` | `settings.vue` | User preferences |
-| `/reports` | `reports/index.vue` | Report list |
-| `/reports/:id` | `reports/[id].vue` | Single report |
-| `/workouts` | `workouts/index.vue` | Workout calendar |
-| `/workouts/:id` | `workouts/[id].vue` | Workout details |
+| Route           | File                 | Purpose          |
+| --------------- | -------------------- | ---------------- |
+| `/`             | `index.vue`          | Landing page     |
+| `/login`        | `login.vue`          | Authentication   |
+| `/dashboard`    | `dashboard.vue`      | Main app view    |
+| `/settings`     | `settings.vue`       | User preferences |
+| `/reports`      | `reports/index.vue`  | Report list      |
+| `/reports/:id`  | `reports/[id].vue`   | Single report    |
+| `/workouts`     | `workouts/index.vue` | Workout calendar |
+| `/workouts/:id` | `workouts/[id].vue`  | Workout details  |
 
 **Dynamic Routes:**
+
 - `[id].vue` - Single parameter
 - `[...slug].vue` - Catch-all route
 
@@ -312,11 +318,13 @@ export const dailyCoach = client.defineJob({
 **Purpose:** Reusable UI building blocks
 
 **Organization Strategy:**
+
 - Group by feature/domain (not by component type)
 - Co-locate related components
 - Use descriptive names
 
 **Naming Convention:**
+
 ```
 ComponentName.vue (PascalCase)
 ```
@@ -339,23 +347,24 @@ ComponentName.vue (PascalCase)
 export const useWorkouts = () => {
   const workouts = ref([])
   const loading = ref(false)
-  
+
   const fetchWorkouts = async () => {
     loading.value = true
     const data = await $fetch('/api/workouts')
     workouts.value = data
     loading.value = false
   }
-  
+
   return { workouts, loading, fetchWorkouts }
 }
 ```
 
 **Usage in Components:**
+
 ```vue
 <script setup>
-const { workouts, loading, fetchWorkouts } = useWorkouts()
-onMounted(() => fetchWorkouts())
+  const { workouts, loading, fetchWorkouts } = useWorkouts()
+  onMounted(() => fetchWorkouts())
 </script>
 ```
 
@@ -363,18 +372,19 @@ onMounted(() => fetchWorkouts())
 
 **Purpose:** Wrapper templates for pages
 
-| Layout | Purpose |
-|--------|---------|
-| `default.vue` | Standard app layout (header, footer) |
-| `auth.vue` | Minimal layout for login/signup |
-| `dashboard.vue` | Dashboard with sidebar navigation |
+| Layout          | Purpose                              |
+| --------------- | ------------------------------------ |
+| `default.vue`   | Standard app layout (header, footer) |
+| `auth.vue`      | Minimal layout for login/signup      |
+| `dashboard.vue` | Dashboard with sidebar navigation    |
 
 **Usage in Pages:**
+
 ```vue
 <script setup>
-definePageMeta({
-  layout: 'dashboard'
-})
+  definePageMeta({
+    layout: 'dashboard'
+  })
 </script>
 ```
 
@@ -382,17 +392,18 @@ definePageMeta({
 
 **Purpose:** Code that runs before route navigation
 
-| Middleware | Purpose |
-|------------|---------|
-| `auth.ts` | Redirect to login if not authenticated |
+| Middleware | Purpose                                |
+| ---------- | -------------------------------------- |
+| `auth.ts`  | Redirect to login if not authenticated |
 | `guest.ts` | Redirect to dashboard if authenticated |
 
 **Usage:**
+
 ```vue
 <script setup>
-definePageMeta({
-  middleware: 'auth'
-})
+  definePageMeta({
+    middleware: 'auth'
+  })
 </script>
 ```
 
@@ -401,11 +412,13 @@ definePageMeta({
 **Purpose:** Shared type definitions
 
 **Organization:**
+
 - One file per domain
 - Export interfaces and types
 - Use for API contracts
 
 **Example:**
+
 ```typescript
 // types/workout.ts
 export interface Workout {
@@ -428,13 +441,14 @@ export interface WorkoutFilters {
 
 **Purpose:** Pure functions usable anywhere (client or server)
 
-| File | Purpose |
-|------|---------|
-| `formatters.ts` | Format dates, numbers, durations |
-| `calculations.ts` | Calculate TSS, IF, W/kg, etc. |
-| `validators.ts` | Validate user input |
+| File              | Purpose                          |
+| ----------------- | -------------------------------- |
+| `formatters.ts`   | Format dates, numbers, durations |
+| `calculations.ts` | Calculate TSS, IF, W/kg, etc.    |
+| `validators.ts`   | Validate user input              |
 
 **Example:**
+
 ```typescript
 // utils/calculations.ts
 export const calculateTSS = (
@@ -451,13 +465,13 @@ export const calculateTSS = (
 
 **Purpose:** Project documentation for reference
 
-| File | Purpose |
-|------|---------|
-| `README.md` | Documentation overview |
-| `architecture.md` | System design and decisions |
-| `database-schema.md` | Database structure details |
-| `project-structure.md` | This file |
-| `implementation-guide.md` | Step-by-step build guide |
+| File                      | Purpose                     |
+| ------------------------- | --------------------------- |
+| `README.md`               | Documentation overview      |
+| `architecture.md`         | System design and decisions |
+| `database-schema.md`      | Database structure details  |
+| `project-structure.md`    | This file                   |
+| `implementation-guide.md` | Step-by-step build guide    |
 
 ## File Naming Conventions
 
@@ -504,6 +518,7 @@ import { prisma } from '~/server/utils/db'
 ```
 
 **Available Aliases:**
+
 - `~` or `@` - Project root
 - `~~` or `@@` - Source directory
 - `#app` - Nuxt app directory
@@ -533,6 +548,7 @@ pnpm trigger:dev
 ### Adding New Features
 
 1. **Database Changes:**
+
    ```bash
    # Update prisma/schema.prisma
    npx prisma migrate dev --name add_feature
@@ -583,6 +599,7 @@ pnpm build
 ```
 
 Output:
+
 - `.output/` - Production build
   - `server/` - Server bundle
   - `public/` - Static assets
@@ -590,11 +607,13 @@ Output:
 ### Deployment
 
 **Server:**
+
 ```bash
 node .output/server/index.mjs
 ```
 
 **Environment:**
+
 - Set `DATABASE_URL`
 - Set `NUXT_AUTH_SECRET`
 - Set all API keys
@@ -607,21 +626,18 @@ Main configuration file:
 
 ```typescript
 export default defineNuxtConfig({
-  modules: [
-    '@nuxt/ui',
-    '@sidebase/nuxt-auth'
-  ],
-  
+  modules: ['@nuxt/ui', '@sidebase/nuxt-auth'],
+
   runtimeConfig: {
     // Server-only (private)
     geminiApiKey: process.env.GEMINI_API_KEY,
-    
+
     public: {
       // Client-accessible
       apiBase: process.env.NUXT_PUBLIC_API_BASE
     }
-  },
-  
+  }
+
   // Other config...
 })
 ```
@@ -658,11 +674,13 @@ TRIGGER_API_URL="..."
 ### 1. File Organization
 
 ✅ **Do:**
+
 - Group by feature/domain
 - Keep related files close
 - Use descriptive names
 
 ❌ **Don't:**
+
 - Create deep nesting (>3 levels)
 - Mix concerns in a single file
 - Use generic names like `utils.ts`
@@ -670,15 +688,16 @@ TRIGGER_API_URL="..."
 ### 2. Component Structure
 
 ✅ **Do:**
+
 ```vue
 <script setup lang="ts">
-// Imports
-// Composables
-// Props
-// State
-// Computed
-// Methods
-// Lifecycle hooks
+  // Imports
+  // Composables
+  // Props
+  // State
+  // Computed
+  // Methods
+  // Lifecycle hooks
 </script>
 
 <template>
@@ -686,18 +705,20 @@ TRIGGER_API_URL="..."
 </template>
 
 <style scoped>
-/* Scoped styles */
+  /* Scoped styles */
 </style>
 ```
 
 ### 3. API Design
 
 ✅ **Do:**
+
 - Use RESTful conventions
 - Return consistent response format
 - Handle errors gracefully
 
 ❌ **Don't:**
+
 - Mix HTTP methods in single file
 - Return different formats for same endpoint
 - Expose sensitive data
@@ -742,6 +763,7 @@ TRIGGER_API_URL="..."
 ## Conclusion
 
 This project structure is designed for:
+
 - **Scalability:** Easy to add new features
 - **Maintainability:** Clear separation of concerns
 - **Developer Experience:** Intuitive organization

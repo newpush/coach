@@ -1,5 +1,5 @@
 import { prisma } from '../../../../utils/db'
-import { tasks } from "@trigger.dev/sdk/v3"
+import { tasks } from '@trigger.dev/sdk/v3'
 import { z } from 'zod'
 
 const adjustSchema = z.object({
@@ -19,7 +19,7 @@ export default defineEventHandler(async (event) => {
   const adjustments = adjustSchema.parse(body)
 
   const workout = await prisma.plannedWorkout.findFirst({
-    where: { 
+    where: {
       id: workoutId,
       userId: session.user.id
     }

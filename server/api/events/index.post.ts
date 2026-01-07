@@ -52,19 +52,19 @@ export default defineEventHandler(async (event) => {
 
   const body = await readBody(event)
   const result = eventSchema.safeParse(body)
-  
+
   if (!result.success) {
     throw createError({ statusCode: 400, message: 'Invalid input', data: result.error.issues })
   }
 
   const userId = (session.user as any).id
-  
+
   try {
     const newEvent = await eventRepository.create(userId, {
       ...result.data,
       date: new Date(result.data.date)
     })
-    
+
     return { success: true, event: newEvent }
   } catch (error: any) {
     throw createError({ statusCode: 500, message: error.message })

@@ -19,7 +19,7 @@
         >
           {{ dayNumber }}
         </span>
-        
+
         <!-- Wellness Metrics -->
         <button
           v-if="dayWellness"
@@ -54,9 +54,12 @@
         :key="activity.id"
         class="w-full text-left px-2 py-1 rounded text-xs hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors group relative cursor-pointer overflow-hidden"
         :class="{
-          'bg-green-50 dark:bg-green-900/20': activity.source === 'completed' && !activity.plannedWorkoutId,
-          'bg-blue-50 dark:bg-blue-900/20': activity.source === 'completed' && activity.plannedWorkoutId,
-          'bg-amber-50 dark:bg-amber-900/20': activity.source === 'planned' && activity.status === 'planned',
+          'bg-green-50 dark:bg-green-900/20':
+            activity.source === 'completed' && !activity.plannedWorkoutId,
+          'bg-blue-50 dark:bg-blue-900/20':
+            activity.source === 'completed' && activity.plannedWorkoutId,
+          'bg-amber-50 dark:bg-amber-900/20':
+            activity.source === 'planned' && activity.status === 'planned',
           'bg-red-50 dark:bg-red-900/20': activity.status === 'missed',
           'ring-2 ring-primary-500 ring-offset-1': isDragOver === activity.id
         }"
@@ -67,7 +70,10 @@
       >
         <!-- Drag Handle -->
         <div
-          v-if="activity.source === 'completed' || (activity.source === 'planned' && activity.status !== 'completed')"
+          v-if="
+            activity.source === 'completed' ||
+            (activity.source === 'planned' && activity.status !== 'completed')
+          "
           class="absolute top-0 right-0 p-1 opacity-0 group-hover:opacity-100 cursor-grab active:cursor-grabbing z-10 hover:bg-black/5 rounded-bl"
           :draggable="true"
           @dragstart.stop="(e) => onDragStart(e, activity)"
@@ -87,15 +93,17 @@
               'bg-red-500': activity.status === 'missed'
             }"
           />
-          
+
           <div class="flex-1 min-w-0">
             <!-- Title -->
             <div class="font-medium truncate" :title="activity.title">
               {{ activity.title }}
             </div>
-            
+
             <!-- Metrics -->
-            <div class="flex items-center gap-1.5 text-[10px] text-gray-500 dark:text-gray-400 mt-0.5">
+            <div
+              class="flex items-center gap-1.5 text-[10px] text-gray-500 dark:text-gray-400 mt-0.5"
+            >
               <span class="inline-block w-10 text-left">
                 <span v-if="activity.duration || activity.plannedDuration">
                   {{ formatDuration(activity.duration || activity.plannedDuration || 0) }}
@@ -108,43 +116,65 @@
               </span>
               <span class="inline-flex items-center gap-0.5 w-8">
                 <template v-if="activity.averageHr">
-                  <UIcon name="i-heroicons-heart" class="w-2.5 h-2.5 flex-shrink-0 text-red-500 dark:text-red-400" />
-                  <span class="text-red-500 dark:text-red-400">{{ Math.round(activity.averageHr) }}</span>
+                  <UIcon
+                    name="i-heroicons-heart"
+                    class="w-2.5 h-2.5 flex-shrink-0 text-red-500 dark:text-red-400"
+                  />
+                  <span class="text-red-500 dark:text-red-400">{{
+                    Math.round(activity.averageHr)
+                  }}</span>
                 </template>
               </span>
               <span class="inline-flex items-center gap-0.5">
-                <template v-if="(activity.tss || activity.trimp || activity.plannedTss)">
+                <template v-if="activity.tss || activity.trimp || activity.plannedTss">
                   <span
-class="w-3 h-0.5 rounded-full flex-shrink-0"
+                    class="w-3 h-0.5 rounded-full flex-shrink-0"
                     :class="{
                       'bg-green-500': activity.source === 'completed',
                       'bg-amber-500': activity.source === 'planned'
                     }"
                   />
-                  <span class="font-medium">{{ Math.round(activity.tss ?? activity.trimp ?? activity.plannedTss ?? 0) }}</span>
+                  <span class="font-medium">{{
+                    Math.round(activity.tss ?? activity.trimp ?? activity.plannedTss ?? 0)
+                  }}</span>
                 </template>
               </span>
             </div>
-            
+
             <!-- Training Stress Metrics (CTL/ATL/TSB) for completed workouts -->
-            <div v-if="activity.source === 'completed' && (activity.ctl || activity.atl)" class="flex items-center gap-2 text-[9px] text-gray-400 dark:text-gray-500 mt-0.5">
-              <UTooltip v-if="activity.ctl" text="Chronic Training Load - Your fitness level at this point">
+            <div
+              v-if="activity.source === 'completed' && (activity.ctl || activity.atl)"
+              class="flex items-center gap-2 text-[9px] text-gray-400 dark:text-gray-500 mt-0.5"
+            >
+              <UTooltip
+                v-if="activity.ctl"
+                text="Chronic Training Load - Your fitness level at this point"
+              >
                 <span class="flex items-center gap-0.5">
                   <span class="text-purple-600 dark:text-purple-400 font-semibold">CTL</span>
                   <span>{{ activity.ctl.toFixed(0) }}</span>
                 </span>
               </UTooltip>
-              <UTooltip v-if="activity.atl" text="Acute Training Load - Your fatigue level at this point">
+              <UTooltip
+                v-if="activity.atl"
+                text="Acute Training Load - Your fatigue level at this point"
+              >
                 <span class="flex items-center gap-0.5">
                   <span class="text-yellow-600 dark:text-yellow-400 font-semibold">ATL</span>
                   <span>{{ activity.atl.toFixed(0) }}</span>
                 </span>
               </UTooltip>
-              <UTooltip v-if="activity.ctl && activity.atl" :text="`Training Stress Balance: ${getTSBTooltip(activity.ctl - activity.atl)}`">
+              <UTooltip
+                v-if="activity.ctl && activity.atl"
+                :text="`Training Stress Balance: ${getTSBTooltip(activity.ctl - activity.atl)}`"
+              >
                 <span class="flex items-center gap-0.5">
-                  <span class="font-semibold" :class="getTSBColor(activity.ctl - activity.atl)">TSB</span>
+                  <span class="font-semibold" :class="getTSBColor(activity.ctl - activity.atl)"
+                    >TSB</span
+                  >
                   <span :class="getTSBColor(activity.ctl - activity.atl)">
-                    {{ activity.ctl - activity.atl > 0 ? '+' : '' }}{{ (activity.ctl - activity.atl).toFixed(0) }}
+                    {{ activity.ctl - activity.atl > 0 ? '+' : ''
+                    }}{{ (activity.ctl - activity.atl).toFixed(0) }}
                   </span>
                 </span>
               </UTooltip>
@@ -159,19 +189,28 @@ class="w-3 h-0.5 rounded-full flex-shrink-0"
             </div>
 
             <!-- Linked Planned Workout Details -->
-            <div v-if="activity.linkedPlannedWorkout" class="mt-1.5 ml-2 pl-2 border-l-2 border-primary-200 dark:border-primary-800 space-y-0.5 opacity-80">
+            <div
+              v-if="activity.linkedPlannedWorkout"
+              class="mt-1.5 ml-2 pl-2 border-l-2 border-primary-200 dark:border-primary-800 space-y-0.5 opacity-80"
+            >
               <div class="flex items-center gap-1">
                 <UIcon name="i-heroicons-link" class="w-2.5 h-2.5 text-primary-500 shrink-0" />
-                <div class="text-[10px] text-primary-700 dark:text-primary-300 truncate italic font-medium">
+                <div
+                  class="text-[10px] text-primary-700 dark:text-primary-300 truncate italic font-medium"
+                >
                   {{ activity.linkedPlannedWorkout?.title }}
                 </div>
               </div>
               <div class="text-[9px] text-gray-400 dark:text-gray-500 pl-3.5">
-                <span v-if="activity.linkedPlannedWorkout?.duration">{{ formatDuration(activity.linkedPlannedWorkout?.duration) }}</span>
-                <span v-if="activity.linkedPlannedWorkout?.tss"> • {{ Math.round(activity.linkedPlannedWorkout?.tss || 0) }} TSS</span>
+                <span v-if="activity.linkedPlannedWorkout?.duration">{{
+                  formatDuration(activity.linkedPlannedWorkout?.duration)
+                }}</span>
+                <span v-if="activity.linkedPlannedWorkout?.tss">
+                  • {{ Math.round(activity.linkedPlannedWorkout?.tss || 0) }} TSS</span
+                >
               </div>
             </div>
-            
+
             <!-- Mini Zone Chart -->
             <div v-if="activity.source === 'completed'" class="mt-1.5">
               <MiniZoneChart
@@ -195,25 +234,29 @@ class="w-3 h-0.5 rounded-full flex-shrink-0"
         <div v-if="dayNutrition.calories != null" class="flex justify-between">
           <span>Cal:</span>
           <span class="font-medium" :class="getNutritionClass('calories')">
-            {{ dayNutrition.calories }}{{ dayNutrition.caloriesGoal ? `/${dayNutrition.caloriesGoal}` : '' }}
+            {{ dayNutrition.calories
+            }}{{ dayNutrition.caloriesGoal ? `/${dayNutrition.caloriesGoal}` : '' }}
           </span>
         </div>
         <div v-if="dayNutrition.protein != null" class="flex justify-between">
           <span>Pro:</span>
           <span class="font-medium" :class="getNutritionClass('protein')">
-            {{ Math.round(dayNutrition.protein) }}{{ dayNutrition.proteinGoal ? `/${Math.round(dayNutrition.proteinGoal)}` : '' }}g
+            {{ Math.round(dayNutrition.protein)
+            }}{{ dayNutrition.proteinGoal ? `/${Math.round(dayNutrition.proteinGoal)}` : '' }}g
           </span>
         </div>
         <div v-if="dayNutrition.carbs != null" class="flex justify-between">
           <span>Carb:</span>
           <span class="font-medium" :class="getNutritionClass('carbs')">
-            {{ Math.round(dayNutrition.carbs) }}{{ dayNutrition.carbsGoal ? `/${Math.round(dayNutrition.carbsGoal)}` : '' }}g
+            {{ Math.round(dayNutrition.carbs)
+            }}{{ dayNutrition.carbsGoal ? `/${Math.round(dayNutrition.carbsGoal)}` : '' }}g
           </span>
         </div>
         <div v-if="dayNutrition.fat != null" class="flex justify-between">
           <span>Fat:</span>
           <span class="font-medium" :class="getNutritionClass('fat')">
-            {{ Math.round(dayNutrition.fat) }}{{ dayNutrition.fatGoal ? `/${Math.round(dayNutrition.fatGoal)}` : '' }}g
+            {{ Math.round(dayNutrition.fat)
+            }}{{ dayNutrition.fatGoal ? `/${Math.round(dayNutrition.fatGoal)}` : '' }}g
           </span>
         </div>
       </div>
@@ -222,151 +265,154 @@ class="w-3 h-0.5 rounded-full flex-shrink-0"
 </template>
 
 <script setup lang="ts">
-import { format, isToday as isTodayFn, isSameMonth } from 'date-fns'
-import type { CalendarActivity } from '../../types/calendar'
+  import { format, isToday as isTodayFn, isSameMonth } from 'date-fns'
+  import type { CalendarActivity } from '../../types/calendar'
 
-const props = defineProps<{
-  date: Date
-  activities: CalendarActivity[]
-  isOtherMonth: boolean
-  streams?: Record<string, any>
-  userZones?: any
-}>()
+  const props = defineProps<{
+    date: Date
+    activities: CalendarActivity[]
+    isOtherMonth: boolean
+    streams?: Record<string, any>
+    userZones?: any
+  }>()
 
-const emit = defineEmits<{
-  'activity-click': [activity: CalendarActivity]
-  'wellness-click': [date: Date]
-  'merge-activity': [data: { source: CalendarActivity, target: CalendarActivity }]
-  'link-activity': [data: { planned: CalendarActivity, completed: CalendarActivity }]
-}>()
+  const emit = defineEmits<{
+    'activity-click': [activity: CalendarActivity]
+    'wellness-click': [date: Date]
+    'merge-activity': [data: { source: CalendarActivity; target: CalendarActivity }]
+    'link-activity': [data: { planned: CalendarActivity; completed: CalendarActivity }]
+  }>()
 
-const dayNumber = computed(() => format(props.date, 'd'))
-const isDragOver = ref<string | null>(null)
+  const dayNumber = computed(() => format(props.date, 'd'))
+  const isDragOver = ref<string | null>(null)
 
-function onDragStart(event: DragEvent, activity: CalendarActivity) {
-  if (event.dataTransfer) {
-    event.dataTransfer.setData('application/json', JSON.stringify({
-      id: activity.id,
-      title: activity.title,
-      source: activity.source
-    }))
-    event.dataTransfer.effectAllowed = 'link'
+  function onDragStart(event: DragEvent, activity: CalendarActivity) {
+    if (event.dataTransfer) {
+      event.dataTransfer.setData(
+        'application/json',
+        JSON.stringify({
+          id: activity.id,
+          title: activity.title,
+          source: activity.source
+        })
+      )
+      event.dataTransfer.effectAllowed = 'link'
+    }
   }
-}
 
-function onDragOver(event: DragEvent) {
-  // Logic could be improved to check if valid target, but for now allow visual feedback
-}
+  function onDragOver(event: DragEvent) {
+    // Logic could be improved to check if valid target, but for now allow visual feedback
+  }
 
-function onDragLeave(event: DragEvent) {
-  // Reset specific drag over state if implemented per-card
-}
+  function onDragLeave(event: DragEvent) {
+    // Reset specific drag over state if implemented per-card
+  }
 
-function onDrop(event: DragEvent, targetActivity: CalendarActivity) {
-  if (event.dataTransfer) {
-    const data = event.dataTransfer.getData('application/json')
-    if (data) {
-      try {
-        const sourceActivity = JSON.parse(data)
-        
-        if (sourceActivity.id === targetActivity.id) return
-        
-        // Case 1: Linking a planned workout to a completed workout
-        if (sourceActivity.source === 'planned' && targetActivity.source === 'completed') {
-          emit('link-activity', {
-            planned: sourceActivity,
-            completed: targetActivity
-          })
-          return
+  function onDrop(event: DragEvent, targetActivity: CalendarActivity) {
+    if (event.dataTransfer) {
+      const data = event.dataTransfer.getData('application/json')
+      if (data) {
+        try {
+          const sourceActivity = JSON.parse(data)
+
+          if (sourceActivity.id === targetActivity.id) return
+
+          // Case 1: Linking a planned workout to a completed workout
+          if (sourceActivity.source === 'planned' && targetActivity.source === 'completed') {
+            emit('link-activity', {
+              planned: sourceActivity,
+              completed: targetActivity
+            })
+            return
+          }
+
+          // Case 2: Merging two completed workouts
+          if (sourceActivity.source === 'completed' && targetActivity.source === 'completed') {
+            emit('merge-activity', {
+              source: sourceActivity,
+              target: targetActivity
+            })
+          }
+        } catch (e) {
+          console.error('Error parsing drop data', e)
         }
-
-        // Case 2: Merging two completed workouts
-        if (sourceActivity.source === 'completed' && targetActivity.source === 'completed') {
-          emit('merge-activity', {
-            source: sourceActivity,
-            target: targetActivity
-          })
-        }
-      } catch (e) {
-        console.error('Error parsing drop data', e)
       }
     }
   }
-}
-const isToday = computed(() => isTodayFn(props.date))
+  const isToday = computed(() => isTodayFn(props.date))
 
-// Get nutrition data from any activity on this day (they all have same nutrition data)
-const dayNutrition = computed(() => {
-  const activityWithNutrition = props.activities.find(a => a.nutrition)
-  return activityWithNutrition?.nutrition || null
-})
+  // Get nutrition data from any activity on this day (they all have same nutrition data)
+  const dayNutrition = computed(() => {
+    const activityWithNutrition = props.activities.find((a) => a.nutrition)
+    return activityWithNutrition?.nutrition || null
+  })
 
-// Get wellness data from any activity on this day (they all have same wellness data)
-const dayWellness = computed(() => {
-  const activityWithWellness = props.activities.find(a => a.wellness)
-  return activityWithWellness?.wellness || null
-})
+  // Get wellness data from any activity on this day (they all have same wellness data)
+  const dayWellness = computed(() => {
+    const activityWithWellness = props.activities.find((a) => a.wellness)
+    return activityWithWellness?.wellness || null
+  })
 
-function formatDuration(seconds: number | undefined | null): string {
-  if (typeof seconds !== 'number' || isNaN(seconds)) return ''
-  
-  const h = Math.floor(seconds / 3600)
-  const m = Math.floor((seconds % 3600) / 60)
-  
-  if (h > 0) {
-    return `${h}h${m > 0 ? `${m}m` : ''}`
+  function formatDuration(seconds: number | undefined | null): string {
+    if (typeof seconds !== 'number' || isNaN(seconds)) return ''
+
+    const h = Math.floor(seconds / 3600)
+    const m = Math.floor((seconds % 3600) / 60)
+
+    if (h > 0) {
+      return `${h}h${m > 0 ? `${m}m` : ''}`
+    }
+    return `${m}m`
   }
-  return `${m}m`
-}
 
-function formatDistance(meters: number): string {
-  const km = meters / 1000
-  if (km >= 10) {
-    return `${Math.round(km)}km`
-  } else if (km >= 1) {
-    return `${km.toFixed(1)}km`
+  function formatDistance(meters: number): string {
+    const km = meters / 1000
+    if (km >= 10) {
+      return `${Math.round(km)}km`
+    } else if (km >= 1) {
+      return `${km.toFixed(1)}km`
+    }
+    return `${Math.round(meters)}m`
   }
-  return `${Math.round(meters)}m`
-}
 
-function getTSBColor(tsb: number | null): string {
-  if (tsb === null) return 'text-gray-400'
-  if (tsb >= 5) return 'text-green-600 dark:text-green-400'
-  if (tsb >= -10) return 'text-yellow-600 dark:text-yellow-400'
-  if (tsb >= -25) return 'text-blue-600 dark:text-blue-400'
-  return 'text-red-600 dark:text-red-400'
-}
-
-function getTSBTooltip(tsb: number): string {
-  if (tsb > 25) return 'Resting too long - fitness declining'
-  if (tsb > 5) return 'Fresh and ready to race'
-  if (tsb > -10) return 'Maintaining fitness'
-  if (tsb > -25) return 'Building fitness'
-  if (tsb > -40) return 'High fatigue - caution'
-  return 'Severe fatigue - rest needed'
-}
-
-function getNutritionClass(metric: 'calories' | 'protein' | 'carbs' | 'fat'): string {
-  if (!dayNutrition.value) return ''
-  
-  const actual = dayNutrition.value[metric]
-  const goal = dayNutrition.value[`${metric}Goal` as keyof typeof dayNutrition.value]
-  
-  if (actual == null || goal == null) return ''
-  
-  const percentage = (actual as number) / (goal as number)
-  
-  // Within 90-110% of goal is good (green)
-  if (percentage >= 0.9 && percentage <= 1.1) {
-    return 'text-green-600 dark:text-green-400'
-  }
-  // Within 80-120% is okay (amber)
-  else if (percentage >= 0.8 && percentage <= 1.2) {
-    return 'text-amber-600 dark:text-amber-400'
-  }
-  // Outside range is concerning (red)
-  else {
+  function getTSBColor(tsb: number | null): string {
+    if (tsb === null) return 'text-gray-400'
+    if (tsb >= 5) return 'text-green-600 dark:text-green-400'
+    if (tsb >= -10) return 'text-yellow-600 dark:text-yellow-400'
+    if (tsb >= -25) return 'text-blue-600 dark:text-blue-400'
     return 'text-red-600 dark:text-red-400'
   }
-}
+
+  function getTSBTooltip(tsb: number): string {
+    if (tsb > 25) return 'Resting too long - fitness declining'
+    if (tsb > 5) return 'Fresh and ready to race'
+    if (tsb > -10) return 'Maintaining fitness'
+    if (tsb > -25) return 'Building fitness'
+    if (tsb > -40) return 'High fatigue - caution'
+    return 'Severe fatigue - rest needed'
+  }
+
+  function getNutritionClass(metric: 'calories' | 'protein' | 'carbs' | 'fat'): string {
+    if (!dayNutrition.value) return ''
+
+    const actual = dayNutrition.value[metric]
+    const goal = dayNutrition.value[`${metric}Goal` as keyof typeof dayNutrition.value]
+
+    if (actual == null || goal == null) return ''
+
+    const percentage = (actual as number) / (goal as number)
+
+    // Within 90-110% of goal is good (green)
+    if (percentage >= 0.9 && percentage <= 1.1) {
+      return 'text-green-600 dark:text-green-400'
+    }
+    // Within 80-120% is okay (amber)
+    else if (percentage >= 0.8 && percentage <= 1.2) {
+      return 'text-amber-600 dark:text-amber-400'
+    }
+    // Outside range is concerning (red)
+    else {
+      return 'text-red-600 dark:text-red-400'
+    }
+  }
 </script>

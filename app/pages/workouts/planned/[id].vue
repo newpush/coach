@@ -3,12 +3,7 @@
     <template #header>
       <UDashboardNavbar :title="workout?.title || 'Workout Details'">
         <template #leading>
-          <UButton
-            color="neutral"
-            variant="ghost"
-            icon="i-heroicons-arrow-left"
-            @click="goBack"
-          >
+          <UButton color="neutral" variant="ghost" icon="i-heroicons-arrow-left" @click="goBack">
             Back
           </UButton>
         </template>
@@ -24,7 +19,7 @@
           >
             <span class="hidden sm:inline">Download</span>
           </UButton>
-          
+
           <UButton
             v-if="workout"
             color="primary"
@@ -34,7 +29,9 @@
             :icon="isLocalWorkout ? 'i-heroicons-cloud-arrow-up' : 'i-heroicons-arrow-path'"
             @click="showPublishModal = true"
           >
-            <span class="hidden sm:inline">{{ isLocalWorkout ? 'Publish' : 'Update Intervals' }}</span>
+            <span class="hidden sm:inline">{{
+              isLocalWorkout ? 'Publish' : 'Update Intervals'
+            }}</span>
           </UButton>
 
           <UButton
@@ -88,7 +85,9 @@
         <!-- Workout Content -->
         <div v-else-if="workout" class="space-y-6">
           <!-- Header Card -->
-          <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-4 sm:p-6">
+          <div
+            class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-4 sm:p-6"
+          >
             <div class="flex flex-col sm:flex-row items-start justify-between mb-4 gap-4">
               <div class="flex-1 min-w-0 w-full">
                 <h1 class="text-2xl sm:text-3xl font-bold mb-2 break-words">{{ workout.title }}</h1>
@@ -108,7 +107,11 @@
                     <span class="whitespace-nowrap">{{ Math.round(displayTss) }} TSS</span>
                   </div>
                   <span class="hidden sm:inline">•</span>
-                  <UBadge :color="workout.completed ? 'success' : 'warning'" size="sm" class="whitespace-nowrap">
+                  <UBadge
+                    :color="workout.completed ? 'success' : 'warning'"
+                    size="sm"
+                    class="whitespace-nowrap"
+                  >
                     {{ workout.completed ? 'Completed' : 'Planned' }}
                   </UBadge>
                 </div>
@@ -128,14 +131,31 @@
             </div>
 
             <!-- Training Context -->
-            <div v-if="workout.trainingWeek" class="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+            <div
+              v-if="workout.trainingWeek"
+              class="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700"
+            >
               <div class="text-xs text-muted mb-2">Training Context</div>
               <div class="flex flex-wrap gap-2 text-sm">
-                <UBadge v-if="workout.trainingWeek.block.plan.goal" color="neutral" variant="soft" class="whitespace-normal h-auto text-left max-w-full">
-                  <span class="truncate block w-full">Goal: {{ workout.trainingWeek.block.plan.goal.title }}</span>
+                <UBadge
+                  v-if="workout.trainingWeek.block.plan.goal"
+                  color="neutral"
+                  variant="soft"
+                  class="whitespace-normal h-auto text-left max-w-full"
+                >
+                  <span class="truncate block w-full"
+                    >Goal: {{ workout.trainingWeek.block.plan.goal.title }}</span
+                  >
                 </UBadge>
-                <UBadge v-else-if="workout.trainingWeek.block.plan.name" color="neutral" variant="soft" class="whitespace-normal h-auto text-left max-w-full">
-                  <span class="truncate block w-full">Plan: {{ workout.trainingWeek.block.plan.name }}</span>
+                <UBadge
+                  v-else-if="workout.trainingWeek.block.plan.name"
+                  color="neutral"
+                  variant="soft"
+                  class="whitespace-normal h-auto text-left max-w-full"
+                >
+                  <span class="truncate block w-full"
+                    >Plan: {{ workout.trainingWeek.block.plan.name }}</span
+                  >
                 </UBadge>
                 <UBadge color="neutral" variant="soft" class="whitespace-nowrap">
                   {{ workout.trainingWeek.block.name }}
@@ -143,8 +163,17 @@
                 <UBadge color="neutral" variant="soft" class="whitespace-nowrap">
                   Week {{ workout.trainingWeek.weekNumber }}
                 </UBadge>
-                <UBadge color="neutral" variant="soft" class="whitespace-normal h-auto text-left max-w-full">
-                  <span class="truncate block w-full">Focus: {{ workout.trainingWeek.focus || workout.trainingWeek.block.primaryFocus }}</span>
+                <UBadge
+                  color="neutral"
+                  variant="soft"
+                  class="whitespace-normal h-auto text-left max-w-full"
+                >
+                  <span class="truncate block w-full"
+                    >Focus:
+                    {{
+                      workout.trainingWeek.focus || workout.trainingWeek.block.primaryFocus
+                    }}</span
+                  >
                 </UBadge>
               </div>
             </div>
@@ -152,7 +181,9 @@
 
           <!-- Extended Stats Grid -->
           <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+            <div
+              class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6"
+            >
               <div class="flex items-center gap-3">
                 <div class="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center">
                   <UIcon name="i-heroicons-clock" class="w-5 h-5 text-primary" />
@@ -164,7 +195,9 @@
               </div>
             </div>
 
-            <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+            <div
+              class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6"
+            >
               <div class="flex items-center gap-3">
                 <div class="w-10 h-10 bg-amber-500/10 rounded-lg flex items-center justify-center">
                   <UIcon name="i-heroicons-bolt" class="w-5 h-5 text-amber-500" />
@@ -176,65 +209,92 @@
               </div>
             </div>
 
-            <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+            <div
+              class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6"
+            >
               <div class="flex items-center gap-3">
                 <div class="w-10 h-10 bg-green-500/10 rounded-lg flex items-center justify-center">
                   <UIcon name="i-heroicons-fire" class="w-5 h-5 text-green-500" />
                 </div>
                 <div>
                   <div class="text-xs text-muted">Intensity</div>
-                  <div class="text-2xl font-bold">{{ Math.round((workout.workIntensity || 0) * 100) }}%</div>
+                  <div class="text-2xl font-bold">
+                    {{ Math.round((workout.workIntensity || 0) * 100) }}%
+                  </div>
                 </div>
               </div>
             </div>
           </div>
 
           <!-- Run/Swim Details -->
-          <div v-if="workout.type === 'Run' || workout.type === 'Swim'" class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-             <div v-if="workout.distanceMeters" class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
-                <div class="flex items-center gap-3">
-                  <div class="w-10 h-10 bg-blue-500/10 rounded-lg flex items-center justify-center">
-                    <UIcon name="i-heroicons-map" class="w-5 h-5 text-blue-500" />
-                  </div>
-                  <div>
-                    <div class="text-xs text-muted">Distance</div>
-                    <div class="text-2xl font-bold">{{ (workout.distanceMeters / 1000).toFixed(1) }} km</div>
+          <div
+            v-if="workout.type === 'Run' || workout.type === 'Swim'"
+            class="grid grid-cols-1 sm:grid-cols-2 gap-4"
+          >
+            <div
+              v-if="workout.distanceMeters"
+              class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6"
+            >
+              <div class="flex items-center gap-3">
+                <div class="w-10 h-10 bg-blue-500/10 rounded-lg flex items-center justify-center">
+                  <UIcon name="i-heroicons-map" class="w-5 h-5 text-blue-500" />
+                </div>
+                <div>
+                  <div class="text-xs text-muted">Distance</div>
+                  <div class="text-2xl font-bold">
+                    {{ (workout.distanceMeters / 1000).toFixed(1) }} km
                   </div>
                 </div>
-             </div>
-             
-             <!-- Pace (Estimated) -->
-             <div v-if="workout.type === 'Run' && workout.distanceMeters && workout.durationSec" class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
-                <div class="flex items-center gap-3">
-                  <div class="w-10 h-10 bg-indigo-500/10 rounded-lg flex items-center justify-center">
-                    <UIcon name="i-heroicons-forward" class="w-5 h-5 text-indigo-500" />
-                  </div>
-                  <div>
-                    <div class="text-xs text-muted">Est. Pace</div>
-                    <div class="text-2xl font-bold">{{ formatPace(workout.durationSec, workout.distanceMeters) }} /km</div>
+              </div>
+            </div>
+
+            <!-- Pace (Estimated) -->
+            <div
+              v-if="workout.type === 'Run' && workout.distanceMeters && workout.durationSec"
+              class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6"
+            >
+              <div class="flex items-center gap-3">
+                <div class="w-10 h-10 bg-indigo-500/10 rounded-lg flex items-center justify-center">
+                  <UIcon name="i-heroicons-forward" class="w-5 h-5 text-indigo-500" />
+                </div>
+                <div>
+                  <div class="text-xs text-muted">Est. Pace</div>
+                  <div class="text-2xl font-bold">
+                    {{ formatPace(workout.durationSec, workout.distanceMeters) }} /km
                   </div>
                 </div>
-             </div>
+              </div>
+            </div>
           </div>
 
           <!-- Coach Instructions -->
-          <div v-if="workout.structuredWorkout?.coachInstructions" class="bg-blue-50 dark:bg-blue-900/20 rounded-xl p-6 border border-blue-100 dark:border-blue-800">
+          <div
+            v-if="workout.structuredWorkout?.coachInstructions"
+            class="bg-blue-50 dark:bg-blue-900/20 rounded-xl p-6 border border-blue-100 dark:border-blue-800"
+          >
             <div class="flex items-start gap-4">
               <div class="p-2 bg-blue-100 dark:bg-blue-800 rounded-full">
-                <UIcon name="i-heroicons-chat-bubble-bottom-center-text" class="w-6 h-6 text-blue-600 dark:text-blue-300" />
+                <UIcon
+                  name="i-heroicons-chat-bubble-bottom-center-text"
+                  class="w-6 h-6 text-blue-600 dark:text-blue-300"
+                />
               </div>
               <div>
-                <h3 class="font-semibold text-lg text-blue-900 dark:text-blue-100">Coach's Advice</h3>
-                <p class="text-blue-800 dark:text-blue-200 mt-2 italic">"{{ workout.structuredWorkout.coachInstructions }}"</p>
+                <h3 class="font-semibold text-lg text-blue-900 dark:text-blue-100">
+                  Coach's Advice
+                </h3>
+                <p class="text-blue-800 dark:text-blue-200 mt-2 italic">
+                  "{{ workout.structuredWorkout.coachInstructions }}"
+                </p>
               </div>
             </div>
           </div>
 
           <!-- Workout Visualization -->
-          <component 
+          <component
             :is="getWorkoutComponent(workout.type)"
             v-if="workout.structuredWorkout"
-            :workout="workout" 
+            :workout="workout"
             :user-ftp="userFtp"
             :generating="generating"
             @add-messages="openMessageModal"
@@ -243,11 +303,16 @@
           />
 
           <!-- No Structured Data -->
-          <div v-else class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+          <div
+            v-else
+            class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6"
+          >
             <div class="text-center py-8">
               <UIcon name="i-heroicons-chart-bar" class="w-12 h-12 text-muted mx-auto mb-3" />
               <h3 class="text-lg font-semibold mb-2">No Structured Workout Data</h3>
-              <p class="text-sm text-muted mb-4">This workout doesn't have detailed interval structure yet.</p>
+              <p class="text-sm text-muted mb-4">
+                This workout doesn't have detailed interval structure yet.
+              </p>
               <UButton
                 size="sm"
                 color="primary"
@@ -262,7 +327,10 @@
           </div>
 
           <!-- Completed Workout Link -->
-          <div v-if="workout.completedWorkouts && workout.completedWorkouts.length > 0" class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+          <div
+            v-if="workout.completedWorkouts && workout.completedWorkouts.length > 0"
+            class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6"
+          >
             <h3 class="text-lg font-semibold mb-4">Linked Completed Activities</h3>
             <div class="space-y-3">
               <NuxtLink
@@ -299,7 +367,9 @@
 
           <!-- Stats Grid -->
           <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+            <div
+              class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6"
+            >
               <div class="flex items-center gap-3">
                 <div class="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center">
                   <UIcon name="i-heroicons-clock" class="w-5 h-5 text-primary" />
@@ -311,7 +381,9 @@
               </div>
             </div>
 
-            <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+            <div
+              class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6"
+            >
               <div class="flex items-center gap-3">
                 <div class="w-10 h-10 bg-amber-500/10 rounded-lg flex items-center justify-center">
                   <UIcon name="i-heroicons-bolt" class="w-5 h-5 text-amber-500" />
@@ -323,29 +395,36 @@
               </div>
             </div>
 
-            <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+            <div
+              class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6"
+            >
               <div class="flex items-center gap-3">
                 <div class="w-10 h-10 bg-green-500/10 rounded-lg flex items-center justify-center">
                   <UIcon name="i-heroicons-fire" class="w-5 h-5 text-green-500" />
                 </div>
                 <div>
                   <div class="text-xs text-muted">Intensity</div>
-                  <div class="text-2xl font-bold">{{ Math.round((workout.workIntensity || 0) * 100) }}%</div>
+                  <div class="text-2xl font-bold">
+                    {{ Math.round((workout.workIntensity || 0) * 100) }}%
+                  </div>
                 </div>
               </div>
             </div>
           </div>
 
           <!-- Coaching Messages Timeline -->
-          <WorkoutMessagesTimeline 
-            v-if="workout.structuredWorkout?.messages?.length" 
-            :workout="workout.structuredWorkout" 
+          <WorkoutMessagesTimeline
+            v-if="workout.structuredWorkout?.messages?.length"
+            :workout="workout.structuredWorkout"
           />
         </div>
 
         <!-- Error State -->
         <div v-else class="text-center py-20">
-          <UIcon name="i-heroicons-exclamation-circle" class="w-16 h-16 text-red-500 mx-auto mb-4" />
+          <UIcon
+            name="i-heroicons-exclamation-circle"
+            class="w-16 h-16 text-red-500 mx-auto mb-4"
+          />
           <h3 class="text-xl font-semibold mb-2">Workout Not Found</h3>
           <p class="text-muted mb-4">The planned workout you're looking for doesn't exist.</p>
           <UButton color="primary" @click="goBack">Go Back</UButton>
@@ -355,156 +434,173 @@
   </UDashboardPanel>
 
   <!-- Modals -->
-  <UModal 
-    v-if="showAdjustModal" 
-    v-model:open="showAdjustModal" 
+  <UModal
+    v-if="showAdjustModal"
+    v-model:open="showAdjustModal"
     title="Adjust Workout"
     description="Modify parameters and give feedback to AI to redesign this session."
   >
     <template #body>
       <div class="p-6 flex flex-col gap-5">
         <div class="w-full">
-          <label class="block text-sm font-medium mb-1.5 text-gray-700 dark:text-gray-200">Duration (minutes)</label>
-          <UInput v-model.number="adjustForm.durationMinutes" type="number" step="5" class="w-full" />
-        </div>
-        
-        <div class="w-full">
-          <label class="block text-sm font-medium mb-1.5 text-gray-700 dark:text-gray-200">Intensity</label>
-          <USelect 
-            v-model="adjustForm.intensity" 
-            :items="['recovery', 'easy', 'moderate', 'hard', 'very_hard']" 
+          <label class="block text-sm font-medium mb-1.5 text-gray-700 dark:text-gray-200"
+            >Duration (minutes)</label
+          >
+          <UInput
+            v-model.number="adjustForm.durationMinutes"
+            type="number"
+            step="5"
             class="w-full"
           />
         </div>
-        
+
         <div class="w-full">
-          <label class="block text-sm font-medium mb-1.5 text-gray-700 dark:text-gray-200">Feedback / Instructions</label>
-          <UTextarea 
-            v-model="adjustForm.feedback" 
-            placeholder="e.g. 'Make the intervals longer', 'I want more rest', 'Focus on cadence'" 
+          <label class="block text-sm font-medium mb-1.5 text-gray-700 dark:text-gray-200"
+            >Intensity</label
+          >
+          <USelect
+            v-model="adjustForm.intensity"
+            :items="['recovery', 'easy', 'moderate', 'hard', 'very_hard']"
+            class="w-full"
+          />
+        </div>
+
+        <div class="w-full">
+          <label class="block text-sm font-medium mb-1.5 text-gray-700 dark:text-gray-200"
+            >Feedback / Instructions</label
+          >
+          <UTextarea
+            v-model="adjustForm.feedback"
+            placeholder="e.g. 'Make the intervals longer', 'I want more rest', 'Focus on cadence'"
             :rows="3"
             class="w-full"
           />
         </div>
-        
+
         <div class="flex justify-end pt-2 gap-2">
           <UButton variant="ghost" @click="showAdjustModal = false">Cancel</UButton>
-          <UButton color="primary" :loading="adjusting" @click="submitAdjustment">Apply Changes</UButton>
+          <UButton color="primary" :loading="adjusting" @click="submitAdjustment"
+            >Apply Changes</UButton
+          >
         </div>
       </div>
     </template>
   </UModal>
 
-  <UModal 
-    v-if="showMessageModal" 
-    v-model:open="showMessageModal" 
+  <UModal
+    v-if="showMessageModal"
+    v-model:open="showMessageModal"
     title="Add Coaching Messages"
     description="Generate engaging text messages to display during your workout."
   >
     <template #body>
       <div class="p-6 flex flex-col gap-5">
         <div class="w-full">
-          <label class="block text-sm font-medium mb-1.5 text-gray-700 dark:text-gray-200">Coach Tone</label>
-          <USelect 
-            v-model="messageForm.tone" 
-            :items="['Motivational', 'Drill Sergeant', 'Technical', 'Funny', 'Supportive', 'Stoic']" 
+          <label class="block text-sm font-medium mb-1.5 text-gray-700 dark:text-gray-200"
+            >Coach Tone</label
+          >
+          <USelect
+            v-model="messageForm.tone"
+            :items="['Motivational', 'Drill Sergeant', 'Technical', 'Funny', 'Supportive', 'Stoic']"
             class="w-full"
           />
         </div>
-        
+
         <div class="w-full">
-          <label class="block text-sm font-medium mb-1.5 text-gray-700 dark:text-gray-200">Additional Context</label>
-          <UTextarea 
-            v-model="messageForm.context" 
-            placeholder="e.g. 'Emphasize high cadence', 'Remind me to drink', 'This is prep for a climbing race'" 
+          <label class="block text-sm font-medium mb-1.5 text-gray-700 dark:text-gray-200"
+            >Additional Context</label
+          >
+          <UTextarea
+            v-model="messageForm.context"
+            placeholder="e.g. 'Emphasize high cadence', 'Remind me to drink', 'This is prep for a climbing race'"
             :rows="3"
             class="w-full"
           />
         </div>
-        
+
         <div class="flex justify-end pt-2 gap-2">
           <UButton variant="ghost" @click="showMessageModal = false">Cancel</UButton>
-          <UButton color="primary" :loading="generatingMessages" @click="submitMessages">Generate Messages</UButton>
+          <UButton color="primary" :loading="generatingMessages" @click="submitMessages"
+            >Generate Messages</UButton
+          >
         </div>
       </div>
     </template>
   </UModal>
-  
-      <UModal 
-        v-if="showDownloadModal" 
-        v-model:open="showDownloadModal" 
-        title="Download Workout"
-        description="Select a format to download this workout."
-      >
-              <template #body>
-                <div class="p-6 grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <UButton
-                    block
-                    color="primary"
-                    variant="soft"
-                    icon="i-heroicons-document-text"
-                    label="Zwift (.zwo)"
-                    @click="downloadWorkout('zwo')"
-                  />
-                  <UButton
-                    block
-                    color="primary"
-                    variant="soft"
-                    icon="i-heroicons-cpu-chip"
-                    label="Garmin (.fit)"
-                    @click="downloadWorkout('fit')"
-                  />
-                </div>
-              </template>        <template #footer>
-          <UButton
-            label="Close"
-            color="neutral"
-            variant="ghost"
-            @click="showDownloadModal = false"
-          />
-        </template>
-      </UModal>
-  
-      <UModal 
-        v-if="showPublishModal" 
-        v-model:open="showPublishModal" 
-        :title="isLocalWorkout ? 'Publish to Intervals.icu' : 'Update on Intervals.icu'"
-        :description="isLocalWorkout ? 'Sync this workout to your Intervals.icu calendar.' : 'Push local changes to Intervals.icu.'"
-      >
-        <template #body>
-          <div class="p-6 space-y-4">
-            <p class="text-sm text-gray-600 dark:text-gray-300">
-              This will {{ isLocalWorkout ? 'create a new' : 'update the' }} workout on your Intervals.icu calendar for <strong>{{ formatDate(workout.date) }}</strong>.
-            </p>
-            <div class="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg text-sm">
-              <ul class="list-disc list-inside space-y-1 text-gray-600 dark:text-gray-400">
-                <li>Structured intervals will be {{ isLocalWorkout ? 'included' : 'updated' }}</li>
-                <li>TSS and duration targets will be synced</li>
-                <li>Any coaching messages will be added</li>
-              </ul>
-            </div>
-          </div>
-        </template>
-        <template #footer>
-          <div class="flex justify-end gap-2">
-            <UButton
-              label="Cancel"
-              color="neutral"
-              variant="ghost"
-              @click="showPublishModal = false"
-            />
-            <UButton
-              :label="isLocalWorkout ? 'Publish Workout' : 'Update Workout'"
-              color="primary"
-              :loading="publishing"
-              @click="publishWorkout"
-            />
-          </div>
-        </template>
-      </UModal>
 
-      <UModal
-        v-model:open="isShareModalOpen"    title="Share Workout"
+  <UModal
+    v-if="showDownloadModal"
+    v-model:open="showDownloadModal"
+    title="Download Workout"
+    description="Select a format to download this workout."
+  >
+    <template #body>
+      <div class="p-6 grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <UButton
+          block
+          color="primary"
+          variant="soft"
+          icon="i-heroicons-document-text"
+          label="Zwift (.zwo)"
+          @click="downloadWorkout('zwo')"
+        />
+        <UButton
+          block
+          color="primary"
+          variant="soft"
+          icon="i-heroicons-cpu-chip"
+          label="Garmin (.fit)"
+          @click="downloadWorkout('fit')"
+        />
+      </div>
+    </template>
+    <template #footer>
+      <UButton label="Close" color="neutral" variant="ghost" @click="showDownloadModal = false" />
+    </template>
+  </UModal>
+
+  <UModal
+    v-if="showPublishModal"
+    v-model:open="showPublishModal"
+    :title="isLocalWorkout ? 'Publish to Intervals.icu' : 'Update on Intervals.icu'"
+    :description="
+      isLocalWorkout
+        ? 'Sync this workout to your Intervals.icu calendar.'
+        : 'Push local changes to Intervals.icu.'
+    "
+  >
+    <template #body>
+      <div class="p-6 space-y-4">
+        <p class="text-sm text-gray-600 dark:text-gray-300">
+          This will {{ isLocalWorkout ? 'create a new' : 'update the' }} workout on your
+          Intervals.icu calendar for <strong>{{ formatDate(workout.date) }}</strong
+          >.
+        </p>
+        <div class="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg text-sm">
+          <ul class="list-disc list-inside space-y-1 text-gray-600 dark:text-gray-400">
+            <li>Structured intervals will be {{ isLocalWorkout ? 'included' : 'updated' }}</li>
+            <li>TSS and duration targets will be synced</li>
+            <li>Any coaching messages will be added</li>
+          </ul>
+        </div>
+      </div>
+    </template>
+    <template #footer>
+      <div class="flex justify-end gap-2">
+        <UButton label="Cancel" color="neutral" variant="ghost" @click="showPublishModal = false" />
+        <UButton
+          :label="isLocalWorkout ? 'Publish Workout' : 'Update Workout'"
+          color="primary"
+          :loading="publishing"
+          @click="publishWorkout"
+        />
+      </div>
+    </template>
+  </UModal>
+
+  <UModal
+    v-model:open="isShareModalOpen"
+    title="Share Workout"
     description="Anyone with this link can view this planned workout. The link will expire in 30 days."
   >
     <template #body>
@@ -514,11 +610,7 @@
         </div>
         <div v-else-if="shareLink" class="space-y-4">
           <div class="flex gap-2">
-            <UInput
-              v-model="shareLink"
-              readonly
-              class="flex-1"
-            />
+            <UInput v-model="shareLink" readonly class="flex-1" />
             <UButton
               icon="i-heroicons-clipboard"
               color="neutral"
@@ -535,430 +627,449 @@
         <div v-else class="flex flex-col items-center justify-center py-8 text-center">
           <UIcon name="i-heroicons-link" class="w-8 h-8 text-gray-400 mb-2" />
           <p class="text-gray-600 mb-4">Click below to generate a shareable link.</p>
-          <UButton
-            color="primary"
-            :loading="generatingShareLink"
-            @click="generateShareLink"
-          >
+          <UButton color="primary" :loading="generatingShareLink" @click="generateShareLink">
             Generate Link
           </UButton>
         </div>
       </div>
     </template>
     <template #footer>
-      <UButton
-        label="Close"
-        color="neutral"
-        variant="ghost"
-        @click="isShareModalOpen = false"
-      />
+      <UButton label="Close" color="neutral" variant="ghost" @click="isShareModalOpen = false" />
     </template>
   </UModal>
 </template>
 
 <script setup lang="ts">
-import WorkoutChart from '~/components/workouts/WorkoutChart.vue'
-import WorkoutMessagesTimeline from '~/components/workouts/WorkoutMessagesTimeline.vue'
-import RideView from '~/components/workouts/planned/RideView.vue'
-import RunView from '~/components/workouts/planned/RunView.vue'
-import SwimView from '~/components/workouts/planned/SwimView.vue'
-import StrengthView from '~/components/workouts/planned/StrengthView.vue'
+  import WorkoutChart from '~/components/workouts/WorkoutChart.vue'
+  import WorkoutMessagesTimeline from '~/components/workouts/WorkoutMessagesTimeline.vue'
+  import RideView from '~/components/workouts/planned/RideView.vue'
+  import RunView from '~/components/workouts/planned/RunView.vue'
+  import SwimView from '~/components/workouts/planned/SwimView.vue'
+  import StrengthView from '~/components/workouts/planned/StrengthView.vue'
 
-definePageMeta({
-  middleware: 'auth'
-})
-
-const route = useRoute()
-const router = useRouter()
-const toast = useToast()
-
-const loading = ref(true)
-const generating = ref(false)
-const adjusting = ref(false)
-const generatingMessages = ref(false)
-const showAdjustModal = ref(false)
-const showMessageModal = ref(false)
-const showDownloadModal = ref(false)
-const showPublishModal = ref(false)
-const adjustForm = reactive({
-  durationMinutes: 60,
-  intensity: 'moderate',
-  feedback: ''
-})
-const messageForm = reactive({
-  tone: 'Motivational',
-  context: ''
-})
-const polling = ref(false)
-const workout = ref<any>(null)
-const userFtp = ref<number | undefined>(undefined)
-let pollingInterval: NodeJS.Timeout | null = null
-
-// Share functionality
-const isShareModalOpen = ref(false)
-const shareLink = ref('')
-const generatingShareLink = ref(false)
-const publishing = ref(false)
-
-const isLocalWorkout = computed(() => {
-  if (!workout.value) return false
-  // Show publish if explicitly marked as LOCAL_ONLY, PENDING, FAILED
-  // OR if externalId looks like a generated one (starts with ai_gen_ or ai-gen-)
-  // OR if syncStatus is missing but externalId is generated
-  return workout.value.syncStatus !== 'SYNCED' || 
-         (workout.value.externalId && (workout.value.externalId.startsWith('ai_gen_') || workout.value.externalId.startsWith('ai-gen-')))
-})
-
-const displayDuration = computed(() => {
-  if (workout.value?.durationSec) return workout.value.durationSec
-  // Fallback to structured workout total duration if available
-  if (workout.value?.structuredWorkout?.steps) {
-    return workout.value.structuredWorkout.steps.reduce((sum: number, step: any) => sum + (step.durationSeconds || 0), 0)
-  }
-  return 0
-})
-
-const displayTss = computed(() => {
-  if (workout.value?.tss) return workout.value.tss
-  // TSS calculation from structure is complex without user FTP, so we might just leave it 0 or try to estimate
-  // For now, just return 0 if null
-  return 0
-})
-
-async function publishWorkout() {
-  if (!workout.value?.id) return
-  
-  publishing.value = true
-  try {
-    const response: any = await $fetch(`/api/workouts/planned/${workout.value.id}/publish`, {
-      method: 'POST'
-    })
-    
-    // Update local state
-    if (response.success && response.workout) {
-      workout.value = response.workout
-      showPublishModal.value = false
-      
-      toast.add({
-        title: 'Published',
-        description: 'Workout published to Intervals.icu successfully.',
-        color: 'success'
-      })
-    }  } catch (error: any) {
-    console.error('Failed to publish workout:', error)
-    toast.add({
-      title: 'Publish Failed',
-      description: error.data?.message || 'Failed to publish workout to Intervals.icu',
-      color: 'error'
-    })
-  } finally {
-    publishing.value = false
-  }
-}
-
-function downloadWorkout(format: string) {
-  if (!workout.value?.id) return
-  // Use window.location.href to trigger download, avoiding popup blockers for direct user actions usually
-  // But _blank is safer for files sometimes. Let's try direct nav.
-  window.location.href = `/api/workouts/planned/${workout.value.id}/download/${format}`
-}
-
-const generateShareLink = async () => {
-  if (!workout.value?.id) return
-  
-  generatingShareLink.value = true
-  try {
-    const response = await $fetch('/api/share/generate', {
-      method: 'POST',
-      body: {
-        resourceType: 'PLANNED_WORKOUT',
-        resourceId: workout.value.id
-      }
-    })
-    shareLink.value = response.url
-  } catch (error) {
-    console.error('Failed to generate share link:', error)
-    toast.add({
-      title: 'Error',
-      description: 'Failed to generate share link. Please try again.',
-      color: 'error'
-    })
-  } finally {
-    generatingShareLink.value = false
-  }
-}
-
-const copyToClipboard = () => {
-  if (!shareLink.value) return
-  
-  navigator.clipboard.writeText(shareLink.value)
-  toast.add({
-    title: 'Copied',
-    description: 'Share link copied to clipboard.',
-    color: 'success'
+  definePageMeta({
+    middleware: 'auth'
   })
-}
 
-watch(isShareModalOpen, (newValue) => {
-  if (newValue && workout.value?.shareToken) {
-    // If token exists (would need API to return it), could pre-fill.
-    // For now we regenerate or check if we store it.
-    // The API generates a new token or returns existing one.
-  }
-})
+  const route = useRoute()
+  const router = useRouter()
+  const toast = useToast()
 
-async function fetchWorkout() {
-  loading.value = true
-  try {
-    const data: any = await $fetch(`/api/workouts/planned/${route.params.id}`)
-    workout.value = data.workout
-    userFtp.value = data.userFtp
-    
-    // Init form
-    if (workout.value) {
-      adjustForm.durationMinutes = Math.round(workout.value.durationSec / 60)
-      adjustForm.intensity = workout.value.workIntensity > 0.8 ? 'hard' : workout.value.workIntensity > 0.6 ? 'moderate' : 'easy'
+  const loading = ref(true)
+  const generating = ref(false)
+  const adjusting = ref(false)
+  const generatingMessages = ref(false)
+  const showAdjustModal = ref(false)
+  const showMessageModal = ref(false)
+  const showDownloadModal = ref(false)
+  const showPublishModal = ref(false)
+  const adjustForm = reactive({
+    durationMinutes: 60,
+    intensity: 'moderate',
+    feedback: ''
+  })
+  const messageForm = reactive({
+    tone: 'Motivational',
+    context: ''
+  })
+  const polling = ref(false)
+  const workout = ref<any>(null)
+  const userFtp = ref<number | undefined>(undefined)
+  let pollingInterval: NodeJS.Timeout | null = null
+
+  // Share functionality
+  const isShareModalOpen = ref(false)
+  const shareLink = ref('')
+  const generatingShareLink = ref(false)
+  const publishing = ref(false)
+
+  const isLocalWorkout = computed(() => {
+    if (!workout.value) return false
+    // Show publish if explicitly marked as LOCAL_ONLY, PENDING, FAILED
+    // OR if externalId looks like a generated one (starts with ai_gen_ or ai-gen-)
+    // OR if syncStatus is missing but externalId is generated
+    return (
+      workout.value.syncStatus !== 'SYNCED' ||
+      (workout.value.externalId &&
+        (workout.value.externalId.startsWith('ai_gen_') ||
+          workout.value.externalId.startsWith('ai-gen-')))
+    )
+  })
+
+  const displayDuration = computed(() => {
+    if (workout.value?.durationSec) return workout.value.durationSec
+    // Fallback to structured workout total duration if available
+    if (workout.value?.structuredWorkout?.steps) {
+      return workout.value.structuredWorkout.steps.reduce(
+        (sum: number, step: any) => sum + (step.durationSeconds || 0),
+        0
+      )
     }
-  } catch (error) {
-    console.error('Failed to fetch workout', error)
-    workout.value = null
-  } finally {
-    loading.value = false
-  }
-}
+    return 0
+  })
 
-function openAdjustModal() {
-  adjustForm.feedback = ''
-  if (workout.value) {
-     adjustForm.durationMinutes = Math.round(workout.value.durationSec / 60)
-     // approximate intensity mapping
-     const i = workout.value.workIntensity || 0.7
-     adjustForm.intensity = i > 0.9 ? 'very_hard' : i > 0.8 ? 'hard' : i > 0.6 ? 'moderate' : i > 0.4 ? 'easy' : 'recovery'
-  }
-  showAdjustModal.value = true
-}
+  const displayTss = computed(() => {
+    if (workout.value?.tss) return workout.value.tss
+    // TSS calculation from structure is complex without user FTP, so we might just leave it 0 or try to estimate
+    // For now, just return 0 if null
+    return 0
+  })
 
-function openMessageModal() {
-  messageForm.context = ''
-  showMessageModal.value = true
-}
+  async function publishWorkout() {
+    if (!workout.value?.id) return
 
-async function submitMessages() {
-  generatingMessages.value = true
-  try {
-    await $fetch(`/api/workouts/planned/${route.params.id}/messages`, {
-      method: 'POST',
-      body: messageForm
-    })
-    
-    toast.add({
-      title: 'Writing Messages...',
-      description: 'Coach is generating your cues. This may take a moment.',
-      color: 'success'
-    })
-    
-    showMessageModal.value = false
-    const currentUpdated = workout.value?.updatedAt ? new Date(workout.value.updatedAt) : new Date()
-    startPolling(currentUpdated)
-  } catch (error: any) {
-    toast.add({
-      title: 'Generation Failed',
-      description: error.data?.message || 'Failed to generate messages',
-      color: 'error'
-    })
-  } finally {
-    generatingMessages.value = false
-  }
-}
-
-async function submitAdjustment() {
-  adjusting.value = true
-  try {
-    await $fetch(`/api/workouts/planned/${route.params.id}/adjust`, {
-      method: 'POST',
-      body: adjustForm
-    })
-    
-    toast.add({
-      title: 'Adjustment Started',
-      description: 'AI is redesigning your workout. This may take a moment.',
-      color: 'success'
-    })
-    
-    showAdjustModal.value = false
-    
-    // Capture current timestamp to ensure we wait for a newer version
-    const currentUpdated = workout.value?.updatedAt ? new Date(workout.value.updatedAt) : new Date()
-    startPolling(currentUpdated)
-    
-  } catch (error: any) {
-    toast.add({
-      title: 'Adjustment Failed',
-      description: error.data?.message || 'Failed to submit adjustment',
-      color: 'error'
-    })
-  } finally {
-    adjusting.value = false
-  }
-}
-
-async function generateStructure() {
-  generating.value = true
-  try {
-    await $fetch(`/api/workouts/planned/${route.params.id}/generate-structure`, {
-      method: 'POST'
-    })
-
-    toast.add({
-      title: 'Generation Started',
-      description: 'AI is generating the workout structure. This may take up to 30 seconds.',
-      color: 'success'
-    })
-
-    // Start polling for the generated structure
-    const currentUpdated = workout.value?.updatedAt ? new Date(workout.value.updatedAt) : new Date()
-    startPolling(currentUpdated)
-  } catch (error: any) {
-    toast.add({
-      title: 'Generation Failed',
-      description: error.data?.message || 'Failed to generate structure',
-      color: 'error'
-    })
-    generating.value = false
-  }
-}
-
-function startPolling(minUpdatedAt?: Date) {
-  polling.value = true
-  let attempts = 0
-  const maxAttempts = 15 // Poll for up to 45 seconds (15 attempts * 3 seconds)
-
-  pollingInterval = setInterval(async () => {
-    attempts++
-
+    publishing.value = true
     try {
-      const data: any = await $fetch(`/api/workouts/planned/${route.params.id}`)
+      const response: any = await $fetch(`/api/workouts/planned/${workout.value.id}/publish`, {
+        method: 'POST'
+      })
 
-      const remoteUpdatedAt = new Date(data.workout.updatedAt)
-      const isNewer = minUpdatedAt ? remoteUpdatedAt > minUpdatedAt : true
-
-      // Check if structured workout data is available AND it is fresh
-      if (data.workout?.structuredWorkout && isNewer) {
-        workout.value = data.workout
-        userFtp.value = data.userFtp
-
-        stopPolling()
-        generating.value = false
+      // Update local state
+      if (response.success && response.workout) {
+        workout.value = response.workout
+        showPublishModal.value = false
 
         toast.add({
-          title: 'Structure Ready',
-          description: 'Your workout has been updated!',
+          title: 'Published',
+          description: 'Workout published to Intervals.icu successfully.',
           color: 'success'
         })
-      } else if (attempts >= maxAttempts) {
-        // Stop polling after max attempts
-        stopPolling()
-        generating.value = false
+      }
+    } catch (error: any) {
+      console.error('Failed to publish workout:', error)
+      toast.add({
+        title: 'Publish Failed',
+        description: error.data?.message || 'Failed to publish workout to Intervals.icu',
+        color: 'error'
+      })
+    } finally {
+      publishing.value = false
+    }
+  }
 
-        toast.add({
-          title: 'Generation Taking Longer',
-          description: 'The workout is still being generated. Try refreshing the page in a moment.',
-          color: 'info'
-        })
+  function downloadWorkout(format: string) {
+    if (!workout.value?.id) return
+    // Use window.location.href to trigger download, avoiding popup blockers for direct user actions usually
+    // But _blank is safer for files sometimes. Let's try direct nav.
+    window.location.href = `/api/workouts/planned/${workout.value.id}/download/${format}`
+  }
+
+  const generateShareLink = async () => {
+    if (!workout.value?.id) return
+
+    generatingShareLink.value = true
+    try {
+      const response = await $fetch('/api/share/generate', {
+        method: 'POST',
+        body: {
+          resourceType: 'PLANNED_WORKOUT',
+          resourceId: workout.value.id
+        }
+      })
+      shareLink.value = response.url
+    } catch (error) {
+      console.error('Failed to generate share link:', error)
+      toast.add({
+        title: 'Error',
+        description: 'Failed to generate share link. Please try again.',
+        color: 'error'
+      })
+    } finally {
+      generatingShareLink.value = false
+    }
+  }
+
+  const copyToClipboard = () => {
+    if (!shareLink.value) return
+
+    navigator.clipboard.writeText(shareLink.value)
+    toast.add({
+      title: 'Copied',
+      description: 'Share link copied to clipboard.',
+      color: 'success'
+    })
+  }
+
+  watch(isShareModalOpen, (newValue) => {
+    if (newValue && workout.value?.shareToken) {
+      // If token exists (would need API to return it), could pre-fill.
+      // For now we regenerate or check if we store it.
+      // The API generates a new token or returns existing one.
+    }
+  })
+
+  async function fetchWorkout() {
+    loading.value = true
+    try {
+      const data: any = await $fetch(`/api/workouts/planned/${route.params.id}`)
+      workout.value = data.workout
+      userFtp.value = data.userFtp
+
+      // Init form
+      if (workout.value) {
+        adjustForm.durationMinutes = Math.round(workout.value.durationSec / 60)
+        adjustForm.intensity =
+          workout.value.workIntensity > 0.8
+            ? 'hard'
+            : workout.value.workIntensity > 0.6
+              ? 'moderate'
+              : 'easy'
       }
     } catch (error) {
-      console.error('Polling error:', error)
-
-      if (attempts >= maxAttempts) {
-        stopPolling()
-        generating.value = false
-      }
+      console.error('Failed to fetch workout', error)
+      workout.value = null
+    } finally {
+      loading.value = false
     }
-  }, 3000) // Poll every 3 seconds
-}
-
-function stopPolling() {
-  polling.value = false
-  if (pollingInterval) {
-    clearInterval(pollingInterval)
-    pollingInterval = null
   }
-}
 
-async function markComplete() {
-  // TODO: Implement mark complete functionality
-  toast.add({
-    title: 'Feature Coming Soon',
-    description: 'Manual workout completion is not yet implemented',
-    color: 'info'
+  function openAdjustModal() {
+    adjustForm.feedback = ''
+    if (workout.value) {
+      adjustForm.durationMinutes = Math.round(workout.value.durationSec / 60)
+      // approximate intensity mapping
+      const i = workout.value.workIntensity || 0.7
+      adjustForm.intensity =
+        i > 0.9
+          ? 'very_hard'
+          : i > 0.8
+            ? 'hard'
+            : i > 0.6
+              ? 'moderate'
+              : i > 0.4
+                ? 'easy'
+                : 'recovery'
+    }
+    showAdjustModal.value = true
+  }
+
+  function openMessageModal() {
+    messageForm.context = ''
+    showMessageModal.value = true
+  }
+
+  async function submitMessages() {
+    generatingMessages.value = true
+    try {
+      await $fetch(`/api/workouts/planned/${route.params.id}/messages`, {
+        method: 'POST',
+        body: messageForm
+      })
+
+      toast.add({
+        title: 'Writing Messages...',
+        description: 'Coach is generating your cues. This may take a moment.',
+        color: 'success'
+      })
+
+      showMessageModal.value = false
+      const currentUpdated = workout.value?.updatedAt
+        ? new Date(workout.value.updatedAt)
+        : new Date()
+      startPolling(currentUpdated)
+    } catch (error: any) {
+      toast.add({
+        title: 'Generation Failed',
+        description: error.data?.message || 'Failed to generate messages',
+        color: 'error'
+      })
+    } finally {
+      generatingMessages.value = false
+    }
+  }
+
+  async function submitAdjustment() {
+    adjusting.value = true
+    try {
+      await $fetch(`/api/workouts/planned/${route.params.id}/adjust`, {
+        method: 'POST',
+        body: adjustForm
+      })
+
+      toast.add({
+        title: 'Adjustment Started',
+        description: 'AI is redesigning your workout. This may take a moment.',
+        color: 'success'
+      })
+
+      showAdjustModal.value = false
+
+      // Capture current timestamp to ensure we wait for a newer version
+      const currentUpdated = workout.value?.updatedAt
+        ? new Date(workout.value.updatedAt)
+        : new Date()
+      startPolling(currentUpdated)
+    } catch (error: any) {
+      toast.add({
+        title: 'Adjustment Failed',
+        description: error.data?.message || 'Failed to submit adjustment',
+        color: 'error'
+      })
+    } finally {
+      adjusting.value = false
+    }
+  }
+
+  async function generateStructure() {
+    generating.value = true
+    try {
+      await $fetch(`/api/workouts/planned/${route.params.id}/generate-structure`, {
+        method: 'POST'
+      })
+
+      toast.add({
+        title: 'Generation Started',
+        description: 'AI is generating the workout structure. This may take up to 30 seconds.',
+        color: 'success'
+      })
+
+      // Start polling for the generated structure
+      const currentUpdated = workout.value?.updatedAt
+        ? new Date(workout.value.updatedAt)
+        : new Date()
+      startPolling(currentUpdated)
+    } catch (error: any) {
+      toast.add({
+        title: 'Generation Failed',
+        description: error.data?.message || 'Failed to generate structure',
+        color: 'error'
+      })
+      generating.value = false
+    }
+  }
+
+  function startPolling(minUpdatedAt?: Date) {
+    polling.value = true
+    let attempts = 0
+    const maxAttempts = 15 // Poll for up to 45 seconds (15 attempts * 3 seconds)
+
+    pollingInterval = setInterval(async () => {
+      attempts++
+
+      try {
+        const data: any = await $fetch(`/api/workouts/planned/${route.params.id}`)
+
+        const remoteUpdatedAt = new Date(data.workout.updatedAt)
+        const isNewer = minUpdatedAt ? remoteUpdatedAt > minUpdatedAt : true
+
+        // Check if structured workout data is available AND it is fresh
+        if (data.workout?.structuredWorkout && isNewer) {
+          workout.value = data.workout
+          userFtp.value = data.userFtp
+
+          stopPolling()
+          generating.value = false
+
+          toast.add({
+            title: 'Structure Ready',
+            description: 'Your workout has been updated!',
+            color: 'success'
+          })
+        } else if (attempts >= maxAttempts) {
+          // Stop polling after max attempts
+          stopPolling()
+          generating.value = false
+
+          toast.add({
+            title: 'Generation Taking Longer',
+            description:
+              'The workout is still being generated. Try refreshing the page in a moment.',
+            color: 'info'
+          })
+        }
+      } catch (error) {
+        console.error('Polling error:', error)
+
+        if (attempts >= maxAttempts) {
+          stopPolling()
+          generating.value = false
+        }
+      }
+    }, 3000) // Poll every 3 seconds
+  }
+
+  function stopPolling() {
+    polling.value = false
+    if (pollingInterval) {
+      clearInterval(pollingInterval)
+      pollingInterval = null
+    }
+  }
+
+  async function markComplete() {
+    // TODO: Implement mark complete functionality
+    toast.add({
+      title: 'Feature Coming Soon',
+      description: 'Manual workout completion is not yet implemented',
+      color: 'info'
+    })
+  }
+
+  function goBack() {
+    router.back()
+  }
+
+  function formatDate(d: string | Date) {
+    return new Date(d).toLocaleDateString('en-US', {
+      weekday: 'long',
+      month: 'long',
+      day: 'numeric',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    })
+  }
+
+  function formatDuration(seconds: number | null | undefined) {
+    if (!seconds) return '0m'
+    const hours = Math.floor(seconds / 3600)
+    const mins = Math.floor((seconds % 3600) / 60)
+
+    if (hours > 0) {
+      return `${hours}h ${mins}m`
+    }
+    return `${mins}m`
+  }
+
+  function formatPace(seconds: number, meters: number) {
+    if (!seconds || !meters) return '-'
+    const minutes = seconds / 60
+    const km = meters / 1000
+    const paceDec = minutes / km
+
+    const pMin = Math.floor(paceDec)
+    const pSec = Math.round((paceDec - pMin) * 60)
+
+    return `${pMin}:${pSec.toString().padStart(2, '0')}`
+  }
+
+  function getWorkoutComponent(type: string) {
+    switch (type) {
+      case 'Ride':
+      case 'VirtualRide':
+        return RideView
+      case 'Run':
+        return RunView
+      case 'Swim':
+        return SwimView
+      case 'Gym':
+      case 'WeightTraining':
+        return StrengthView
+      default:
+        return RideView
+    }
+  }
+
+  useHead(() => ({
+    title: workout.value ? `${workout.value.title} - Planned Workout` : 'Planned Workout'
+  }))
+
+  onMounted(() => {
+    fetchWorkout()
   })
-}
 
-function goBack() {
-  router.back()
-}
-
-function formatDate(d: string | Date) {
-  return new Date(d).toLocaleDateString('en-US', {
-    weekday: 'long',
-    month: 'long',
-    day: 'numeric',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit'
+  onUnmounted(() => {
+    // Clean up polling interval if component is unmounted
+    stopPolling()
   })
-}
-
-function formatDuration(seconds: number | null | undefined) {
-  if (!seconds) return '0m'
-  const hours = Math.floor(seconds / 3600)
-  const mins = Math.floor((seconds % 3600) / 60)
-
-  if (hours > 0) {
-    return `${hours}h ${mins}m`
-  }
-  return `${mins}m`
-}
-
-function formatPace(seconds: number, meters: number) {
-  if (!seconds || !meters) return '-'
-  const minutes = seconds / 60
-  const km = meters / 1000
-  const paceDec = minutes / km
-  
-  const pMin = Math.floor(paceDec)
-  const pSec = Math.round((paceDec - pMin) * 60)
-  
-  return `${pMin}:${pSec.toString().padStart(2, '0')}`
-}
-
-function getWorkoutComponent(type: string) {
-  switch (type) {
-    case 'Ride':
-    case 'VirtualRide':
-      return RideView
-    case 'Run':
-      return RunView
-    case 'Swim':
-      return SwimView
-    case 'Gym':
-    case 'WeightTraining':
-      return StrengthView
-    default:
-      return RideView
-  }
-}
-
-useHead(() => ({
-  title: workout.value ? `${workout.value.title} - Planned Workout` : 'Planned Workout'
-}))
-
-onMounted(() => {
-  fetchWorkout()
-})
-
-onUnmounted(() => {
-  // Clean up polling interval if component is unmounted
-  stopPolling()
-})
 </script>

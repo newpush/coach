@@ -27,7 +27,7 @@ const WORKOUT_IDS = [
   '02397635-915d-4690-8ca4-eeddcaebd914',
   '2225fba6-85de-499b-894a-78f8fd864310',
   '2209931e-d09b-4402-92ff-2c871a942857',
-  '1d59ab1c-93f9-4b00-baaf-93b3df77825e',
+  '1d59ab1c-93f9-4b00-baaf-93b3df77825e'
 ]
 
 async function main() {
@@ -41,7 +41,7 @@ async function main() {
 
   for (const workoutId of WORKOUT_IDS) {
     console.log('-'.repeat(80))
-    
+
     const workout = await prisma.workout.findUnique({
       where: { id: workoutId },
       include: { streams: true }
@@ -96,17 +96,17 @@ async function main() {
     console.log(`\nAttempting TSS normalization...`)
     try {
       const result = await normalizeTSS(workoutId, workout.userId)
-      
+
       if (result.tss !== null) {
         console.log(`✅ SUCCESS: TSS = ${result.tss}`)
         console.log(`   Source: ${result.source}`)
         console.log(`   Method: ${result.method}`)
         console.log(`   Confidence: ${result.confidence}`)
-        
+
         // Update CTL/ATL
         await calculateWorkoutStress(workoutId, workout.userId)
         console.log(`   CTL/ATL updated`)
-        
+
         normalized++
       } else {
         console.log(`❌ FAILED: ${result.method}`)
@@ -131,7 +131,7 @@ async function main() {
   if (normalized > 0) {
     console.log(`✓ Successfully normalized ${normalized} workouts`)
   }
-  
+
   if (failed > 0) {
     console.log(`⚠ ${failed} workouts could not be normalized`)
     console.log(`  Possible reasons:`)
@@ -140,7 +140,7 @@ async function main() {
     console.log(`  - Very short duration (< 5 minutes)`)
     console.log(`  - No effort data recorded`)
   }
-  
+
   console.log()
 }
 

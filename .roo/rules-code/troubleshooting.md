@@ -16,14 +16,14 @@ import { prisma } from '../server/utils/db'
 
 async function main() {
   console.log('Connecting to database...')
-  
+
   // Your logic here
   const user = await prisma.user.findFirst()
   console.log('User found:', user?.email)
 }
 
 main()
-  .catch(e => {
+  .catch((e) => {
     console.error('Error:', e)
     process.exit(1)
   })

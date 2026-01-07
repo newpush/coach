@@ -10,6 +10,7 @@
 The functionCalls variable was evaluated once before the loop started, causing the loop to continue even after the AI had processed the tool results and no longer needed to make more calls.
 
 **Fixed Implementation**:
+
 - Moved functionCalls check inside the loop
 - Explicitly break when no function calls are present
 - Added tool call tracking array for debugging
@@ -24,12 +25,14 @@ The loop now re-evaluates whether function calls are present on each iteration, 
 **Enhancement**: Added metadata to AI responses to show which tools were used, enabling the UI to display tool usage transparency.
 
 **Implementation Details**:
+
 - Tracks all tools used during the conversation
 - Stores tool names and arguments in metadata
 - Returns summary to frontend for UI display
 - Database stores full tool execution history
 
 **Frontend Benefits**:
+
 - Display "Fetching workout data..." while AI uses tools
 - Show which tools were used after response
 - Provide transparency about data sources
@@ -40,6 +43,7 @@ The loop now re-evaluates whether function calls are present on each iteration, 
 New console output shows clear tool execution flow with numbered steps, tool names, arguments, and results preview.
 
 Example output format:
+
 ```
 [Tool Call 1/5] get_recent_workouts with limit 3
 [Tool Result 1] Returns 3 workout summaries
@@ -50,34 +54,43 @@ Example output format:
 ## Testing Guide
 
 ### Test Case 1: Simple Query (No Tools)
+
 **Input**: "Hello Coach!"
 **Expected**: Normal greeting response, no tool calls, no metadata
 
 ### Test Case 2: Recent Workouts
+
 **Input**: "How did my last 3 rides go?"
-**Expected**: 
+**Expected**:
+
 - Tool call to get_recent_workouts
 - Response with actual workout data
 - Metadata showing tool usage
 
 ### Test Case 3: Multi-Step Query
+
 **Input**: "Show me my last 5 workouts"
 **Follow-up**: "Tell me more about the second one"
 **Expected**:
+
 - First: get_recent_workouts called
 - Second: get_workout_details called with specific ID
 - Contextual understanding maintained
 
 ### Test Case 4: Complex Query (Multiple Tools)
+
 **Input**: "How's my training and recovery been this week?"
 **Expected**:
+
 - get_recent_workouts for training data
 - get_wellness_metrics for recovery data
 - Comprehensive analysis combining both
 
 ### Test Case 5: Nutrition Query
+
 **Input**: "What did I eat yesterday?"
 **Expected**:
+
 - get_nutrition_log with date parameter
 - Nutrition breakdown with macros
 - AI analysis of nutrition quality
@@ -96,6 +109,7 @@ The 429 error you encountered is due to Gemini API quota limits (10 requests/min
 To display tool usage in the UI, check for metadata in the response and show visual indicators when tools are being used or have been used.
 
 Suggested UI elements:
+
 - Loading spinner with "Analyzing your workouts..."
 - Badge showing "Used 2 tools" after response
 - Expandable details showing which tools were called
@@ -104,6 +118,7 @@ Suggested UI elements:
 ## Monitoring
 
 Console logs now provide detailed tracking:
+
 - Tool call count and limit (X/5)
 - Tool names and arguments passed
 - Tool execution results (first 200 chars)
@@ -128,6 +143,7 @@ Console logs now provide detailed tracking:
 ## Configuration
 
 Key constants in server/api/chat/messages.post.ts:
+
 - MAX_TOOL_CALLS: 5 (prevents infinite loops)
 - Model: gemini-2.0-flash-exp (can be changed)
 - Tool result preview: 200 characters
@@ -135,6 +151,7 @@ Key constants in server/api/chat/messages.post.ts:
 ## Success Metrics
 
 The system should now:
+
 - Never make more than 5 tool calls per message
 - Exit loop immediately when no more tools needed
 - Log clear progression of tool execution

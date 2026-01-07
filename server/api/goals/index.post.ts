@@ -13,7 +13,10 @@ defineRouteMeta({
             type: 'object',
             required: ['type', 'title'],
             properties: {
-              type: { type: 'string', enum: ['BODY_COMPOSITION', 'EVENT', 'PERFORMANCE', 'CONSISTENCY'] },
+              type: {
+                type: 'string',
+                enum: ['BODY_COMPOSITION', 'EVENT', 'PERFORMANCE', 'CONSISTENCY']
+              },
               title: { type: 'string' },
               description: { type: 'string' },
               targetDate: { type: 'string', format: 'date-time' },
@@ -82,33 +85,35 @@ const goalSchema = z.object({
   phase: z.string().optional(),
   eventIds: z.array(z.string()).optional(), // Multiple events
   eventId: z.string().optional(), // Single event (backward compat)
-  eventData: z.object({
-    externalId: z.string().optional(),
-    source: z.string().optional(),
-    title: z.string(),
-    date: z.string(),
-    type: z.string().optional(),
-    subType: z.string().optional(),
-    distance: z.number().optional(),
-    elevation: z.number().optional(),
-    expectedDuration: z.number().optional(),
-    terrain: z.string().optional()
-  }).optional()
+  eventData: z
+    .object({
+      externalId: z.string().optional(),
+      source: z.string().optional(),
+      title: z.string(),
+      date: z.string(),
+      type: z.string().optional(),
+      subType: z.string().optional(),
+      distance: z.number().optional(),
+      elevation: z.number().optional(),
+      expectedDuration: z.number().optional(),
+      terrain: z.string().optional()
+    })
+    .optional()
 })
 
 export default defineEventHandler(async (event) => {
   const session = await getServerSession(event)
-  
+
   if (!session?.user?.email) {
     throw createError({
       statusCode: 401,
       statusMessage: 'Unauthorized'
     })
   }
-  
+
   const body = await readBody(event)
   const result = goalSchema.safeParse(body)
-  
+
   if (!result.success) {
     throw createError({
       statusCode: 400,
@@ -116,50 +121,50 @@ export default defineEventHandler(async (event) => {
       data: result.error.issues
     })
   }
-  
+
   const data = result.data
-  
+
   // Consistency Check: Event driven goals must have at least one event
   const hasEventIds = (data.eventIds && data.eventIds.length > 0) || !!data.eventId
   const hasEventData = !!data.eventData
-  
+
   if (data.type === 'EVENT' && !hasEventIds && !hasEventData) {
     throw createError({
       statusCode: 400,
       statusMessage: 'Event driven goals must have at least one event attached.'
     })
   }
-  
+
   try {
     const user = await prisma.user.findUnique({
       where: { email: session.user.email }
     })
-    
+
     if (!user) {
       throw createError({
         statusCode: 404,
         statusMessage: 'User not found'
       })
     }
-    
+
     // Handle Event creation/linkage
     const eventsToConnect: { id: string }[] = []
-    
+
     // Add existing IDs
     if (data.eventIds) {
-      data.eventIds.forEach(id => eventsToConnect.push({ id }))
+      data.eventIds.forEach((id) => eventsToConnect.push({ id }))
     }
     if (data.eventId) {
-      if (!eventsToConnect.some(e => e.id === data.eventId)) {
+      if (!eventsToConnect.some((e) => e.id === data.eventId)) {
         eventsToConnect.push({ id: data.eventId })
       }
     }
-    
+
     // Create new event if provided
     if (data.eventData) {
       const { externalId, source, title, date, ...details } = data.eventData
       let newEventId: string
-      
+
       if (externalId && source) {
         const eventRecord = await prisma.event.upsert({
           where: {
@@ -210,29 +215,29 @@ export default defineEventHandler(async (event) => {
         })
         newEventId = eventRecord.id
       }
-      
-      if (!eventsToConnect.some(e => e.id === newEventId)) {
+
+      if (!eventsToConnect.some((e) => e.id === newEventId)) {
         eventsToConnect.push({ id: newEventId })
       }
     }
-    
+
     // Determine targetDate if not set (use latest event date)
     let finalTargetDate = data.targetDate ? new Date(data.targetDate) : null
-    
+
     if (!finalTargetDate && eventsToConnect.length > 0) {
       // We need to fetch the dates of the events to determine the latest one
       // Optimization: If we just created one, we know the date.
       // If we only have IDs, we need to query.
-      const eventIds = eventsToConnect.map(e => e.id)
+      const eventIds = eventsToConnect.map((e) => e.id)
       const linkedEvents = await prisma.event.findMany({
         where: { id: { in: eventIds } },
         select: { date: true }
       })
-      
+
       if (linkedEvents.length > 0 && linkedEvents[0]) {
         // Find max date
         const firstDate = linkedEvents[0].date
-        const maxDate = linkedEvents.reduce((max, e) => e.date > max ? e.date : max, firstDate)
+        const maxDate = linkedEvents.reduce((max, e) => (e.date > max ? e.date : max), firstDate)
         finalTargetDate = maxDate
       }
     }
@@ -240,7 +245,7 @@ export default defineEventHandler(async (event) => {
     // Prepare Goal Data
     // We strictly avoid duplicating event data for EVENT goals
     const isEventGoal = data.type === 'EVENT'
-    
+
     const goal = await prisma.goal.create({
       data: {
         userId: user.id,
@@ -248,16 +253,16 @@ export default defineEventHandler(async (event) => {
         title: data.title,
         description: data.description,
         targetDate: finalTargetDate,
-        
+
         // For EVENT goals, we do NOT set these redundant fields
         // For other goals, we allow them
-        eventDate: isEventGoal ? null : (data.eventDate ? new Date(data.eventDate) : null),
-        eventType: isEventGoal ? null : (data.eventType || null),
-        distance: isEventGoal ? null : (data.distance || null),
-        elevation: isEventGoal ? null : (data.elevation || null),
-        duration: isEventGoal ? null : (data.duration || null),
-        terrain: isEventGoal ? null : (data.terrain || null),
-        
+        eventDate: isEventGoal ? null : data.eventDate ? new Date(data.eventDate) : null,
+        eventType: isEventGoal ? null : data.eventType || null,
+        distance: isEventGoal ? null : data.distance || null,
+        elevation: isEventGoal ? null : data.elevation || null,
+        duration: isEventGoal ? null : data.duration || null,
+        terrain: isEventGoal ? null : data.terrain || null,
+
         metric: data.metric,
         targetValue: data.targetValue,
         startValue: data.startValue,
@@ -265,11 +270,11 @@ export default defineEventHandler(async (event) => {
         priority: data.priority,
         aiContext: data.aiContext || `Goal: ${data.title}. Type: ${data.type}.`,
         phase: data.phase,
-        
+
         events: eventsToConnect.length > 0 ? { connect: eventsToConnect } : undefined
       }
     })
-    
+
     return {
       success: true,
       goal: {

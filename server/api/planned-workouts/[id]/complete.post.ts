@@ -51,69 +51,69 @@ defineRouteMeta({
 
 export default defineEventHandler(async (event) => {
   const session = await getServerSession(event)
-  
+
   if (!session?.user) {
     throw createError({
       statusCode: 401,
       message: 'Unauthorized'
     })
   }
-  
+
   const userId = (session.user as any).id
   const plannedWorkoutId = event.context.params?.id
   const body = await readBody(event)
-  
+
   if (!plannedWorkoutId) {
     throw createError({
       statusCode: 400,
       message: 'Planned workout ID is required'
     })
   }
-  
+
   // workoutId is now optional
-  
+
   try {
     // Check if planned workout exists and belongs to user
     const plannedWorkout = await prisma.plannedWorkout.findUnique({
       where: { id: plannedWorkoutId }
     })
-    
+
     if (!plannedWorkout) {
       throw createError({
         statusCode: 404,
         message: 'Planned workout not found'
       })
     }
-    
+
     if (plannedWorkout.userId !== userId) {
       throw createError({
         statusCode: 403,
         message: 'Not authorized to update this planned workout'
       })
     }
-    
+
     let updatedWorkout = null
-    
+
     if (body.workoutId) {
       // Check if workout exists and belongs to user
       const workout = await prisma.workout.findUnique({
         where: { id: body.workoutId }
       })
-      
+
       if (!workout) {
         throw createError({
           statusCode: 404,
           message: 'Workout not found'
         })
       }
-      
+
       if (workout.userId !== userId) {
         throw createError({
           statusCode: 403,
           message: 'Not authorized to link to this workout'
         })
       }
-      
+
       // Update workout to link to planned workout
       updatedWorkout = await prisma.workout.update({
         where: { id: body.workoutId },
@@ -122,7 +122,7 @@ export default defineEventHandler(async (event) => {
         }
       })
     }
-    
+
     // Update planned workout to mark as completed
     const updatedPlannedWorkout = await prisma.plannedWorkout.update({
       where: { id: plannedWorkoutId },
@@ -131,7 +131,7 @@ export default defineEventHandler(async (event) => {
         completionStatus: 'COMPLETED'
       }
     })
-    
+
     return {
       success: true,
       plannedWorkout: updatedPlannedWorkout,

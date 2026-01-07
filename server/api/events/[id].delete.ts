@@ -7,9 +7,9 @@ export default defineEventHandler(async (event) => {
 
   const id = getRouterParam(event, 'id')
   if (!id) throw createError({ statusCode: 400, message: 'Missing event ID' })
-  
+
   const userId = session.user.id
-  
+
   try {
     await eventRepository.delete(id, userId)
     return { success: true }

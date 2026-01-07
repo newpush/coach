@@ -1,26 +1,26 @@
-@import "tailwindcss" theme(static);
-@import "@nuxt/ui";
+@import 'tailwindcss' theme(static);
+@import '@nuxt/ui';
 
 @theme static {
   --font-sans: 'Public Sans', sans-serif;
 
-  --color-green-50: #EFFDF5;
-  --color-green-100: #D9FBE8;
-  --color-green-200: #B3F5D1;
-  --color-green-300: #75EDAE;
-  --color-green-400: #00DC82;
-  --color-green-500: #00C16A;
-  --color-green-600: #00A155;
-  --color-green-700: #007F45;
+  --color-green-50: #effdf5;
+  --color-green-100: #d9fbe8;
+  --color-green-200: #b3f5d1;
+  --color-green-300: #75edae;
+  --color-green-400: #00dc82;
+  --color-green-500: #00c16a;
+  --color-green-600: #00a155;
+  --color-green-700: #007f45;
   --color-green-800: #016538;
-  --color-green-900: #0A5331;
-  --color-green-950: #052E16;
+  --color-green-900: #0a5331;
+  --color-green-950: #052e16;
 }
 
 /* Ensure buttons and interactive elements have pointer cursor */
-button:not(:disabled):not([aria-disabled="true"]),
+button:not(:disabled):not([aria-disabled='true']),
 a[href],
-[role="button"]:not([aria-disabled="true"]) {
+[role='button']:not([aria-disabled='true']) {
   cursor: pointer;
 }
 
@@ -88,7 +88,7 @@ a[href],
 }
 
 .vac-text-message-content li::before {
-  content: "•";
+  content: '•';
   position: absolute;
   left: -1.15em;
   font-weight: 700;
@@ -123,7 +123,7 @@ a[href],
   padding: 14px 18px !important;
   border-radius: 18px !important;
   border-bottom-left-radius: 4px !important;
-  background: linear-gradient(135deg, #00DC82 0%, #00C16A 100%) !important;
+  background: linear-gradient(135deg, #00dc82 0%, #00c16a 100%) !important;
   box-shadow: 0 1px 3px rgba(0, 220, 130, 0.15) !important;
 }
 
@@ -197,7 +197,7 @@ a[href],
 
 /* Dark Mode Adjustments */
 .dark .vac-message-box-author .vac-message-card {
-  background: linear-gradient(135deg, #00C16A 0%, #00A155 100%) !important;
+  background: linear-gradient(135deg, #00c16a 0%, #00a155 100%) !important;
 }
 
 .dark .vac-text-message-content strong {
@@ -213,12 +213,12 @@ a[href],
   .vac-text-message-content {
     font-size: 15.5px !important;
   }
-  
+
   .vac-message-box-me .vac-message-card {
     padding: 18px 24px !important;
     max-width: 85%;
   }
-  
+
   .vac-message-box-author .vac-message-card {
     padding: 16px 20px !important;
   }

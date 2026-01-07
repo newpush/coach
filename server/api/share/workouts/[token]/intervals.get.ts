@@ -129,7 +129,7 @@ export default defineEventHandler(async (event) => {
   }
 
   const time = getStreamData(streams.time)
-  
+
   if (!time || time.length === 0) {
     return {
       hasData: false,
@@ -188,9 +188,8 @@ export default defineEventHandler(async (event) => {
   const hrRecovery = hasHr ? calculateHeartRateRecovery(time, hrStream!) : null
 
   // 4. Advanced Metrics (Drift, Coasting, Surges)
-  const decoupling = (hasWatts && hasHr)
-    ? calculateAerobicDecoupling(time, wattsStream!, hrStream!)
-    : null
+  const decoupling =
+    hasWatts && hasHr ? calculateAerobicDecoupling(time, wattsStream!, hrStream!) : null
 
   const coasting = hasWatts
     ? calculateCoastingStats(time, wattsStream!, cadenceStream || [], velocityStream || [])
@@ -200,12 +199,11 @@ export default defineEventHandler(async (event) => {
   // Fallback to 250 for display if both are missing (can be refined later)
   const calculationFtp = workout.ftp || (workout as any).user?.ftp || 250
 
-  const surges = (hasWatts && calculationFtp)
-    ? detectSurgesAndFades(time, wattsStream!, calculationFtp)
-    : []
+  const surges =
+    hasWatts && calculationFtp ? detectSurgesAndFades(time, wattsStream!, calculationFtp) : []
 
   // 5. New Advanced Analytics (W' Bal, EF Decay, Quadrants)
-  
+
   let wPrime = null
   if (hasWatts && calculationFtp) {
     try {
@@ -234,49 +232,47 @@ export default defineEventHandler(async (event) => {
   }
 
   // 5. New Extended Advanced Metrics (Fatigue sensitivity, Stability, Recovery Trend)
-  const fatigueSensitivity = (hasWatts && hasHr)
-    ? calculateFatigueSensitivity(wattsStream!, hrStream!, time)
-    : null
+  const fatigueSensitivity =
+    hasWatts && hasHr ? calculateFatigueSensitivity(wattsStream!, hrStream!, time) : null
 
   const powerStability = hasWatts
     ? calculateStabilityMetrics(wattsStream!, detectedIntervals)
     : null
 
-  const paceStability = (velocityStream && velocityStream.length > 0)
-    ? calculateStabilityMetrics(velocityStream!, detectedIntervals)
-    : null
+  const paceStability =
+    velocityStream && velocityStream.length > 0
+      ? calculateStabilityMetrics(velocityStream!, detectedIntervals)
+      : null
 
-  const recoveryTrend = hasHr
-    ? calculateRecoveryRateTrend(time, hrStream!, detectedIntervals)
-    : []
+  const recoveryTrend = hasHr ? calculateRecoveryRateTrend(time, hrStream!, detectedIntervals) : []
 
   // Enrich intervals with stats from other streams
-  const enrichedIntervals = detectedIntervals.map(interval => {
+  const enrichedIntervals = detectedIntervals.map((interval) => {
     const startIdx = interval.start_index
     const endIdx = interval.end_index
-    
+
     const stats: any = { ...interval }
-    
+
     // Add avg Power if available and not already set
     if (hasWatts && detectionMetric !== 'power') {
       const vals = wattsStream!.slice(startIdx, endIdx + 1)
       stats.avg_power = vals.reduce((a, b) => a + b, 0) / vals.length
       stats.max_power = Math.max(...vals)
     }
-    
+
     // Add avg HR if available
     if (hasHr) {
       const vals = hrStream!.slice(startIdx, endIdx + 1)
       stats.avg_heartrate = vals.reduce((a, b) => a + b, 0) / vals.length
       stats.max_heartrate = Math.max(...vals)
     }
-    
+
     // Add avg Pace if available
     if (velocityStream) {
       const vals = velocityStream!.slice(startIdx, endIdx + 1)
       stats.avg_pace = vals.reduce((a, b) => a + b, 0) / vals.length
     }
-    
+
     // Add avg Cadence if available
     if (hasCadence) {
       const vals = cadenceStream!.slice(startIdx, endIdx + 1)
@@ -285,11 +281,11 @@ export default defineEventHandler(async (event) => {
 
     return stats
   })
-  
+
   // Sample data for chart (return ~500 points for performance)
   const sampleRate = Math.max(1, Math.floor(time.length / 500))
-  const sample = (data: number[]) => data ? data.filter((_, i) => i % sampleRate === 0) : []
-  
+  const sample = (data: number[]) => (data ? data.filter((_, i) => i % sampleRate === 0) : [])
+
   const chartData = {
     time: sample(time),
     power: hasWatts ? sample(wattsStream!) : [],

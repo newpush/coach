@@ -35,10 +35,10 @@ export const useRecommendationStore = defineStore('recommendation', () => {
       const data = await $fetch('/api/recommendations/today')
       todayRecommendation.value = data
     } catch (error: any) {
-        // 404 is expected if no recommendation exists
-        if (error?.statusCode !== 404) {
-             console.error('Error fetching recommendation:', error)
-        }
+      // 404 is expected if no recommendation exists
+      if (error?.statusCode !== 404) {
+        console.error('Error fetching recommendation:', error)
+      }
     } finally {
       loading.value = false
     }
@@ -49,18 +49,20 @@ export const useRecommendationStore = defineStore('recommendation', () => {
 
     generating.value = true
     try {
-      const result: any = await $fetch('/api/recommendations/today', { 
+      const result: any = await $fetch('/api/recommendations/today', {
         method: 'POST',
         body: { userFeedback }
       })
       currentRecommendationId.value = result.recommendationId
-      
+
       // Initial fetch to show processing state if API returns it immediately
       await fetchTodayRecommendation()
 
       toast.add({
         title: userFeedback ? 'Regenerating Recommendation' : 'Analysis Started',
-        description: userFeedback ? 'Updating plan based on your feedback...' : 'Analyzing your recovery and planned workout...',
+        description: userFeedback
+          ? 'Updating plan based on your feedback...'
+          : 'Analyzing your recovery and planned workout...',
         color: 'success',
         icon: 'i-heroicons-arrow-path'
       })
@@ -68,10 +70,8 @@ export const useRecommendationStore = defineStore('recommendation', () => {
       poll(
         () => $fetch('/api/recommendations/today'),
         (data: any) => {
-             // Check matching ID and completed status
-             return data && 
-                    data.id === currentRecommendationId.value && 
-                    data.status === 'COMPLETED'
+          // Check matching ID and completed status
+          return data && data.id === currentRecommendationId.value && data.status === 'COMPLETED'
         },
         {
           onSuccess: (data) => {
@@ -86,23 +86,22 @@ export const useRecommendationStore = defineStore('recommendation', () => {
             })
           },
           onMaxAttemptsReached: () => {
-             generating.value = false
-             currentRecommendationId.value = null
-             toast.add({
-                title: 'Analysis Taking Longer',
-                description: 'The analysis is still running. Please check back in a moment.',
-                color: 'warning',
-                icon: 'i-heroicons-clock'
-             })
+            generating.value = false
+            currentRecommendationId.value = null
+            toast.add({
+              title: 'Analysis Taking Longer',
+              description: 'The analysis is still running. Please check back in a moment.',
+              color: 'warning',
+              icon: 'i-heroicons-clock'
+            })
           },
           onError: (error) => {
-             generating.value = false
-             currentRecommendationId.value = null
-             console.error('Recommendation polling error:', error)
+            generating.value = false
+            currentRecommendationId.value = null
+            console.error('Recommendation polling error:', error)
           }
         }
       )
-
     } catch (error: any) {
       generating.value = false
       currentRecommendationId.value = null
@@ -118,18 +117,18 @@ export const useRecommendationStore = defineStore('recommendation', () => {
   async function generateAdHocWorkout(params: any) {
     generatingAdHoc.value = true
     try {
-      const { success } = await $fetch('/api/workouts/generate', { 
+      const { success } = await $fetch('/api/workouts/generate', {
         method: 'POST',
         body: params
       })
-      
+
       if (success) {
         toast.add({
           title: 'Generating Workout',
           description: 'AI is designing your workout...',
           color: 'success'
         })
-        
+
         poll(
           () => $fetch('/api/workouts/planned/today'),
           (data) => !!data,
@@ -154,23 +153,20 @@ export const useRecommendationStore = defineStore('recommendation', () => {
 
   async function acceptRecommendation(id: string) {
     if (!id) return
-    
+
     try {
       await $fetch(`/api/recommendations/${id}/accept`, { method: 'POST' })
-      
+
       toast.add({
         title: 'Plan Updated',
         description: 'The workout has been modified based on the recommendation.',
         color: 'success',
         icon: 'i-heroicons-check-circle'
       })
-      
+
       // Refresh both recommendation and workout
-      await Promise.all([
-        fetchTodayRecommendation(),
-        fetchTodayWorkout()
-      ])
-      
+      await Promise.all([fetchTodayRecommendation(), fetchTodayWorkout()])
+
       return true
     } catch (error: any) {
       toast.add({

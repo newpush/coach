@@ -30,7 +30,7 @@ async function getTables(pool: pg.Pool) {
     ORDER BY table_name;
   `
   const result = await pool.query(query)
-  return result.rows.map(row => row.table_name)
+  return result.rows.map((row) => row.table_name)
 }
 
 async function getTableSchema(pool: pg.Pool, tableName: string) {
@@ -41,7 +41,7 @@ async function getTableSchema(pool: pg.Pool, tableName: string) {
     ORDER BY column_name;
   `
   const result = await pool.query(query, [tableName])
-  
+
   const indexesQuery = `
       SELECT indexname, indexdef
       FROM pg_indexes
@@ -51,8 +51,8 @@ async function getTableSchema(pool: pg.Pool, tableName: string) {
   const indexesResult = await pool.query(indexesQuery, [tableName])
 
   return {
-      columns: result.rows as ColumnInfo[],
-      indexes: indexesResult.rows as IndexInfo[]
+    columns: result.rows as ColumnInfo[],
+    indexes: indexesResult.rows as IndexInfo[]
   }
 }
 
@@ -91,16 +91,16 @@ async function compareSchemas() {
 
       // Compare Columns
       const allColumns = new Set([
-        ...localSchema.columns.map(c => c.column_name),
-        ...prodSchema.columns.map(c => c.column_name)
+        ...localSchema.columns.map((c) => c.column_name),
+        ...prodSchema.columns.map((c) => c.column_name)
       ])
 
       let tableHasDifferences = false
       const diffs: string[] = []
 
       for (const colName of Array.from(allColumns).sort()) {
-        const localCol = localSchema.columns.find(c => c.column_name === colName)
-        const prodCol = prodSchema.columns.find(c => c.column_name === colName)
+        const localCol = localSchema.columns.find((c) => c.column_name === colName)
+        const prodCol = prodSchema.columns.find((c) => c.column_name === colName)
 
         if (!localCol) {
           diffs.push(`  - Column '${colName}' missing in LOCAL`)
@@ -108,21 +108,26 @@ async function compareSchemas() {
         } else if (!prodCol) {
           diffs.push(`  - Column '${colName}' missing in PROD`)
           tableHasDifferences = true
-        } else if (localCol.data_type !== prodCol.data_type || localCol.is_nullable !== prodCol.is_nullable) {
-          diffs.push(`  - Column '${colName}' mismatch: Local[${localCol.data_type}, ${localCol.is_nullable}] vs Prod[${prodCol.data_type}, ${prodCol.is_nullable}]`)
+        } else if (
+          localCol.data_type !== prodCol.data_type ||
+          localCol.is_nullable !== prodCol.is_nullable
+        ) {
+          diffs.push(
+            `  - Column '${colName}' mismatch: Local[${localCol.data_type}, ${localCol.is_nullable}] vs Prod[${prodCol.data_type}, ${prodCol.is_nullable}]`
+          )
           tableHasDifferences = true
         }
       }
 
       // Compare Indexes
       const allIndexes = new Set([
-        ...localSchema.indexes.map(i => i.indexname),
-        ...prodSchema.indexes.map(i => i.indexname)
+        ...localSchema.indexes.map((i) => i.indexname),
+        ...prodSchema.indexes.map((i) => i.indexname)
       ])
 
       for (const indexName of Array.from(allIndexes).sort()) {
-        const localIndex = localSchema.indexes.find(i => i.indexname === indexName)
-        const prodIndex = prodSchema.indexes.find(i => i.indexname === indexName)
+        const localIndex = localSchema.indexes.find((i) => i.indexname === indexName)
+        const prodIndex = prodSchema.indexes.find((i) => i.indexname === indexName)
 
         if (!localIndex) {
           diffs.push(`  - Index '${indexName}' missing in LOCAL`)
@@ -131,19 +136,19 @@ async function compareSchemas() {
           diffs.push(`  - Index '${indexName}' missing in PROD`)
           tableHasDifferences = true
         } else if (localIndex.indexdef !== prodIndex.indexdef) {
-           // Ignore "public." prefix differences which sometimes happen
-           const cleanLocal = localIndex.indexdef.replace('public.', '')
-           const cleanProd = prodIndex.indexdef.replace('public.', '')
-           if (cleanLocal !== cleanProd) {
-             diffs.push(`  - Index '${indexName}' definition mismatch`)
-             tableHasDifferences = true
-           }
+          // Ignore "public." prefix differences which sometimes happen
+          const cleanLocal = localIndex.indexdef.replace('public.', '')
+          const cleanProd = prodIndex.indexdef.replace('public.', '')
+          if (cleanLocal !== cleanProd) {
+            diffs.push(`  - Index '${indexName}' definition mismatch`)
+            tableHasDifferences = true
+          }
         }
       }
 
       if (tableHasDifferences) {
         console.log(`⚠️  Differences in table '${tableName}':`)
-        diffs.forEach(d => console.log(d))
+        diffs.forEach((d) => console.log(d))
         totalDifferences++
       } else {
         // console.log(`✅ Table '${tableName}' matches`)
@@ -156,7 +161,6 @@ async function compareSchemas() {
     } else {
       console.log('✅ Full database schema matches perfectly (excluding _prisma_migrations).')
     }
-
   } catch (error) {
     console.error('Error comparing schemas:', error)
   } finally {

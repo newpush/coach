@@ -89,7 +89,7 @@ export function normalizeYazioData(
   // Parse date string to create Date object at midnight UTC
   const [year = 0, month = 1, day = 1] = date.split('-').map(Number)
   const dateObj = new Date(Date.UTC(year, month - 1, day))
-  
+
   // Group items by meal time
   const mealGroups: Record<string, any[]> = {
     breakfast: [],
@@ -97,24 +97,26 @@ export function normalizeYazioData(
     dinner: [],
     snacks: []
   }
-  
+
   // Process regular products (manual entries with product_nutrients)
   for (const item of items.products) {
     const mealTime = item.daytime.toLowerCase()
-    
+
     // For regular products, nutrients are in product_nutrients and need to be multiplied by amount
     // product_nutrients contain values per gram/serving, amount is the quantity consumed
     const productNutrients = (item as any).product_nutrients || {}
     const amount = item.amount || 0
-    
+
     // Calculate actual consumed nutrients by multiplying by amount
     const calories = (productNutrients['energy.energy'] || 0) * amount
     const protein = (productNutrients['nutrient.protein'] || 0) * amount
     const carbs = (productNutrients['nutrient.carb'] || 0) * amount
     const fat = (productNutrients['nutrient.fat'] || 0) * amount
-    const fiber = (productNutrients['nutrient.fiber'] || productNutrients['nutrient.dietaryfiber'] || 0) * amount
+    const fiber =
+      (productNutrients['nutrient.fiber'] || productNutrients['nutrient.dietaryfiber'] || 0) *
+      amount
     const sugar = (productNutrients['nutrient.sugar'] || 0) * amount
-    
+
     // Add calculated nutrients to the item
     const enrichedItem = {
       ...item,
@@ -125,18 +127,18 @@ export function normalizeYazioData(
       fiber: fiber,
       sugar: sugar
     }
-    
+
     if (mealGroups[mealTime]) {
       mealGroups[mealTime]!.push(enrichedItem)
     } else {
       mealGroups.snacks!.push(enrichedItem)
     }
   }
-  
+
   // Process simple products (AI-generated items with names already included)
   for (const item of items.simple_products || []) {
     const mealTime = item.daytime.toLowerCase()
-    
+
     // Extract nutrients from the nested structure
     const nutrients = item.nutrients || {}
     const calories = nutrients['energy.energy'] || 0
@@ -145,7 +147,7 @@ export function normalizeYazioData(
     const fat = nutrients['nutrient.fat'] || 0
     const fiber = nutrients['nutrient.fiber'] || nutrients['nutrient.dietaryfiber'] || 0
     const sugar = nutrients['nutrient.sugar'] || 0
-    
+
     // Transform simple_product to match the expected structure with top-level nutrient fields
     const transformedItem = {
       id: item.id,
@@ -164,14 +166,14 @@ export function normalizeYazioData(
       fiber: fiber,
       sugar: sugar
     }
-    
+
     if (mealGroups[mealTime]) {
       mealGroups[mealTime]!.push(transformedItem)
     } else {
       mealGroups.snacks!.push(transformedItem)
     }
   }
-  
+
   // Calculate totals from meals data
   const meals = summary.meals || {}
   const totals = {
@@ -182,7 +184,7 @@ export function normalizeYazioData(
     fiber: 0,
     sugar: 0
   }
-  
+
   // Sum up nutrients from all meals if available
   Object.entries(meals).forEach(([mealName, meal]: [string, any]) => {
     if (meal?.nutrients) {
@@ -194,7 +196,7 @@ export function normalizeYazioData(
         fiber: meal.nutrients['nutrient.fiber'] || 0,
         sugar: meal.nutrients['nutrient.sugar'] || 0
       }
-      
+
       totals.calories += mealNutrients.calories
       totals.protein += mealNutrients.protein
       totals.carbs += mealNutrients.carbs
@@ -203,7 +205,7 @@ export function normalizeYazioData(
       totals.sugar += mealNutrients.sugar
     }
   })
-  
+
   const result = {
     userId,
     date: dateObj,
@@ -224,6 +226,6 @@ export function normalizeYazioData(
     snacks: mealGroups.snacks!.length > 0 ? mealGroups.snacks : null,
     rawJson: { summary, items }
   }
-  
+
   return result
 }

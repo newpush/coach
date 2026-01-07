@@ -19,7 +19,7 @@ defineRouteMeta({
 
 export default defineEventHandler(async (event) => {
   const session = await getServerSession(event)
-  
+
   if (!session?.user?.email) {
     throw createError({
       statusCode: 401,
@@ -42,21 +42,21 @@ export default defineEventHandler(async (event) => {
   const code = query.code as string
   const state = query.state as string
   const error = query.error as string
-  
+
   if (error) {
     console.error('Strava OAuth error:', error)
     return sendRedirect(event, '/settings?strava_error=' + encodeURIComponent(error))
   }
-  
+
   const storedState = getCookie(event, 'strava_oauth_state')
   if (!state || !storedState || state !== storedState) {
     console.error('Strava OAuth state mismatch')
     deleteCookie(event, 'strava_oauth_state')
     return sendRedirect(event, '/settings?strava_error=invalid_state')
   }
-  
+
   deleteCookie(event, 'strava_oauth_state')
-  
+
   if (!code) {
     return sendRedirect(event, '/settings?strava_error=no_code')
   }
@@ -72,14 +72,14 @@ export default defineEventHandler(async (event) => {
     const tokenResponse = await fetch('https://www.strava.com/oauth/token', {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
+        'Content-Type': 'application/json'
       },
       body: JSON.stringify({
         client_id: clientId,
         client_secret: clientSecret,
         code,
-        grant_type: 'authorization_code',
-      }),
+        grant_type: 'authorization_code'
+      })
     })
 
     if (!tokenResponse.ok) {
@@ -145,6 +145,9 @@ export default defineEventHandler(async (event) => {
     return sendRedirect(event, '/settings?strava_success=true')
   } catch (error: any) {
     console.error('Failed to connect Strava:', error)
-    return sendRedirect(event, '/settings?strava_error=' + encodeURIComponent(error.message || 'connection_failed'))
+    return sendRedirect(
+      event,
+      '/settings?strava_error=' + encodeURIComponent(error.message || 'connection_failed')
+    )
   }
 })

@@ -5,7 +5,7 @@ defineRouteMeta({
   openAPI: {
     tags: ['Availability'],
     summary: 'Update training availability',
-    description: 'Updates the user\'s weekly training availability preferences.',
+    description: "Updates the user's weekly training availability preferences.",
     requestBody: {
       content: {
         'application/json': {
@@ -56,17 +56,17 @@ defineRouteMeta({
 
 export default defineEventHandler(async (event) => {
   const session = await getServerSession(event)
-  
+
   if (!session?.user) {
-    throw createError({ 
+    throw createError({
       statusCode: 401,
-      message: 'Unauthorized' 
+      message: 'Unauthorized'
     })
   }
-  
+
   const userId = (session.user as any).id
   const body = await readBody(event)
-  
+
   // Validate input
   if (!Array.isArray(body.availability)) {
     throw createError({
@@ -74,12 +74,12 @@ export default defineEventHandler(async (event) => {
       message: 'Invalid request: availability must be an array'
     })
   }
-  
+
   // Delete existing availability and create new ones
   await prisma.trainingAvailability.deleteMany({
     where: { userId }
   })
-  
+
   const created = await prisma.trainingAvailability.createMany({
     data: body.availability.map((item: any) => ({
       userId,
@@ -94,7 +94,7 @@ export default defineEventHandler(async (event) => {
       notes: item.notes || null
     }))
   })
-  
+
   return {
     success: true,
     count: created.count

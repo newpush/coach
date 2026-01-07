@@ -2,7 +2,6 @@ import { getServerSession } from '../../utils/session'
 import { prisma } from '../../utils/db'
 import { generateStructuredAnalysis } from '../../utils/gemini'
 
-
 defineRouteMeta({
   openAPI: {
     tags: ['Scores'],
@@ -70,7 +69,7 @@ interface TrendAnalysis {
 
 export default defineEventHandler(async (event) => {
   const session = await getServerSession(event)
-  
+
   if (!session?.user?.email) {
     throw createError({
       statusCode: 401,
@@ -80,11 +79,11 @@ export default defineEventHandler(async (event) => {
 
   const body = await readBody(event)
   const { days = 14, summary } = body
-  
+
   const user = await prisma.user.findUnique({
     where: { email: session.user.email }
   })
-  
+
   if (!user) {
     throw createError({
       statusCode: 404,
@@ -94,7 +93,7 @@ export default defineEventHandler(async (event) => {
 
   const startDate = new Date()
   startDate.setDate(startDate.getDate() - days)
-  
+
   // Get recent nutrition entries
   const nutrition = await prisma.nutrition.findMany({
     where: {
@@ -127,87 +126,84 @@ SUMMARY (Last ${days} days):
 - Hydration: ${summary.avgHydration?.toFixed(1)}/10
 
 RECENT DATA:
-${nutrition.map(n => {
-  const totalMacros = (n.protein || 0) + (n.carbs || 0) + (n.fat || 0)
-  const proteinPct = totalMacros > 0 ? ((n.protein || 0) / totalMacros * 100).toFixed(0) : 0
-  const carbsPct = totalMacros > 0 ? ((n.carbs || 0) / totalMacros * 100).toFixed(0) : 0
-  const fatPct = totalMacros > 0 ? ((n.fat || 0) / totalMacros * 100).toFixed(0) : 0
-  return `- ${n.date.toISOString().split('T')[0]}: ${n.calories || 0}kcal (P:${proteinPct}% C:${carbsPct}% F:${fatPct}%)`
-}).join('\n')}
+${nutrition
+  .map((n) => {
+    const totalMacros = (n.protein || 0) + (n.carbs || 0) + (n.fat || 0)
+    const proteinPct = totalMacros > 0 ? (((n.protein || 0) / totalMacros) * 100).toFixed(0) : 0
+    const carbsPct = totalMacros > 0 ? (((n.carbs || 0) / totalMacros) * 100).toFixed(0) : 0
+    const fatPct = totalMacros > 0 ? (((n.fat || 0) / totalMacros) * 100).toFixed(0) : 0
+    return `- ${n.date.toISOString().split('T')[0]}: ${n.calories || 0}kcal (P:${proteinPct}% C:${carbsPct}% F:${fatPct}%)`
+  })
+  .join('\n')}
 
 Provide structured analysis focusing on patterns and actionable nutrition improvements.`
 
   const schema = {
-    type: "object",
+    type: 'object',
     properties: {
       executive_summary: {
-        type: "string",
-        description: "2-3 sentence summary of current nutrition performance and key patterns"
+        type: 'string',
+        description: '2-3 sentence summary of current nutrition performance and key patterns'
       },
       sections: {
-        type: "array",
-        description: "Analysis sections for different aspects",
+        type: 'array',
+        description: 'Analysis sections for different aspects',
         items: {
-          type: "object",
+          type: 'object',
           properties: {
             title: {
-              type: "string",
+              type: 'string',
               description: "Section title (e.g., 'Macro Balance', 'Food Quality')"
             },
             status: {
-              type: "string",
-              enum: ["excellent", "good", "moderate", "needs_improvement"],
-              description: "Current status"
+              type: 'string',
+              enum: ['excellent', 'good', 'moderate', 'needs_improvement'],
+              description: 'Current status'
             },
             analysis_points: {
-              type: "array",
-              items: { type: "string" },
-              description: "2-3 specific observations about this aspect"
+              type: 'array',
+              items: { type: 'string' },
+              description: '2-3 specific observations about this aspect'
             }
           },
-          required: ["title", "status", "analysis_points"]
+          required: ['title', 'status', 'analysis_points']
         }
       },
       recommendations: {
-        type: "array",
-        description: "3-4 actionable nutrition improvement recommendations",
+        type: 'array',
+        description: '3-4 actionable nutrition improvement recommendations',
         items: {
-          type: "object",
+          type: 'object',
           properties: {
             title: {
-              type: "string",
-              description: "Brief recommendation title"
+              type: 'string',
+              description: 'Brief recommendation title'
             },
             description: {
-              type: "string",
-              description: "Detailed actionable step"
+              type: 'string',
+              description: 'Detailed actionable step'
             },
             priority: {
-              type: "string",
-              enum: ["high", "medium", "low"],
-              description: "Priority level"
+              type: 'string',
+              enum: ['high', 'medium', 'low'],
+              description: 'Priority level'
             }
           },
-          required: ["title", "description", "priority"]
+          required: ['title', 'description', 'priority']
         }
       }
     },
-    required: ["executive_summary", "sections", "recommendations"]
+    required: ['executive_summary', 'sections', 'recommendations']
   }
 
   try {
-    const analysis = await generateStructuredAnalysis<TrendAnalysis>(
-      prompt,
-      schema,
-      'flash',
-      {
-        userId: user.id,
-        operation: 'nutrition_trends_explanation',
-        entityType: 'Nutrition',
-        entityId: undefined // This is a trend analysis, not a specific entity
-      }
-    )
-    
+    const analysis = await generateStructuredAnalysis<TrendAnalysis>(prompt, schema, 'flash', {
+      userId: user.id,
+      operation: 'nutrition_trends_explanation',
+      entityType: 'Nutrition',
+      entityId: undefined // This is a trend analysis, not a specific entity
+    })
+
     return {
       analysis,
       score: summary.avgOverall,

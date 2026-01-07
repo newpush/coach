@@ -89,13 +89,13 @@ export default defineEventHandler(async (event) => {
   // 3. Correlate Data
   // We want to see if High Recovery leads to High Performance (e.g. TSS or Intensity)
   // or simply plot them together scatter style
-  
+
   const points = []
 
   for (const workout of workouts) {
     // Find metric for the same day
-    const metric = dailyMetrics.find(m => isSameDay(new Date(m.date), new Date(workout.date)))
-    
+    const metric = dailyMetrics.find((m) => isSameDay(new Date(m.date), new Date(workout.date)))
+
     // We prioritize recoveryScore (Whoop style 0-100)
     // If not available, maybe HRV or Sleep Score
     const recovery = metric?.recoveryScore ?? metric?.sleepScore ?? null

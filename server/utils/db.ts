@@ -8,9 +8,9 @@ const prismaClientSingleton = () => {
   // The error "SCRAM-SERVER-FIRST-MESSAGE: client password must be a string" suggests
   // something about the connection string parsing or password handling in pg.
   // This often happens if the password is empty or encoded weirdly in the URL.
-  
+
   const pool = new pg.Pool({
-    connectionString: process.env.DATABASE_URL,
+    connectionString: process.env.DATABASE_URL
   })
   const adapter = new PrismaPg(pool)
   return new PrismaClient({ adapter })

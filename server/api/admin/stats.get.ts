@@ -5,7 +5,7 @@ import { Prisma } from '@prisma/client'
 
 export default defineEventHandler(async (event) => {
   const session = await getServerSession(event)
-  
+
   // Strict admin check
   if (!session?.user?.isAdmin) {
     throw createError({
@@ -19,11 +19,11 @@ export default defineEventHandler(async (event) => {
     prisma.user.count(),
     prisma.workout.count()
   ])
-  
+
   // AI Costs & Usage (last 30 days)
   const thirtyDaysAgo = new Date()
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
-  
+
   // Efficient Aggregation for AI Usage
   const llmStats = await prisma.llmUsage.aggregate({
     where: {
@@ -55,7 +55,7 @@ export default defineEventHandler(async (event) => {
   // --- Daily Histograms via Raw SQL for Performance ---
 
   // Users by day
-  const usersByDayRaw = await prisma.$queryRaw<{ date: string, count: bigint }[]>`
+  const usersByDayRaw = await prisma.$queryRaw<{ date: string; count: bigint }[]>`
     SELECT DATE("createdAt") as date, COUNT(*) as count
     FROM "User"
     WHERE "createdAt" >= ${thirtyDaysAgo}
@@ -64,7 +64,7 @@ export default defineEventHandler(async (event) => {
   `
 
   // Workouts by day
-  const workoutsByDayRaw = await prisma.$queryRaw<{ date: string, count: bigint }[]>`
+  const workoutsByDayRaw = await prisma.$queryRaw<{ date: string; count: bigint }[]>`
     SELECT DATE("date") as date, COUNT(*) as count
     FROM "Workout"
     WHERE "date" >= ${thirtyDaysAgo}
@@ -73,7 +73,7 @@ export default defineEventHandler(async (event) => {
   `
 
   // AI Cost by day
-  const aiCostByDayRaw = await prisma.$queryRaw<{ date: string, cost: number }[]>`
+  const aiCostByDayRaw = await prisma.$queryRaw<{ date: string; cost: number }[]>`
     SELECT DATE("createdAt") as date, SUM("estimatedCost") as cost
     FROM "LlmUsage"
     WHERE "createdAt" >= ${thirtyDaysAgo}
@@ -90,9 +90,9 @@ export default defineEventHandler(async (event) => {
     }
   })
   const activeUsersLast30DaysCount = activeUsersLast30DaysResult.length
-  
+
   // Also get Active Users by Day (unique users per day)
-  const activeUsersByDayRaw = await prisma.$queryRaw<{ date: string, count: bigint }[]>`
+  const activeUsersByDayRaw = await prisma.$queryRaw<{ date: string; count: bigint }[]>`
     SELECT DATE("date") as date, COUNT(DISTINCT "userId") as count
     FROM "Workout"
     WHERE "date" >= ${thirtyDaysAgo}
@@ -108,12 +108,16 @@ export default defineEventHandler(async (event) => {
     cost?: number
   }
 
-  const fillMissingDays = (data: Record<string, number>, type: 'count' | 'cost' = 'count', days = 30): StatResult[] => {
+  const fillMissingDays = (
+    data: Record<string, number>,
+    type: 'count' | 'cost' = 'count',
+    days = 30
+  ): StatResult[] => {
     const result: StatResult[] = []
     const today = new Date()
-    // Normalize today to start of day for consistent comparison if needed, 
+    // Normalize today to start of day for consistent comparison if needed,
     // but here we just need 30 distinct dates ending today
-    
+
     for (let i = days - 1; i >= 0; i--) {
       const d = new Date(today)
       d.setDate(today.getDate() - i)
@@ -129,14 +133,17 @@ export default defineEventHandler(async (event) => {
   }
 
   const mapToRecord = (rows: any[], valKey: string) => {
-    return rows.reduce((acc, row) => {
-      // row.date might be a Date object or string depending on driver
-      const d = new Date(row.date).toISOString().split('T')[0]
-      if (d) {
-        acc[d] = Number(row[valKey] || 0) // Convert BigInt/Decimal to Number
-      }
-      return acc
-    }, {} as Record<string, number>)
+    return rows.reduce(
+      (acc, row) => {
+        // row.date might be a Date object or string depending on driver
+        const d = new Date(row.date).toISOString().split('T')[0]
+        if (d) {
+          acc[d] = Number(row[valKey] || 0) // Convert BigInt/Decimal to Number
+        }
+        return acc
+      },
+      {} as Record<string, number>
+    )
   }
 
   const usersByDay = fillMissingDays(mapToRecord(usersByDayRaw, 'count'), 'count')

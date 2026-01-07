@@ -11,13 +11,13 @@ import { prisma } from '../db'
 export async function getPlannedWorkouts(userId: string, args: any): Promise<any> {
   const startDate = args.start_date ? new Date(args.start_date) : new Date()
   startDate.setHours(0, 0, 0, 0)
-  
+
   const endDate = args.end_date ? new Date(args.end_date) : new Date(startDate)
   if (!args.end_date) {
     endDate.setDate(endDate.getDate() + 14) // Default 14 days ahead
   }
   endDate.setHours(23, 59, 59, 999)
-  
+
   const where: any = {
     userId,
     date: {
@@ -25,11 +25,11 @@ export async function getPlannedWorkouts(userId: string, args: any): Promise<any
       lte: endDate
     }
   }
-  
+
   if (!args.include_completed) {
     where.completed = false
   }
-  
+
   const workouts = await prisma.plannedWorkout.findMany({
     where,
     orderBy: { date: 'asc' },
@@ -46,7 +46,7 @@ export async function getPlannedWorkouts(userId: string, args: any): Promise<any
       lastSyncedAt: true
     }
   })
-  
+
   if (workouts.length === 0) {
     return {
       message: 'No planned workouts found for the specified date range',
@@ -56,14 +56,14 @@ export async function getPlannedWorkouts(userId: string, args: any): Promise<any
       }
     }
   }
-  
+
   return {
     count: workouts.length,
     date_range: {
       start: startDate.toISOString().split('T')[0],
       end: endDate.toISOString().split('T')[0]
     },
-    workouts: workouts.map(w => ({
+    workouts: workouts.map((w) => ({
       id: w.id,
       date: w.date.toISOString().split('T')[0],
       title: w.title,
@@ -83,7 +83,7 @@ export async function getPlannedWorkouts(userId: string, args: any): Promise<any
  */
 export async function createPlannedWorkout(userId: string, args: any): Promise<any> {
   const { date, time_of_day, title, description, type, duration_minutes, tss, intensity } = args
-  
+
   console.log('[createPlannedWorkout] 🚀 Starting with args:', {
     userId,
     date,
@@ -93,7 +93,7 @@ export async function createPlannedWorkout(userId: string, args: any): Promise<a
     duration_minutes,
     tss
   })
-  
+
   if (!date || !title) {
     console.log('[createPlannedWorkout] ❌ Missing required fields')
     return {
@@ -101,24 +101,24 @@ export async function createPlannedWorkout(userId: string, args: any): Promise<a
       required_fields: ['date', 'title']
     }
   }
-  
+
   // Parse time of day - default to 8am (morning) if not specified
   const workoutDate = new Date(date)
   const timeOfDay = time_of_day || 'morning'
-  
+
   // Handle different time formats
   if (typeof timeOfDay === 'string') {
     const timeStr = timeOfDay.toLowerCase()
-    
+
     // Check if it's a specific hour (e.g., "6am", "14", "2pm")
     const hourMatch = timeStr.match(/(\d+)\s*(am|pm)?/)
     if (hourMatch && hourMatch[1]) {
       let hour = parseInt(hourMatch[1])
       const meridiem = hourMatch[2]
-      
+
       if (meridiem === 'pm' && hour < 12) hour += 12
       if (meridiem === 'am' && hour === 12) hour = 0
-      
+
       workoutDate.setHours(hour, 0, 0, 0)
     } else {
       // Use preset times
@@ -143,24 +143,24 @@ export async function createPlannedWorkout(userId: string, args: any): Promise<a
   } else {
     workoutDate.setHours(8, 0, 0, 0) // Default to morning
   }
-  
+
   console.log('[createPlannedWorkout] ⏰ Scheduled time:', {
     time_of_day: timeOfDay,
     parsed_date: workoutDate.toISOString(),
     hour: workoutDate.getHours()
   })
-  
+
   try {
     // Import sync function
     const { syncPlannedWorkoutToIntervals } = await import('../intervals-sync')
     const { createIntervalsPlannedWorkout } = await import('../intervals')
-    
+
     // Get Intervals integration
     console.log('[createPlannedWorkout] 🔍 Checking for Intervals.icu integration...')
     const integration = await prisma.integration.findFirst({
       where: { userId, provider: 'intervals' }
     })
-    
+
     if (!integration) {
       console.log('[createPlannedWorkout] ❌ No Intervals.icu integration found')
       return {
@@ -168,9 +168,9 @@ export async function createPlannedWorkout(userId: string, args: any): Promise<a
         message: 'Please connect your Intervals.icu account first'
       }
     }
-    
+
     console.log('[createPlannedWorkout] ✅ Integration found, creating in Intervals.icu...')
-    
+
     // Create in Intervals.icu first (using parsed workoutDate with time)
     const intervalsWorkout = await createIntervalsPlannedWorkout(integration, {
       date: workoutDate,
@@ -180,12 +180,12 @@ export async function createPlannedWorkout(userId: string, args: any): Promise<a
       durationSec: duration_minutes ? duration_minutes * 60 : undefined,
       tss
     })
-    
+
     console.log('[createPlannedWorkout] ✅ Intervals.icu workout created:', {
       id: intervalsWorkout.id,
       title: intervalsWorkout.name
     })
-    
+
     // Create locally (store with time for reference, but Prisma will truncate to date only)
     console.log('[createPlannedWorkout] 💾 Creating in local database...')
     const workout = await prisma.plannedWorkout.create({
@@ -205,7 +205,7 @@ export async function createPlannedWorkout(userId: string, args: any): Promise<a
         lastSyncedAt: new Date()
       }
     })
-    
+
     console.log('[createPlannedWorkout] ✅ SUCCESS: Database record created:', {
       id: workout.id,
       externalId: workout.externalId,
@@ -214,7 +214,7 @@ export async function createPlannedWorkout(userId: string, args: any): Promise<a
       type: workout.type,
       syncStatus: workout.syncStatus
     })
-    
+
     const response = {
       success: true,
       message: `Created workout: ${title} for ${date}`,
@@ -228,22 +228,21 @@ export async function createPlannedWorkout(userId: string, args: any): Promise<a
         sync_status: 'SYNCED'
       }
     }
-    
+
     console.log('[createPlannedWorkout] 📤 Returning success response')
     return response
-    
   } catch (error: any) {
     console.error('[createPlannedWorkout] ❌ ERROR:', {
       message: error.message,
       stack: error.stack?.split('\n').slice(0, 3).join('\n')
     })
-    
+
     const errorResponse = {
       error: 'Failed to create workout',
       message: error.message,
       details: error.toString()
     }
-    
+
     console.log('[createPlannedWorkout] 📤 Returning error response:', errorResponse)
     return errorResponse
   }
@@ -254,25 +253,25 @@ export async function createPlannedWorkout(userId: string, args: any): Promise<a
  */
 export async function updatePlannedWorkout(userId: string, args: any): Promise<any> {
   const { workout_id, date, title, description, type, duration_minutes, tss } = args
-  
+
   if (!workout_id) {
     return {
       error: 'workout_id is required'
     }
   }
-  
+
   try {
     // Check if workout exists and belongs to user
     const existing = await prisma.plannedWorkout.findFirst({
       where: { id: workout_id, userId }
     })
-    
+
     if (!existing) {
       return {
         error: 'Workout not found or does not belong to you'
       }
     }
-    
+
     // Build update data
     const updateData: any = {}
     if (date !== undefined) updateData.date = new Date(date)
@@ -281,10 +280,10 @@ export async function updatePlannedWorkout(userId: string, args: any): Promise<a
     if (type !== undefined) updateData.type = type
     if (duration_minutes !== undefined) updateData.durationSec = duration_minutes * 60
     if (tss !== undefined) updateData.tss = tss
-    
+
     // Import sync function
     const { syncPlannedWorkoutToIntervals } = await import('../intervals-sync')
-    
+
     // Update locally first
     const workout = await prisma.plannedWorkout.update({
       where: { id: workout_id },
@@ -293,19 +292,23 @@ export async function updatePlannedWorkout(userId: string, args: any): Promise<a
         modifiedLocally: true
       }
     })
-    
+
     // Attempt to sync to Intervals
-    const syncResult = await syncPlannedWorkoutToIntervals('UPDATE', {
-      id: workout.id,
-      externalId: workout.externalId,
-      date: workout.date,
-      title: workout.title,
-      description: workout.description,
-      type: workout.type,
-      durationSec: workout.durationSec,
-      tss: workout.tss
-    }, userId)
-    
+    const syncResult = await syncPlannedWorkoutToIntervals(
+      'UPDATE',
+      {
+        id: workout.id,
+        externalId: workout.externalId,
+        date: workout.date,
+        title: workout.title,
+        description: workout.description,
+        type: workout.type,
+        durationSec: workout.durationSec,
+        tss: workout.tss
+      },
+      userId
+    )
+
     // Update sync status
     await prisma.plannedWorkout.update({
       where: { id: workout_id },
@@ -315,7 +318,7 @@ export async function updatePlannedWorkout(userId: string, args: any): Promise<a
         modifiedLocally: !syncResult.synced
       }
     })
-    
+
     return {
       success: true,
       message: `Updated workout: ${workout.title}`,
@@ -341,38 +344,42 @@ export async function updatePlannedWorkout(userId: string, args: any): Promise<a
  */
 export async function deletePlannedWorkout(userId: string, args: any): Promise<any> {
   const { workout_id } = args
-  
+
   if (!workout_id) {
     return {
       error: 'workout_id is required'
     }
   }
-  
+
   try {
     const workout = await prisma.plannedWorkout.findFirst({
       where: { id: workout_id, userId }
     })
-    
+
     if (!workout) {
       return {
         error: 'Workout not found or does not belong to you'
       }
     }
-    
+
     // Import sync function
     const { syncPlannedWorkoutToIntervals } = await import('../intervals-sync')
-    
+
     // Attempt to delete from Intervals first
-    await syncPlannedWorkoutToIntervals('DELETE', {
-      id: workout.id,
-      externalId: workout.externalId
-    }, userId)
-    
+    await syncPlannedWorkoutToIntervals(
+      'DELETE',
+      {
+        id: workout.id,
+        externalId: workout.externalId
+      },
+      userId
+    )
+
     // Delete locally
     await prisma.plannedWorkout.delete({
       where: { id: workout_id }
     })
-    
+
     return {
       success: true,
       message: `Deleted workout: ${workout.title} (${workout.date.toISOString().split('T')[0]})`
@@ -394,18 +401,18 @@ export async function getTrainingAvailability(userId: string): Promise<any> {
     where: { userId },
     orderBy: { dayOfWeek: 'asc' }
   })
-  
+
   if (availability.length === 0) {
     return {
       message: 'No training availability set',
       suggestion: 'Use update_training_availability to set your schedule'
     }
   }
-  
+
   const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
-  
+
   return {
-    availability: availability.map(a => ({
+    availability: availability.map((a) => ({
       day: dayNames[a.dayOfWeek],
       day_of_week: a.dayOfWeek,
       morning: a.morning,
@@ -425,14 +432,25 @@ export async function getTrainingAvailability(userId: string): Promise<any> {
  * Update training availability
  */
 export async function updateTrainingAvailability(userId: string, args: any): Promise<any> {
-  const { day_of_week, morning, afternoon, evening, preferred_types, indoor_only, outdoor_only, gym_access, bike_access, notes } = args
-  
+  const {
+    day_of_week,
+    morning,
+    afternoon,
+    evening,
+    preferred_types,
+    indoor_only,
+    outdoor_only,
+    gym_access,
+    bike_access,
+    notes
+  } = args
+
   if (day_of_week === undefined || day_of_week < 0 || day_of_week > 6) {
     return {
       error: 'day_of_week must be between 0 (Sunday) and 6 (Saturday)'
     }
   }
-  
+
   try {
     const updateData: any = {}
     if (morning !== undefined) updateData.morning = morning
@@ -444,7 +462,7 @@ export async function updateTrainingAvailability(userId: string, args: any): Pro
     if (gym_access !== undefined) updateData.gymAccess = gym_access
     if (bike_access !== undefined) updateData.bikeAccess = bike_access
     if (notes !== undefined) updateData.notes = notes
-    
+
     const availability = await prisma.trainingAvailability.upsert({
       where: {
         userId_dayOfWeek: {
@@ -459,9 +477,9 @@ export async function updateTrainingAvailability(userId: string, args: any): Pro
       },
       update: updateData
     })
-    
+
     const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
-    
+
     return {
       success: true,
       message: `Updated availability for ${dayNames[day_of_week]}`,
@@ -487,7 +505,8 @@ export async function updateTrainingAvailability(userId: string, args: any): Pro
 export async function generateTrainingPlan(userId: string, args: any): Promise<any> {
   return {
     message: 'Training plan generation requires user confirmation',
-    instruction: 'Please ask the user to confirm they want to generate a training plan, then trigger the /api/plans/generate endpoint',
+    instruction:
+      'Please ask the user to confirm they want to generate a training plan, then trigger the /api/plans/generate endpoint',
     confirmation_required: true,
     parameters: args
   }
@@ -499,13 +518,13 @@ export async function generateTrainingPlan(userId: string, args: any): Promise<a
 export async function getCurrentPlan(userId: string): Promise<any> {
   const today = new Date()
   today.setHours(0, 0, 0, 0)
-  
+
   // Get the start of the current week (Monday)
   const currentWeekStart = new Date(today)
   const day = currentWeekStart.getDay()
   const diff = currentWeekStart.getDate() - day + (day === 0 ? -6 : 1)
   currentWeekStart.setDate(diff)
-  
+
   // Get active or most recent plan
   const plan = await prisma.weeklyTrainingPlan.findFirst({
     where: {
@@ -514,21 +533,18 @@ export async function getCurrentPlan(userId: string): Promise<any> {
         lte: currentWeekStart
       }
     },
-    orderBy: [
-      { status: 'asc' },
-      { weekStartDate: 'desc' }
-    ]
+    orderBy: [{ status: 'asc' }, { weekStartDate: 'desc' }]
   })
-  
+
   if (!plan) {
     return {
       message: 'No training plan found',
       suggestion: 'Use generate_training_plan to create one'
     }
   }
-  
+
   const planJson = plan.planJson as any
-  
+
   return {
     plan: {
       id: plan.id,

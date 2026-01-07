@@ -50,7 +50,7 @@ export default defineEventHandler(async (event) => {
   }
 
   const { roomId } = getQuery(event) as { roomId: string }
-  
+
   if (!roomId) {
     throw createError({ statusCode: 400, message: 'Room ID required' })
   }
@@ -82,9 +82,9 @@ export default defineEventHandler(async (event) => {
   })
 
   // Return messages in AI SDK v5 format
-  return messages.map(msg => ({
+  return messages.map((msg) => ({
     id: msg.id,
-    role: msg.senderId === 'ai_agent' ? 'assistant' as const : 'user' as const,
+    role: msg.senderId === 'ai_agent' ? ('assistant' as const) : ('user' as const),
     parts: [
       {
         type: 'text' as const,
@@ -93,7 +93,7 @@ export default defineEventHandler(async (event) => {
       }
     ],
     metadata: {
-      ...(msg.metadata as any || {}),
+      ...((msg.metadata as any) || {}),
       createdAt: msg.createdAt,
       senderId: msg.senderId
     }

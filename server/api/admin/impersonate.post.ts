@@ -5,7 +5,7 @@ import { prisma } from '../../utils/db'
 export default defineEventHandler(async (event) => {
   const session = await getServerSession(event)
   const user = session?.user as any
-  
+
   // Strict admin check
   if (!user?.isAdmin) {
     throw createError({
@@ -15,7 +15,7 @@ export default defineEventHandler(async (event) => {
   }
 
   const { userId } = await readBody(event)
-  
+
   if (!userId) {
     throw createError({
       statusCode: 400,
@@ -44,16 +44,21 @@ export default defineEventHandler(async (event) => {
   })
 
   // Set metadata cookie for frontend (NOT httpOnly so frontend can read it)
-  setCookie(event, 'auth.impersonation_meta', JSON.stringify({
-    adminId: user.id,
-    adminEmail: user.email,
-    impersonatedUserId: userId,
-    impersonatedUserEmail: userToImpersonate.email
-  }), {
-    httpOnly: false,
-    path: '/',
-    maxAge: 3600
-  })
+  setCookie(
+    event,
+    'auth.impersonation_meta',
+    JSON.stringify({
+      adminId: user.id,
+      adminEmail: user.email,
+      impersonatedUserId: userId,
+      impersonatedUserEmail: userToImpersonate.email
+    }),
+    {
+      httpOnly: false,
+      path: '/',
+      maxAge: 3600
+    }
+  )
 
   console.log('[Impersonate] Set impersonation cookie for user:', userId)
 

@@ -6,16 +6,16 @@ Coach Watts is an AI-powered cycling coach that analyzes training data from mult
 
 ## 1. High-Level Stack
 
-| Component | Technology | Purpose |
-|-----------|-----------|---------|
-| **Framework** | Nuxt 3 | Full Stack: SSR + API Routes |
-| **Database** | PostgreSQL | Primary data store (via Supabase or Neon) |
-| **ORM** | Prisma | Type-safe database access |
-| **Data Access** | Repository Pattern | Centralized data access logic |
-| **Authentication** | NuxtAuth | Based on NextAuth with Google Provider |
-| **Background Jobs** | Trigger.dev (v3) | Async data ingestion and AI processing |
-| **AI Engine** | Google Gemini 2.5 | Flash for daily checks, Pro for deep analysis |
-| **UI Library** | Nuxt UI | Component library for consistent design |
+| Component           | Technology         | Purpose                                       |
+| ------------------- | ------------------ | --------------------------------------------- |
+| **Framework**       | Nuxt 3             | Full Stack: SSR + API Routes                  |
+| **Database**        | PostgreSQL         | Primary data store (via Supabase or Neon)     |
+| **ORM**             | Prisma             | Type-safe database access                     |
+| **Data Access**     | Repository Pattern | Centralized data access logic                 |
+| **Authentication**  | NuxtAuth           | Based on NextAuth with Google Provider        |
+| **Background Jobs** | Trigger.dev (v3)   | Async data ingestion and AI processing        |
+| **AI Engine**       | Google Gemini 2.5  | Flash for daily checks, Pro for deep analysis |
+| **UI Library**      | Nuxt UI            | Component library for consistent design       |
 
 ## 2. Core Functional Modules
 
@@ -24,9 +24,11 @@ Coach Watts is an AI-powered cycling coach that analyzes training data from mult
 To ensure data consistency and encapsulate complex logic (like handling duplicates or permissions), we use the Repository Pattern.
 
 **Key Repositories:**
+
 - **WorkoutRepository:** Centralizes access to `Workout` data, automatically handling `isDuplicate` filtering and user ownership checks.
 
 **Usage Standard:**
+
 - **Avoid:** Direct `prisma.model.find...` calls in API handlers for complex models.
 - **Prefer:** `repository.getForUser(...)` or similar encapsulated methods.
 
@@ -37,10 +39,12 @@ The system normalizes data from different sources into a unified `Workout` and `
 #### Data Sources
 
 **Intervals.icu**
+
 - Excellent for raw power data, FTP, and fitness/fatigue charts (ATL/CTL)
 - Provides detailed workout metrics and training calendar
 
 **Whoop**
+
 - Gold standard for Recovery (HRV)
 - Sleep tracking and quality metrics
 - Strain calculation
@@ -59,6 +63,7 @@ graph LR
 ```
 
 **Process:**
+
 1. User connects account via OAuth
 2. Token stored encrypted in database
 3. Trigger.dev job runs nightly or on webhook event
@@ -73,28 +78,31 @@ The AI is split into two specialized agents to manage context window limits and 
 
 **Purpose:** Deep analysis of past performance
 
-| Property | Value |
-|----------|-------|
-| **Trigger** | Weekly or Monthly (User requested) |
-| **Model** | Gemini 2.5 Pro (High reasoning capability) |
-| **Input** | Last 4 weeks of workouts + daily metrics |
-| **Strategy** | Chain-of-Thought reasoning |
-| **Output** | Markdown report (convertible to PDF) |
+| Property     | Value                                      |
+| ------------ | ------------------------------------------ |
+| **Trigger**  | Weekly or Monthly (User requested)         |
+| **Model**    | Gemini 2.5 Pro (High reasoning capability) |
+| **Input**    | Last 4 weeks of workouts + daily metrics   |
+| **Strategy** | Chain-of-Thought reasoning                 |
+| **Output**   | Markdown report (convertible to PDF)       |
 
 **Data Analyzed:**
+
 - Power curve and zone distribution
 - Average HRV and sleep scores
 - Training Stress Balance (TSB)
 - Correlation between high strain and low recovery
 
 **Prompt Strategy:**
+
 ```
-"Look at the TSB (Training Stress Balance). 
+"Look at the TSB (Training Stress Balance).
 Identify trends where high strain correlated with low recovery.
 Analyze power progression and fatigue accumulation."
 ```
 
 **Output Formats:**
+
 - Markdown report for web viewing
 - PDF via headless browser (Puppeteer) or LaTeX compilation
 
@@ -102,14 +110,15 @@ Analyze power progression and fatigue accumulation."
 
 **Purpose:** Daily guidance and workout adjustments
 
-| Property | Value |
-|----------|-------|
-| **Trigger** | Daily Morning Briefing or Plan Change Request |
-| **Model** | Gemini 2.5 Flash (Low latency, cost-effective) |
-| **Input** | Yesterday's load + Today's recovery + Planned workout |
-| **Output** | Structured JSON suggestion + Explanation |
+| Property    | Value                                                 |
+| ----------- | ----------------------------------------------------- |
+| **Trigger** | Daily Morning Briefing or Plan Change Request         |
+| **Model**   | Gemini 2.5 Flash (Low latency, cost-effective)        |
+| **Input**   | Yesterday's load + Today's recovery + Planned workout |
+| **Output**  | Structured JSON suggestion + Explanation              |
 
 **Decision Logic:**
+
 ```
 IF Recovery < 33% AND Planned Workout = "VO2 Max Intervals"
 THEN Suggest: "Swap to Zone 2 Endurance or Rest Day."
@@ -119,6 +128,7 @@ THEN Suggest: "Consider adding high-intensity interval session"
 ```
 
 **Input Data:**
+
 - **Hard Data:** Yesterday's training load, Today's Whoop Recovery, Planned workout from Intervals.icu
 - **Soft Data:** User subjective feeling (via UI form)
 
@@ -140,6 +150,7 @@ graph TD
 ```
 
 **Steps:**
+
 1. Fetches data from Intervals/Whoop APIs
 2. Normalizes data format
 3. Upserts into Postgres (prevents duplicates)
@@ -164,6 +175,7 @@ graph TD
 ```
 
 **Steps:**
+
 1. Queries Prisma for requested date range
 2. Formats data into dense text summary (JSON/CSV string)
 3. Sends to Gemini 2.5 (Pro or Flash)
@@ -185,6 +197,7 @@ graph LR
 ```
 
 **Implementation:**
+
 - Google SSO is the entry point
 - User record created on first login
 - Session managed via NuxtAuth
@@ -192,11 +205,13 @@ graph LR
 ### Integration Authentication
 
 Separate table for `IntegrationTokens` because one user might have multiple integrations:
+
 - Whoop
 - Intervals.icu
 - Future: Strava, Garmin, etc.
 
 **Security Considerations:**
+
 - Access tokens for external APIs encrypted at rest
 - OAuth refresh tokens stored securely
 - Tokens refreshed automatically before expiration
@@ -208,12 +223,14 @@ Separate table for `IntegrationTokens` because one user might have multiple inte
 
 **Purpose:** Web viewing in dashboard
 
-**Technology:** 
+**Technology:**
+
 - `@nuxtjs/mdc` for rendering
 - Styled with Tailwind typography classes
 - Interactive elements possible (charts, graphs)
 
 **Advantages:**
+
 - Fast rendering
 - Interactive
 - Easy to style
@@ -224,6 +241,7 @@ Separate table for `IntegrationTokens` because one user might have multiple inte
 **Purpose:** Formal coaching reports for download
 
 **Pipeline:**
+
 ```mermaid
 graph LR
     A[Gemini Generates LaTeX] --> B[Save .tex File]
@@ -233,11 +251,13 @@ graph LR
 ```
 
 **Alternative (Simpler):**
+
 - Gemini generates Markdown
 - Generic PDF generator converts to PDF
 - Reduces infrastructure complexity
 
 **Storage:**
+
 - PDFs stored in blob storage (S3, Cloudflare R2)
 - URLs stored in database
 - Signed URLs for secure access
@@ -285,18 +305,21 @@ graph LR
 ## 7. Future Enhancements
 
 ### Phase 2 Features
+
 - Strava integration
 - Garmin Connect integration
 - Real-time workout adjustments
 - Community features (coach sharing)
 
 ### Phase 3 Features
+
 - Mobile app (React Native)
 - Wearable device integration
 - Video analysis (form checking)
 - Nutrition tracking integration
 
 ### AI Improvements
+
 - Fine-tuned models on cycling-specific data
 - Multi-modal analysis (power + video)
 - Predictive performance modeling
@@ -305,30 +328,35 @@ graph LR
 ## 8. Technology Decisions Rationale
 
 ### Why Nuxt 3?
+
 - Full-stack framework (API + Frontend)
 - Excellent TypeScript support
 - SSR for better SEO and initial load
 - Large ecosystem
 
 ### Why Prisma?
+
 - Type-safe database queries
 - Excellent migration management
 - Great developer experience
 - Good PostgreSQL support
 
 ### Why Trigger.dev?
+
 - Purpose-built for background jobs
 - Great observability
 - Handles retries and failures
 - Native TypeScript support
 
 ### Why Gemini 2.5?
+
 - Excellent reasoning capabilities
 - Cost-effective (especially Flash)
 - Large context window
 - Good structured output support
 
 ### Why PostgreSQL?
+
 - Robust and reliable
 - Great JSON support
 - Excellent indexing

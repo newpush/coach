@@ -1,6 +1,10 @@
 import type { Integration } from '@prisma/client'
 import { prisma } from './db'
-import { updateIntervalsPlannedWorkout, createIntervalsPlannedWorkout, deleteIntervalsPlannedWorkout } from './intervals'
+import {
+  updateIntervalsPlannedWorkout,
+  createIntervalsPlannedWorkout,
+  deleteIntervalsPlannedWorkout
+} from './intervals'
 
 /**
  * Sync a planned workout to Intervals.icu with retry logic
@@ -19,7 +23,7 @@ export async function syncPlannedWorkoutToIntervals(
         provider: 'intervals'
       }
     })
-    
+
     if (!integration) {
       return {
         success: true,
@@ -27,16 +31,20 @@ export async function syncPlannedWorkoutToIntervals(
         message: 'No Intervals.icu integration found. Saved locally only.'
       }
     }
-    
+
     // Attempt sync based on operation
     let result: any
-    
+
     switch (operation) {
       case 'CREATE':
         result = await createIntervalsPlannedWorkout(integration, workoutData)
         break
       case 'UPDATE':
-        result = await updateIntervalsPlannedWorkout(integration, workoutData.externalId, workoutData)
+        result = await updateIntervalsPlannedWorkout(
+          integration,
+          workoutData.externalId,
+          workoutData
+        )
         break
       case 'DELETE':
         result = await deleteIntervalsPlannedWorkout(integration, workoutData.externalId)
@@ -44,7 +52,7 @@ export async function syncPlannedWorkoutToIntervals(
       default:
         throw new Error(`Unknown operation: ${operation}`)
     }
-    
+
     return {
       success: true,
       synced: true,
@@ -52,7 +60,7 @@ export async function syncPlannedWorkoutToIntervals(
     }
   } catch (error: any) {
     console.error(`Failed to sync ${operation} to Intervals.icu:`, error.message)
-    
+
     // Queue for retry
     await queueSyncOperation({
       userId,
@@ -62,7 +70,7 @@ export async function syncPlannedWorkoutToIntervals(
       payload: workoutData,
       error: error.message
     })
-    
+
     return {
       success: true,
       synced: false,
@@ -114,7 +122,7 @@ export async function processSyncQueueItem(queueItem: any): Promise<boolean> {
         provider: 'intervals'
       }
     })
-    
+
     if (!integration) {
       // Mark as failed permanently if no integration
       await prisma.syncQueue.update({
@@ -128,10 +136,10 @@ export async function processSyncQueueItem(queueItem: any): Promise<boolean> {
       })
       return false
     }
-    
+
     // Attempt sync
     const payload = queueItem.payload
-    
+
     switch (queueItem.operation) {
       case 'CREATE':
         await createIntervalsPlannedWorkout(integration, payload)
@@ -143,7 +151,7 @@ export async function processSyncQueueItem(queueItem: any): Promise<boolean> {
         await deleteIntervalsPlannedWorkout(integration, payload.externalId)
         break
     }
-    
+
     // Mark as completed
     await prisma.syncQueue.update({
       where: { id: queueItem.id },
@@ -154,7 +162,7 @@ export async function processSyncQueueItem(queueItem: any): Promise<boolean> {
         lastAttempt: new Date()
       }
     })
-    
+
     // Update entity sync status
     if (queueItem.entityType === 'planned_workout') {
       await prisma.plannedWorkout.update({
@@ -166,16 +174,16 @@ export async function processSyncQueueItem(queueItem: any): Promise<boolean> {
         }
       })
     }
-    
+
     console.log(`Successfully synced ${queueItem.entityType} ${queueItem.entityId}`)
     return true
   } catch (error: any) {
     console.error(`Failed to process sync queue item ${queueItem.id}:`, error.message)
-    
+
     // Update failure count
     const newAttempts = queueItem.attempts + 1
     const maxAttempts = 3
-    
+
     await prisma.syncQueue.update({
       where: { id: queueItem.id },
       data: {
@@ -185,7 +193,7 @@ export async function processSyncQueueItem(queueItem: any): Promise<boolean> {
         lastAttempt: new Date()
       }
     })
-    
+
     // Update entity with error if permanently failed
     if (newAttempts >= maxAttempts && queueItem.entityType === 'planned_workout') {
       await prisma.plannedWorkout.update({
@@ -196,7 +204,7 @@ export async function processSyncQueueItem(queueItem: any): Promise<boolean> {
         }
       })
     }
-    
+
     return false
   }
 }

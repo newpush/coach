@@ -1,13 +1,19 @@
-import { logger, task } from "@trigger.dev/sdk/v3";
-import { generateStructuredAnalysis } from "../server/utils/gemini";
-import { prisma } from "../server/utils/db";
-import { workoutRepository } from "../server/utils/repositories/workoutRepository";
-import { wellnessRepository } from "../server/utils/repositories/wellnessRepository";
-import { generateTrainingContext } from "../server/utils/training-metrics";
-import { userBackgroundQueue } from "./queues";
-import { getUserTimezone, getStartOfDaysAgoUTC, formatUserDate, getStartOfDayUTC, getEndOfDayUTC } from "../server/utils/date";
+import { logger, task } from '@trigger.dev/sdk/v3'
+import { generateStructuredAnalysis } from '../server/utils/gemini'
+import { prisma } from '../server/utils/db'
+import { workoutRepository } from '../server/utils/repositories/workoutRepository'
+import { wellnessRepository } from '../server/utils/repositories/wellnessRepository'
+import { generateTrainingContext } from '../server/utils/training-metrics'
+import { userBackgroundQueue } from './queues'
+import {
+  getUserTimezone,
+  getStartOfDaysAgoUTC,
+  formatUserDate,
+  getStartOfDayUTC,
+  getEndOfDayUTC
+} from '../server/utils/date'
 
-    const weeklyPlanSchema = {
+const weeklyPlanSchema = {
   type: 'object',
   properties: {
     weekSummary: {
@@ -23,11 +29,15 @@ import { getUserTimezone, getStartOfDaysAgoUTC, formatUserDate, getStartOfDayUTC
       items: {
         type: 'object',
         properties: {
-          date: { type: 'string', description: 'Date in YYYY-MM-DD format (must be within the planned week range)' },
-          dayOfWeek: { type: 'number', description: 'Day of week (0-6)' },
-          workoutType: { 
+          date: {
             type: 'string',
-            description: 'Type of workout: Ride, Run, Gym, Swim, or Rest. DO NOT use generic terms like "Workout" or "Active Recovery". For recovery days, use "Rest" or a light "Ride"/"Run".',
+            description: 'Date in YYYY-MM-DD format (must be within the planned week range)'
+          },
+          dayOfWeek: { type: 'number', description: 'Day of week (0-6)' },
+          workoutType: {
+            type: 'string',
+            description:
+              'Type of workout: Ride, Run, Gym, Swim, or Rest. DO NOT use generic terms like "Workout" or "Active Recovery". For recovery days, use "Rest" or a light "Ride"/"Run".',
             enum: ['Ride', 'Run', 'Gym', 'Swim', 'Rest']
           },
           timeOfDay: {
@@ -38,8 +48,14 @@ import { getUserTimezone, getStartOfDaysAgoUTC, formatUserDate, getStartOfDayUTC
           title: { type: 'string', description: 'Workout title' },
           description: { type: 'string', description: 'Detailed workout description' },
           durationMinutes: { type: 'number', description: 'Duration in minutes' },
-          distanceMeters: { type: 'number', description: 'Estimated distance in meters (for Run/Swim)' },
-          targetArea: { type: 'string', description: 'Focus area for Gym workouts (e.g. Legs, Upper Body, Core)' },
+          distanceMeters: {
+            type: 'number',
+            description: 'Estimated distance in meters (for Run/Swim)'
+          },
+          targetArea: {
+            type: 'string',
+            description: 'Focus area for Gym workouts (e.g. Legs, Upper Body, Core)'
+          },
           targetTSS: { type: 'number', description: 'Target Training Stress Score' },
           intensity: {
             type: 'string',
@@ -56,84 +72,113 @@ import { getUserTimezone, getStartOfDaysAgoUTC, formatUserDate, getStartOfDayUTC
             description: 'Why this workout on this day'
           }
         },
-        required: ['date', 'dayOfWeek', 'workoutType', 'title', 'description', 'durationMinutes', 'reasoning']
+        required: [
+          'date',
+          'dayOfWeek',
+          'workoutType',
+          'title',
+          'description',
+          'durationMinutes',
+          'reasoning'
+        ]
       }
     }
   },
   required: ['weekSummary', 'totalTSS', 'days']
-};
+}
 
 export const generateWeeklyPlanTask = task({
-  id: "generate-weekly-plan",
+  id: 'generate-weekly-plan',
   queue: userBackgroundQueue,
-  run: async (payload: { userId: string; startDate: Date; daysToPlann: number; userInstructions?: string; trainingWeekId?: string }) => {
-    const { userId, startDate, daysToPlann, userInstructions, trainingWeekId } = payload;
-    
-    logger.log("Starting weekly plan generation", { userId, startDate, daysToPlann, userInstructions, trainingWeekId });
-    
-    const timezone = await getUserTimezone(userId);
-    
+  run: async (payload: {
+    userId: string
+    startDate: Date
+    daysToPlann: number
+    userInstructions?: string
+    trainingWeekId?: string
+  }) => {
+    const { userId, startDate, daysToPlann, userInstructions, trainingWeekId } = payload
+
+    logger.log('Starting weekly plan generation', {
+      userId,
+      startDate,
+      daysToPlann,
+      userInstructions,
+      trainingWeekId
+    })
+
+    const timezone = await getUserTimezone(userId)
+
     // Parse startDate. If string, treat as local day. If Date, treat as... well, Date.
     // Assuming input is the start of the week user wants to plan for.
     // If startDate is 2026-01-08 (Thursday), we might want to align to Monday or start from there.
     // The original code adjusted to Monday. Let's keep that logic but using timezone helpers.
-    
-    const inputDate = new Date(startDate);
+
+    const inputDate = new Date(startDate)
     // Find the start of that day in UTC for the user's timezone
-    const startOfDayUTC = getStartOfDayUTC(timezone, inputDate);
-    
+    const startOfDayUTC = getStartOfDayUTC(timezone, inputDate)
+
     // Calculate week boundaries (Monday aligned)
     // We convert to zoned time to get the day of week in local time
     // But since we have helper functions, maybe we can simplify.
     // Let's stick to the existing logic but ensure boundaries are UTC.
-    
+
     // Original logic:
-    // const day = weekStart.getDay(); 
+    // const day = weekStart.getDay();
     // const diff = weekStart.getDate() - day + (day === 0 ? -6 : 1);
-    
+
     // We need to do this adjustment in "Local Time" domain, then convert back to UTC.
     // Or just use the inputDate if it's already aligned?
     // Let's assume inputDate IS the start date requested.
     // But the code says "Adjust to Monday".
-    
+
     // Safe approach: Use the existing logic but on the Date object derived from timezone.
     // Actually, getStartOfDayUTC gives us a UTC timestamp that represents 00:00 Local.
     // So `weekStart` (UTC) = 00:00 Local.
-    
-    const weekStart = new Date(startOfDayUTC);
+
+    const weekStart = new Date(startOfDayUTC)
     // Adjust to Monday relative to the DATE value (which is shifted in UTC)
     // Wait, if I'm in UTC+9, 00:00 Local is 15:00 Prev Day UTC.
     // `weekStart.getDay()` will return the day of week in LOCAL time? No, in browser/server local.
     // Server is UTC. So `weekStart.getDay()` returns day in UTC.
     // 15:00 Prev Day is likely the day before.
     // This logic is tricky.
-    
-    // Better approach: Use formatted string to get local day of week.
-    const localDateStr = formatUserDate(weekStart, timezone, 'yyyy-MM-dd');
-    const [y, m, d] = localDateStr.split('-').map(Number);
-    const localDateObj = new Date(y, m - 1, d); // Local Date object (system timezone assumed match or just abstract)
-    const day = localDateObj.getDay();
-    const diff = localDateObj.getDate() - day + (day === 0 ? -6 : 1);
-    localDateObj.setDate(diff);
-    
-    // Now convert that back to UTC start of day
-    const alignedWeekStart = getStartOfDayUTC(timezone, localDateObj);
-    
-    const alignedWeekEnd = new Date(alignedWeekStart);
-    alignedWeekEnd.setDate(alignedWeekEnd.getDate() + (daysToPlann - 1));
-    // Set to end of day in local time -> UTC
-    const alignedWeekEndUTC = getEndOfDayUTC(timezone, alignedWeekEnd);
 
-    logger.log("Week boundaries calculated (Timezone Aware)", { 
-        timezone,
-        weekStart: alignedWeekStart.toISOString(), 
-        weekEnd: alignedWeekEndUTC.toISOString(),
-        localStart: formatUserDate(alignedWeekStart, timezone),
-        localEnd: formatUserDate(alignedWeekEndUTC, timezone)
-    });
-    
+    // Better approach: Use formatted string to get local day of week.
+    const localDateStr = formatUserDate(weekStart, timezone, 'yyyy-MM-dd')
+    const [y, m, d] = localDateStr.split('-').map(Number)
+    const localDateObj = new Date(y, m - 1, d) // Local Date object (system timezone assumed match or just abstract)
+    const day = localDateObj.getDay()
+    const diff = localDateObj.getDate() - day + (day === 0 ? -6 : 1)
+    localDateObj.setDate(diff)
+
+    // Now convert that back to UTC start of day
+    const alignedWeekStart = getStartOfDayUTC(timezone, localDateObj)
+
+    const alignedWeekEnd = new Date(alignedWeekStart)
+    alignedWeekEnd.setDate(alignedWeekEnd.getDate() + (daysToPlann - 1))
+    // Set to end of day in local time -> UTC
+    const alignedWeekEndUTC = getEndOfDayUTC(timezone, alignedWeekEnd)
+
+    logger.log('Week boundaries calculated (Timezone Aware)', {
+      timezone,
+      weekStart: alignedWeekStart.toISOString(),
+      weekEnd: alignedWeekEndUTC.toISOString(),
+      localStart: formatUserDate(alignedWeekStart, timezone),
+      localEnd: formatUserDate(alignedWeekEndUTC, timezone)
+    })
+
     // Fetch user data
-    const [user, availability, recentWorkouts, recentWellness, currentPlan, athleteProfile, activeGoals, existingPlannedWorkouts] = await Promise.all([
+    const [
+      user,
+      availability,
+      recentWorkouts,
+      recentWellness,
+      currentPlan,
+      athleteProfile,
+      activeGoals,
+      existingPlannedWorkouts
+    ] = await Promise.all([
       prisma.user.findUnique({
         where: { id: userId },
         select: { ftp: true, weight: true, maxHr: true }
@@ -160,7 +205,7 @@ export const generateWeeklyPlanTask = task({
           weekStartDate: alignedWeekStart
         }
       }),
-      
+
       // Latest athlete profile
       prisma.report.findFirst({
         where: {
@@ -171,7 +216,7 @@ export const generateWeeklyPlanTask = task({
         orderBy: { createdAt: 'desc' },
         select: { analysisJson: true, createdAt: true }
       }),
-      
+
       // Active goals
       prisma.goal.findMany({
         where: {
@@ -194,7 +239,7 @@ export const generateWeeklyPlanTask = task({
           aiContext: true
         }
       }),
-      
+
       // Existing planned workouts for this week
       prisma.plannedWorkout.findMany({
         where: {
@@ -217,14 +262,18 @@ export const generateWeeklyPlanTask = task({
           targetArea: true
         }
       })
-    ]);
+    ])
 
-    logger.log("Existing workouts fetched details", { 
-        count: existingPlannedWorkouts.length,
-        workouts: existingPlannedWorkouts.map(w => ({ date: w.date.toISOString(), title: w.title, id: w.id }))
-    });
-    
-    logger.log("Data fetched", {
+    logger.log('Existing workouts fetched details', {
+      count: existingPlannedWorkouts.length,
+      workouts: existingPlannedWorkouts.map((w) => ({
+        date: w.date.toISOString(),
+        title: w.title,
+        id: w.id
+      }))
+    })
+
+    logger.log('Data fetched', {
       hasUser: !!user,
       availabilityDays: availability.length,
       recentWorkoutsCount: recentWorkouts.length,
@@ -232,76 +281,94 @@ export const generateWeeklyPlanTask = task({
       hasExistingPlan: !!currentPlan,
       hasAthleteProfile: !!athleteProfile,
       activeGoals: activeGoals.length
-    });
-    
+    })
+
     // Build availability summary
-    const availabilitySummary = availability.map(a => {
-      const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-      const slots = [];
-      if (a.morning) slots.push('morning');
-      if (a.afternoon) slots.push('afternoon');
-      if (a.evening) slots.push('evening');
-      
-      const constraints = [];
-      if (a.bikeAccess) constraints.push('bike/trainer available');
-      if (a.gymAccess) constraints.push('gym available');
-      if (a.indoorOnly) constraints.push('indoor only');
-      if (a.outdoorOnly) constraints.push('outdoor only');
-      
-      // Build the line
-      let line = `${dayNames[a.dayOfWeek]}: ${slots.length > 0 ? slots.join(', ') : 'rest day'}`;
-      if (constraints.length > 0) {
-        line += ` (${constraints.join(', ')})`;
-      }
-      
-      // Add explicit warnings for equipment limitations
-      if (slots.length > 0 && !a.bikeAccess && !a.gymAccess) {
-        line += ' [NO EQUIPMENT - only bodyweight activities]';
-      } else if (slots.length > 0 && !a.bikeAccess && a.gymAccess) {
-        line += ' [NO BIKE - gym strength training only]';
-      } else if (slots.length > 0 && a.bikeAccess && !a.gymAccess) {
-        line += ' [cycling only, no gym]';
-      }
-      
-      return line;
-    }).join('\n');
-    
+    const availabilitySummary = availability
+      .map((a) => {
+        const dayNames = [
+          'Sunday',
+          'Monday',
+          'Tuesday',
+          'Wednesday',
+          'Thursday',
+          'Friday',
+          'Saturday'
+        ]
+        const slots = []
+        if (a.morning) slots.push('morning')
+        if (a.afternoon) slots.push('afternoon')
+        if (a.evening) slots.push('evening')
+
+        const constraints = []
+        if (a.bikeAccess) constraints.push('bike/trainer available')
+        if (a.gymAccess) constraints.push('gym available')
+        if (a.indoorOnly) constraints.push('indoor only')
+        if (a.outdoorOnly) constraints.push('outdoor only')
+
+        // Build the line
+        let line = `${dayNames[a.dayOfWeek]}: ${slots.length > 0 ? slots.join(', ') : 'rest day'}`
+        if (constraints.length > 0) {
+          line += ` (${constraints.join(', ')})`
+        }
+
+        // Add explicit warnings for equipment limitations
+        if (slots.length > 0 && !a.bikeAccess && !a.gymAccess) {
+          line += ' [NO EQUIPMENT - only bodyweight activities]'
+        } else if (slots.length > 0 && !a.bikeAccess && a.gymAccess) {
+          line += ' [NO BIKE - gym strength training only]'
+        } else if (slots.length > 0 && a.bikeAccess && !a.gymAccess) {
+          line += ' [cycling only, no gym]'
+        }
+
+        return line
+      })
+      .join('\n')
+
     // Calculate recent training load
-    const recentTSS = recentWorkouts.reduce((sum, w) => sum + (w.tss || 0), 0);
-    const avgRecovery = recentWellness.length > 0
-      ? recentWellness.reduce((sum, w) => sum + (w.recoveryScore || 50), 0) / recentWellness.length
-      : 50;
-    
+    const recentTSS = recentWorkouts.reduce((sum, w) => sum + (w.tss || 0), 0)
+    const avgRecovery =
+      recentWellness.length > 0
+        ? recentWellness.reduce((sum, w) => sum + (w.recoveryScore || 50), 0) /
+          recentWellness.length
+        : 50
+
     // Generate training context for load management
-    const thirtyDaysAgo = getStartOfDaysAgoUTC(timezone, 30);
-    const trainingContext = await generateTrainingContext(userId, thirtyDaysAgo, getEndOfDayUTC(timezone, new Date()), {
-      includeZones: false,
-      includeBreakdown: true,
-      timezone
-    });
+    const thirtyDaysAgo = getStartOfDaysAgoUTC(timezone, 30)
+    const trainingContext = await generateTrainingContext(
+      userId,
+      thirtyDaysAgo,
+      getEndOfDayUTC(timezone, new Date()),
+      {
+        includeZones: false,
+        includeBreakdown: true,
+        timezone
+      }
+    )
 
     // Determine current training phase if a goal exists
-    let phaseInstruction = "";
-    const primaryGoal = activeGoals.find(g => g.type === 'EVENT' && g.priority === 'HIGH') || activeGoals[0];
-    
-    // Fetch full Plan context if available (via trainingWeekId)
-    let planContext = "";
-    if (trainingWeekId) {
-        const fullContext = await prisma.trainingWeek.findUnique({
-            where: { id: trainingWeekId },
-            include: {
-                block: {
-                    include: {
-                        plan: {
-                            include: { goal: true }
-                        }
-                    }
-                }
-            }
-        });
+    let phaseInstruction = ''
+    const primaryGoal =
+      activeGoals.find((g) => g.type === 'EVENT' && g.priority === 'HIGH') || activeGoals[0]
 
-        if (fullContext) {
-            planContext = `
+    // Fetch full Plan context if available (via trainingWeekId)
+    let planContext = ''
+    if (trainingWeekId) {
+      const fullContext = await prisma.trainingWeek.findUnique({
+        where: { id: trainingWeekId },
+        include: {
+          block: {
+            include: {
+              plan: {
+                include: { goal: true }
+              }
+            }
+          }
+        }
+      })
+
+      if (fullContext) {
+        planContext = `
 CONTEXT FROM MASTER PLAN:
 - Plan Name: ${fullContext.block.plan.name || fullContext.block.plan.goal?.title || 'Custom Plan'}
 - Current Block: "${fullContext.block.name}" (${fullContext.block.type} Phase)
@@ -310,46 +377,48 @@ CONTEXT FROM MASTER PLAN:
 - Week Focus: ${fullContext.focus || 'Standard Progression'}
 - Target Weekly Volume: ${Math.round(fullContext.volumeTargetMinutes / 60)} hours
 - Target Weekly TSS: ${fullContext.tssTarget}
-`;
-            // Override phase instruction with strict block context
-            phaseInstruction = `\nCURRENT PHASE: ${fullContext.block.type}. Focus strictly on ${fullContext.block.primaryFocus}. This is Week ${fullContext.weekNumber} of the block.`;
-        }
+`
+        // Override phase instruction with strict block context
+        phaseInstruction = `\nCURRENT PHASE: ${fullContext.block.type}. Focus strictly on ${fullContext.block.primaryFocus}. This is Week ${fullContext.weekNumber} of the block.`
+      }
     }
-    
+
     if (!phaseInstruction && primaryGoal) {
-      const today = new Date();
-      const goalDate = primaryGoal.eventDate || primaryGoal.targetDate;
-      
+      const today = new Date()
+      const goalDate = primaryGoal.eventDate || primaryGoal.targetDate
+
       if (goalDate) {
-        const weeksToGoal = Math.ceil((new Date(goalDate).getTime() - today.getTime()) / (1000 * 60 * 60 * 24 * 7));
-        
+        const weeksToGoal = Math.ceil(
+          (new Date(goalDate).getTime() - today.getTime()) / (1000 * 60 * 60 * 24 * 7)
+        )
+
         // Extract phase preference from aiContext if available
-        let preferredPhase = "";
-        if (primaryGoal.aiContext?.includes("Phase Preference:")) {
-          preferredPhase = primaryGoal.aiContext.split("Phase Preference:")[1].split(".")[0].trim();
+        let preferredPhase = ''
+        if (primaryGoal.aiContext?.includes('Phase Preference:')) {
+          preferredPhase = primaryGoal.aiContext.split('Phase Preference:')[1].split('.')[0].trim()
         }
 
         if (preferredPhase) {
-          phaseInstruction = `\nUSER SPECIFIED PHASE: ${preferredPhase}. Focus the training plan strictly on this phase's objectives.`;
+          phaseInstruction = `\nUSER SPECIFIED PHASE: ${preferredPhase}. Focus the training plan strictly on this phase's objectives.`
         } else if (weeksToGoal > 12) {
-          phaseInstruction = `\nRECOMMENDED PHASE: BASE. Focus on building aerobic foundation and muscular endurance.`;
+          phaseInstruction = `\nRECOMMENDED PHASE: BASE. Focus on building aerobic foundation and muscular endurance.`
         } else if (weeksToGoal > 4) {
-          phaseInstruction = `\nRECOMMENDED PHASE: BUILD. Focus on specificity, threshold, and race-intensity workouts.`;
+          phaseInstruction = `\nRECOMMENDED PHASE: BUILD. Focus on specificity, threshold, and race-intensity workouts.`
         } else if (weeksToGoal > 0) {
-          phaseInstruction = `\nRECOMMENDED PHASE: SPECIALTY/PEAK. Focus on maximum specificity, race simulation, and tapering.`;
+          phaseInstruction = `\nRECOMMENDED PHASE: SPECIALTY/PEAK. Focus on maximum specificity, race simulation, and tapering.`
         }
       }
     }
-    
+
     // Calculate current and target TSS values
-    const currentWeeklyTSS = trainingContext.loadTrend.weeklyTSSAvg;
-    const targetMinTSS = Math.round(currentWeeklyTSS * 1.05); // 5% increase
-    const targetMaxTSS = Math.round(currentWeeklyTSS * 1.10); // 10% increase
-    
+    const currentWeeklyTSS = trainingContext.loadTrend.weeklyTSSAvg
+    const targetMinTSS = Math.round(currentWeeklyTSS * 1.05) // 5% increase
+    const targetMaxTSS = Math.round(currentWeeklyTSS * 1.1) // 10% increase
+
     // Build athlete profile context
-    let athleteContext = '';
+    let athleteContext = ''
     if (athleteProfile?.analysisJson) {
-      const profile = athleteProfile.analysisJson as any;
+      const profile = athleteProfile.analysisJson as any
       athleteContext = `
 ATHLETE PROFILE (Generated ${new Date(athleteProfile.createdAt).toLocaleDateString()}):
 ${profile.executive_summary ? `Summary: ${profile.executive_summary}` : ''}
@@ -376,7 +445,7 @@ ${profile.planning_context?.opportunities?.length ? `Opportunities: ${profile.pl
 Recommendations Summary:
 ${profile.recommendations_summary?.recurring_themes?.length ? `Themes: ${profile.recommendations_summary.recurring_themes.join('; ')}` : ''}
 ${profile.recommendations_summary?.action_items?.length ? `Priority Actions:\n${profile.recommendations_summary.action_items.map((a: any) => `- [${a.priority}] ${a.action}`).join('\n')}` : ''}
-`;
+`
     } else {
       athleteContext = `
 USER BASIC INFO:
@@ -384,39 +453,46 @@ USER BASIC INFO:
 - Weight: ${user?.weight || 'Unknown'} kg
 - Max HR: ${user?.maxHr || 'Unknown'} bpm
 Note: No structured athlete profile available yet. Consider generating one for better personalized planning.
-`;
+`
     }
-    
+
     // Add goals context
     if (activeGoals.length > 0) {
       athleteContext += `
 
 CURRENT GOALS:
-${activeGoals.map(g => {
-  const daysToTarget = g.targetDate ? Math.ceil((new Date(g.targetDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24)) : null;
-  const daysToEvent = g.eventDate ? Math.ceil((new Date(g.eventDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24)) : null;
-  
-  let goalInfo = `- [${g.priority}] ${g.title} (${g.type})`;
-  if (g.description) goalInfo += `\n  ${g.description}`;
-  if (g.metric && g.targetValue) {
-    goalInfo += `\n  Target: ${g.metric} = ${g.targetValue}`;
-    if (g.currentValue) goalInfo += ` (Current: ${g.currentValue})`;
-  }
-  if (daysToTarget) goalInfo += `\n  Timeline: ${daysToTarget} days remaining`;
-  if (daysToEvent) goalInfo += `\n  Event: ${g.eventType || 'race'} on ${new Date(g.eventDate!).toLocaleDateString()} (${daysToEvent} days)`;
-  if (g.aiContext) goalInfo += `\n  Context: ${g.aiContext}`;
-  
-  return goalInfo;
-}).join('\n\n')}
-`;
+${activeGoals
+  .map((g) => {
+    const daysToTarget = g.targetDate
+      ? Math.ceil((new Date(g.targetDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+      : null
+    const daysToEvent = g.eventDate
+      ? Math.ceil((new Date(g.eventDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+      : null
+
+    let goalInfo = `- [${g.priority}] ${g.title} (${g.type})`
+    if (g.description) goalInfo += `\n  ${g.description}`
+    if (g.metric && g.targetValue) {
+      goalInfo += `\n  Target: ${g.metric} = ${g.targetValue}`
+      if (g.currentValue) goalInfo += ` (Current: ${g.currentValue})`
+    }
+    if (daysToTarget) goalInfo += `\n  Timeline: ${daysToTarget} days remaining`
+    if (daysToEvent)
+      goalInfo += `\n  Event: ${g.eventType || 'race'} on ${new Date(g.eventDate!).toLocaleDateString()} (${daysToEvent} days)`
+    if (g.aiContext) goalInfo += `\n  Context: ${g.aiContext}`
+
+    return goalInfo
+  })
+  .join('\n\n')}
+`
     } else {
       athleteContext += `
 
 CURRENT GOALS:
 No active goals set. Plan for general fitness maintenance and improvement.
-`;
+`
     }
-    
+
     // Build prompt
     const prompt = `You are an expert cycling coach creating a personalized ${daysToPlann}-day training plan.
 ${phaseInstruction}
@@ -431,17 +507,27 @@ USER INSTRUCTIONS (HIGHEST PRIORITY):
 ${userInstructions ? `"${userInstructions}"\n\nFollow these instructions above everything else. They override standard progression and availability constraints.` : 'No special instructions.'}
 
 CURRENT PLANNED WORKOUTS FOR THIS WEEK (For Context):
-${existingPlannedWorkouts.length > 0 
-  ? existingPlannedWorkouts.map(w => 
-      `- ${formatUserDate(w.date, timezone)}: ${w.title} (${w.type}, ${Math.round((w.durationSec || 0) / 60)}min)`
-    ).join('\n')
-  : 'None currently planned'
+${
+  existingPlannedWorkouts.length > 0
+    ? existingPlannedWorkouts
+        .map(
+          (w) =>
+            `- ${formatUserDate(w.date, timezone)}: ${w.title} (${w.type}, ${Math.round((w.durationSec || 0) / 60)}min)`
+        )
+        .join('\n')
+    : 'None currently planned'
 }
 
 RECENT TRAINING (Last 14 days):
-${recentWorkouts.slice(0, 3).map(w => 
-    `${formatUserDate(w.date, timezone)}: ${w.title} (TSS: ${w.tss || 'N/A'}, ${Math.round(w.durationSec / 60)}min)`
-  ).join(', ') || 'No recent workouts'}
+${
+  recentWorkouts
+    .slice(0, 3)
+    .map(
+      (w) =>
+        `${formatUserDate(w.date, timezone)}: ${w.title} (TSS: ${w.tss || 'N/A'}, ${Math.round(w.durationSec / 60)}min)`
+    )
+    .join(', ') || 'No recent workouts'
+}
 
 RECENT RECOVERY (Last 7 days):
 - Average recovery score: ${avgRecovery.toFixed(0)}%
@@ -465,35 +551,33 @@ INSTRUCTIONS:
    - Weekly TSS target: ${Math.round(currentWeeklyTSS)} - ${targetMaxTSS} (unless overridden by instructions).
 5. **CONTEXT**: Consider the "Current Planned Workouts" to understand what the user is replacing or modifying.
 
-Create a structured, progressive plan for the next ${daysToPlann} days.`;
+Create a structured, progressive plan for the next ${daysToPlann} days.`
 
-    logger.log("Generating plan with Gemini Flash");
-    
+    logger.log('Generating plan with Gemini Flash')
+
     // Log prompt instructions for debugging
-    const instructionStart = prompt.indexOf("INSTRUCTIONS:");
-    logger.log("Prompt Instructions sent to AI", { 
-        instructions: instructionStart > -1 ? prompt.substring(instructionStart) : "Instructions not found in prompt",
-        userInstructions: userInstructions || "None"
-    });
+    const instructionStart = prompt.indexOf('INSTRUCTIONS:')
+    logger.log('Prompt Instructions sent to AI', {
+      instructions:
+        instructionStart > -1
+          ? prompt.substring(instructionStart)
+          : 'Instructions not found in prompt',
+      userInstructions: userInstructions || 'None'
+    })
 
-    const plan = await generateStructuredAnalysis(
-      prompt,
-      weeklyPlanSchema,
-      'flash',
-      {
-        userId,
-        operation: 'weekly_plan_generation',
-        entityType: 'WeeklyTrainingPlan',
-        entityId: undefined
-      }
-    );
-    
-    logger.log("Plan generated from AI", { 
+    const plan = await generateStructuredAnalysis(prompt, weeklyPlanSchema, 'flash', {
+      userId,
+      operation: 'weekly_plan_generation',
+      entityType: 'WeeklyTrainingPlan',
+      entityId: undefined
+    })
+
+    logger.log('Plan generated from AI', {
       daysPlanned: (plan as any).days?.length,
       days: (plan as any).days?.map((d: any) => ({ date: d.date, type: d.workoutType })),
       totalTSS: (plan as any).totalTSS
-    });
-    
+    })
+
     // Save or update the plan
     const planData = {
       userId,
@@ -505,10 +589,13 @@ Create a structured, progressive plan for the next ${daysToPlann} days.`;
       modelVersion: 'gemini-2.0-flash-exp',
       planJson: plan as any,
       totalTSS: (plan as any).totalTSS,
-      totalDuration: (plan as any).days?.reduce((sum: number, d: any) => sum + (d.durationMinutes || 0) * 60, 0),
+      totalDuration: (plan as any).days?.reduce(
+        (sum: number, d: any) => sum + (d.durationMinutes || 0) * 60,
+        0
+      ),
       workoutCount: (plan as any).days?.filter((d: any) => d.workoutType !== 'Rest').length
-    };
-    
+    }
+
     const savedPlan = currentPlan
       ? await prisma.weeklyTrainingPlan.update({
           where: { id: currentPlan.id },
@@ -519,8 +606,8 @@ Create a structured, progressive plan for the next ${daysToPlann} days.`;
         })
       : await prisma.weeklyTrainingPlan.create({
           data: planData
-        });
-    
+        })
+
     // Also update the individual planned workouts if this is an active plan
     if (savedPlan.status === 'ACTIVE') {
       // First, clear existing future planned workouts for this period to avoid duplicates
@@ -534,8 +621,12 @@ Create a structured, progressive plan for the next ${daysToPlann} days.`;
           },
           completed: false
         }
-      });
-      logger.log("Deleted existing planned workouts", { count: deleted.count, weekStart: alignedWeekStart.toISOString(), weekEnd: alignedWeekEndUTC.toISOString() });
+      })
+      logger.log('Deleted existing planned workouts', {
+        count: deleted.count,
+        weekStart: alignedWeekStart.toISOString(),
+        weekEnd: alignedWeekEndUTC.toISOString()
+      })
 
       // Insert new workouts from the generated plan
       const workoutsToCreate = (plan as any).days
@@ -544,160 +635,181 @@ Create a structured, progressive plan for the next ${daysToPlann} days.`;
           // Parse date strictly from the AI response
           // AI returns 'YYYY-MM-DD' which represents the user's local date.
           // We need to convert this to the UTC timestamp that represents the start of that day in the user's timezone.
-          
-          const rawDate = d.date;
-          const [y, m, day] = rawDate.split('-').map(Number);
+
+          const rawDate = d.date
+          const [y, m, day] = rawDate.split('-').map(Number)
           // Create a "Local Date" object (using system/server time, but representing the abstract date)
-          const abstractDate = new Date(y, m - 1, day);
-          
+          const abstractDate = new Date(y, m - 1, day)
+
           // Get the UTC timestamp for the start of that day in the user's timezone
-          const workoutDate = getStartOfDayUTC(timezone, abstractDate);
-          
-          logger.log("Processing generated workout day", {
-             rawDate: d.date,
-             parsedDate: workoutDate.toISOString(),
-             isValid: !isNaN(workoutDate.getTime()),
-             title: d.title,
-             timezone
-          });
+          const workoutDate = getStartOfDayUTC(timezone, abstractDate)
+
+          logger.log('Processing generated workout day', {
+            rawDate: d.date,
+            parsedDate: workoutDate.toISOString(),
+            isValid: !isNaN(workoutDate.getTime()),
+            title: d.title,
+            timezone
+          })
 
           // Ensure the date is valid
           if (isNaN(workoutDate.getTime())) {
-             logger.error("Invalid date in generated plan", { date: d.date });
-             return null;
+            logger.error('Invalid date in generated plan', { date: d.date })
+            return null
           }
 
           // Strict validation: Date MUST be within the planned week
           // We compare timestamps to avoid timezone confusion, but add a buffer
-          const buffer = 12 * 60 * 60 * 1000;
-          if (workoutDate.getTime() < (alignedWeekStart.getTime() - buffer) || workoutDate.getTime() > (alignedWeekEndUTC.getTime() + buffer)) {
-             logger.error("Generated date out of range", { 
-               date: d.date, 
-               parsed: workoutDate.toISOString(),
-               weekStart: alignedWeekStart.toISOString(), 
-               weekEnd: alignedWeekEndUTC.toISOString() 
-             });
-             // Skipping is safer to avoid pollution
-             return null;
+          const buffer = 12 * 60 * 60 * 1000
+          if (
+            workoutDate.getTime() < alignedWeekStart.getTime() - buffer ||
+            workoutDate.getTime() > alignedWeekEndUTC.getTime() + buffer
+          ) {
+            logger.error('Generated date out of range', {
+              date: d.date,
+              parsed: workoutDate.toISOString(),
+              weekStart: alignedWeekStart.toISOString(),
+              weekEnd: alignedWeekEndUTC.toISOString()
+            })
+            // Skipping is safer to avoid pollution
+            return null
           }
 
           return {
-          userId,
-          date: workoutDate, // Stored as UTC start of day for user
-          title: d.title,
-          description: d.description + (d.reasoning ? `\n\nReasoning: ${d.reasoning}` : ''),
-          // Map AI "Gym" type to "WeightTraining" which is standard in Intervals/our DB
-          // "Rest" is preserved. Everything else is passed through.
-          // AI has been instructed NOT to use "Workout" or "Active Recovery".
-          // If it still does, we map Active Recovery to a light Ride or Run based on user profile would be better,
-          // but for now let's map to "Workout" as a fallback so it doesn't crash, but log it.
-          type: d.workoutType === 'Gym' ? 'WeightTraining' : d.workoutType,
-          durationSec: (d.durationMinutes || 0) * 60,
-          distanceMeters: d.distanceMeters,
-          tss: d.targetTSS,
-          targetArea: d.targetArea,
-          workIntensity: d.intensity === 'recovery' ? 0.5 : d.intensity === 'easy' ? 0.6 : d.intensity === 'moderate' ? 0.75 : d.intensity === 'hard' ? 0.9 : 1.0,
-          category: 'WORKOUT',
-          externalId: `ai_gen_${userId}_${d.date}_${Date.now()}_${Math.random().toString(36).substring(7)}`, // Generate unique external ID
-          syncStatus: 'LOCAL_ONLY', // Mark as local initially
-          trainingWeekId: undefined // We'll link this if we have a TrainingWeek record
-        }}).filter(Boolean); // Remove nulls
+            userId,
+            date: workoutDate, // Stored as UTC start of day for user
+            title: d.title,
+            description: d.description + (d.reasoning ? `\n\nReasoning: ${d.reasoning}` : ''),
+            // Map AI "Gym" type to "WeightTraining" which is standard in Intervals/our DB
+            // "Rest" is preserved. Everything else is passed through.
+            // AI has been instructed NOT to use "Workout" or "Active Recovery".
+            // If it still does, we map Active Recovery to a light Ride or Run based on user profile would be better,
+            // but for now let's map to "Workout" as a fallback so it doesn't crash, but log it.
+            type: d.workoutType === 'Gym' ? 'WeightTraining' : d.workoutType,
+            durationSec: (d.durationMinutes || 0) * 60,
+            distanceMeters: d.distanceMeters,
+            tss: d.targetTSS,
+            targetArea: d.targetArea,
+            workIntensity:
+              d.intensity === 'recovery'
+                ? 0.5
+                : d.intensity === 'easy'
+                  ? 0.6
+                  : d.intensity === 'moderate'
+                    ? 0.75
+                    : d.intensity === 'hard'
+                      ? 0.9
+                      : 1.0,
+            category: 'WORKOUT',
+            externalId: `ai_gen_${userId}_${d.date}_${Date.now()}_${Math.random().toString(36).substring(7)}`, // Generate unique external ID
+            syncStatus: 'LOCAL_ONLY', // Mark as local initially
+            trainingWeekId: undefined // We'll link this if we have a TrainingWeek record
+          }
+        })
+        .filter(Boolean) // Remove nulls
 
-      logger.log("Workouts prepared for creation", { count: workoutsToCreate.length, data: workoutsToCreate });
+      logger.log('Workouts prepared for creation', {
+        count: workoutsToCreate.length,
+        data: workoutsToCreate
+      })
 
       if (workoutsToCreate.length > 0) {
-        
-        let targetTrainingWeekId: string | undefined = trainingWeekId;
+        let targetTrainingWeekId: string | undefined = trainingWeekId
 
         // If explicitly passed, verify it exists and use it
         if (targetTrainingWeekId) {
-             const verifiedWeek = await prisma.trainingWeek.findUnique({
-                 where: { id: targetTrainingWeekId }
-             });
-             if (!verifiedWeek) {
-                 logger.warn("Explicitly passed trainingWeekId not found in DB", { trainingWeekId });
-                 targetTrainingWeekId = undefined; // Fallback to search logic
-             } else {
-                 logger.log("Using explicitly passed TrainingWeek ID", { trainingWeekId });
-                 console.log(`Using explicitly passed TrainingWeek ID: ${trainingWeekId}`);
-             }
+          const verifiedWeek = await prisma.trainingWeek.findUnique({
+            where: { id: targetTrainingWeekId }
+          })
+          if (!verifiedWeek) {
+            logger.warn('Explicitly passed trainingWeekId not found in DB', { trainingWeekId })
+            targetTrainingWeekId = undefined // Fallback to search logic
+          } else {
+            logger.log('Using explicitly passed TrainingWeek ID', { trainingWeekId })
+            console.log(`Using explicitly passed TrainingWeek ID: ${trainingWeekId}`)
+          }
         }
 
         // If not found or not passed, search for it
         if (!targetTrainingWeekId) {
-            // Find the TrainingWeek ID to link these workouts to, if possible
-            const trainingWeek = await prisma.trainingWeek.findFirst({
-                where: {
-                    block: {
-                        plan: {
-                            userId: userId,
-                            status: 'ACTIVE'
-                        }
-                    },
-                    startDate: {
-                        lte: alignedWeekStart
-                    },
-                    endDate: {
-                        gte: alignedWeekEndUTC
-                    }
+          // Find the TrainingWeek ID to link these workouts to, if possible
+          const trainingWeek = await prisma.trainingWeek.findFirst({
+            where: {
+              block: {
+                plan: {
+                  userId: userId,
+                  status: 'ACTIVE'
                 }
-            });
-            if (trainingWeek) targetTrainingWeekId = trainingWeek.id;
+              },
+              startDate: {
+                lte: alignedWeekStart
+              },
+              endDate: {
+                gte: alignedWeekEndUTC
+              }
+            }
+          })
+          if (trainingWeek) targetTrainingWeekId = trainingWeek.id
         }
 
         if (targetTrainingWeekId) {
-            logger.log("Linking generated workouts to TrainingWeek", { trainingWeekId: targetTrainingWeekId });
-            console.log(`Linking generated workouts to TrainingWeek ID: ${targetTrainingWeekId}`);
-            workoutsToCreate.forEach(w => {
-                if (w) (w as any).trainingWeekId = targetTrainingWeekId;
-            });
+          logger.log('Linking generated workouts to TrainingWeek', {
+            trainingWeekId: targetTrainingWeekId
+          })
+          console.log(`Linking generated workouts to TrainingWeek ID: ${targetTrainingWeekId}`)
+          workoutsToCreate.forEach((w) => {
+            if (w) (w as any).trainingWeekId = targetTrainingWeekId
+          })
         } else {
-             // FALLBACK: Try to find ANY training week for this user that overlaps with this week
-             // This handles cases where the plan might not be strictly 'ACTIVE' or dates are slightly off
-             const fallbackWeek = await prisma.trainingWeek.findFirst({
-                where: {
-                    block: {
-                        plan: {
-                           userId: userId
-                        }
-                    },
-                    startDate: {
-                        lte: alignedWeekEndUTC
-                    },
-                    endDate: {
-                        gte: alignedWeekStart
-                    }
+          // FALLBACK: Try to find ANY training week for this user that overlaps with this week
+          // This handles cases where the plan might not be strictly 'ACTIVE' or dates are slightly off
+          const fallbackWeek = await prisma.trainingWeek.findFirst({
+            where: {
+              block: {
+                plan: {
+                  userId: userId
                 }
-             });
+              },
+              startDate: {
+                lte: alignedWeekEndUTC
+              },
+              endDate: {
+                gte: alignedWeekStart
+              }
+            }
+          })
 
-             if (fallbackWeek) {
-                 logger.log("Found fallback TrainingWeek", { trainingWeekId: fallbackWeek.id });
-                 console.log(`Linking to fallback TrainingWeek ID: ${fallbackWeek.id}`);
-                 workoutsToCreate.forEach(w => {
-                    if (w) (w as any).trainingWeekId = fallbackWeek.id;
-                 });
-             } else {
-                 logger.warn("No matching TrainingWeek found for these workouts - they will be unlinked from the structured plan", {
-                    weekStart: alignedWeekStart.toISOString(),
-                    weekEnd: alignedWeekEndUTC.toISOString()
-                 });
-                 console.log("WARNING: No matching TrainingWeek found. Workouts will be unlinked.");
-             }
+          if (fallbackWeek) {
+            logger.log('Found fallback TrainingWeek', { trainingWeekId: fallbackWeek.id })
+            console.log(`Linking to fallback TrainingWeek ID: ${fallbackWeek.id}`)
+            workoutsToCreate.forEach((w) => {
+              if (w) (w as any).trainingWeekId = fallbackWeek.id
+            })
+          } else {
+            logger.warn(
+              'No matching TrainingWeek found for these workouts - they will be unlinked from the structured plan',
+              {
+                weekStart: alignedWeekStart.toISOString(),
+                weekEnd: alignedWeekEndUTC.toISOString()
+              }
+            )
+            console.log('WARNING: No matching TrainingWeek found. Workouts will be unlinked.')
+          }
         }
 
         // Use createMany but we need to match the type exactly.
         // Prisma createMany is strict.
         const result = await prisma.plannedWorkout.createMany({
           data: workoutsToCreate as any
-        });
-        logger.log("Created workouts in DB", { count: result.count });
+        })
+        logger.log('Created workouts in DB', { count: result.count })
       } else {
-        logger.warn("No workouts to create found in plan");
+        logger.warn('No workouts to create found in plan')
       }
     }
 
-    logger.log("Plan saved", { planId: savedPlan.id });
-    
+    logger.log('Plan saved', { planId: savedPlan.id })
+
     return {
       success: true,
       planId: savedPlan.id,
@@ -707,6 +819,6 @@ Create a structured, progressive plan for the next ${daysToPlann} days.`;
       daysPlanned: daysToPlann,
       totalTSS: savedPlan.totalTSS,
       workoutCount: savedPlan.workoutCount
-    };
+    }
   }
-});
+})

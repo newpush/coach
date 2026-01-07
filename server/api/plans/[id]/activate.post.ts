@@ -1,6 +1,6 @@
 import { prisma } from '../../../utils/db'
 import { getServerSession } from '../../../utils/session'
-import { tasks } from "@trigger.dev/sdk/v3"
+import { tasks } from '@trigger.dev/sdk/v3'
 
 export default defineEventHandler(async (event) => {
   const session = await getServerSession(event)
@@ -13,8 +13,8 @@ export default defineEventHandler(async (event) => {
 
   const plan = await (prisma as any).trainingPlan.findUnique({
     where: { id: planId },
-    include: { 
-      blocks: { 
+    include: {
+      blocks: {
         orderBy: { order: 'asc' },
         include: {
           weeks: {
@@ -24,7 +24,7 @@ export default defineEventHandler(async (event) => {
             }
           }
         }
-      } 
+      }
     }
   })
 
@@ -77,7 +77,7 @@ export default defineEventHandler(async (event) => {
             for (const b of plan.blocks) {
               if (b.order < block.order) weeksBefore += b.durationWeeks
             }
-            blockStartDate.setDate(blockStartDate.getDate() + (weeksBefore * 7))
+            blockStartDate.setDate(blockStartDate.getDate() + weeksBefore * 7)
 
             return {
               order: block.order,
@@ -90,7 +90,7 @@ export default defineEventHandler(async (event) => {
               weeks: {
                 create: block.weeks.map((week: any) => {
                   const weekStartDate = new Date(blockStartDate)
-                  weekStartDate.setDate(weekStartDate.getDate() + ((week.weekNumber - 1) * 7))
+                  weekStartDate.setDate(weekStartDate.getDate() + (week.weekNumber - 1) * 7)
                   const weekEndDate = new Date(weekStartDate)
                   weekEndDate.setDate(weekEndDate.getDate() + 6)
 
@@ -134,14 +134,14 @@ export default defineEventHandler(async (event) => {
         }
       },
       include: {
-        blocks: { 
-          include: { 
+        blocks: {
+          include: {
             weeks: {
               include: {
                 workouts: true
               }
             }
-          } 
+          }
         }
       }
     })
@@ -152,7 +152,7 @@ export default defineEventHandler(async (event) => {
   // 3. Activate existing DRAFT Plan
   await (prisma as any).trainingPlan.update({
     where: { id: planId },
-    data: { 
+    data: {
       status: 'ACTIVE',
       ...(requestedStartDate ? { startDate: requestedStartDate } : {})
     }

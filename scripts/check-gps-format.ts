@@ -9,7 +9,7 @@ async function main() {
   // Find a stream that has latlng data
   // Since we can't easily query JSON content existence in Prisma/Postgres without raw SQL sometimes,
   // we'll fetch a few that likely have it.
-  
+
   // Note: In Prisma, filtering by JSON content can be tricky.
   // We'll fetch streams where latlng is not null.
   const streams = await prisma.workoutStream.findMany({
@@ -43,7 +43,7 @@ async function main() {
     console.log(`
 Workout: ${stream.workout.title} (${stream.workout.source})`)
     const coords = stream.latlng as any[]
-    
+
     if (!Array.isArray(coords)) {
       console.log('latlng is NOT an array!')
       continue
@@ -65,7 +65,7 @@ Workout: ${stream.workout.title} (${stream.workout.source})`)
 }
 
 main()
-  .catch(e => {
+  .catch((e) => {
     console.error(e)
     process.exit(1)
   })

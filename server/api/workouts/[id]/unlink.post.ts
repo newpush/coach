@@ -5,7 +5,8 @@ defineRouteMeta({
   openAPI: {
     tags: ['Workouts'],
     summary: 'Unlink workout from planned workout',
-    description: 'Removes the link between a completed workout and a planned workout, marking the planned workout as pending.',
+    description:
+      'Removes the link between a completed workout and a planned workout, marking the planned workout as pending.',
     responses: {
       200: {
         description: 'Success',
@@ -28,11 +29,11 @@ defineRouteMeta({
 
 export default defineEventHandler(async (event) => {
   const session = await getServerSession(event)
-  
+
   if (!session?.user) {
-    throw createError({ 
+    throw createError({
       statusCode: 401,
-      message: 'Unauthorized' 
+      message: 'Unauthorized'
     })
   }
 
@@ -43,7 +44,7 @@ export default defineEventHandler(async (event) => {
 
   // Fetch the workout to get the plannedWorkoutId
   const workout = await prisma.workout.findUnique({
-    where: { 
+    where: {
       id: workoutId,
       userId: (session.user as any).id
     }

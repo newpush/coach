@@ -39,28 +39,28 @@ defineRouteMeta({
 
 export default defineEventHandler(async (event) => {
   const session = await getServerSession(event)
-  
+
   if (!session?.user) {
-    throw createError({ 
+    throw createError({
       statusCode: 401,
-      message: 'Unauthorized' 
+      message: 'Unauthorized'
     })
   }
-  
+
   const query = getQuery(event)
   const jobId = query.jobId as string
-  
+
   if (!jobId) {
     throw createError({
       statusCode: 400,
       message: 'Job ID is required'
     })
   }
-  
+
   try {
     // Get the run status and output
     const run = await runs.retrieve(jobId)
-    
+
     return {
       status: run.status,
       output: run.output,

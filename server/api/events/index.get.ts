@@ -39,23 +39,23 @@ defineRouteMeta({
 
 export default defineEventHandler(async (event) => {
   const session = await getServerSession(event)
-  
+
   if (!session?.user) {
-    throw createError({ 
+    throw createError({
       statusCode: 401,
-      message: 'Unauthorized' 
+      message: 'Unauthorized'
     })
   }
-  
+
   const userId = (session.user as any).id
-  
+
   try {
     const events = await prisma.event.findMany({
       where: { userId },
       orderBy: { date: 'asc' },
       include: { goals: true }
     })
-    
+
     return events
   } catch (error) {
     console.error('Error fetching events:', error)

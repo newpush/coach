@@ -15,7 +15,7 @@ export default defineEventHandler(async (event) => {
   if (!planId) {
     throw createError({ statusCode: 400, message: 'Plan ID required' })
   }
-  
+
   if (!name) {
     throw createError({ statusCode: 400, message: 'Template name required' })
   }
@@ -51,10 +51,10 @@ export default defineEventHandler(async (event) => {
       description,
       isTemplate: true,
       strategy: plan.strategy,
-      status: 'ACTIVE',
+      status: 'ACTIVE'
     }
   })
-  
+
   // Clone Blocks
   for (const block of plan.blocks) {
     const newBlock = await (prisma as any).trainingBlock.create({
@@ -64,13 +64,13 @@ export default defineEventHandler(async (event) => {
         name: block.name,
         type: block.type,
         primaryFocus: block.primaryFocus,
-        startDate: new Date(0), 
+        startDate: new Date(0),
         durationWeeks: block.durationWeeks,
         recoveryWeekIndex: block.recoveryWeekIndex,
         progressionLogic: block.progressionLogic
       }
     })
-    
+
     // Clone Weeks
     for (const week of block.weeks) {
       const newWeek = await (prisma as any).trainingWeek.create({
@@ -85,12 +85,12 @@ export default defineEventHandler(async (event) => {
           focus: week.focus
         }
       })
-      
+
       // Clone Workouts with relative day of week
       for (const workout of week.workouts) {
         const workoutDate = new Date(workout.date)
         const dayOfWeek = workoutDate.getDay() // 0 = Sunday, 1 = Monday...
-        
+
         await (prisma as any).plannedWorkout.create({
           data: {
             userId,

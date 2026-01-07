@@ -3,12 +3,7 @@
     <template #header>
       <UDashboardNavbar title="Connect Yazio">
         <template #leading>
-          <UButton
-            icon="i-heroicons-arrow-left"
-            variant="ghost"
-            color="neutral"
-            @click="goBack"
-          >
+          <UButton icon="i-heroicons-arrow-left" variant="ghost" color="neutral" @click="goBack">
             Back
           </UButton>
         </template>
@@ -20,8 +15,14 @@
         <UCard>
           <template #header>
             <div class="flex items-center gap-4">
-              <div class="w-12 h-12 bg-white rounded-lg flex items-center justify-center shrink-0 overflow-hidden ring-1 ring-gray-200 dark:ring-gray-700">
-                <img src="/images/logos/yazio_square.webp" alt="Yazio Logo" class="w-8 h-8 object-contain" >
+              <div
+                class="w-12 h-12 bg-white rounded-lg flex items-center justify-center shrink-0 overflow-hidden ring-1 ring-gray-200 dark:ring-gray-700"
+              >
+                <img
+                  src="/images/logos/yazio_square.webp"
+                  alt="Yazio Logo"
+                  class="w-8 h-8 object-contain"
+                />
               </div>
               <div>
                 <h2 class="text-xl font-semibold">Connect Yazio</h2>
@@ -86,13 +87,7 @@
 
           <template #footer>
             <div class="flex justify-end gap-3">
-              <UButton
-                color="neutral"
-                variant="outline"
-                @click="goBack"
-              >
-                Cancel
-              </UButton>
+              <UButton color="neutral" variant="outline" @click="goBack"> Cancel </UButton>
               <UButton
                 :loading="loading"
                 :disabled="!username || !password"
@@ -110,51 +105,54 @@
 </template>
 
 <script setup lang="ts">
-const router = useRouter()
+  const router = useRouter()
 
-useHead({
-  title: 'Connect Yazio',
-  meta: [
-    { name: 'description', content: 'Connect your Yazio account to track nutrition, calories, and macros.' }
-  ]
-})
-
-const username = ref('')
-const password = ref('')
-const loading = ref(false)
-const error = ref('')
-const success = ref(false)
-
-const goBack = () => {
-  router.push('/dashboard')
-}
-
-const handleConnect = async () => {
-  if (!username.value || !password.value) return
-
-  loading.value = true
-  error.value = ''
-  success.value = false
-
-  try {
-    const response = await $fetch('/api/integrations/yazio/connect', {
-      method: 'POST',
-      body: {
-        username: username.value,
-        password: password.value
+  useHead({
+    title: 'Connect Yazio',
+    meta: [
+      {
+        name: 'description',
+        content: 'Connect your Yazio account to track nutrition, calories, and macros.'
       }
-    })
+    ]
+  })
 
-    if (response.success) {
-      success.value = true
-      setTimeout(() => {
-        navigateTo('/dashboard')
-      }, 2000)
-    }
-  } catch (e: any) {
-    error.value = e.data?.message || 'Failed to connect to Yazio'
-  } finally {
-    loading.value = false
+  const username = ref('')
+  const password = ref('')
+  const loading = ref(false)
+  const error = ref('')
+  const success = ref(false)
+
+  const goBack = () => {
+    router.push('/dashboard')
   }
-}
+
+  const handleConnect = async () => {
+    if (!username.value || !password.value) return
+
+    loading.value = true
+    error.value = ''
+    success.value = false
+
+    try {
+      const response = await $fetch('/api/integrations/yazio/connect', {
+        method: 'POST',
+        body: {
+          username: username.value,
+          password: password.value
+        }
+      })
+
+      if (response.success) {
+        success.value = true
+        setTimeout(() => {
+          navigateTo('/dashboard')
+        }, 2000)
+      }
+    } catch (e: any) {
+      error.value = e.data?.message || 'Failed to connect to Yazio'
+    } finally {
+      loading.value = false
+    }
+  }
 </script>

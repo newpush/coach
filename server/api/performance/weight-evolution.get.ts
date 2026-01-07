@@ -98,7 +98,7 @@ export default defineEventHandler(async (event) => {
   })
 
   // Format data points
-  const data = weightHistory.map(entry => ({
+  const data = weightHistory.map((entry) => ({
     date: entry.date,
     weight: entry.weight
   }))
@@ -109,7 +109,11 @@ export default defineEventHandler(async (event) => {
     const lastEntry = data[data.length - 1]
     const today = new Date()
     // If no history, or last entry is old/different, append current state
-    if (!lastEntry || (lastEntry.weight !== user.weight && today.getTime() - new Date(lastEntry.date).getTime() > 86400000)) {
+    if (
+      !lastEntry ||
+      (lastEntry.weight !== user.weight &&
+        today.getTime() - new Date(lastEntry.date).getTime() > 86400000)
+    ) {
       data.push({
         date: today,
         weight: user.weight
@@ -120,14 +124,14 @@ export default defineEventHandler(async (event) => {
   // Calculate stats
   const lastEntry = data.length > 0 ? data[data.length - 1] : null
   const currentWeight = user.weight || (lastEntry ? lastEntry.weight : null)
-  
+
   const firstEntry = data.length > 0 ? data[0] : null
   const startingWeight = firstEntry ? firstEntry.weight : null
-  
-  const minWeight = data.length > 0 ? Math.min(...data.map(d => d.weight!)) : null
-  const maxWeight = data.length > 0 ? Math.max(...data.map(d => d.weight!)) : null
-  
-  const change = startingWeight && currentWeight ? (currentWeight - startingWeight) : 0
+
+  const minWeight = data.length > 0 ? Math.min(...data.map((d) => d.weight!)) : null
+  const maxWeight = data.length > 0 ? Math.max(...data.map((d) => d.weight!)) : null
+
+  const change = startingWeight && currentWeight ? currentWeight - startingWeight : 0
 
   return {
     data,

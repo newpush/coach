@@ -9,18 +9,18 @@ const prisma = new PrismaClient({ adapter })
 
 async function main() {
   console.log('Inspecting User table columns...')
-  
+
   const columns = await prisma.$queryRawUnsafe(`
     SELECT column_name, data_type, is_nullable, column_default
     FROM information_schema.columns 
     WHERE table_name = 'User'
   `)
-  
+
   console.log(JSON.stringify(columns, null, 2))
 }
 
 main()
-  .catch(e => {
+  .catch((e) => {
     console.error('Error:', e)
     process.exit(1)
   })

@@ -89,11 +89,11 @@ interface TrainingContext {
   activityBreakdown: ActivityBreakdown[]
   zoneDistribution?: ZoneDistribution
   intensityDistribution: {
-    recovery: number  // < 0.70 IF
+    recovery: number // < 0.70 IF
     endurance: number // 0.70-0.85 IF
-    tempo: number     // 0.85-0.95 IF
+    tempo: number // 0.85-0.95 IF
     threshold: number // 0.95-1.05 IF
-    vo2max: number    // > 1.05 IF
+    vo2max: number // > 1.05 IF
   }
 }
 
@@ -113,12 +113,12 @@ function getZoneIndex(value: number, zones: Zone[]): number {
       return i
     }
   }
-  
+
   // If value is above all zones, put it in the highest zone
   if (value > zones[zones.length - 1]!.max) {
     return zones.length - 1
   }
-  
+
   return -1
 }
 
@@ -131,16 +131,16 @@ export async function calculateZoneDistribution(
   options: { preferPower?: boolean } = {}
 ): Promise<ZoneDistribution | null> {
   if (workoutIds.length === 0) return null
-  
+
   // Fetch user's zone definitions
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: { hrZones: true, powerZones: true }
   })
-  
+
   const hrZones = (user?.hrZones as unknown as Zone[]) || DEFAULT_HR_ZONES
   const powerZones = (user?.powerZones as unknown as Zone[]) || DEFAULT_POWER_ZONES
-  
+
   // Fetch streams for all workouts
   const streams = await prisma.workoutStream.findMany({
     where: { workoutId: { in: workoutIds } },
@@ -151,15 +151,15 @@ export async function calculateZoneDistribution(
       powerZoneTimes: true
     }
   })
-  
+
   if (streams.length === 0) return null
-  
+
   // Aggregate zone times
   const hrZoneTimes = new Array(5).fill(0)
   const powerZoneTimes = new Array(5).fill(0)
   let hasHrData = false
   let hasPowerData = false
-  
+
   for (const stream of streams) {
     const s = stream as any
     // Check for cached zone times first
@@ -172,41 +172,45 @@ export async function calculateZoneDistribution(
     } else if (stream.heartrate && Array.isArray(stream.heartrate)) {
       // Process HR zones from raw stream
       hasHrData = true
-      for (const hr of (stream.heartrate as number[] || [])) {
+      for (const hr of (stream.heartrate as number[]) || []) {
         if (hr === null || hr === undefined) continue
         const zoneIndex = getZoneIndex(hr, hrZones)
         if (zoneIndex >= 0) hrZoneTimes[zoneIndex]++
       }
     }
-    
+
     // Process Power zones
-    if (s.powerZoneTimes && Array.isArray(s.powerZoneTimes) && (s.powerZoneTimes as number[]).length >= 5) {
-        hasPowerData = true
-        const cached = s.powerZoneTimes as number[]
-        for (let i = 0; i < 5; i++) {
-            powerZoneTimes[i] += cached[i]
-        }
+    if (
+      s.powerZoneTimes &&
+      Array.isArray(s.powerZoneTimes) &&
+      (s.powerZoneTimes as number[]).length >= 5
+    ) {
+      hasPowerData = true
+      const cached = s.powerZoneTimes as number[]
+      for (let i = 0; i < 5; i++) {
+        powerZoneTimes[i] += cached[i]
+      }
     } else if (stream.watts && Array.isArray(stream.watts)) {
       hasPowerData = true
-      for (const watts of (stream.watts as number[] || [])) {
+      for (const watts of (stream.watts as number[]) || []) {
         if (watts === null || watts === undefined) continue
         const zoneIndex = getZoneIndex(watts, powerZones)
         if (zoneIndex >= 0) powerZoneTimes[zoneIndex]++
       }
     }
   }
-  
+
   // Prefer power if available (or if explicitly requested), otherwise use HR
-  const usePower = options.preferPower ? hasPowerData : (hasPowerData || !hasHrData)
+  const usePower = options.preferPower ? hasPowerData : hasPowerData || !hasHrData
   const zoneTimes = usePower ? powerZoneTimes : hrZoneTimes
   const zones = usePower ? powerZones : hrZones
-  const type = usePower ? 'power' as const : 'hr' as const
-  
+  const type = usePower ? ('power' as const) : ('hr' as const)
+
   if (!usePower && !hasHrData) return null
-  
+
   const totalTime = zoneTimes.reduce((sum, time) => sum + time, 0)
   if (totalTime === 0) return null
-  
+
   return {
     type,
     zones: zones.map((zone, index) => ({
@@ -241,7 +245,7 @@ export async function calculateLoadTrends(
     },
     orderBy: { date: 'asc' }
   })
-  
+
   // Also fetch wellness data which may have CTL/ATL
   const wellness = await prisma.wellness.findMany({
     where: {
@@ -255,10 +259,10 @@ export async function calculateLoadTrends(
     },
     orderBy: { date: 'asc' }
   })
-  
+
   // Merge and deduplicate by date, preferring workout data
   const trendMap = new Map<string, LoadTrend>()
-  
+
   for (const w of wellness) {
     // Wellness dates are already day-aligned (stored as UTC midnight), but best to be consistent
     const dateKey = formatUserDate(w.date, timezone)
@@ -269,7 +273,7 @@ export async function calculateLoadTrends(
       tsb: calculateTSB(w.ctl, w.atl)
     })
   }
-  
+
   for (const w of workouts) {
     const dateKey = formatUserDate(w.date, timezone)
     trendMap.set(dateKey, {
@@ -279,7 +283,7 @@ export async function calculateLoadTrends(
       tsb: calculateTSB(w.ctl, w.atl)
     })
   }
-  
+
   return Array.from(trendMap.values()).sort((a, b) => a.date.getTime() - b.date.getTime())
 }
 
@@ -306,13 +310,13 @@ export async function calculateActivityBreakdown(
       trimp: true
     }
   })
-  
+
   const breakdown = new Map<string, ActivityBreakdown>()
-  
+
   for (const workout of workouts) {
     const type = workout.type || 'Unknown'
     const tss = calculateTSS(workout)
-    
+
     if (!breakdown.has(type)) {
       breakdown.set(type, {
         type,
@@ -323,19 +327,19 @@ export async function calculateActivityBreakdown(
         avgTSS: 0
       })
     }
-    
+
     const current = breakdown.get(type)!
     current.count++
     current.totalDuration += workout.durationSec
     current.totalDistance += workout.distanceMeters || 0
     current.totalTSS += tss
   }
-  
+
   // Calculate averages
   for (const b of breakdown.values()) {
     b.avgTSS = b.count > 0 ? b.totalTSS / b.count : 0
   }
-  
+
   return Array.from(breakdown.values()).sort((a, b) => b.totalTSS - a.totalTSS)
 }
 
@@ -362,10 +366,10 @@ export async function calculateIntensityDistribution(
       date: true
     }
   })
-  
+
   console.log('[TrainingMetrics] Intensity Distribution Debug:')
   console.log(`  Found ${workouts.length} workouts with intensity data`)
-  
+
   const distribution = {
     recovery: 0,
     endurance: 0,
@@ -373,13 +377,13 @@ export async function calculateIntensityDistribution(
     threshold: 0,
     vo2max: 0
   }
-  
+
   let totalTime = 0
-  
+
   for (const workout of workouts) {
     let intensity = workout.intensity!
     const duration = workout.durationSec
-    
+
     // Normalize intensity: Intensity Factor should be a decimal ratio (typically 0.5-1.5, rarely >2.0)
     // - If > 2.0: Invalid data (likely from old Strava calculation), skip this workout
     // - If 2.0-10: Stored as percentage, divide by 100
@@ -387,24 +391,32 @@ export async function calculateIntensityDistribution(
     if (intensity > 2.0) {
       if (intensity <= 10) {
         // Stored as percentage (e.g., 8.8 for 88%)
-        console.log(`  Workout ${workout.id} (${workout.type}): Raw IF=${intensity.toFixed(3)} (normalizing to ${(intensity / 100).toFixed(3)}), Duration=${duration}s`)
+        console.log(
+          `  Workout ${workout.id} (${workout.type}): Raw IF=${intensity.toFixed(3)} (normalizing to ${(intensity / 100).toFixed(3)}), Duration=${duration}s`
+        )
         intensity = intensity / 100
       } else if (intensity <= 200) {
         // Stored as percentage * 100 (e.g., 88.210 for 88.21%)
-        console.log(`  Workout ${workout.id} (${workout.type}): Raw IF=${intensity.toFixed(3)} (normalizing to ${(intensity / 100).toFixed(3)}), Duration=${duration}s`)
+        console.log(
+          `  Workout ${workout.id} (${workout.type}): Raw IF=${intensity.toFixed(3)} (normalizing to ${(intensity / 100).toFixed(3)}), Duration=${duration}s`
+        )
         intensity = intensity / 100
       } else {
         // Invalid data (e.g., raw watts from bad Strava calculation)
-        console.log(`  Workout ${workout.id} (${workout.type}): Invalid IF=${intensity.toFixed(3)}, skipping`)
+        console.log(
+          `  Workout ${workout.id} (${workout.type}): Invalid IF=${intensity.toFixed(3)}, skipping`
+        )
         continue
       }
     } else {
-      console.log(`  Workout ${workout.id} (${workout.type}): IF=${intensity.toFixed(3)}, Duration=${duration}s`)
+      console.log(
+        `  Workout ${workout.id} (${workout.type}): IF=${intensity.toFixed(3)}, Duration=${duration}s`
+      )
     }
-    
+
     totalTime += duration
-    
-    if (intensity < 0.70) {
+
+    if (intensity < 0.7) {
       distribution.recovery += duration
       console.log(`    -> Recovery (<0.70)`)
     } else if (intensity < 0.85) {
@@ -421,10 +433,10 @@ export async function calculateIntensityDistribution(
       console.log(`    -> VO2 Max (>1.05)`)
     }
   }
-  
+
   console.log(`  Total time: ${totalTime}s`)
   console.log(`  Distribution (seconds):`, distribution)
-  
+
   // Convert to percentages
   if (totalTime > 0) {
     distribution.recovery = (distribution.recovery / totalTime) * 100
@@ -433,9 +445,9 @@ export async function calculateIntensityDistribution(
     distribution.threshold = (distribution.threshold / totalTime) * 100
     distribution.vo2max = (distribution.vo2max / totalTime) * 100
   }
-  
+
   console.log(`  Distribution (percentages):`, distribution)
-  
+
   return distribution
 }
 
@@ -453,7 +465,7 @@ export async function generateTrainingContext(
   } = {}
 ): Promise<TrainingContext> {
   const { includeZones = false, period = 'Recent Period', timezone = 'UTC' } = options
-  
+
   // Fetch workouts
   const workouts = await prisma.workout.findMany({
     where: {
@@ -476,7 +488,7 @@ export async function generateTrainingContext(
     },
     orderBy: { date: 'desc' }
   })
-  
+
   // Calculate summary stats
   const summary = {
     totalWorkouts: workouts.length,
@@ -486,7 +498,7 @@ export async function generateTrainingContext(
     avgTSS: 0
   }
   summary.avgTSS = summary.totalWorkouts > 0 ? summary.totalTSS / summary.totalWorkouts : 0
-  
+
   // Fetch latest wellness for current load metrics (often more up to date than workouts)
   const latestWellness = await prisma.wellness.findFirst({
     where: { userId },
@@ -500,10 +512,10 @@ export async function generateTrainingContext(
 
   // Get latest load values (comparing workout and wellness)
   const latestWorkout = workouts[0] // Already sorted by date desc
-  
+
   let currentCTL: number | null = null
   let currentATL: number | null = null
-  
+
   // Logic to pick the most recent data source
   if (latestWellness && latestWorkout) {
     if (latestWellness.date >= latestWorkout.date) {
@@ -520,13 +532,13 @@ export async function generateTrainingContext(
     currentCTL = latestWorkout.ctl
     currentATL = latestWorkout.atl
   }
-  
+
   const currentTSB = calculateTSB(currentCTL, currentATL)
-  
+
   // Calculate weekly TSS average
   const daysDiff = Math.max(1, (endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24))
   const weeklyTSSAvg = (summary.totalTSS / daysDiff) * 7
-  
+
   // Determine trend
   let trend: 'increasing' | 'stable' | 'decreasing' | 'unknown' = 'unknown'
   if (workouts.length >= 2) {
@@ -538,31 +550,31 @@ export async function generateTrainingContext(
       else trend = 'stable'
     }
   }
-  
+
   // Get activity breakdown
   const activityBreakdown = await calculateActivityBreakdown(userId, startDate, endDate)
-  
+
   // Get intensity distribution
   const intensityDistribution = await calculateIntensityDistribution(userId, startDate, endDate)
-  
+
   // Optionally get zone distribution (expensive operation)
   let zoneDistribution: ZoneDistribution | undefined
   if (includeZones) {
-    const workoutIds = workouts.map(w => w.id)
-    zoneDistribution = await calculateZoneDistribution(workoutIds, userId) || undefined
+    const workoutIds = workouts.map((w) => w.id)
+    zoneDistribution = (await calculateZoneDistribution(workoutIds, userId)) || undefined
   }
-  
+
   // Calculate full trend history for context if needed (though not currently returned in TrainingContext interface??)
   // Wait, TrainingContext interface doesn't have trend history array, just summary stats.
   // But calculateLoadTrends IS exported and used elsewhere?
   // Checking usage... it seems calculateLoadTrends is NOT used inside generateTrainingContext in the original code?
   // Let me check the original code I read.
-  
+
   // Ah, I see. generateTrainingContext constructs `loadTrend` object manually from single point values.
   // It does NOT call calculateLoadTrends.
   // However, I see I modified calculateLoadTrends earlier.
   // Let's check if anyone calls calculateLoadTrends.
-  
+
   return {
     period,
     summary,
@@ -584,10 +596,10 @@ export async function generateTrainingContext(
  */
 export function formatTrainingContextForPrompt(context: TrainingContext): string {
   const lines: string[] = []
-  
+
   lines.push(`## Training Context: ${context.period}`)
   lines.push('')
-  
+
   // Summary
   lines.push('### Overview')
   lines.push(`- Total Workouts: ${context.summary.totalWorkouts}`)
@@ -598,7 +610,7 @@ export function formatTrainingContextForPrompt(context: TrainingContext): string
   lines.push(`- Total TSS: ${Math.round(context.summary.totalTSS)}`)
   lines.push(`- Average TSS per workout: ${Math.round(context.summary.avgTSS)}`)
   lines.push('')
-  
+
   // Load Management
   lines.push('### Training Load & Form')
   if (context.loadTrend.currentCTL !== null) {
@@ -609,28 +621,40 @@ export function formatTrainingContextForPrompt(context: TrainingContext): string
   }
   if (context.loadTrend.currentTSB !== null) {
     const tsb = context.loadTrend.currentTSB
-    const formStatus = tsb > 25 ? 'Detraining' :
-                      tsb > 5 ? 'Peak Form' :
-                      tsb > -10 ? 'Maintenance' :
-                      tsb > -25 ? 'Building Fitness' :
-                      tsb > -40 ? 'High Fatigue' : 'Overreaching'
-    lines.push(`- Training Stress Balance (TSB/Form): ${tsb > 0 ? '+' : ''}${tsb.toFixed(0)} (${formStatus})`)
+    const formStatus =
+      tsb > 25
+        ? 'Detraining'
+        : tsb > 5
+          ? 'Peak Form'
+          : tsb > -10
+            ? 'Maintenance'
+            : tsb > -25
+              ? 'Building Fitness'
+              : tsb > -40
+                ? 'High Fatigue'
+                : 'Overreaching'
+    lines.push(
+      `- Training Stress Balance (TSB/Form): ${tsb > 0 ? '+' : ''}${tsb.toFixed(0)} (${formStatus})`
+    )
   }
   lines.push(`- Weekly TSS Average: ${Math.round(context.loadTrend.weeklyTSSAvg)}`)
   lines.push(`- Fitness Trend: ${context.loadTrend.trend}`)
   lines.push('')
-  
+
   // Activity Breakdown
   if (context.activityBreakdown.length > 0) {
     lines.push('### Activity Type Breakdown')
     for (const activity of context.activityBreakdown) {
       const hours = (activity.totalDuration / 3600).toFixed(1)
-      const distance = activity.totalDistance > 0 ? `, ${(activity.totalDistance / 1000).toFixed(0)}km` : ''
-      lines.push(`- **${activity.type}**: ${activity.count} workouts, ${hours}h${distance}, ${Math.round(activity.totalTSS)} TSS`)
+      const distance =
+        activity.totalDistance > 0 ? `, ${(activity.totalDistance / 1000).toFixed(0)}km` : ''
+      lines.push(
+        `- **${activity.type}**: ${activity.count} workouts, ${hours}h${distance}, ${Math.round(activity.totalTSS)} TSS`
+      )
     }
     lines.push('')
   }
-  
+
   // Intensity Distribution
   lines.push('### Intensity Distribution (by time)')
   if (context.intensityDistribution) {
@@ -641,7 +665,7 @@ export function formatTrainingContextForPrompt(context: TrainingContext): string
     lines.push(`- VO2 Max (>105% IF): ${context.intensityDistribution.vo2max.toFixed(1)}%`)
   }
   lines.push('')
-  
+
   // Zone Distribution (if available)
   if (context.zoneDistribution) {
     const type = context.zoneDistribution.type === 'hr' ? 'Heart Rate' : 'Power'
@@ -656,6 +680,6 @@ export function formatTrainingContextForPrompt(context: TrainingContext): string
     }
     lines.push('')
   }
-  
+
   return lines.join('\n')
 }

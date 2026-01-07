@@ -17,7 +17,7 @@ export const workoutRepository = {
       orderBy?: Prisma.WorkoutOrderByWithRelationInput
       include?: Prisma.WorkoutInclude
       select?: Prisma.WorkoutSelect
-      } = {}
+    } = {}
   ) {
     const where: Prisma.WorkoutWhereInput = {
       userId,
@@ -226,10 +226,7 @@ export const workoutRepository = {
   /**
    * Update many workouts based on criteria
    */
-  async updateMany(
-    where: Prisma.WorkoutWhereInput,
-    data: Prisma.WorkoutUpdateManyMutationInput
-  ) {
+  async updateMany(where: Prisma.WorkoutWhereInput, data: Prisma.WorkoutUpdateManyMutationInput) {
     return prisma.workout.updateMany({
       where,
       data

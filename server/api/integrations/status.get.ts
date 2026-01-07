@@ -39,7 +39,7 @@ defineRouteMeta({
 
 export default defineEventHandler(async (event) => {
   const session = await getServerSession(event)
-  
+
   if (!session?.user?.email) {
     throw createError({
       statusCode: 401,
@@ -80,11 +80,11 @@ export default defineEventHandler(async (event) => {
   }
 
   // Self-healing: If user has an intervals account but no intervals integration, create it
-  const hasIntervalsAccount = user.accounts.some(a => a.provider === 'intervals')
-  const hasIntervalsIntegration = user.integrations.some(i => i.provider === 'intervals')
+  const hasIntervalsAccount = user.accounts.some((a) => a.provider === 'intervals')
+  const hasIntervalsIntegration = user.integrations.some((i) => i.provider === 'intervals')
 
   if (hasIntervalsAccount && !hasIntervalsIntegration) {
-    const account = user.accounts.find(a => a.provider === 'intervals')
+    const account = user.accounts.find((a) => a.provider === 'intervals')
     if (account?.access_token) {
       try {
         const newIntegration = await prisma.integration.create({

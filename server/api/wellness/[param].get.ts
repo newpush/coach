@@ -27,14 +27,14 @@ defineRouteMeta({
 
 export default defineEventHandler(async (event) => {
   const session = await getServerSession(event)
-  
+
   if (!session?.user) {
-    throw createError({ 
+    throw createError({
       statusCode: 401,
-      message: 'Unauthorized' 
+      message: 'Unauthorized'
     })
   }
-  
+
   const param = getRouterParam(event, 'param')
   if (!param) {
     throw createError({
@@ -68,7 +68,7 @@ export default defineEventHandler(async (event) => {
         message: 'Access denied'
       })
     }
-    
+
     wellnessData = wellness
     targetDate = wellness.date
   } else {
@@ -81,9 +81,9 @@ export default defineEventHandler(async (event) => {
       })
     }
     targetDate = date
-    
+
     const wellness = await wellnessRepository.findFirst(userId, { date })
-    
+
     if (wellness) {
       wellnessData = wellness
     } else {
@@ -94,7 +94,7 @@ export default defineEventHandler(async (event) => {
           date
         }
       })
-      
+
       if (dailyMetric) {
         wellnessData = {
           ...dailyMetric,
@@ -158,7 +158,7 @@ export default defineEventHandler(async (event) => {
   const historyMap = new Map<string, any>()
 
   // 1. Populate with Daily Metrics
-  historyMetrics.forEach(m => {
+  historyMetrics.forEach((m) => {
     const d = m.date.toISOString().split('T')[0]!
     historyMap.set(d, {
       hrv: m.hrv,
@@ -171,7 +171,7 @@ export default defineEventHandler(async (event) => {
   })
 
   // 2. Override with Wellness
-  historyWellness.forEach(w => {
+  historyWellness.forEach((w) => {
     const d = w.date.toISOString().split('T')[0]!
     const existing = historyMap.get(d) || {}
     historyMap.set(d, {
@@ -188,26 +188,30 @@ export default defineEventHandler(async (event) => {
   // Calculate Averages
   const metrics = ['hrv', 'restingHr', 'sleepHours', 'sleepScore', 'recoveryScore', 'readiness']
   const trends: any = {}
-  
+
   // Sort dates descending (today first)
   const sortedDates = Array.from(historyMap.keys()).sort().reverse()
-  
+
   // Calculate Trends and History
   const targetDateStr = targetDate.toISOString().split('T')[0]!
   const values30Entries = Array.from(historyMap.entries())
-    .filter(([d]) => d <= targetDateStr && d > new Date(targetDate.getTime() - 30 * 86400000).toISOString().split('T')[0]!)
+    .filter(
+      ([d]) =>
+        d <= targetDateStr &&
+        d > new Date(targetDate.getTime() - 30 * 86400000).toISOString().split('T')[0]!
+    )
     .sort(([a], [b]) => a.localeCompare(b))
 
-  metrics.forEach(key => {
+  metrics.forEach((key) => {
     const values7 = values30Entries
-      .filter(([d]) => d > new Date(targetDate.getTime() - 7 * 86400000).toISOString().split('T')[0]!)
+      .filter(
+        ([d]) => d > new Date(targetDate.getTime() - 7 * 86400000).toISOString().split('T')[0]!
+      )
       .map(([, v]) => v[key])
-      .filter(v => v != null)
+      .filter((v) => v != null)
 
-    const values30 = values30Entries
-      .map(([, v]) => v[key])
-      .filter(v => v != null)
-    
+    const values30 = values30Entries.map(([, v]) => v[key]).filter((v) => v != null)
+
     // Find previous day data (not just the last entry, but specifically the day before target)
     const previousDateStr = new Date(targetDate.getTime() - 86400000).toISOString().split('T')[0]!
     const previousEntry = historyMap.get(previousDateStr)

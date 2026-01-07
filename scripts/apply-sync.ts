@@ -13,9 +13,9 @@ if (!prodConnectionString) {
 async function runMigration() {
   console.log('🚀 Starting production schema sync...')
   console.log('Connecting to production database...')
-  
-  const pool = new pg.Pool({ 
-    connectionString: prodConnectionString,
+
+  const pool = new pg.Pool({
+    connectionString: prodConnectionString
   })
 
   try {
@@ -28,10 +28,9 @@ async function runMigration() {
     console.log('-----------------------------------\n')
 
     await pool.query(sql)
-    
+
     console.log('✅ Migration executed successfully!')
     console.log('Production database is now in sync with local schema.')
-
   } catch (error) {
     console.error('❌ Migration failed!')
     console.error(error)

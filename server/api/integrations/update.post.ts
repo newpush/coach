@@ -49,7 +49,7 @@ defineRouteMeta({
 
 export default defineEventHandler(async (event) => {
   const session = await getServerSession(event)
-  
+
   if (!session?.user?.id) {
     throw createError({
       statusCode: 401,

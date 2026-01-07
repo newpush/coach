@@ -53,7 +53,7 @@ export default defineEventHandler(async (event) => {
   // We can do this efficiently with a deleteMany query on PlannedWorkout
   // but we need to ensure they belong to this plan.
   // PlannedWorkout is linked to TrainingWeek, which is linked to TrainingBlock, which is linked to TrainingPlan.
-  
+
   // Efficient query:
   const deleted = await prisma.plannedWorkout.deleteMany({
     where: {

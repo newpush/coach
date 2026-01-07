@@ -4,7 +4,7 @@ import { prisma } from '../../utils/db'
 
 export default defineEventHandler(async (event) => {
   const session = await getServerSession(event)
-  
+
   // Strict admin check
   if (!session?.user?.isAdmin) {
     throw createError({
@@ -56,20 +56,20 @@ export default defineEventHandler(async (event) => {
       }
     }
   })
-  
+
   // Create a map for faster lookup
   const llmStatsMap = new Map(
-    llmUsageStats.map(stat => [
-      stat.userId, 
-      { 
-        count: stat._count._all, 
-        cost: stat._sum.estimatedCost || 0 
+    llmUsageStats.map((stat) => [
+      stat.userId,
+      {
+        count: stat._count._all,
+        cost: stat._sum.estimatedCost || 0
       }
     ])
   )
 
   // Merge stats into user objects
-  return users.map(user => ({
+  return users.map((user) => ({
     ...user,
     llmUsage: llmStatsMap.get(user.id) || { count: 0, cost: 0 }
   }))

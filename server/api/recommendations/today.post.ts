@@ -32,19 +32,19 @@ defineRouteMeta({
 
 export default defineEventHandler(async (event) => {
   const session = await getServerSession(event)
-  
+
   if (!session?.user) {
     throw createError({
       statusCode: 401,
       message: 'Unauthorized'
     })
   }
-  
+
   const userId = (session.user as any).id
-  
+
   const timezone = await getUserTimezone(userId)
   const today = getUserLocalDate(timezone)
-  
+
   const body = await readBody(event)
   const userFeedback = body?.userFeedback
 
@@ -56,12 +56,12 @@ export default defineEventHandler(async (event) => {
       recommendation: 'proceed', // Placeholder
       confidence: 0,
       reasoning: 'Analysis in progress...',
-      status: 'PROCESSING',
+      status: 'PROCESSING'
       // We could store the feedback in a new field if we want to persist it,
       // but passing it to the job is sufficient for now.
     }
   })
-  
+
   // Trigger background job with the recommendation ID
   const handle = await tasks.trigger('recommend-today-activity', {
     userId,
@@ -69,11 +69,11 @@ export default defineEventHandler(async (event) => {
     recommendationId: recommendation.id,
     userFeedback
   })
-  
+
   return {
     success: true,
     jobId: handle.id,
     recommendationId: recommendation.id,
-    message: 'Generating today\'s recommendation'
+    message: "Generating today's recommendation"
   }
 })

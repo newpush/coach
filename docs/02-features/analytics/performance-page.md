@@ -22,6 +22,7 @@ Displays current athlete profile scores at the top of the page:
 - **Training Consistency Score** - Training adherence over time
 
 Each score includes:
+
 - Icon representation
 - Numeric score (0-10 scale)
 - Visual progress bar
@@ -32,6 +33,7 @@ Each score includes:
 Comprehensive workout score tracking with:
 
 **Score Cards** (5 metrics):
+
 - Overall Score
 - Technical Score (form, efficiency)
 - Effort Score (appropriateness)
@@ -39,12 +41,14 @@ Comprehensive workout score tracking with:
 - Execution Score (plan adherence)
 
 **Trend Chart**:
+
 - Line chart showing all 5 workout scores over time
 - Interactive tooltips on hover
 - Color-coded lines for each metric
 - Responsive date labels
 
 **Radar Chart**:
+
 - Pentagon visualization of score balance
 - Shows current average across all 5 dimensions
 - Helps identify strengths and weaknesses visually
@@ -54,6 +58,7 @@ Comprehensive workout score tracking with:
 Comprehensive nutrition score tracking with:
 
 **Score Cards** (5 metrics):
+
 - Overall Score
 - Macro Balance Score
 - Quality Score (food quality)
@@ -61,17 +66,20 @@ Comprehensive nutrition score tracking with:
 - Hydration Score
 
 **Trend Chart**:
+
 - Line chart showing all 5 nutrition scores over time
 - Interactive tooltips
 - Color-coded lines
 
 **Radar Chart**:
+
 - Pentagon visualization of nutrition balance
 - Current average across all 5 dimensions
 
 ### 4. Time Period Selector
 
 Dropdown menu to adjust the viewing period:
+
 - 7 Days
 - 14 Days
 - 30 Days (default)
@@ -86,6 +94,7 @@ Dynamically updates all charts and statistics.
 **File**: [`app/components/ScoreCard.vue`](../app/components/ScoreCard.vue)
 
 **Props**:
+
 - `title` (string) - Card title
 - `score` (number | null) - Score value (1-10)
 - `icon` (string) - Heroicon name
@@ -93,6 +102,7 @@ Dynamically updates all charts and statistics.
 - `compact` (boolean) - Compact display mode
 
 **Features**:
+
 - Color-coded score display
 - Visual progress bar
 - Score label (Exceptional/Strong/Adequate/Needs Work/Poor)
@@ -104,10 +114,12 @@ Dynamically updates all charts and statistics.
 **File**: [`app/components/TrendChart.vue`](../app/components/TrendChart.vue)
 
 **Props**:
+
 - `data` (array) - Score data points
 - `type` ('workout' | 'nutrition') - Chart type
 
 **Features**:
+
 - SVG-based line chart
 - Multiple metrics displayed simultaneously
 - Interactive tooltips showing exact values
@@ -117,6 +129,7 @@ Dynamically updates all charts and statistics.
 - Dark mode support
 
 **Metrics Displayed**:
+
 - Workout: overall, technical, effort, pacing, execution
 - Nutrition: overall, macroBalance, quality, adherence, hydration
 
@@ -125,10 +138,12 @@ Dynamically updates all charts and statistics.
 **File**: [`app/components/RadarChart.vue`](../app/components/RadarChart.vue)
 
 **Props**:
+
 - `scores` (object) - Score values for each dimension
 - `type` ('workout' | 'nutrition') - Chart type
 
 **Features**:
+
 - Pentagon-shaped radar visualization
 - Shows balance across all dimensions
 - Interactive tooltips on data points
@@ -142,9 +157,11 @@ Dynamically updates all charts and statistics.
 ### GET /api/scores/workout-trends
 
 **Query Parameters**:
+
 - `days` (number) - Number of days to retrieve (default: 30)
 
 **Response**:
+
 ```json
 {
   "workouts": [
@@ -174,9 +191,11 @@ Dynamically updates all charts and statistics.
 ### GET /api/scores/nutrition-trends
 
 **Query Parameters**:
+
 - `days` (number) - Number of days to retrieve (default: 14)
 
 **Response**:
+
 ```json
 {
   "nutrition": [
@@ -208,6 +227,7 @@ Dynamically updates all charts and statistics.
 ### GET /api/scores/athlete-profile
 
 **Response**:
+
 ```json
 {
   "user": {
@@ -270,6 +290,7 @@ Navigate to `/performance` in your application to view the dashboard.
 ## Styling
 
 The page uses:
+
 - **Tailwind CSS** for styling
 - **Nuxt UI** components (UCard, UBadge, USelectMenu, UIcon)
 - **Custom SVG** charts for visualizations
@@ -279,6 +300,7 @@ The page uses:
 ## Color Coding
 
 ### Score Ranges
+
 - **9-10**: Green (Exceptional)
 - **7-8**: Blue (Strong)
 - **5-6**: Yellow (Adequate)
@@ -286,7 +308,9 @@ The page uses:
 - **1-2**: Red (Poor)
 
 ### Chart Colors
+
 **Workout Metrics**:
+
 - Overall: Yellow (#eab308)
 - Technical: Blue (#3b82f6)
 - Effort: Red (#ef4444)
@@ -294,6 +318,7 @@ The page uses:
 - Execution: Purple (#a855f7)
 
 **Nutrition Metrics**:
+
 - Overall: Yellow (#eab308)
 - Macro Balance: Blue (#3b82f6)
 - Quality: Green (#22c55e)
@@ -303,6 +328,7 @@ The page uses:
 ## Future Enhancements
 
 Potential improvements:
+
 1. Export charts as PNG/PDF
 2. Score goal setting and tracking
 3. Comparative analysis (week-over-week, month-over-month)
@@ -321,6 +347,7 @@ Potential improvements:
 **Issue**: Charts show "No data available"
 
 **Solutions**:
+
 1. Ensure migration has been run: `npx prisma migrate dev`
 2. Regenerate Prisma client: `npx prisma generate`
 3. Trigger analysis on existing data to generate scores
@@ -331,6 +358,7 @@ Potential improvements:
 **Issue**: Type errors about missing score fields
 
 **Solution**: Regenerate Prisma client after running migration:
+
 ```bash
 npx prisma generate
 ```
@@ -340,6 +368,7 @@ npx prisma generate
 **Issue**: 500 errors when loading page
 
 **Solutions**:
+
 1. Check database connection
 2. Verify migration was applied successfully
 3. Check server logs for specific errors

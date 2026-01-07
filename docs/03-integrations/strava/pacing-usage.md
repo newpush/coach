@@ -7,11 +7,13 @@ The Strava pacing data feature provides detailed pace analysis for running and c
 ## Features Implemented
 
 ### 1. Data Ingestion
+
 - **Streams API Integration**: Fetches time-series data from Strava including velocity, heart rate, power, and GPS coordinates
 - **Background Processing**: Uses Trigger.dev job to fetch and process streams asynchronously
 - **Intelligent Caching**: Stores processed data to avoid repeated API calls
 
 ### 2. Pacing Metrics
+
 - **Lap Splits**: Automatic 1km/1mi lap split calculation
 - **Average Pace**: Overall pace per kilometer/mile
 - **Pace Variability**: Consistency score based on velocity standard deviation
@@ -20,6 +22,7 @@ The Strava pacing data feature provides detailed pace analysis for running and c
 - **Surge Detection**: Identifies sudden pace increases during activity
 
 ### 3. Visual Analysis
+
 - **Metrics Dashboard**: Key pacing metrics at a glance
 - **Lap Splits Table**: Color-coded splits showing fast/slow laps
 - **Split Comparison**: First half vs. second half analysis
@@ -52,7 +55,7 @@ The Strava pacing data feature provides detailed pace analysis for running and c
 Use the Trigger.dev job to ingest streams for a specific workout:
 
 ```typescript
-import { tasks } from "@trigger.dev/sdk/v3"
+import { tasks } from '@trigger.dev/sdk/v3'
 
 // Trigger stream ingestion
 await tasks.trigger('ingest-strava-streams', {
@@ -87,13 +90,13 @@ Add pacing analysis to any workout page:
   <div>
     <h2>Workout Details</h2>
     <!-- Other workout info -->
-    
+
     <PacingAnalysis :workout-id="workoutId" />
   </div>
 </template>
 
 <script setup>
-const workoutId = '...'
+  const workoutId = '...'
 </script>
 ```
 
@@ -106,6 +109,7 @@ npx tsx scripts/test-strava-pacing.ts
 ```
 
 This will:
+
 1. Find a Strava integration
 2. Locate a recent workout
 3. Fetch streams from Strava
@@ -155,6 +159,7 @@ Step 6: Verifying data retrieval...
 ## Rate Limits
 
 **Important**: Strava has strict API rate limits:
+
 - 100 requests per 15 minutes
 - 1,000 requests per day
 
@@ -174,7 +179,7 @@ Step 6: Verifying data retrieval...
 model WorkoutStream {
   id              String   @id @default(uuid())
   workoutId       String   @unique
-  
+
   // Raw stream arrays
   time            Json?    // [0, 10, 20, ...]
   distance        Json?    // [0, 50, 100, ...]
@@ -183,7 +188,7 @@ model WorkoutStream {
   cadence         Json?    // [85, 88, 90, ...]
   watts           Json?    // [200, 210, 205, ...]
   altitude        Json?    // [100, 105, 110, ...]
-  
+
   // Computed metrics
   avgPacePerKm    Float?   // 4.5 (min/km)
   paceVariability Float?   // 0.23 (m/s)
@@ -247,18 +252,21 @@ prisma/
 ## Future Enhancements
 
 ### Short Term
+
 1. Add manual "Fetch Pacing Data" button to workout page
 2. Show pacing data availability indicator
 3. Add loading states during ingestion
 4. Implement retry logic for failed fetches
 
 ### Medium Term
+
 1. **Pace Zones**: Calculate time in different pace zones
 2. **Route Visualization**: Map with pace overlay
 3. **Comparative Analysis**: Compare pacing across similar workouts
 4. **AI Insights**: "Your pacing was 5% more consistent than your last 10K"
 
 ### Long Term
+
 1. **Predictive Pacing**: Suggest optimal pacing for upcoming races
 2. **Terrain-Adjusted Pace**: Normalize pace for hills/elevation
 3. **Real-time Feedback**: "You're starting too fast" alerts

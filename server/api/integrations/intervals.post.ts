@@ -50,7 +50,7 @@ defineRouteMeta({
 
 export default defineEventHandler(async (event) => {
   const session = await getServerSession(event)
-  
+
   if (!session?.user?.email) {
     throw createError({
       statusCode: 401,
@@ -110,7 +110,7 @@ export default defineEventHandler(async (event) => {
           accessToken: apiKey,
           externalUserId: finalAthleteId,
           lastSyncAt: new Date(),
-          syncStatus: 'SUCCESS',
+          syncStatus: 'SUCCESS'
           // Don't reset initialSyncCompleted if it's already true
         }
       })
@@ -139,12 +139,13 @@ export default defineEventHandler(async (event) => {
     }
   } catch (error: any) {
     console.error('Failed to connect Intervals.icu:', error)
-    
+
     // Provide more specific error messages
     let message = 'Failed to connect to Intervals.icu.'
-    
+
     if (error.message?.includes('403')) {
-      message = 'Invalid API key or athlete ID. Please check your credentials at intervals.icu/settings'
+      message =
+        'Invalid API key or athlete ID. Please check your credentials at intervals.icu/settings'
     } else if (error.message?.includes('401')) {
       message = 'Authentication failed. Please verify your API key.'
     } else if (error.message?.includes('404')) {
@@ -152,7 +153,7 @@ export default defineEventHandler(async (event) => {
     } else if (error.message) {
       message = error.message
     }
-    
+
     throw createError({
       statusCode: 400,
       message

@@ -13,13 +13,13 @@ export const useTheme = () => {
     const colors: Record<string, Record<number, string>> = {
       green: { 400: '#4ade80', 500: '#22c55e', 600: '#16a34a' },
       amber: { 400: '#fbbf24', 500: '#f59e0b', 600: '#d97706' },
-      red:   { 400: '#f87171', 500: '#ef4444', 600: '#dc2626' },
-      blue:  { 400: '#60a5fa', 500: '#3b82f6', 600: '#2563eb' },
-      zinc:  { 400: '#a1a1aa', 500: '#71717a', 600: '#52525b', 800: '#27272a' },
+      red: { 400: '#f87171', 500: '#ef4444', 600: '#dc2626' },
+      blue: { 400: '#60a5fa', 500: '#3b82f6', 600: '#2563eb' },
+      zinc: { 400: '#a1a1aa', 500: '#71717a', 600: '#52525b', 800: '#27272a' },
       purple: { 400: '#c084fc', 500: '#a855f7', 600: '#9333ea' },
-      cyan:   { 400: '#22d3ee', 500: '#06b6d4', 600: '#0891b2' }
+      cyan: { 400: '#22d3ee', 500: '#06b6d4', 600: '#0891b2' }
     }
-    
+
     return colors[colorName]?.[shade] || colors.zinc?.[500] || '#71717a'
   }
 
@@ -36,9 +36,9 @@ export const useTheme = () => {
       primary: isDark.value ? getHex(primary, 400) : getHex(primary, 600),
       success: isDark.value ? getHex(success, 400) : getHex(success, 600),
       warning: isDark.value ? getHex(warning, 400) : getHex(warning, 600),
-      error:   isDark.value ? getHex(error, 400) : getHex(error, 600),
-      info:    isDark.value ? getHex(info, 400) : getHex(info, 600),
-      
+      error: isDark.value ? getHex(error, 400) : getHex(error, 600),
+      info: isDark.value ? getHex(info, 400) : getHex(info, 600),
+
       // Category Specific
       performance: isDark.value ? getHex('amber', 400) : getHex('amber', 600),
       wellness: isDark.value ? getHex('indigo', 400) : getHex('indigo', 600),
@@ -48,7 +48,7 @@ export const useTheme = () => {
       // Chart specific
       chartGrid: isDark.value ? 'rgba(75, 85, 99, 0.2)' : 'rgba(229, 231, 235, 0.5)',
       chartText: isDark.value ? '#9ca3af' : '#4b5563', // gray-400 / gray-600
-      
+
       // Raw hex access for custom needs
       get: getHex
     }

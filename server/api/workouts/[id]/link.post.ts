@@ -5,7 +5,8 @@ defineRouteMeta({
   openAPI: {
     tags: ['Workouts'],
     summary: 'Link workout to planned workout',
-    description: 'Links an existing completed workout to a planned workout, marking the planned workout as completed.',
+    description:
+      'Links an existing completed workout to a planned workout, marking the planned workout as completed.',
     requestBody: {
       content: {
         'application/json': {
@@ -42,11 +43,11 @@ defineRouteMeta({
 
 export default defineEventHandler(async (event) => {
   const session = await getServerSession(event)
-  
+
   if (!session?.user) {
-    throw createError({ 
+    throw createError({
       statusCode: 401,
-      message: 'Unauthorized' 
+      message: 'Unauthorized'
     })
   }
 
@@ -68,13 +69,13 @@ export default defineEventHandler(async (event) => {
   // Verify ownership
   const [workout, plannedWorkout] = await Promise.all([
     prisma.workout.findUnique({
-      where: { 
+      where: {
         id: workoutId,
         userId: (session.user as any).id
       }
     }),
     prisma.plannedWorkout.findUnique({
-      where: { 
+      where: {
         id: plannedWorkoutId,
         userId: (session.user as any).id
       }

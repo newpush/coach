@@ -48,31 +48,31 @@ export function detectIntervals(
   // 2. Determine threshold for "Work" vs "Recovery"
   // If no manual threshold provided, estimate baseline
   const baseline = threshold || calculateBaseline(smoothed)
-  
+
   // For power, work is typically > 75% FTP (Zone 2/3 border)
   // For HR, work is > 70% Max (approx Z2)
-  const workThreshold = metricType === 'power' ? baseline * 0.75 : baseline * 0.70
+  const workThreshold = metricType === 'power' ? baseline * 0.75 : baseline * 0.7
 
   const intervals: Interval[] = []
   let inInterval = false
   let startIndex = 0
-  
+
   // Minimum duration for an interval (e.g., 30 seconds)
-  const minDuration = 30 
-  
+  const minDuration = 30
+
   // Minimum recovery between intervals (e.g., 15 seconds)
   // Used to merge close intervals
   const minRecovery = 15
 
   // First pass: Detect candidate intervals
   const candidates: { start: number; end: number }[] = []
-  
+
   for (let i = 0; i < smoothed.length; i++) {
     const smoothedValue = smoothed[i]
     if (smoothedValue === undefined) continue
-    
+
     const isWork = smoothedValue >= workThreshold
-    
+
     if (isWork && !inInterval) {
       // Start of potential interval
       inInterval = true
@@ -82,17 +82,17 @@ export function detectIntervals(
       inInterval = false
       const currentTime = times[i]
       const startTime = times[startIndex]
-      
+
       if (currentTime !== undefined && startTime !== undefined) {
         const duration = currentTime - startTime
-      
+
         if (duration >= minDuration) {
           candidates.push({ start: startIndex, end: i })
         }
       }
     }
   }
-  
+
   // Handle case where workout ends during an interval
   const lastTime = times[times.length - 1]
   const startTime = times[startIndex]
@@ -102,22 +102,22 @@ export function detectIntervals(
       candidates.push({ start: startIndex, end: times.length - 1 })
     }
   }
-  
+
   // Second pass: Merge close intervals
   const merged: { start: number; end: number }[] = []
   if (candidates.length > 0 && candidates[0]) {
     let current = candidates[0]
-    
+
     for (let i = 1; i < candidates.length; i++) {
       const next = candidates[i]
       if (!next) continue
-      
+
       const tNextStart = times[next.start]
       const tCurrentEnd = times[current.end]
-      
+
       if (tNextStart !== undefined && tCurrentEnd !== undefined) {
         const gap = tNextStart - tCurrentEnd
-        
+
         if (gap < minRecovery) {
           // Merge
           current.end = next.end
@@ -126,41 +126,75 @@ export function detectIntervals(
           current = next
         }
       } else {
-          merged.push(current)
-          current = next
+        merged.push(current)
+        current = next
       }
     }
     if (current) merged.push(current)
   }
-  
+
   // Third pass: Classify and calculate stats
   // Identify warmup (first segment before first work interval)
   // Identify cooldown (segment after last work interval)
-  
+
   let lastEndIndex = 0
-  
+
   merged.forEach((candidate, index) => {
     // Add recovery/warmup segment before this work interval
     if (candidate.start > lastEndIndex) {
       const type = index === 0 ? 'WARMUP' : 'RECOVERY'
       if (times[lastEndIndex] !== undefined && times[candidate.start] !== undefined) {
-          intervals.push(createIntervalObj(times, values, lastEndIndex, candidate.start, type, threshold, metricType))
+        intervals.push(
+          createIntervalObj(
+            times,
+            values,
+            lastEndIndex,
+            candidate.start,
+            type,
+            threshold,
+            metricType
+          )
+        )
       }
     }
-    
+
     // Add the work interval
     if (times[candidate.start] !== undefined && times[candidate.end] !== undefined) {
-        intervals.push(createIntervalObj(times, values, candidate.start, candidate.end, 'WORK', threshold, metricType))
+      intervals.push(
+        createIntervalObj(
+          times,
+          values,
+          candidate.start,
+          candidate.end,
+          'WORK',
+          threshold,
+          metricType
+        )
+      )
     }
-    
+
     lastEndIndex = candidate.end
   })
-  
+
   // Add cooldown if there's data after the last interval
-  if (lastEndIndex < times.length - 1 && times[lastEndIndex] !== undefined && times[times.length - 1] !== undefined) {
-    intervals.push(createIntervalObj(times, values, lastEndIndex, times.length - 1, 'COOLDOWN', threshold, metricType))
+  if (
+    lastEndIndex < times.length - 1 &&
+    times[lastEndIndex] !== undefined &&
+    times[times.length - 1] !== undefined
+  ) {
+    intervals.push(
+      createIntervalObj(
+        times,
+        values,
+        lastEndIndex,
+        times.length - 1,
+        'COOLDOWN',
+        threshold,
+        metricType
+      )
+    )
   }
-  
+
   return intervals
 }
 
@@ -173,7 +207,7 @@ export function findPeakEfforts(
   metric: 'power' | 'heartrate' | 'pace'
 ): PeakEffort[] {
   if (!values || values.length === 0) return []
-  
+
   const durations = [
     { sec: 5, label: '5s' },
     { sec: 30, label: '30s' },
@@ -183,38 +217,38 @@ export function findPeakEfforts(
     { sec: 1200, label: '20m' },
     { sec: 3600, label: '60m' }
   ]
-  
+
   const peaks: PeakEffort[] = []
-  
+
   // Optimization: Pre-calculate prefix sums for O(1) range sum queries?
   // Since we need max average, a simple sliding window is O(N) per duration.
-  
+
   for (const dur of durations) {
     const lastTime = times[times.length - 1]
     if (lastTime === undefined || lastTime < dur.sec) continue
-    
+
     // Find approximate number of data points for this duration
     // Assuming 1Hz sampling for simplicity, or we check timestamps
     // Robust approach: Sliding window on time
-    
+
     let maxSum = -Infinity
     let bestStartIdx = -1
     let bestEndIdx = -1
-    
+
     let currentSum = 0
     let startPtr = 0
-    
+
     for (let endPtr = 0; endPtr < values.length; endPtr++) {
       const val = values[endPtr]
       if (val !== undefined) currentSum += val
-      
+
       // Shrink window from left until duration is approx correct
       // We want times[endPtr] - times[startPtr] approx dur.sec
-      
+
       while (times[endPtr] !== undefined && times[startPtr] !== undefined) {
         const tEnd = times[endPtr]
         const tStart = times[startPtr]
-        if (tEnd !== undefined && tStart !== undefined && (tEnd - tStart > dur.sec)) {
+        if (tEnd !== undefined && tStart !== undefined && tEnd - tStart > dur.sec) {
           const startVal = values[startPtr]
           if (startVal !== undefined) currentSum -= startVal
           startPtr++
@@ -222,24 +256,25 @@ export function findPeakEfforts(
           break
         }
       }
-      
+
       // Check if window is valid duration (close enough)
       const tEnd = times[endPtr]
       const tStart = times[startPtr]
-      
+
       if (tEnd !== undefined && tStart !== undefined) {
-          const windowDuration = tEnd - tStart
-          if (windowDuration >= dur.sec * 0.95) { // Allow slight tolerance
-            const avg = currentSum / (endPtr - startPtr + 1)
-            if (avg > maxSum) {
-              maxSum = avg
-              bestStartIdx = startPtr
-              bestEndIdx = endPtr
-            }
+        const windowDuration = tEnd - tStart
+        if (windowDuration >= dur.sec * 0.95) {
+          // Allow slight tolerance
+          const avg = currentSum / (endPtr - startPtr + 1)
+          if (avg > maxSum) {
+            maxSum = avg
+            bestStartIdx = startPtr
+            bestEndIdx = endPtr
           }
+        }
       }
     }
-    
+
     if (bestStartIdx !== -1 && bestEndIdx !== -1) {
       const startTimeValue = times[bestStartIdx]
       const endTimeValue = times[bestEndIdx]
@@ -255,10 +290,9 @@ export function findPeakEfforts(
       }
     }
   }
-  
+
   return peaks
 }
-
 
 // --- Helper Functions ---
 
@@ -276,7 +310,7 @@ function smoothData(data: number[], windowSize: number): number[] {
 
 function calculateBaseline(data: number[]): number {
   // Simple baseline: Median or Mean of non-zero values
-  const nonZeros = data.filter(v => v > 0).sort((a, b) => a - b)
+  const nonZeros = data.filter((v) => v > 0).sort((a, b) => a - b)
   if (nonZeros.length === 0) return 0
   const median = nonZeros[Math.floor(nonZeros.length / 2)]
   return median !== undefined ? median : 0
@@ -294,27 +328,27 @@ function createIntervalObj(
   const segmentValues = values.slice(startIdx, endIdx + 1)
   const sum = segmentValues.reduce((a, b) => a + (b || 0), 0)
   const avg = sum / segmentValues.length
-  const max = Math.max(...segmentValues.map(v => v || 0))
-  
+  const max = Math.max(...segmentValues.map((v) => v || 0))
+
   let intensity_zone: number | undefined
 
   if (threshold && metricType) {
     if (metricType === 'power') {
-       const zones = calculatePowerZones(threshold)
-       const zone = identifyZone(avg, zones)
-       if (zone) {
-         // Extract zone number from name "Z2 Endurance" -> 2
-         const match = zone.name.match(/^Z(\d+)/)
-         if (match && match[1]) intensity_zone = parseInt(match[1])
-       }
+      const zones = calculatePowerZones(threshold)
+      const zone = identifyZone(avg, zones)
+      if (zone) {
+        // Extract zone number from name "Z2 Endurance" -> 2
+        const match = zone.name.match(/^Z(\d+)/)
+        if (match && match[1]) intensity_zone = parseInt(match[1])
+      }
     } else if (metricType === 'heartrate') {
-       // Estimate maxHR roughly if threshold is LTHR
-       // Or assume threshold passed IS MaxHR? The function signature says "FTP or Threshold Pace/HR"
-       // Let's assume for HR detection, threshold passed is usually MaxHR or LTHR.
-       // The identifyZone logic expects LTHR for HrZones usually.
-       // This is a bit ambiguous in the original code.
-       // For now, let's skip zone detection for HR here to avoid breakage,
-       // or implement a simple check if we want.
+      // Estimate maxHR roughly if threshold is LTHR
+      // Or assume threshold passed IS MaxHR? The function signature says "FTP or Threshold Pace/HR"
+      // Let's assume for HR detection, threshold passed is usually MaxHR or LTHR.
+      // The identifyZone logic expects LTHR for HrZones usually.
+      // This is a bit ambiguous in the original code.
+      // For now, let's skip zone detection for HR here to avoid breakage,
+      // or implement a simple check if we want.
     }
   }
 
@@ -331,7 +365,7 @@ function createIntervalObj(
     max_power: max,
     type,
     intensity_zone
-    // Add generic average based on what 'values' represents? 
+    // Add generic average based on what 'values' represents?
     // In real implementation, we'd pass all streams to calculate all averages
   }
 }
@@ -345,11 +379,11 @@ export function calculateHeartRateRecovery(
   hrValues: number[]
 ): { peakHr: number; peakTime: number; recoveryHr: number; drops: number } | null {
   if (!hrValues || hrValues.length === 0) return null
-  
+
   // Find max HR index
   let maxHr = -Infinity
   let maxIdx = -1
-  
+
   for (let i = 0; i < hrValues.length; i++) {
     const val = hrValues[i]
     if (val !== undefined && val > maxHr) {
@@ -357,17 +391,17 @@ export function calculateHeartRateRecovery(
       maxIdx = i
     }
   }
-  
+
   if (maxIdx === -1) return null
-  
+
   // Look ahead 60 seconds (or closest available)
   const peakTime = times[maxIdx]
   if (peakTime === undefined) return null
 
   const targetTime = peakTime + 60
-  
+
   let recoveryIdx = -1
-  
+
   for (let i = maxIdx; i < times.length; i++) {
     const currentTime = times[i]
     if (currentTime !== undefined && currentTime >= targetTime) {
@@ -375,12 +409,12 @@ export function calculateHeartRateRecovery(
       break
     }
   }
-  
+
   // If workout ended before 60s, take last value
   if (recoveryIdx === -1 && maxIdx < times.length - 1) {
     recoveryIdx = times.length - 1
   }
-  
+
   if (recoveryIdx !== -1) {
     const recoveryHr = hrValues[recoveryIdx]
     if (recoveryHr !== undefined) {
@@ -392,7 +426,7 @@ export function calculateHeartRateRecovery(
       }
     }
   }
-  
+
   return null
 }
 
@@ -406,7 +440,12 @@ export function calculateAerobicDecoupling(
   powerValues: number[],
   hrValues: number[]
 ): number | null {
-  if (!powerValues || !hrValues || powerValues.length !== hrValues.length || powerValues.length < 600) {
+  if (
+    !powerValues ||
+    !hrValues ||
+    powerValues.length !== hrValues.length ||
+    powerValues.length < 600
+  ) {
     // Need at least 10 minutes of data
     return null
   }
@@ -463,7 +502,7 @@ export function calculateCoastingStats(
   let coastingTime = 0
   let coastingEvents = 0
   let inCoasting = false
-  
+
   // Thresholds
   const minPower = 10
   const minCadence = 20
@@ -473,7 +512,7 @@ export function calculateCoastingStats(
     const p = powerValues[i]
     const c = cadenceValues ? cadenceValues[i] : 0
     const v = velocityValues ? velocityValues[i] : 5 // Assume moving if no velocity stream
-    
+
     if (p === undefined || c === undefined || v === undefined) continue
 
     // Check if moving but not pedaling
@@ -483,7 +522,7 @@ export function calculateCoastingStats(
 
     if (isMoving && !isPedaling) {
       coastingTime++ // Assuming 1s intervals roughly
-      
+
       if (!inCoasting) {
         inCoasting = true
         coastingEvents++
@@ -495,8 +534,8 @@ export function calculateCoastingStats(
 
   const firstTime = times[0]
   const lastTime = times[times.length - 1]
-  const totalDuration = (firstTime !== undefined && lastTime !== undefined) ? lastTime - firstTime : 0
-  
+  const totalDuration = firstTime !== undefined && lastTime !== undefined ? lastTime - firstTime : 0
+
   return {
     totalTime: coastingTime,
     percentTime: totalDuration > 0 ? (coastingTime / totalDuration) * 100 : 0,
@@ -516,11 +555,7 @@ export interface Surge {
  * Detect "Matches" (Surges) and their cost
  * Identifies efforts > threshold (e.g. 120% FTP) and analyzes subsequent fade.
  */
-export function detectSurgesAndFades(
-  times: number[],
-  powerValues: number[],
-  ftp: number
-): Surge[] {
+export function detectSurgesAndFades(times: number[], powerValues: number[], ftp: number): Surge[] {
   if (!powerValues || !ftp || ftp === 0) return []
 
   const surgeThreshold = ftp * 1.2 // 120% FTP
@@ -549,12 +584,12 @@ export function detectSurgesAndFades(
         // Check duration (assuming 1s intervals for simplicity, or use times)
         const tStart = times[startIndex]
         const tCurrent = times[i]
-        
+
         if (tStart !== undefined && tCurrent !== undefined) {
-            const duration = tCurrent - tStart
-            if (duration >= minSurgeDuration) {
-              candidates.push({ start: startIndex, end: i })
-            }
+          const duration = tCurrent - tStart
+          if (duration >= minSurgeDuration) {
+            candidates.push({ start: startIndex, end: i })
+          }
         }
       }
     }
@@ -562,32 +597,32 @@ export function detectSurgesAndFades(
 
   // Handle surge at end of workout
   if (inSurge) {
-     const tStart = times[startIndex]
-     const tLast = times[times.length - 1]
-     
-     if (tStart !== undefined && tLast !== undefined) {
-         const duration = tLast - tStart
-         if (duration >= minSurgeDuration) {
-           candidates.push({ start: startIndex, end: times.length - 1 })
-         }
-     }
+    const tStart = times[startIndex]
+    const tLast = times[times.length - 1]
+
+    if (tStart !== undefined && tLast !== undefined) {
+      const duration = tLast - tStart
+      if (duration >= minSurgeDuration) {
+        candidates.push({ start: startIndex, end: times.length - 1 })
+      }
+    }
   }
 
   // 2. Process Surges
   // Merge close surges? For now, keep distinct to see repeated attacks.
 
-  candidates.forEach(cand => {
+  candidates.forEach((cand) => {
     const segment = powerValues.slice(cand.start, cand.end + 1)
     const sum = segment.reduce((a, b) => a + (b || 0), 0)
     const avg = sum / segment.length
-    const max = Math.max(...segment.map(v => v || 0))
+    const max = Math.max(...segment.map((v) => v || 0))
 
     // Calculate "Cost" - power in the recovery window
     // Look ahead 60s
     let costSum = 0
     let costCount = 0
     const recoveryEndIndex = Math.min(powerValues.length - 1, cand.end + recoveryWindow)
-    
+
     for (let k = cand.end + 1; k <= recoveryEndIndex; k++) {
       const val = powerValues[k]
       if (val !== undefined) {
@@ -595,20 +630,20 @@ export function detectSurgesAndFades(
         costCount++
       }
     }
-    
+
     const costAvg = costCount > 0 ? costSum / costCount : 0
 
     const tStart = times[cand.start]
     const tEnd = times[cand.end]
-    
+
     if (tStart !== undefined && tEnd !== undefined) {
-        surges.push({
-          start_time: tStart,
-          duration: tEnd - tStart,
-          avg_power: Math.round(avg),
-          max_power: Math.round(max),
-          cost_avg_power: Math.round(costAvg)
-        })
+      surges.push({
+        start_time: tStart,
+        duration: tEnd - tStart,
+        avg_power: Math.round(avg),
+        max_power: Math.round(max),
+        cost_avg_power: Math.round(costAvg)
+      })
     }
   })
 
@@ -637,7 +672,7 @@ export function calculateRecoveryRateTrend(
 ): RecoveryRate[] {
   if (!hrStream || hrStream.length === 0 || !intervals) return []
 
-  const workIntervals = intervals.filter(i => i.type === 'WORK')
+  const workIntervals = intervals.filter((i) => i.type === 'WORK')
   const results: RecoveryRate[] = []
 
   workIntervals.forEach((interval, idx) => {
@@ -667,9 +702,9 @@ export function calculateRecoveryRateTrend(
       hr30s,
       hr60s,
       hr90s,
-      drop30s: (hr30s !== null) ? peakHr - hr30s : null,
-      drop60s: (hr60s !== null) ? peakHr - hr60s : null,
-      drop90s: (hr90s !== null) ? peakHr - hr90s : null
+      drop30s: hr30s !== null ? peakHr - hr30s : null,
+      drop60s: hr60s !== null ? peakHr - hr60s : null,
+      drop90s: hr90s !== null ? peakHr - hr90s : null
     })
   })
 

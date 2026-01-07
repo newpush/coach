@@ -12,15 +12,14 @@ async function main() {
       AND table_name = 'FitFile';
     `
     console.log('Table check result:', result)
-    
+
     // Also try to count
     try {
-        const count = await prisma.fitFile.count()
-        console.log('FitFile count:', count)
+      const count = await prisma.fitFile.count()
+      console.log('FitFile count:', count)
     } catch (e) {
-        console.error('Error querying FitFile model:', e.message)
+      console.error('Error querying FitFile model:', e.message)
     }
-
   } catch (e) {
     console.error('Error:', e)
   } finally {

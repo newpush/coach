@@ -9,7 +9,7 @@ const wellnessAnalysisSchema = {
   properties: {
     executive_summary: {
       type: 'string',
-      description: 'A concise summary of the athlete\'s wellness status (2-3 sentences).'
+      description: "A concise summary of the athlete's wellness status (2-3 sentences)."
     },
     status: {
       type: 'string',
@@ -104,8 +104,9 @@ export default defineEventHandler(async (event) => {
     })
 
     // Construct the prompt
-    const readinessLabel = (wellness.readiness || 0) > 10 ? `${wellness.readiness}%` : `${wellness.readiness}/10`
-    
+    const readinessLabel =
+      (wellness.readiness || 0) > 10 ? `${wellness.readiness}%` : `${wellness.readiness}/10`
+
     const prompt = `
       Analyze this athlete's daily wellness data.
 
@@ -119,9 +120,9 @@ export default defineEventHandler(async (event) => {
       - Vitals: SpO2 ${wellness.spO2}%, Weight ${wellness.weight}kg
       
       HISTORY (Last 30 Days):
-      - Average HRV: ${Math.round(history.reduce((acc, curr) => acc + (curr.hrv || 0), 0) / history.filter(h => h.hrv).length || 0)} ms
-      - Average RHR: ${Math.round(history.reduce((acc, curr) => acc + (curr.restingHr || 0), 0) / history.filter(h => h.restingHr).length || 0)} bpm
-      - Average Sleep: ${(history.reduce((acc, curr) => acc + (curr.sleepHours || 0), 0) / history.filter(h => h.sleepHours).length || 0).toFixed(1)} hours
+      - Average HRV: ${Math.round(history.reduce((acc, curr) => acc + (curr.hrv || 0), 0) / history.filter((h) => h.hrv).length || 0)} ms
+      - Average RHR: ${Math.round(history.reduce((acc, curr) => acc + (curr.restingHr || 0), 0) / history.filter((h) => h.restingHr).length || 0)} bpm
+      - Average Sleep: ${(history.reduce((acc, curr) => acc + (curr.sleepHours || 0), 0) / history.filter((h) => h.sleepHours).length || 0).toFixed(1)} hours
 
       TASK:
       Provide a comprehensive analysis of the athlete's recovery status and readiness to train.
@@ -134,17 +135,12 @@ export default defineEventHandler(async (event) => {
     `
 
     // Generate analysis using Gemini
-    const analysis = await generateStructuredAnalysis(
-      prompt,
-      wellnessAnalysisSchema,
-      'flash',
-      {
-        userId,
-        operation: 'wellness_analysis',
-        entityType: 'Wellness',
-        entityId: wellnessId
-      }
-    )
+    const analysis = await generateStructuredAnalysis(prompt, wellnessAnalysisSchema, 'flash', {
+      userId,
+      operation: 'wellness_analysis',
+      entityType: 'Wellness',
+      entityId: wellnessId
+    })
 
     // Save the result
     const updatedWellness = await prisma.wellness.update({
@@ -161,10 +157,9 @@ export default defineEventHandler(async (event) => {
       analysis: updatedWellness.aiAnalysisJson,
       analyzedAt: updatedWellness.aiAnalyzedAt
     }
-
   } catch (error: any) {
     console.error('Wellness analysis failed:', error)
-    
+
     await prisma.wellness.update({
       where: { id: wellnessId },
       data: { aiAnalysisStatus: 'FAILED' }

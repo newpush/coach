@@ -1,6 +1,6 @@
 /**
  * TSS Normalization Utility
- * 
+ *
  * Systematically finds, calculates, or estimates TSS for workouts from any source.
  * Priority order:
  * 1. Pre-calculated TSS from source (Intervals.icu, TrainingPeaks, etc.)
@@ -17,7 +17,14 @@ import { userRepository } from './repositories/userRepository'
 
 export interface TSSNormalizationResult {
   tss: number | null
-  source: 'intervals' | 'strava_suffer' | 'calculated_power' | 'calculated_hr' | 'trimp' | 'estimated' | 'none'
+  source:
+    | 'intervals'
+    | 'strava_suffer'
+    | 'calculated_power'
+    | 'calculated_hr'
+    | 'trimp'
+    | 'estimated'
+    | 'none'
   confidence: 'high' | 'medium' | 'low'
   method?: string
 }
@@ -54,7 +61,7 @@ async function calculateTSSFromPowerStream(
 ): Promise<number> {
   const np = calculateNormalizedPower(wattsArray)
   const intensityFactor = np / userFTP
-  const tss = (durationSeconds * np * intensityFactor) / (userFTP * 3600) * 100
+  const tss = ((durationSeconds * np * intensityFactor) / (userFTP * 3600)) * 100
   return Math.round(tss)
 }
 
@@ -73,13 +80,13 @@ async function calculateHRSSFromHRStream(
   const avgHR = hrArray.reduce((a, b) => a + b, 0) / hrArray.length
 
   // Use LTHR if provided, otherwise estimate as 90% of maxHR
-  const thresholdHR = lthr || Math.round(maxHR * 0.90)
+  const thresholdHR = lthr || Math.round(maxHR * 0.9)
 
   // Calculate Heart Rate Reserve
   const hrr = (avgHR - restingHR) / (maxHR - restingHR)
 
   // Calculate HRSS
-  const hrss = (durationSeconds * avgHR * hrr) / (thresholdHR * 3600) * 100
+  const hrss = ((durationSeconds * avgHR * hrr) / (thresholdHR * 3600)) * 100
   return Math.round(hrss)
 }
 
@@ -97,7 +104,7 @@ function estimateTSSFromDuration(
   // If we have HR data, use a squared intensity model (TSS ~ IF^2)
   if (avgHR && maxHR) {
     const intensity = avgHR / maxHR
-    
+
     let estimatedIF = intensity
 
     // For very low intensity (e.g., walking, active recovery < 55% Max HR),
@@ -168,7 +175,7 @@ export async function normalizeTSS(
       where: { id: workoutId },
       data: { tss: workout.trainingLoad }
     })
-    
+
     return {
       tss: workout.trainingLoad,
       source: 'intervals',
@@ -215,21 +222,20 @@ export async function normalizeTSS(
   if (workout.streams && user?.ftp) {
     const wattsData = parseStreamData((workout.streams as any).watts)
     if (wattsData && wattsData.length > 0) {
-      
       // Calculate Normalized Power with Altitude Adjustment
-      // Altitude adjustment: Above 1500m, power output drops. 
+      // Altitude adjustment: Above 1500m, power output drops.
       // FTP effectively drops, so we should calculate Stress against a LOWER FTP for the same watts.
       // Rule of thumb: FTP drops ~1% per 100m above 1500m (simplified Bassett/Bassett model)
-      
+
       let effectiveFtp = user.ftp
-      
+
       // Get home altitude from user profile
       // TODO: Get altitude for workout location if available, otherwise use home altitude
       const altitude = await userRepository.getAltitudeForDate(userId, workout.date)
-      
+
       if (altitude > 1500) {
         // Adjust FTP down for high altitude to reflect higher physiological stress
-        const altitudeFactor = 1 - ((altitude - 1500) / 10000) // 1% per 100m is 10% per 1000m -> 0.1/1000 = 0.0001 per m?
+        const altitudeFactor = 1 - (altitude - 1500) / 10000 // 1% per 100m is 10% per 1000m -> 0.1/1000 = 0.0001 per m?
         // Bassett et al (1999):
         // 0m: 100%
         // 1000m: 98%
@@ -237,16 +243,14 @@ export async function normalizeTSS(
         // 3000m: 85%
         // Linear approx for >1500m: 1% drop per 100m elevation gain
         const dropPercent = Math.max(0, (altitude - 1500) / 100)
-        effectiveFtp = Math.round(user.ftp * (1 - (dropPercent / 100)))
-        
-        console.log(`[normalizeTSS] Altitude ${altitude}m: Adjusted FTP ${user.ftp} -> ${effectiveFtp}W`)
+        effectiveFtp = Math.round(user.ftp * (1 - dropPercent / 100))
+
+        console.log(
+          `[normalizeTSS] Altitude ${altitude}m: Adjusted FTP ${user.ftp} -> ${effectiveFtp}W`
+        )
       }
 
-      const tss = await calculateTSSFromPowerStream(
-        wattsData,
-        workout.durationSec,
-        effectiveFtp
-      )
+      const tss = await calculateTSSFromPowerStream(wattsData, workout.durationSec, effectiveFtp)
       await prisma.workout.update({
         where: { id: workoutId },
         data: { tss }
@@ -305,7 +309,7 @@ export async function normalizeTSS(
       workout.averageHr,
       user?.maxHr || null
     )
-    
+
     // Only save if it's a reasonable value (don't save obviously bad estimates)
     if (estimatedTSS > 0 && estimatedTSS < 500) {
       await prisma.workout.update({

@@ -53,7 +53,10 @@ export default defineEventHandler(async (event) => {
   }
 
   if (!recommendation.plannedWorkoutId) {
-    throw createError({ statusCode: 400, message: 'No planned workout linked to this recommendation' })
+    throw createError({
+      statusCode: 400,
+      message: 'No planned workout linked to this recommendation'
+    })
   }
 
   if (recommendation.userAccepted) {
@@ -75,11 +78,13 @@ export default defineEventHandler(async (event) => {
     where: { id: recommendation.plannedWorkoutId },
     data: {
       title: modifications.new_title,
-      durationSec: modifications.new_duration_min ? Math.round(modifications.new_duration_min * 60) : undefined,
+      durationSec: modifications.new_duration_min
+        ? Math.round(modifications.new_duration_min * 60)
+        : undefined,
       tss: modifications.new_tss,
       description: newDescription,
-      modifiedLocally: true,
-      // We explicitly DO NOT clear structuredWorkout here because we want the user to see the old one 
+      modifiedLocally: true
+      // We explicitly DO NOT clear structuredWorkout here because we want the user to see the old one
       // while the new one generates in the background. The generation task will overwrite it.
     }
   })

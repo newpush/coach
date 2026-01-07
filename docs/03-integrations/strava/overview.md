@@ -29,6 +29,7 @@ Contains all Strava API interaction logic:
 ### 2. API Endpoints
 
 #### Authorization Flow
+
 - **`/api/integrations/strava/authorize` (GET)**
   - Initiates OAuth flow
   - Redirects user to Strava authorization page
@@ -40,6 +41,7 @@ Contains all Strava API interaction logic:
   - Stores integration in database
 
 #### Management
+
 - **`/api/integrations/strava/disconnect` (DELETE)**
   - Disconnects Strava integration
   - Removes integration from database
@@ -52,11 +54,13 @@ Contains all Strava API interaction logic:
 ### 3. UI Components
 
 #### Connect Page (`app/pages/connect-strava.vue`)
+
 - User-friendly connection page
 - Explains what data will be imported
 - OAuth authorization flow
 
 #### Settings Integration (`app/pages/settings.vue`)
+
 - Shows Strava connection status
 - Connect/Disconnect buttons
 - Sync button to manually trigger data import
@@ -65,6 +69,7 @@ Contains all Strava API interaction logic:
 ### 4. Background Job (`trigger/ingest-strava.ts`)
 
 Trigger.dev task for importing Strava data:
+
 - Fetches activities for specified date range
 - Handles pagination automatically
 - Upserts activities to avoid duplicates
@@ -127,20 +132,21 @@ Strava activities are mapped to our Workout model with the following fields:
 
 ## Comparison with Intervals.icu
 
-| Feature | Strava | Intervals.icu |
-|---------|--------|---------------|
-| Auth Method | OAuth2 | API Key |
-| Token Expiry | Yes (6 hours) | No |
-| Planned Workouts | No | Yes |
-| Wellness Data | No | Yes |
-| Activity Import | Direct | Via Strava sync |
-| Real-time Sync | Yes | Manual/Scheduled |
+| Feature          | Strava        | Intervals.icu    |
+| ---------------- | ------------- | ---------------- |
+| Auth Method      | OAuth2        | API Key          |
+| Token Expiry     | Yes (6 hours) | No               |
+| Planned Workouts | No            | Yes              |
+| Wellness Data    | No            | Yes              |
+| Activity Import  | Direct        | Via Strava sync  |
+| Real-time Sync   | Yes           | Manual/Scheduled |
 
 ## Deduplication with Intervals.icu
 
 Since Intervals.icu can sync with Strava, you might have the same activities in both systems. The Strava integration includes intelligent deduplication:
 
 **How it Works:**
+
 - Before importing a Strava activity, checks if it already exists from Intervals.icu
 - Matches activities by:
   - Date (within 5-minute window)
@@ -149,6 +155,7 @@ Since Intervals.icu can sync with Strava, you might have the same activities in 
 - Skips importing the Strava version if already in Intervals.icu
 
 **Why Prefer Intervals.icu?**
+
 - Intervals.icu provides richer training metrics (CTL, ATL, TSS)
 - More detailed power analysis
 - Better integration with training plans
@@ -156,11 +163,13 @@ Since Intervals.icu can sync with Strava, you might have the same activities in 
 
 **Log Output:**
 The sync job logs how many activities were:
+
 - Upserted (new or updated from Strava)
 - Skipped (already existed from Intervals.icu)
 - Total activities found in Strava
 
 **Example:**
+
 ```
 Strava sync complete: 15 upserted, 25 skipped (already in Intervals.icu)
 ```
@@ -178,6 +187,7 @@ This means you only get Strava-exclusive activities (like activities recorded on
 ## API Scopes
 
 The integration requests these Strava scopes:
+
 - `read` - Basic profile information
 - `activity:read_all` - Read all activities
 - `profile:read_all` - Read full profile
@@ -204,26 +214,31 @@ To test the integration:
 ## Troubleshooting
 
 ### "Invalid client" error
+
 - Check STRAVA_CLIENT_ID and STRAVA_CLIENT_SECRET are set correctly
 - Verify callback domain matches in Strava app settings
 
-### "Authorization failed" 
+### "Authorization failed"
+
 - User may have denied access
 - Check browser console for errors
 - Verify OAuth flow completes correctly
 
 ### No activities imported
+
 - Check Trigger.dev job logs
 - Verify user has activities in date range
 - Check for API rate limit errors
 
 ### Token expired
+
 - Should auto-refresh - check logs for refresh errors
 - If persistent, ask user to disconnect and reconnect
 
 ## Future Enhancements
 
 Possible improvements:
+
 1. Webhook support for real-time activity sync
 2. Activity segments and efforts
 3. Kudos and comments

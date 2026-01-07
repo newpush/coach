@@ -1,22 +1,26 @@
 <script setup lang="ts">
-const { isStreaming = false } = defineProps<{ 
-  text: string
-  isStreaming?: boolean
-}>()
+  const { isStreaming = false } = defineProps<{
+    text: string
+    isStreaming?: boolean
+  }>()
 
-const open = ref(false)
+  const open = ref(false)
 
-watch(() => isStreaming, () => {
-  open.value = isStreaming
-}, { immediate: true })
+  watch(
+    () => isStreaming,
+    () => {
+      open.value = isStreaming
+    },
+    { immediate: true }
+  )
 
-function cleanMarkdown(text: string): string {
-  return text
-    .replace(/\*\*(.+?)\*\*/g, '$1') // Remove bold
-    .replace(/\*(.+?)\*/g, '$1') // Remove italic
-    .replace(/`(.+?)`/g, '$1') // Remove inline code
-    .replace(/^#+\s+/gm, '') // Remove headers
-}
+  function cleanMarkdown(text: string): string {
+    return text
+      .replace(/\*\*(.+?)\*\*/g, '$1') // Remove bold
+      .replace(/\*(.+?)\*/g, '$1') // Remove italic
+      .replace(/`(.+?)`/g, '$1') // Remove inline code
+      .replace(/^#+\s+/gm, '') // Remove headers
+  }
 </script>
 
 <template>
@@ -27,7 +31,10 @@ function cleanMarkdown(text: string): string {
       variant="link"
       trailing-icon="i-lucide-chevron-down"
       :ui="{
-        trailingIcon: text.length > 0 ? 'group-data-[state=open]:rotate-180 transition-transform duration-200' : 'hidden'
+        trailingIcon:
+          text.length > 0
+            ? 'group-data-[state=open]:rotate-180 transition-transform duration-200'
+            : 'hidden'
       }"
       :label="isStreaming ? 'Thinking...' : 'Thoughts'"
     />

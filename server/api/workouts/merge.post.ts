@@ -43,11 +43,11 @@ defineRouteMeta({
 
 export default defineEventHandler(async (event) => {
   const session = await getServerSession(event)
-  
+
   if (!session?.user) {
-    throw createError({ 
+    throw createError({
       statusCode: 401,
-      message: 'Unauthorized' 
+      message: 'Unauthorized'
     })
   }
 
@@ -76,8 +76,8 @@ export default defineEventHandler(async (event) => {
     })
   }
 
-  const primaryWorkout = workouts.find(w => w.id === primaryWorkoutId)
-  const secondaryWorkout = workouts.find(w => w.id === secondaryWorkoutId)
+  const primaryWorkout = workouts.find((w) => w.id === primaryWorkoutId)
+  const secondaryWorkout = workouts.find((w) => w.id === secondaryWorkoutId)
 
   if (!primaryWorkout || !secondaryWorkout) {
     throw createError({ statusCode: 500, message: 'Error retrieving workouts' })
@@ -98,7 +98,7 @@ export default defineEventHandler(async (event) => {
             plannedWorkoutId: secondaryWorkout.plannedWorkoutId
           }
         })
-        
+
         // Remove link from secondary to avoid unique constraint issues if any (though usually one-to-many is fine, but cleaner to move it)
         // Actually, schema says: plannedWorkoutId String? (relation to PlannedWorkout)
         // And PlannedWorkout has completedWorkouts Workout[]
@@ -126,7 +126,8 @@ export default defineEventHandler(async (event) => {
     })
 
     // Recalculate stress scores for the user after the earliest workout date in the merge
-    const earliestDate = primaryWorkout.date < secondaryWorkout.date ? primaryWorkout.date : secondaryWorkout.date
+    const earliestDate =
+      primaryWorkout.date < secondaryWorkout.date ? primaryWorkout.date : secondaryWorkout.date
     await recalculateStressAfterDate((session.user as any).id, earliestDate)
 
     return { success: true }

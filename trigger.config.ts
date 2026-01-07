@@ -1,10 +1,10 @@
-import { defineConfig } from "@trigger.dev/sdk/v3";
-import { prismaExtension } from "@trigger.dev/build/extensions/prisma";
+import { defineConfig } from '@trigger.dev/sdk/v3'
+import { prismaExtension } from '@trigger.dev/build/extensions/prisma'
 
 export default defineConfig({
   project: process.env.TRIGGER_PROJECT_REF!,
-  runtime: "node-22",
-  logLevel: "log",
+  runtime: 'node-22',
+  logLevel: 'log',
   maxDuration: 300, // 5 minutes default
   retries: {
     enabledInDev: true,
@@ -13,16 +13,16 @@ export default defineConfig({
       minTimeoutInMs: 1000,
       maxTimeoutInMs: 10000,
       factor: 2,
-      randomize: true,
-    },
+      randomize: true
+    }
   },
-  dirs: ["./trigger"],
+  dirs: ['./trigger'],
   build: {
     extensions: [
       prismaExtension({
-        mode: "legacy",
-        schema: "prisma/schema.prisma",
-      }),
-    ],
-  },
-});
+        mode: 'legacy',
+        schema: 'prisma/schema.prisma'
+      })
+    ]
+  }
+})

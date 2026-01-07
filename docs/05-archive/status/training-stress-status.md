@@ -1,14 +1,17 @@
 # Training Stress Metrics - Implementation Status
 
 ## Overview
+
 Full implementation of Training Stress Metrics (TSS, CTL, ATL, TSB) for tracking fitness, fatigue, and form. The implementation follows the Performance Management Chart (PMC) methodology.
 
 ## Implemented Components
 
 ### 1. Core Calculation Service ✅
+
 **File**: [`server/utils/training-stress.ts`](../server/utils/training-stress.ts)
 
 **Features**:
+
 - `calculateCTL()` - 42-day exponentially weighted moving average for fitness
 - `calculateATL()` - 7-day exponentially weighted moving average for fatigue
 - `calculateTSB()` - Training Stress Balance (CTL - ATL) for form
@@ -21,6 +24,7 @@ Full implementation of Training Stress Metrics (TSS, CTL, ATL, TSB) for tracking
 - `getCurrentFitnessSummary()` - Get current fitness state
 
 **Form Status Zones**:
+
 - TSB > 25: "No Fitness" (gray) - Resting too long
 - TSB > 5: "Performance" (green) - Fresh and ready to race
 - TSB > -10: "Maintenance" (yellow) - Maintaining fitness
@@ -29,9 +33,11 @@ Full implementation of Training Stress Metrics (TSS, CTL, ATL, TSB) for tracking
 - TSB < -40: "Overreaching" (red) - Severe fatigue
 
 ### 2. Database Schema ✅
+
 **File**: [`prisma/schema.prisma`](../prisma/schema.prisma)
 
 **Workout Model Fields**:
+
 ```prisma
 model Workout {
   tss      Float?  // Training Stress Score
@@ -45,18 +51,22 @@ model Workout {
 ### 3. API Endpoints ✅
 
 #### Calendar API (Updated)
+
 **File**: [`server/api/calendar/index.get.ts`](../server/api/calendar/index.get.ts)
 
 **Changes**:
+
 - Added `ctl` and `atl` fields to completed workout responses
 - These metrics are now available for all activities in the calendar view
 
 #### PMC Endpoint (New)
+
 **File**: [`server/api/performance/pmc.get.ts`](../server/api/performance/pmc.get.ts)
 
 **Endpoint**: `GET /api/performance/pmc?days=90`
 
 **Response**:
+
 ```json
 {
   "data": [
@@ -81,9 +91,11 @@ model Workout {
 ```
 
 ### 4. Activities Page Enhancements ✅
+
 **File**: [`app/pages/activities.vue`](../app/pages/activities.vue)
 
 **Weekly Summary Column**:
+
 - Shows CTL (Chronic Training Load / Fitness)
 - Shows TSB (Training Stress Balance / Form) with color coding
 - Shows Form Status text (e.g., "Peak Form", "Building", "Caution")
@@ -94,13 +106,16 @@ model Workout {
   - Red: High fatigue (TSB < -25)
 
 **Added Functions**:
+
 - `getTSBColor()` - Returns appropriate color class for TSB value
 - `getFormStatusText()` - Returns short status text for weekly summary
 
 ### 5. Activity Cards Enhancement ✅
+
 **File**: [`app/components/CalendarDayCell.vue`](../app/components/CalendarDayCell.vue)
 
 **New Display Elements**:
+
 - CTL (Fitness) indicator in purple
 - ATL (Fatigue) indicator in yellow
 - TSB (Form) indicator with dynamic color
@@ -109,12 +124,15 @@ model Workout {
 - Tooltip titles for each metric
 
 **Added Functions**:
+
 - `getTSBColor()` - Consistent color coding for TSB across components
 
 ### 6. Backfill Script ✅
+
 **File**: [`scripts/backfill-training-stress.ts`](../scripts/backfill-training-stress.ts)
 
 **Usage**:
+
 ```bash
 # Backfill all users
 npx tsx scripts/backfill-training-stress.ts
@@ -124,6 +142,7 @@ npx tsx scripts/backfill-training-stress.ts [userId]
 ```
 
 **Features**:
+
 - Processes workouts chronologically to maintain accuracy
 - Skips duplicates automatically
 - Shows progress every 100 workouts
@@ -133,6 +152,7 @@ npx tsx scripts/backfill-training-stress.ts [userId]
 ## Visual Implementation
 
 ### Weekly Summary Display
+
 ```
 Week 45
 ────────────
@@ -146,6 +166,7 @@ Peak Form
 ```
 
 ### Activity Card Metrics
+
 ```
 Morning Run
 45m | 10.2km | ❤️ 152 | ─ 65
@@ -154,6 +175,7 @@ CTL 67 | ATL 59 | TSB +8
 ```
 
 ### TSB Color Coding
+
 - **Green** (TSB ≥ 5): Ready to perform
 - **Yellow** (TSB -10 to 5): Maintenance
 - **Blue** (TSB -25 to -10): Building fitness
@@ -162,10 +184,13 @@ CTL 67 | ATL 59 | TSB +8
 ## Testing Checklist
 
 ### Manual Testing Steps
+
 1. **Run Backfill Script**:
+
    ```bash
    npx tsx scripts/backfill-training-stress.ts
    ```
+
    - Verify CTL/ATL calculated for all workouts
    - Check final values make sense
 
@@ -181,9 +206,11 @@ CTL 67 | ATL 59 | TSB +8
    - Check color coding is consistent
 
 4. **Test PMC Endpoint**:
+
    ```bash
    curl http://localhost:3000/api/performance/pmc?days=90
    ```
+
    - Verify data structure
    - Check summary contains current metrics
    - Confirm form status is calculated correctly
@@ -228,21 +255,26 @@ CTL 67 | ATL 59 | TSB +8
 ## Integration Points
 
 ### With Intervals.icu
+
 - CTL/ATL values synced from Intervals when available
 - Falls back to calculated values for other sources
 
 ### With Strava
+
 - Uses power data (TSS) when available
 - Falls back to HR-based calculation (HRSS)
 
 ### With Whoop
+
 - Can use TRIMP calculation from HR data
 - Integrates with recovery scores
 
 ## Maintenance
 
 ### Recalculating Metrics
+
 If metrics become out of sync:
+
 ```bash
 # Recalculate for all users
 npx tsx scripts/backfill-training-stress.ts
@@ -252,6 +284,7 @@ npx tsx scripts/backfill-training-stress.ts [userId]
 ```
 
 ### Monitoring
+
 - Check for workouts with TSS but null CTL/ATL
 - Verify chronological order of calculations
 - Monitor for unusually high/low values

@@ -1,15 +1,15 @@
 /**
  * Backfill TSS for existing workouts
- * 
+ *
  * This script normalizes TSS for workouts that don't have it set.
  * It will:
  * 1. Find workouts with tss = null
  * 2. Try to calculate TSS using available data (power, HR, suffer score, TRIMP, etc.)
  * 3. Update CTL/ATL values after TSS is set
- * 
+ *
  * Usage:
  *   npx tsx scripts/backfill-tss.ts [userId] [limit]
- * 
+ *
  * Examples:
  *   npx tsx scripts/backfill-tss.ts                    # Process all users, all workouts
  *   npx tsx scripts/backfill-tss.ts <userId>           # Process specific user, all workouts
@@ -71,7 +71,9 @@ async function main() {
     console.log('User Profile:')
     console.log(`  FTP: ${profile?.ftp || 'Not set'} ${profile?.ftp ? '✅' : '❌'}`)
     console.log(`  Max HR: ${profile?.maxHr || 'Not set'} ${profile?.maxHr ? '✅' : '❌'}`)
-    console.log(`  Resting HR: ${profile?.restingHr || 'Not set'} ${profile?.restingHr ? '✅' : '❌'}`)
+    console.log(
+      `  Resting HR: ${profile?.restingHr || 'Not set'} ${profile?.restingHr ? '✅' : '❌'}`
+    )
     console.log()
 
     // Count workouts without TSS
@@ -93,7 +95,7 @@ async function main() {
     // Run backfill
     try {
       const result = await backfillTSSForWorkouts(user.id, limit)
-      
+
       totalProcessed += result.processed
       totalNormalized += result.normalized
       totalFailed += result.failed

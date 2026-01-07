@@ -6,7 +6,11 @@ export const useFormat = () => {
 
   // Reactive timezone
   const timezone = computed(() => {
-    return (data.value?.user as any)?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
+    return (
+      (data.value?.user as any)?.timezone ||
+      Intl.DateTimeFormat().resolvedOptions().timeZone ||
+      'UTC'
+    )
   })
 
   // Helper to convert date to Zoned Date
@@ -19,9 +23,12 @@ export const useFormat = () => {
     try {
       // If formatStr is an object (legacy Intl options), ignore it or map it.
       if (typeof formatStr === 'object') {
-        return new Date(date).toLocaleDateString('en-US', { ...(formatStr as any), timeZone: timezone.value })
+        return new Date(date).toLocaleDateString('en-US', {
+          ...(formatStr as any),
+          timeZone: timezone.value
+        })
       }
-      
+
       return format(toZoned(date), formatStr, { timeZone: timezone.value })
     } catch (e) {
       return ''

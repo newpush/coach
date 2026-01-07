@@ -7,11 +7,13 @@ The workout deduplication system automatically identifies and manages duplicate 
 ## Problem Statement
 
 Users may have the same workout synced from multiple sources:
+
 - **Intervals.icu**: Often has full cycling metrics (power, TSS, training load)
 - **Strava**: Better for gym/strength training activities
 - **Both**: May have the same ride/run with different data quality
 
 Without deduplication, the system would:
+
 - Show duplicate entries in workout lists
 - Inflate workout counts and statistics
 - Run duplicate AI analyses
@@ -32,9 +34,10 @@ completenessScore Int?                     // Score used to rank versions
 ### Detection Logic
 
 **Duplicate Detection Criteria:**
+
 1. **Time proximity**: Within 1 hour of each other
 2. **Duration similarity**: Within 5 minutes OR 10% difference
-3. **Type/title similarity**: 
+3. **Type/title similarity**:
    - Matching workout types
    - Similar titles
    - Same activity category (ride/run/etc)
@@ -77,10 +80,10 @@ The deduplication task runs after data ingestion:
 Level 1: Data Ingestion
   ↓ ingest-intervals
   ↓ ingest-strava
-  
+
 Level 1.5: Data Cleanup
   ↓ deduplicate-workouts  ← NEW
-  
+
 Level 2: AI Analysis
   ↓ analyze-workouts (uses non-duplicates only)
 ```
@@ -90,12 +93,14 @@ Level 2: AI Analysis
 ### API Endpoints
 
 **Trigger Deduplication:**
+
 ```typescript
-POST /api/workouts/deduplicate
+POST / api / workouts / deduplicate
 // Returns: { success: true, taskId: string }
 ```
 
 **Get Workouts (Auto-filters duplicates):**
+
 ```typescript
 GET /api/workouts
 // Returns non-duplicate workouts by default
@@ -107,7 +112,7 @@ GET /api/workouts?includeDuplicates=true
 ### Trigger Task
 
 ```typescript
-import { tasks } from "@trigger.dev/sdk/v3"
+import { tasks } from '@trigger.dev/sdk/v3'
 
 await tasks.trigger('deduplicate-workouts', {
   userId: user.id
@@ -123,7 +128,7 @@ All workout queries now automatically exclude duplicates:
 const workouts = await prisma.workout.findMany({
   where: {
     userId,
-    isDuplicate: false  // ← Always include this
+    isDuplicate: false // ← Always include this
   }
 })
 
@@ -136,6 +141,7 @@ const workouts = await prisma.workout.findMany({
 ### Updated Endpoints
 
 All these endpoints now filter duplicates automatically:
+
 - `/api/workouts` - Workout listing
 - `/api/workouts/analyze-all` - Batch analysis
 - `/api/activity/recent` - Recent activity timeline
@@ -173,20 +179,24 @@ The TaskDependencyGraph component shows deduplication status:
 ## Example Scenarios
 
 ### Scenario 1: Zwift Ride
+
 - **Intervals.icu**: Full power data, TSS, training load ✅ **KEPT**
 - **Strava**: Basic metrics only ❌ Marked as duplicate
 
-### Scenario 2: Gym Session  
+### Scenario 2: Gym Session
+
 - **Intervals.icu**: Basic duration only ❌ Marked as duplicate
 - **Strava**: Sets, reps, equipment notes ✅ **KEPT**
 
 ### Scenario 3: Outdoor Run
+
 - **Intervals.icu**: HR, pace, elevation
 - **Strava**: HR, pace, elevation, route map ✅ **KEPT** (tie-breaker: more complete)
 
 ## Migration
 
 Existing workouts are unaffected:
+
 - Default `isDuplicate = false`
 - Run deduplication task to mark historical duplicates
 - Non-destructive: duplicates preserved but hidden
@@ -194,6 +204,7 @@ Existing workouts are unaffected:
 ## Future Enhancements
 
 Potential improvements:
+
 - Manual duplicate resolution UI
 - Merge duplicate data (combine best fields)
 - Source preference settings per user

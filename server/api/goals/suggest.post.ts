@@ -29,24 +29,28 @@ defineRouteMeta({
 
 export default defineEventHandler(async (event) => {
   const session = await getServerSession(event)
-  
+
   if (!session?.user) {
-    throw createError({ 
+    throw createError({
       statusCode: 401,
-      message: 'Unauthorized' 
+      message: 'Unauthorized'
     })
   }
-  
+
   const userId = (session.user as any).id
-  
+
   try {
     // Trigger the goal suggestions background job with per-user concurrency
-    const handle = await tasks.trigger('suggest-goals', {
-      userId
-    }, {
-      concurrencyKey: userId
-    })
-    
+    const handle = await tasks.trigger(
+      'suggest-goals',
+      {
+        userId
+      },
+      {
+        concurrencyKey: userId
+      }
+    )
+
     return {
       success: true,
       jobId: handle.id,

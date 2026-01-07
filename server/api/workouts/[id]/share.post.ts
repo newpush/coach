@@ -85,8 +85,8 @@ export default defineEventHandler(async (event) => {
       data: { shareToken: token }
     })
     return { token: updated.shareToken }
-  } 
-  
+  }
+
   if (action === 'revoke') {
     await prisma.workout.update({
       where: { id: workoutId },

@@ -28,7 +28,7 @@ export default defineEventHandler(async (event) => {
 
   try {
     const eventData = await prisma.event.findFirst({
-      where: { 
+      where: {
         id,
         userId
       },

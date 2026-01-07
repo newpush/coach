@@ -36,20 +36,19 @@ export const nutritionRepository = {
   /**
    * Get a single nutrition entry by ID, ensuring it belongs to the user
    */
-  async getById(
-    nutritionId: string,
-    userId: string
-  ) {
-    return prisma.nutrition.findUnique({
-      where: {
-        id: nutritionId,
-      }
-    }).then(nutrition => {
-      if (nutrition && nutrition.userId === userId) {
-        return nutrition
-      }
-      return null
-    })
+  async getById(nutritionId: string, userId: string) {
+    return prisma.nutrition
+      .findUnique({
+        where: {
+          id: nutritionId
+        }
+      })
+      .then((nutrition) => {
+        if (nutrition && nutrition.userId === userId) {
+          return nutrition
+        }
+        return null
+      })
   },
 
   /**

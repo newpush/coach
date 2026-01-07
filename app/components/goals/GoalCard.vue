@@ -8,7 +8,7 @@
         <div>
           <h3 class="font-semibold text-sm text-gray-900 dark:text-white">{{ goal.title }}</h3>
           <p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{{ typeLabel }}</p>
-          
+
           <div class="mt-3 flex flex-wrap gap-2">
             <UBadge v-if="goal.priority" :color="priorityColor" variant="subtle" size="xs">
               {{ goal.priority }} Priority
@@ -22,24 +22,32 @@
           </div>
         </div>
       </div>
-      
+
       <UDropdownMenu :items="actions">
         <UButton color="neutral" variant="ghost" icon="i-heroicons-ellipsis-vertical" size="xs" />
       </UDropdownMenu>
     </div>
-    
+
     <div class="mt-6">
       <div v-if="goal.metric === 'weight_kg'" class="space-y-2">
         <div class="flex justify-between text-xs font-medium">
           <span class="text-gray-700 dark:text-gray-300">{{ goal.currentValue }}kg</span>
           <span class="text-gray-500">Target: {{ goal.targetValue }}kg</span>
         </div>
-        <UProgress :model-value="calculateProgress(goal.startValue, goal.currentValue, goal.targetValue)" size="sm" color="primary" />
+        <UProgress
+          :model-value="calculateProgress(goal.startValue, goal.currentValue, goal.targetValue)"
+          size="sm"
+          color="primary"
+        />
       </div>
-      
+
       <div v-else-if="goal.type === 'EVENT'" class="text-xs font-medium space-y-3">
         <template v-if="goal.events && goal.events.length > 0">
-          <div v-for="event in sortedEvents" :key="event.id" class="flex justify-between items-center py-1 border-b border-gray-100 dark:border-gray-800 last:border-0">
+          <div
+            v-for="event in sortedEvents"
+            :key="event.id"
+            class="flex justify-between items-center py-1 border-b border-gray-100 dark:border-gray-800 last:border-0"
+          >
             <div class="flex items-center gap-2">
               <UIcon name="i-heroicons-calendar" class="w-3.5 h-3.5 text-gray-400" />
               <span class="text-gray-700 dark:text-gray-300">{{ event.title }}</span>
@@ -54,7 +62,7 @@
           </div>
         </template>
         <div v-else-if="effectiveEventDate">
-           <p v-if="daysUntil(effectiveEventDate) > 0" class="text-gray-600 dark:text-gray-400">
+          <p v-if="daysUntil(effectiveEventDate) > 0" class="text-gray-600 dark:text-gray-400">
             {{ daysUntil(effectiveEventDate) }} days until event
           </p>
           <p v-else class="text-green-600 dark:text-green-400 flex items-center gap-1">
@@ -63,7 +71,7 @@
           </p>
         </div>
       </div>
-      
+
       <div v-else class="text-sm text-gray-600 dark:text-gray-400 leading-relaxed">
         {{ goal.description }}
       </div>
@@ -72,92 +80,118 @@
 </template>
 
 <script setup lang="ts">
-const { formatDate, getUserLocalDate } = useFormat()
+  const { formatDate, getUserLocalDate } = useFormat()
 
-const props = defineProps<{
-  goal: any
-}>()
+  const props = defineProps<{
+    goal: any
+  }>()
 
-const emit = defineEmits(['delete', 'edit'])
+  const emit = defineEmits(['delete', 'edit'])
 
-const typeIcon = computed(() => {
-  switch (props.goal.type) {
-    case 'BODY_COMPOSITION': return 'i-heroicons-scale'
-    case 'EVENT': return 'i-heroicons-calendar'
-    case 'PERFORMANCE': return 'i-heroicons-bolt'
-    case 'CONSISTENCY': return 'i-heroicons-arrow-path'
-    default: return 'i-heroicons-trophy'
+  const typeIcon = computed(() => {
+    switch (props.goal.type) {
+      case 'BODY_COMPOSITION':
+        return 'i-heroicons-scale'
+      case 'EVENT':
+        return 'i-heroicons-calendar'
+      case 'PERFORMANCE':
+        return 'i-heroicons-bolt'
+      case 'CONSISTENCY':
+        return 'i-heroicons-arrow-path'
+      default:
+        return 'i-heroicons-trophy'
+    }
+  })
+
+  const typeColorClasses = computed(() => {
+    switch (props.goal.type) {
+      case 'BODY_COMPOSITION':
+        return 'bg-blue-50 text-blue-600 ring-blue-500/10 dark:bg-blue-900/20 dark:text-blue-400 dark:ring-blue-400/20'
+      case 'EVENT':
+        return 'bg-purple-50 text-purple-600 ring-purple-500/10 dark:bg-purple-900/20 dark:text-purple-400 dark:ring-purple-400/20'
+      case 'PERFORMANCE':
+        return 'bg-amber-50 text-amber-600 ring-amber-500/10 dark:bg-amber-900/20 dark:text-amber-400 dark:ring-amber-400/20'
+      case 'CONSISTENCY':
+        return 'bg-green-50 text-green-600 ring-green-500/10 dark:bg-green-900/20 dark:text-green-400 dark:ring-green-400/20'
+      default:
+        return 'bg-gray-50 text-gray-600 ring-gray-500/10 dark:bg-gray-800 dark:text-gray-400 dark:ring-gray-700'
+    }
+  })
+
+  const typeLabel = computed(() => {
+    switch (props.goal.type) {
+      case 'BODY_COMPOSITION':
+        return 'Body Composition'
+      case 'EVENT':
+        return 'Event Preparation'
+      case 'PERFORMANCE':
+        return 'Performance'
+      case 'CONSISTENCY':
+        return 'Consistency'
+      default:
+        return 'Goal'
+    }
+  })
+
+  const priorityColor = computed(() => {
+    switch (props.goal.priority) {
+      case 'HIGH':
+        return 'error'
+      case 'MEDIUM':
+        return 'warning'
+      case 'LOW':
+        return 'success'
+      default:
+        return 'neutral'
+    }
+  })
+
+  const effectiveEventDate = computed(() => {
+    if (props.goal.eventDate) return props.goal.eventDate
+    if (props.goal.events && props.goal.events.length > 0) {
+      // Find the latest event date (assuming main event is last)
+      const dates = props.goal.events.map((e: any) => new Date(e.date).getTime())
+      return new Date(Math.max(...dates)).toISOString()
+    }
+    return null
+  })
+
+  const sortedEvents = computed(() => {
+    if (!props.goal.events) return []
+    return [...props.goal.events].sort(
+      (a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime()
+    )
+  })
+
+  const actions = [
+    [
+      {
+        label: 'Edit Goal',
+        icon: 'i-heroicons-pencil',
+        onSelect: () => emit('edit', props.goal)
+      },
+      {
+        label: 'Delete Goal',
+        icon: 'i-heroicons-trash',
+        onSelect: () => emit('delete', props.goal.id)
+      }
+    ]
+  ]
+
+  function daysUntil(dateString: string) {
+    if (!dateString) return 0
+    const today = getUserLocalDate()
+    const target = new Date(dateString)
+    // Both are UTC midnight or relative.
+    const diffTime = target.getTime() - today.getTime()
+    return Math.ceil(diffTime / (1000 * 60 * 60 * 24))
   }
-})
 
-const typeColorClasses = computed(() => {
-  switch (props.goal.type) {
-    case 'BODY_COMPOSITION': return 'bg-blue-50 text-blue-600 ring-blue-500/10 dark:bg-blue-900/20 dark:text-blue-400 dark:ring-blue-400/20'
-    case 'EVENT': return 'bg-purple-50 text-purple-600 ring-purple-500/10 dark:bg-purple-900/20 dark:text-purple-400 dark:ring-purple-400/20'
-    case 'PERFORMANCE': return 'bg-amber-50 text-amber-600 ring-amber-500/10 dark:bg-amber-900/20 dark:text-amber-400 dark:ring-amber-400/20'
-    case 'CONSISTENCY': return 'bg-green-50 text-green-600 ring-green-500/10 dark:bg-green-900/20 dark:text-green-400 dark:ring-green-400/20'
-    default: return 'bg-gray-50 text-gray-600 ring-gray-500/10 dark:bg-gray-800 dark:text-gray-400 dark:ring-gray-700'
+  function calculateProgress(start: number, current: number, target: number) {
+    if (!start || !target || !current) return 0
+    const totalChange = Math.abs(target - start)
+    const currentChange = Math.abs(current - start)
+    if (totalChange === 0) return 100
+    return Math.min(Math.round((currentChange / totalChange) * 100), 100)
   }
-})
-
-const typeLabel = computed(() => {
-  switch (props.goal.type) {
-    case 'BODY_COMPOSITION': return 'Body Composition'
-    case 'EVENT': return 'Event Preparation'
-    case 'PERFORMANCE': return 'Performance'
-    case 'CONSISTENCY': return 'Consistency'
-    default: return 'Goal'
-  }
-})
-
-const priorityColor = computed(() => {
-  switch (props.goal.priority) {
-    case 'HIGH': return 'error'
-    case 'MEDIUM': return 'warning'
-    case 'LOW': return 'success'
-    default: return 'neutral'
-  }
-})
-
-const effectiveEventDate = computed(() => {
-  if (props.goal.eventDate) return props.goal.eventDate
-  if (props.goal.events && props.goal.events.length > 0) {
-    // Find the latest event date (assuming main event is last)
-    const dates = props.goal.events.map((e: any) => new Date(e.date).getTime())
-    return new Date(Math.max(...dates)).toISOString()
-  }
-  return null
-})
-
-const sortedEvents = computed(() => {
-  if (!props.goal.events) return []
-  return [...props.goal.events].sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime())
-})
-
-const actions = [[{
-  label: 'Edit Goal',
-  icon: 'i-heroicons-pencil',
-  onSelect: () => emit('edit', props.goal)
-}, {
-  label: 'Delete Goal',
-  icon: 'i-heroicons-trash',
-  onSelect: () => emit('delete', props.goal.id)
-}]]
-
-function daysUntil(dateString: string) {
-  if (!dateString) return 0
-  const today = getUserLocalDate()
-  const target = new Date(dateString)
-  // Both are UTC midnight or relative.
-  const diffTime = target.getTime() - today.getTime()
-  return Math.ceil(diffTime / (1000 * 60 * 60 * 24))
-}
-
-function calculateProgress(start: number, current: number, target: number) {
-  if (!start || !target || !current) return 0
-  const totalChange = Math.abs(target - start)
-  const currentChange = Math.abs(current - start)
-  if (totalChange === 0) return 100
-  return Math.min(Math.round((currentChange / totalChange) * 100), 100)
-}
 </script>

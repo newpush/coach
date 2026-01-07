@@ -1,234 +1,252 @@
-import { logger, task } from "@trigger.dev/sdk/v3";
-import { generateStructuredAnalysis } from "../server/utils/gemini";
-import { prisma } from "../server/utils/db";
-import { nutritionRepository } from "../server/utils/repositories/nutritionRepository";
-import { userAnalysisQueue } from "./queues";
-import { getUserTimezone, formatUserDate } from "../server/utils/date";
+import { logger, task } from '@trigger.dev/sdk/v3'
+import { generateStructuredAnalysis } from '../server/utils/gemini'
+import { prisma } from '../server/utils/db'
+import { nutritionRepository } from '../server/utils/repositories/nutritionRepository'
+import { userAnalysisQueue } from './queues'
+import { getUserTimezone, formatUserDate } from '../server/utils/date'
 
 // Analysis schema for nutrition
 const nutritionAnalysisSchema = {
-  type: "object",
+  type: 'object',
   properties: {
     type: {
-      type: "string",
-      description: "Type of analysis: nutrition",
-      enum: ["nutrition"]
+      type: 'string',
+      description: 'Type of analysis: nutrition',
+      enum: ['nutrition']
     },
     title: {
-      type: "string",
-      description: "Title of the analysis"
+      type: 'string',
+      description: 'Title of the analysis'
     },
     date: {
-      type: "string",
-      description: "Date of the nutrition entry"
+      type: 'string',
+      description: 'Date of the nutrition entry'
     },
     executive_summary: {
-      type: "string",
-      description: "2-3 sentence high-level summary of key findings about nutrition quality and completeness"
+      type: 'string',
+      description:
+        '2-3 sentence high-level summary of key findings about nutrition quality and completeness'
     },
     data_completeness: {
-      type: "object",
-      description: "Assessment of whether the user logged their full day",
+      type: 'object',
+      description: 'Assessment of whether the user logged their full day',
       properties: {
         status: {
-          type: "string",
-          enum: ["complete", "mostly_complete", "partial", "incomplete"],
-          description: "Overall completeness status"
+          type: 'string',
+          enum: ['complete', 'mostly_complete', 'partial', 'incomplete'],
+          description: 'Overall completeness status'
         },
         confidence: {
-          type: "number",
-          description: "Confidence level (0-1) that the data represents a full day"
+          type: 'number',
+          description: 'Confidence level (0-1) that the data represents a full day'
         },
         missing_meals: {
-          type: "array",
-          items: { type: "string" },
-          description: "List of likely missing meals or gaps"
+          type: 'array',
+          items: { type: 'string' },
+          description: 'List of likely missing meals or gaps'
         },
         reasoning: {
-          type: "string",
-          description: "Explanation of completeness assessment"
+          type: 'string',
+          description: 'Explanation of completeness assessment'
         }
       },
-      required: ["status", "confidence", "reasoning"]
+      required: ['status', 'confidence', 'reasoning']
     },
     sections: {
-      type: "array",
-      description: "Analysis sections with status and points",
+      type: 'array',
+      description: 'Analysis sections with status and points',
       items: {
-        type: "object",
+        type: 'object',
         properties: {
           title: {
-            type: "string",
-            description: "Section title (e.g., Macro Balance, Calorie Adherence)"
+            type: 'string',
+            description: 'Section title (e.g., Macro Balance, Calorie Adherence)'
           },
           status: {
-            type: "string",
-            description: "Overall assessment",
-            enum: ["excellent", "good", "moderate", "needs_improvement", "poor"]
+            type: 'string',
+            description: 'Overall assessment',
+            enum: ['excellent', 'good', 'moderate', 'needs_improvement', 'poor']
           },
           status_label: {
-            type: "string",
-            description: "Display label for status"
+            type: 'string',
+            description: 'Display label for status'
           },
           analysis_points: {
-            type: "array",
-            description: "Detailed analysis points for this section",
+            type: 'array',
+            description: 'Detailed analysis points for this section',
             items: {
-              type: "string"
+              type: 'string'
             }
           }
         },
-        required: ["title", "status", "analysis_points"]
+        required: ['title', 'status', 'analysis_points']
       }
     },
     recommendations: {
-      type: "array",
-      description: "Actionable recommendations",
+      type: 'array',
+      description: 'Actionable recommendations',
       items: {
-        type: "object",
+        type: 'object',
         properties: {
           title: {
-            type: "string",
-            description: "Recommendation title"
+            type: 'string',
+            description: 'Recommendation title'
           },
           description: {
-            type: "string",
-            description: "Detailed recommendation"
+            type: 'string',
+            description: 'Detailed recommendation'
           },
           priority: {
-            type: "string",
-            description: "Priority level",
-            enum: ["high", "medium", "low"]
+            type: 'string',
+            description: 'Priority level',
+            enum: ['high', 'medium', 'low']
           }
         },
-        required: ["title", "description"]
+        required: ['title', 'description']
       }
     },
     strengths: {
-      type: "array",
-      description: "Key strengths identified",
+      type: 'array',
+      description: 'Key strengths identified',
       items: {
-        type: "string"
+        type: 'string'
       }
     },
     areas_for_improvement: {
-      type: "array",
-      description: "Areas needing improvement",
+      type: 'array',
+      description: 'Areas needing improvement',
       items: {
-        type: "string"
+        type: 'string'
       }
     },
     scores: {
-      type: "object",
-      description: "Nutrition quality scores on 1-10 scale for tracking over time, with detailed explanations",
+      type: 'object',
+      description:
+        'Nutrition quality scores on 1-10 scale for tracking over time, with detailed explanations',
       properties: {
         overall: {
-          type: "number",
-          description: "Overall nutrition quality (1-10)",
+          type: 'number',
+          description: 'Overall nutrition quality (1-10)',
           minimum: 1,
           maximum: 10
         },
         overall_explanation: {
-          type: "string",
-          description: "Detailed explanation of overall nutrition quality: key factors affecting score, what's working well, and 2-3 specific actionable improvements (e.g., 'Add more vegetables', 'Increase protein at breakfast')"
+          type: 'string',
+          description:
+            "Detailed explanation of overall nutrition quality: key factors affecting score, what's working well, and 2-3 specific actionable improvements (e.g., 'Add more vegetables', 'Increase protein at breakfast')"
         },
         macro_balance: {
-          type: "number",
-          description: "Macronutrient distribution appropriateness (1-10)",
+          type: 'number',
+          description: 'Macronutrient distribution appropriateness (1-10)',
           minimum: 1,
           maximum: 10
         },
         macro_balance_explanation: {
-          type: "string",
-          description: "Macro distribution analysis: current ratios vs optimal for training, which macros need adjustment, and specific recommendations (e.g., 'Increase carbs to 5g/kg on training days')"
+          type: 'string',
+          description:
+            "Macro distribution analysis: current ratios vs optimal for training, which macros need adjustment, and specific recommendations (e.g., 'Increase carbs to 5g/kg on training days')"
         },
         quality: {
-          type: "number",
-          description: "Food quality and nutrient density (1-10)",
+          type: 'number',
+          description: 'Food quality and nutrient density (1-10)',
           minimum: 1,
           maximum: 10
         },
         quality_explanation: {
-          type: "string",
-          description: "Food quality assessment: processed vs whole foods ratio, nutrient density observations, and suggestions for higher quality choices"
+          type: 'string',
+          description:
+            'Food quality assessment: processed vs whole foods ratio, nutrient density observations, and suggestions for higher quality choices'
         },
         adherence: {
-          type: "number",
-          description: "Adherence to goals and targets (1-10)",
+          type: 'number',
+          description: 'Adherence to goals and targets (1-10)',
           minimum: 1,
           maximum: 10
         },
         adherence_explanation: {
-          type: "string",
-          description: "Goal adherence analysis: how well targets are being met, patterns in over/under eating, and strategies to improve consistency"
+          type: 'string',
+          description:
+            'Goal adherence analysis: how well targets are being met, patterns in over/under eating, and strategies to improve consistency'
         },
         hydration: {
-          type: "number",
-          description: "Hydration adequacy (1-10)",
+          type: 'number',
+          description: 'Hydration adequacy (1-10)',
           minimum: 1,
           maximum: 10
         },
         hydration_explanation: {
-          type: "string",
-          description: "Hydration status analysis: daily water intake vs needs, timing of hydration, and specific recommendations to optimize (e.g., 'Drink 500ml upon waking', 'Increase water during training')"
+          type: 'string',
+          description:
+            "Hydration status analysis: daily water intake vs needs, timing of hydration, and specific recommendations to optimize (e.g., 'Drink 500ml upon waking', 'Increase water during training')"
         }
       },
-      required: ["overall", "overall_explanation", "macro_balance", "macro_balance_explanation", "quality", "quality_explanation", "adherence", "adherence_explanation", "hydration", "hydration_explanation"]
+      required: [
+        'overall',
+        'overall_explanation',
+        'macro_balance',
+        'macro_balance_explanation',
+        'quality',
+        'quality_explanation',
+        'adherence',
+        'adherence_explanation',
+        'hydration',
+        'hydration_explanation'
+      ]
     },
     metrics_summary: {
-      type: "object",
-      description: "Key metrics at a glance",
+      type: 'object',
+      description: 'Key metrics at a glance',
       properties: {
-        calories: { type: "number" },
-        calories_goal: { type: "number" },
-        protein_g: { type: "number" },
-        carbs_g: { type: "number" },
-        fat_g: { type: "number" },
-        water_l: { type: "number" }
+        calories: { type: 'number' },
+        calories_goal: { type: 'number' },
+        protein_g: { type: 'number' },
+        carbs_g: { type: 'number' },
+        fat_g: { type: 'number' },
+        water_l: { type: 'number' }
       }
     }
   },
-  required: ["type", "title", "executive_summary", "data_completeness", "sections", "scores"]
+  required: ['type', 'title', 'executive_summary', 'data_completeness', 'sections', 'scores']
 }
 
 export const analyzeNutritionTask = task({
-  id: "analyze-nutrition",
+  id: 'analyze-nutrition',
   maxDuration: 300, // 5 minutes for AI processing
   queue: userAnalysisQueue,
   run: async (payload: { nutritionId: string }) => {
-    const { nutritionId } = payload;
-    
-    logger.log("Starting nutrition analysis", { nutritionId });
-    
+    const { nutritionId } = payload
+
+    logger.log('Starting nutrition analysis', { nutritionId })
+
     // Update nutrition status to PROCESSING
-    await nutritionRepository.updateStatus(nutritionId, 'PROCESSING');
-    
+    await nutritionRepository.updateStatus(nutritionId, 'PROCESSING')
+
     try {
       // Fetch the nutrition record
       const nutrition = await prisma.nutrition.findUnique({
         where: { id: nutritionId }
-      });
-      
+      })
+
       if (!nutrition) {
-        throw new Error('Nutrition record not found');
+        throw new Error('Nutrition record not found')
       }
-      
-      logger.log("Nutrition data fetched", { 
+
+      logger.log('Nutrition data fetched', {
         nutritionId,
         date: nutrition.date,
         calories: nutrition.calories
-      });
-      
-      const timezone = await getUserTimezone(nutrition.userId);
+      })
+
+      const timezone = await getUserTimezone(nutrition.userId)
 
       // Build comprehensive nutrition data for analysis
-      const nutritionData = buildNutritionAnalysisData(nutrition);
-      
+      const nutritionData = buildNutritionAnalysisData(nutrition)
+
       // Generate the prompt
-      const prompt = buildNutritionAnalysisPrompt(nutritionData, timezone);
-      
-      logger.log("Generating structured analysis with Gemini Flash");
-      
+      const prompt = buildNutritionAnalysisPrompt(nutritionData, timezone)
+
+      logger.log('Generating structured analysis with Gemini Flash')
+
       // Generate structured JSON analysis
       const structuredAnalysis = await generateStructuredAnalysis(
         prompt,
@@ -240,18 +258,18 @@ export const analyzeNutritionTask = task({
           entityType: 'Nutrition',
           entityId: nutrition.id
         }
-      );
-      
+      )
+
       // Also generate markdown for fallback/export
-      const markdownAnalysis = convertStructuredToMarkdown(structuredAnalysis);
-      
-      logger.log("Analysis generated successfully", {
+      const markdownAnalysis = convertStructuredToMarkdown(structuredAnalysis)
+
+      logger.log('Analysis generated successfully', {
         sections: structuredAnalysis.sections?.length || 0,
         recommendations: structuredAnalysis.recommendations?.length || 0,
         completeness: structuredAnalysis.data_completeness?.status,
         scores: structuredAnalysis.scores
-      });
-      
+      })
+
       // Save both formats to the database, including scores and explanations
       await nutritionRepository.update(nutritionId, {
         aiAnalysis: markdownAnalysis,
@@ -270,25 +288,25 @@ export const analyzeNutritionTask = task({
         macroDistributionExplanation: structuredAnalysis.scores?.macro_balance_explanation,
         hydrationStatusExplanation: structuredAnalysis.scores?.hydration_explanation,
         timingOptimizationExplanation: structuredAnalysis.scores?.quality_explanation
-      });
-      
-      logger.log("Analysis saved to database");
-      
+      })
+
+      logger.log('Analysis saved to database')
+
       return {
         success: true,
         nutritionId,
         analysisLength: markdownAnalysis.length,
         sectionsCount: structuredAnalysis.sections?.length || 0
-      };
+      }
     } catch (error) {
-      logger.error("Error generating nutrition analysis", { error });
-      
-      await nutritionRepository.updateStatus(nutritionId, 'FAILED');
-      
-      throw error;
+      logger.error('Error generating nutrition analysis', { error })
+
+      await nutritionRepository.updateStatus(nutritionId, 'FAILED')
+
+      throw error
     }
   }
-});
+})
 
 function buildNutritionAnalysisData(nutrition: any) {
   const data: any = {
@@ -306,13 +324,13 @@ function buildNutritionAnalysisData(nutrition: any) {
     sugar: nutrition.sugar,
     water_ml: nutrition.waterMl
   }
-  
+
   // Extract meal data
   if (nutrition.breakfast) data.breakfast = nutrition.breakfast
   if (nutrition.lunch) data.lunch = nutrition.lunch
   if (nutrition.dinner) data.dinner = nutrition.dinner
   if (nutrition.snacks) data.snacks = nutrition.snacks
-  
+
   return data
 }
 
@@ -320,9 +338,9 @@ function buildNutritionAnalysisPrompt(nutritionData: any, timezone: string): str
   const formatMetric = (value: any, decimals = 1) => {
     return value !== undefined && value !== null ? Number(value).toFixed(decimals) : 'N/A'
   }
-  
-  const dateStr = formatUserDate(nutritionData.date, timezone, 'yyyy-MM-dd');
-  
+
+  const dateStr = formatUserDate(nutritionData.date, timezone, 'yyyy-MM-dd')
+
   let prompt = `You are an expert nutrition coach analyzing a day's food intake. Provide a comprehensive, supportive analysis.
 
 ## Nutrition Summary for ${dateStr}
@@ -337,53 +355,57 @@ function buildNutritionAnalysisPrompt(nutritionData: any, timezone: string): str
   if (nutritionData.fiber) {
     prompt += `- **Fiber**: ${formatMetric(nutritionData.fiber, 0)}g (target: 25-30g for optimal health)\n`
   }
-  
+
   if (nutritionData.sugar) {
     prompt += `- **Sugar**: ${formatMetric(nutritionData.sugar, 0)}g (recommended: <50g daily)\n`
   }
-  
+
   if (nutritionData.water_ml) {
     prompt += `- **Water**: ${formatMetric(nutritionData.water_ml / 1000, 1)}L (target: 2-3L daily)\n`
   }
 
   // Meal breakdown
   prompt += '\n### Meal Breakdown\n'
-  
+
   const meals = ['breakfast', 'lunch', 'dinner', 'snacks']
   let mealCount = 0
   let totalItems = 0
-  
+
   for (const meal of meals) {
-    if (nutritionData[meal] && Array.isArray(nutritionData[meal]) && nutritionData[meal].length > 0) {
+    if (
+      nutritionData[meal] &&
+      Array.isArray(nutritionData[meal]) &&
+      nutritionData[meal].length > 0
+    ) {
       mealCount++
       const mealItems = nutritionData[meal]
       totalItems += mealItems.length
-      
+
       prompt += `\n**${meal.charAt(0).toUpperCase() + meal.slice(1)}** (${mealItems.length} items):\n`
-      
+
       // Calculate meal totals from items
       let mealCalories = 0
       let mealProtein = 0
       let mealCarbs = 0
       let mealFat = 0
-      
+
       // List items with their macros
       mealItems.forEach((item: any, index: number) => {
         const itemName = item.product_name || item.name || 'Unknown item'
         const itemAmount = item.amount ? `${item.amount}${item.serving ? item.serving : 'g'}` : ''
-        
+
         prompt += `  ${index + 1}. ${itemName}`
         if (itemAmount) prompt += ` (${itemAmount})`
         if (item.product_brand) prompt += ` - ${item.product_brand}`
         prompt += '\n'
-        
+
         // Aggregate macros
         if (item.calories) mealCalories += item.calories
         if (item.protein) mealProtein += item.protein
         if (item.carbs) mealCarbs += item.carbs
         if (item.fat) mealFat += item.fat
       })
-      
+
       // Show meal totals
       prompt += `  **Meal Totals**: ${Math.round(mealCalories)} kcal`
       if (mealProtein > 0) prompt += `, ${formatMetric(mealProtein, 0)}g protein`
@@ -392,7 +414,7 @@ function buildNutritionAnalysisPrompt(nutritionData: any, timezone: string): str
       prompt += '\n'
     }
   }
-  
+
   if (mealCount === 0) {
     prompt += 'No meal data logged. Only daily totals are available.\n'
   } else {
@@ -483,11 +505,11 @@ IMPORTANT:
 // Convert structured analysis to markdown for fallback/export
 function convertStructuredToMarkdown(analysis: any): string {
   let markdown = `# ${analysis.title}\n\n`
-  
+
   if (analysis.date) {
     markdown += `Date: ${analysis.date}\n\n`
   }
-  
+
   // Data Completeness
   if (analysis.data_completeness) {
     const dc = analysis.data_completeness
@@ -498,9 +520,9 @@ function convertStructuredToMarkdown(analysis: any): string {
     }
     markdown += `\n${dc.reasoning}\n\n`
   }
-  
+
   markdown += `## Executive Summary\n${analysis.executive_summary}\n\n`
-  
+
   // Sections
   if (analysis.sections) {
     for (const section of analysis.sections) {
@@ -514,7 +536,7 @@ function convertStructuredToMarkdown(analysis: any): string {
       markdown += '\n'
     }
   }
-  
+
   // Recommendations
   if (analysis.recommendations && analysis.recommendations.length > 0) {
     markdown += `## Recommendations\n`
@@ -523,11 +545,11 @@ function convertStructuredToMarkdown(analysis: any): string {
       markdown += `${rec.description}\n\n`
     }
   }
-  
+
   // Strengths & Areas for Improvement
   if (analysis.strengths || analysis.areas_for_improvement) {
     markdown += `## Strengths & Areas for Improvement\n`
-    
+
     if (analysis.strengths && analysis.strengths.length > 0) {
       markdown += `### Strengths\n`
       for (const strength of analysis.strengths) {
@@ -535,7 +557,7 @@ function convertStructuredToMarkdown(analysis: any): string {
       }
       markdown += '\n'
     }
-    
+
     if (analysis.areas_for_improvement && analysis.areas_for_improvement.length > 0) {
       markdown += `### Areas for Improvement\n`
       for (const area of analysis.areas_for_improvement) {
@@ -543,6 +565,6 @@ function convertStructuredToMarkdown(analysis: any): string {
       }
     }
   }
-  
+
   return markdown
 }

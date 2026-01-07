@@ -10,13 +10,7 @@ export const usePolling = () => {
       onError?: (error: any) => void
     } = {}
   ) => {
-    const {
-      interval = 5000,
-      maxAttempts = 15,
-      onSuccess,
-      onMaxAttemptsReached,
-      onError
-    } = options
+    const { interval = 5000, maxAttempts = 15, onSuccess, onMaxAttemptsReached, onError } = options
 
     let attempts = 0
 
@@ -24,7 +18,7 @@ export const usePolling = () => {
       attempts++
       try {
         const data = await fetchFn()
-        
+
         if (checkFn(data)) {
           if (onSuccess) onSuccess(data)
           return

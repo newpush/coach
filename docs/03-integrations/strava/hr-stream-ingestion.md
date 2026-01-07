@@ -7,10 +7,12 @@ The system now automatically fetches and stores heart rate (HR) stream data for 
 ## What Changed
 
 ### Before
+
 - HR stream data was only fetched for specific activity types: Run, Ride, VirtualRide, Walk, Hike
 - Activities like "Elliptical" (classified as "Other") were skipped even if they had HR data
 
 ### After
+
 - HR stream data is fetched for ALL activities that have heart rate or power data
 - This includes elliptical, rowing, skiing, and any other activity type with HR monitoring
 
@@ -37,12 +39,15 @@ The stream ingestion task performs these steps:
 ## CLI Tools
 
 ### Check if workout has HR stream in database
+
 npx tsx scripts/check-workout-hr-stream.ts [workout-id]
 
 ### Check if Strava API has HR stream
+
 npx tsx scripts/check-strava-hr-stream.ts [workout-id]
 
 ### Backfill existing workouts
+
 npx tsx scripts/backfill-strava-streams.ts
 
 ## Benefits

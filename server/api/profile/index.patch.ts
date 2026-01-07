@@ -3,7 +3,6 @@ import { z } from 'zod'
 import { prisma } from '../../utils/db'
 import { athleteMetricsService } from '../../utils/athleteMetricsService'
 
-
 defineRouteMeta({
   openAPI: {
     tags: ['Profile'],
@@ -87,7 +86,7 @@ const profileSchema = z.object({
 
 export default defineEventHandler(async (event) => {
   const session = await getServerSession(event)
-  
+
   if (!session?.user?.email) {
     throw createError({
       statusCode: 401,
@@ -132,7 +131,7 @@ export default defineEventHandler(async (event) => {
       ...data,
       dob: dobDate
     }
-    
+
     // Remove dob from spread if it was processed separately to avoid type mismatch if any
     if ('dob' in data) {
       delete updateData.dob
@@ -147,7 +146,7 @@ export default defineEventHandler(async (event) => {
         maxHr: data.maxHr,
         weight: data.weight
       })
-      
+
       // Remove these from generic update to avoid double-write
       if (data.ftp !== undefined) delete updateData.ftp
       if (data.maxHr !== undefined) delete updateData.maxHr

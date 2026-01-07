@@ -50,34 +50,34 @@ defineRouteMeta({
 
 export default defineEventHandler(async (event) => {
   const session = await getServerSession(event)
-  
+
   if (!session?.user) {
-    throw createError({ 
+    throw createError({
       statusCode: 401,
-      message: 'Unauthorized' 
+      message: 'Unauthorized'
     })
   }
-  
+
   const query = getQuery(event)
   const startDate = query.startDate ? new Date(query.startDate as string) : null
   const endDate = query.endDate ? new Date(query.endDate as string) : null
-  
+
   if (!startDate || !endDate || isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
     throw createError({
       statusCode: 400,
       message: 'Valid startDate and endDate parameters are required'
     })
   }
-  
+
   const userId = (session.user as any).id
-  
+
   // Fetch wellness data for the date range
   const wellness = await wellnessRepository.getForUser(userId, {
     startDate,
     endDate,
     orderBy: { date: 'asc' }
   })
-  
+
   // Fetch daily metrics for the date range
   const dailyMetrics = await prisma.dailyMetric.findMany({
     where: {
@@ -89,10 +89,10 @@ export default defineEventHandler(async (event) => {
     },
     orderBy: { date: 'asc' }
   })
-  
+
   // Merge data by date, preferring wellness over dailyMetrics
   const dataByDate = new Map()
-  
+
   // Add daily metrics first
   for (const d of dailyMetrics) {
     const dateKey = d.date.toISOString().split('T')[0]
@@ -105,7 +105,7 @@ export default defineEventHandler(async (event) => {
       recoveryScore: d.recoveryScore
     })
   }
-  
+
   // Override with wellness data where available
   for (const w of wellness) {
     const dateKey = w.date.toISOString().split('T')[0]
@@ -119,9 +119,7 @@ export default defineEventHandler(async (event) => {
       recoveryScore: w.recoveryScore ?? existing.recoveryScore
     })
   }
-  
+
   // Convert map to array and sort by date
-  return Array.from(dataByDate.values()).sort((a, b) => 
-    a.date.localeCompare(b.date)
-  )
+  return Array.from(dataByDate.values()).sort((a, b) => a.date.localeCompare(b.date))
 })

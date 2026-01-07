@@ -70,9 +70,7 @@ export default defineEventHandler(async (event) => {
         name: 'Coach Watts',
         avatar: '/media/logo.webp', // Assuming a logo exists
         users: {
-          create: [
-            { userId: userId }
-          ]
+          create: [{ userId: userId }]
         }
       },
       include: {
@@ -88,25 +86,32 @@ export default defineEventHandler(async (event) => {
   }
 
   // Format for vue-advanced-chat
-  const formattedRooms = rooms.map(room => {
+  const formattedRooms = rooms.map((room) => {
     const lastMessage = room.messages[0]
-    
+
     return {
       roomId: room.id,
       roomName: room.name,
       avatar: room.avatar,
       unreadCount: 0, // TODO: Implement unread count logic
-      index: lastMessage ? new Date(lastMessage.createdAt).getTime() : new Date(room.createdAt).getTime(),
-      lastMessage: lastMessage ? {
-        content: lastMessage.content,
-        senderId: lastMessage.senderId,
-        username: lastMessage.senderId === 'ai_agent' ? 'Coach Watts' : 'Me', // Simplified
-        timestamp: new Date(lastMessage.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        saved: true,
-        distributed: true,
-        seen: true,
-        new: false
-      } : null,
+      index: lastMessage
+        ? new Date(lastMessage.createdAt).getTime()
+        : new Date(room.createdAt).getTime(),
+      lastMessage: lastMessage
+        ? {
+            content: lastMessage.content,
+            senderId: lastMessage.senderId,
+            username: lastMessage.senderId === 'ai_agent' ? 'Coach Watts' : 'Me', // Simplified
+            timestamp: new Date(lastMessage.createdAt).toLocaleTimeString([], {
+              hour: '2-digit',
+              minute: '2-digit'
+            }),
+            saved: true,
+            distributed: true,
+            seen: true,
+            new: false
+          }
+        : null,
       users: [
         {
           _id: userId,

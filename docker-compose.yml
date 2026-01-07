@@ -9,11 +9,11 @@ services:
       POSTGRES_PASSWORD: password
       POSTGRES_DB: watts
     ports:
-      - "5439:5432"
+      - '5439:5432'
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U watts"]
+      test: ['CMD-SHELL', 'pg_isready -U watts']
       interval: 10s
       timeout: 5s
       retries: 5

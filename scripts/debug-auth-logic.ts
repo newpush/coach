@@ -1,4 +1,3 @@
-
 import 'dotenv/config'
 import { PrismaClient } from '@prisma/client'
 import pg from 'pg'
@@ -24,7 +23,13 @@ async function main() {
         where: { email: process.env.AUTH_BYPASS_USER }
       })
       if (user) {
-        console.log('✅ Bypass user exists:', user.id, user.email, 'isAdmin:', (user as any).isAdmin)
+        console.log(
+          '✅ Bypass user exists:',
+          user.id,
+          user.email,
+          'isAdmin:',
+          (user as any).isAdmin
+        )
       } else {
         console.log('❌ Bypass user NOT FOUND')
       }
@@ -45,7 +50,7 @@ async function main() {
 }
 
 main()
-  .catch(e => {
+  .catch((e) => {
     console.error(e)
     process.exit(1)
   })

@@ -7,36 +7,32 @@ export type GeminiModel = 'flash' | 'pro'
 
 const MODEL_NAMES = {
   flash: 'gemini-flash-latest',
-  pro: 'gemini-1.5-pro-latest'  // Using Gemini 1.5 Pro for advanced reasoning
+  pro: 'gemini-1.5-pro-latest' // Using Gemini 1.5 Pro for advanced reasoning
 } as const
 
 // Gemini API pricing (as of Dec 2024, per 1M tokens)
 // Source: https://ai.google.dev/pricing
 const PRICING = {
   'gemini-flash-latest': {
-    input: 0.075,   // $0.075 per 1M input tokens
-    output: 0.30    // $0.30 per 1M output tokens
+    input: 0.075, // $0.075 per 1M input tokens
+    output: 0.3 // $0.30 per 1M output tokens
   },
   'gemini-1.5-pro-latest': {
-    input: 1.25,    // $1.25 per 1M input tokens
-    output: 5.00    // $5.00 per 1M output tokens
+    input: 1.25, // $1.25 per 1M input tokens
+    output: 5.0 // $5.00 per 1M output tokens
   }
 } as const
 
 /**
  * Calculate cost in USD for a Gemini API call
  */
-function calculateCost(
-  model: string,
-  inputTokens: number,
-  outputTokens: number
-): number {
+function calculateCost(model: string, inputTokens: number, outputTokens: number): number {
   const pricing = PRICING[model as keyof typeof PRICING]
   if (!pricing) {
     console.warn(`[Gemini] Unknown model for pricing: ${model}`)
     return 0
   }
-  
+
   const inputCost = (inputTokens / 1_000_000) * pricing.input
   const outputCost = (outputTokens / 1_000_000) * pricing.output
   return inputCost + outputCost
@@ -114,7 +110,7 @@ const MAX_DELAY_MS = 60000 // 60 seconds max delay
  * Sleep for a given duration
  */
 function sleep(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms))
+  return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
 /**
@@ -139,7 +135,11 @@ function parseRetryDelay(error: any): number | null {
  */
 function isRateLimitError(error: any): boolean {
   const errorString = error.message || JSON.stringify(error)
-  return errorString.includes('[429') || errorString.includes('quota') || errorString.includes('rate limit')
+  return (
+    errorString.includes('[429') ||
+    errorString.includes('quota') ||
+    errorString.includes('rate limit')
+  )
 }
 
 /**
@@ -162,25 +162,25 @@ async function retryWithBackoff<T>(
   const startTime = Date.now()
   let retryCount = 0
   let result: T | undefined
-  
+
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     try {
       result = await fn()
-      
+
       // Log successful usage if tracking is enabled
       if (trackingParams && result) {
         const durationMs = Date.now() - startTime
-        
+
         // Extract token usage from response if available
         let promptTokens: number | undefined
         let completionTokens: number | undefined
         let totalTokens: number | undefined
         let responseText: string = ''
-        
+
         // Try to extract usage metadata from the result
         if (typeof result === 'object' && result !== null) {
           const anyResult = result as any
-          
+
           // For generateContent responses - check response.usageMetadata
           if (anyResult.response?.usageMetadata) {
             promptTokens = anyResult.response.usageMetadata.promptTokenCount
@@ -193,7 +193,7 @@ async function retryWithBackoff<T>(
             completionTokens = anyResult.usageMetadata.candidatesTokenCount
             totalTokens = anyResult.usageMetadata.totalTokenCount
           }
-          
+
           // Try to get response text for preview
           if (typeof anyResult === 'string') {
             responseText = anyResult
@@ -215,12 +215,13 @@ async function retryWithBackoff<T>(
         } else if (typeof result === 'string') {
           responseText = result
         }
-        
+
         // Calculate estimated cost
-        const estimatedCost = promptTokens && completionTokens
-          ? calculateCost(trackingParams.model, promptTokens, completionTokens)
-          : undefined
-        
+        const estimatedCost =
+          promptTokens && completionTokens
+            ? calculateCost(trackingParams.model, promptTokens, completionTokens)
+            : undefined
+
         await logLlmUsage({
           userId: trackingParams.userId,
           model: trackingParams.model,
@@ -241,12 +242,12 @@ async function retryWithBackoff<T>(
           responseFull: responseText
         })
       }
-      
+
       return result
     } catch (error: any) {
       lastError = error
       retryCount++
-      
+
       // If it's not a rate limit error, throw immediately (after logging)
       if (!isRateLimitError(error)) {
         // Log failed usage if tracking is enabled
@@ -270,11 +271,11 @@ async function retryWithBackoff<T>(
         }
         throw error
       }
-      
+
       // If we've exhausted retries, throw (after logging)
       if (attempt === MAX_RETRIES) {
         console.error(`[Gemini] ${context} failed after ${MAX_RETRIES} retries`)
-        
+
         // Log rate limit failure if tracking is enabled
         if (trackingParams) {
           const durationMs = Date.now() - startTime
@@ -296,27 +297,31 @@ async function retryWithBackoff<T>(
         }
         throw error
       }
-      
+
       // Calculate delay
       let delayMs: number
-      
+
       // Try to parse the retry delay from the error
       const suggestedDelay = parseRetryDelay(error)
       if (suggestedDelay !== null) {
         delayMs = Math.min(suggestedDelay, MAX_DELAY_MS)
-        console.log(`[Gemini] Rate limited. Using suggested delay of ${delayMs}ms (attempt ${attempt + 1}/${MAX_RETRIES})`)
+        console.log(
+          `[Gemini] Rate limited. Using suggested delay of ${delayMs}ms (attempt ${attempt + 1}/${MAX_RETRIES})`
+        )
       } else {
         // Use exponential backoff: baseDelay * 2^attempt with jitter
         const exponentialDelay = BASE_DELAY_MS * Math.pow(2, attempt)
         const jitter = Math.random() * 1000 // Add up to 1 second of jitter
         delayMs = Math.min(exponentialDelay + jitter, MAX_DELAY_MS)
-        console.log(`[Gemini] Rate limited. Retrying after ${Math.round(delayMs)}ms (attempt ${attempt + 1}/${MAX_RETRIES})`)
+        console.log(
+          `[Gemini] Rate limited. Retrying after ${Math.round(delayMs)}ms (attempt ${attempt + 1}/${MAX_RETRIES})`
+        )
       }
-      
+
       await sleep(delayMs)
     }
   }
-  
+
   // This should never be reached, but TypeScript needs it
   throw lastError
 }
@@ -334,22 +339,24 @@ export async function generateCoachAnalysis(
   trackingContext?: LlmTrackingContext
 ): Promise<string> {
   const modelName = MODEL_NAMES[modelType]
-  
+
   const result = await retryWithBackoff(
     async () => {
       const model = genAI.getGenerativeModel({
         model: modelName
       })
-      
+
       return model.generateContent(prompt)
     },
     `generateCoachAnalysis(${modelType})`,
-    trackingContext ? {
-      ...trackingContext,
-      model: modelName,
-      modelType,
-      prompt
-    } : undefined
+    trackingContext
+      ? {
+          ...trackingContext,
+          model: modelName,
+          modelType,
+          prompt
+        }
+      : undefined
   )
 
   return result.response.text()
@@ -362,7 +369,7 @@ export async function generateStructuredAnalysis<T>(
   trackingContext?: LlmTrackingContext
 ): Promise<T> {
   const modelName = MODEL_NAMES[modelType]
-  
+
   const result = await retryWithBackoff(
     async () => {
       const model = genAI.getGenerativeModel({
@@ -372,113 +379,120 @@ export async function generateStructuredAnalysis<T>(
           responseSchema: schema
         }
       })
-      
+
       return model.generateContent(prompt)
     },
     `generateStructuredAnalysis(${modelType})`,
-    trackingContext ? {
-      ...trackingContext,
-      model: modelName,
-      modelType,
-      prompt
-    } : undefined
+    trackingContext
+      ? {
+          ...trackingContext,
+          model: modelName,
+          modelType,
+          prompt
+        }
+      : undefined
   )
 
   return JSON.parse(result.response.text())
 }
 
 export function buildWorkoutSummary(workouts: any[]): string {
-  return workouts.map((w, idx) => {
-    const lines = [
-      `### Workout ${idx + 1}: ${w.title}`,
-      `- **Date**: ${new Date(w.date).toLocaleDateString()}`,
-      `- **Duration**: ${Math.round(w.durationSec / 60)} minutes`,
-      `- **Type**: ${w.type || 'Unknown'}`,
-    ];
-    
-    // Power metrics
-    if (w.averageWatts) lines.push(`- **Average Power**: ${w.averageWatts}W`);
-    if (w.normalizedPower) lines.push(`- **Normalized Power**: ${w.normalizedPower}W`);
-    if (w.maxWatts) lines.push(`- **Max Power**: ${w.maxWatts}W`);
-    if (w.weightedAvgWatts) lines.push(`- **Weighted Avg Power**: ${w.weightedAvgWatts}W`);
-    
-    // Heart rate metrics
-    if (w.averageHr) lines.push(`- **Average HR**: ${w.averageHr} bpm`);
-    if (w.maxHr) lines.push(`- **Max HR**: ${w.maxHr} bpm`);
-    
-    // Cadence
-    if (w.averageCadence) lines.push(`- **Average Cadence**: ${w.averageCadence} rpm`);
-    if (w.maxCadence) lines.push(`- **Max Cadence**: ${w.maxCadence} rpm`);
-    
-    // Training load & intensity
-    if (w.tss) lines.push(`- **TSS**: ${Math.round(w.tss)}`);
-    if (w.trainingLoad) lines.push(`- **Training Load**: ${Math.round(w.trainingLoad)}`);
-    if (w.intensity) lines.push(`- **Intensity Factor**: ${w.intensity.toFixed(2)}`);
-    if (w.kilojoules) lines.push(`- **Energy**: ${w.kilojoules} kJ`);
-    
-    // Distance & elevation
-    if (w.distanceMeters) lines.push(`- **Distance**: ${(w.distanceMeters / 1000).toFixed(1)} km`);
-    if (w.elevationGain) lines.push(`- **Elevation**: ${w.elevationGain}m`);
-    if (w.averageSpeed) lines.push(`- **Avg Speed**: ${(w.averageSpeed * 3.6).toFixed(1)} km/h`);
-    
-    // Performance metrics
-    if (w.variabilityIndex) lines.push(`- **Variability Index**: ${w.variabilityIndex.toFixed(2)}`);
-    if (w.powerHrRatio) lines.push(`- **Power/HR Ratio**: ${w.powerHrRatio.toFixed(2)}`);
-    if (w.efficiencyFactor) lines.push(`- **Efficiency Factor**: ${w.efficiencyFactor.toFixed(2)}`);
-    if (w.decoupling) lines.push(`- **Decoupling**: ${w.decoupling.toFixed(1)}%`);
-    
-    // Fitness tracking
-    if (w.ctl) lines.push(`- **CTL (Fitness)**: ${Math.round(w.ctl)}`);
-    if (w.atl) lines.push(`- **ATL (Fatigue)**: ${Math.round(w.atl)}`);
-    
-    // Subjective metrics
-    if (w.rpe) lines.push(`- **RPE**: ${w.rpe}/10`);
-    if (w.sessionRpe) lines.push(`- **Session RPE**: ${w.sessionRpe}`);
-    // Feel is stored as 1-5 (Intervals standard), but AI understands 1-10 better.
-    // 1 (Weak) -> 2/10, 5 (Strong) -> 10/10
-    if (w.feel) lines.push(`- **Feel**: ${w.feel * 2}/10 (10=Strong, 2=Weak)`);
-    
-    // Environmental
-    if (w.avgTemp !== null && w.avgTemp !== undefined) lines.push(`- **Avg Temperature**: ${w.avgTemp.toFixed(1)}°C`);
-    if (w.trainer) lines.push(`- **Indoor Trainer**: Yes`);
-    
-    // Balance
-    if (w.lrBalance) lines.push(`- **L/R Balance**: ${w.lrBalance.toFixed(1)}%`);
-    
-    // Description
-    if (w.description) lines.push(`\n**Description**: ${w.description}`);
-    
-    return lines.join('\n');
-  }).join('\n\n');
+  return workouts
+    .map((w, idx) => {
+      const lines = [
+        `### Workout ${idx + 1}: ${w.title}`,
+        `- **Date**: ${new Date(w.date).toLocaleDateString()}`,
+        `- **Duration**: ${Math.round(w.durationSec / 60)} minutes`,
+        `- **Type**: ${w.type || 'Unknown'}`
+      ]
+
+      // Power metrics
+      if (w.averageWatts) lines.push(`- **Average Power**: ${w.averageWatts}W`)
+      if (w.normalizedPower) lines.push(`- **Normalized Power**: ${w.normalizedPower}W`)
+      if (w.maxWatts) lines.push(`- **Max Power**: ${w.maxWatts}W`)
+      if (w.weightedAvgWatts) lines.push(`- **Weighted Avg Power**: ${w.weightedAvgWatts}W`)
+
+      // Heart rate metrics
+      if (w.averageHr) lines.push(`- **Average HR**: ${w.averageHr} bpm`)
+      if (w.maxHr) lines.push(`- **Max HR**: ${w.maxHr} bpm`)
+
+      // Cadence
+      if (w.averageCadence) lines.push(`- **Average Cadence**: ${w.averageCadence} rpm`)
+      if (w.maxCadence) lines.push(`- **Max Cadence**: ${w.maxCadence} rpm`)
+
+      // Training load & intensity
+      if (w.tss) lines.push(`- **TSS**: ${Math.round(w.tss)}`)
+      if (w.trainingLoad) lines.push(`- **Training Load**: ${Math.round(w.trainingLoad)}`)
+      if (w.intensity) lines.push(`- **Intensity Factor**: ${w.intensity.toFixed(2)}`)
+      if (w.kilojoules) lines.push(`- **Energy**: ${w.kilojoules} kJ`)
+
+      // Distance & elevation
+      if (w.distanceMeters) lines.push(`- **Distance**: ${(w.distanceMeters / 1000).toFixed(1)} km`)
+      if (w.elevationGain) lines.push(`- **Elevation**: ${w.elevationGain}m`)
+      if (w.averageSpeed) lines.push(`- **Avg Speed**: ${(w.averageSpeed * 3.6).toFixed(1)} km/h`)
+
+      // Performance metrics
+      if (w.variabilityIndex)
+        lines.push(`- **Variability Index**: ${w.variabilityIndex.toFixed(2)}`)
+      if (w.powerHrRatio) lines.push(`- **Power/HR Ratio**: ${w.powerHrRatio.toFixed(2)}`)
+      if (w.efficiencyFactor)
+        lines.push(`- **Efficiency Factor**: ${w.efficiencyFactor.toFixed(2)}`)
+      if (w.decoupling) lines.push(`- **Decoupling**: ${w.decoupling.toFixed(1)}%`)
+
+      // Fitness tracking
+      if (w.ctl) lines.push(`- **CTL (Fitness)**: ${Math.round(w.ctl)}`)
+      if (w.atl) lines.push(`- **ATL (Fatigue)**: ${Math.round(w.atl)}`)
+
+      // Subjective metrics
+      if (w.rpe) lines.push(`- **RPE**: ${w.rpe}/10`)
+      if (w.sessionRpe) lines.push(`- **Session RPE**: ${w.sessionRpe}`)
+      // Feel is stored as 1-5 (Intervals standard), but AI understands 1-10 better.
+      // 1 (Weak) -> 2/10, 5 (Strong) -> 10/10
+      if (w.feel) lines.push(`- **Feel**: ${w.feel * 2}/10 (10=Strong, 2=Weak)`)
+
+      // Environmental
+      if (w.avgTemp !== null && w.avgTemp !== undefined)
+        lines.push(`- **Avg Temperature**: ${w.avgTemp.toFixed(1)}°C`)
+      if (w.trainer) lines.push(`- **Indoor Trainer**: Yes`)
+
+      // Balance
+      if (w.lrBalance) lines.push(`- **L/R Balance**: ${w.lrBalance.toFixed(1)}%`)
+
+      // Description
+      if (w.description) lines.push(`\n**Description**: ${w.description}`)
+
+      return lines.join('\n')
+    })
+    .join('\n\n')
 }
 
 export function buildMetricsSummary(metrics: any[]): string {
-  return metrics.map(m => {
-    const parts = [
-      `**${new Date(m.date).toLocaleDateString()}**:`
-    ];
-    
-    // Recovery metrics
-    if (m.recoveryScore !== null) parts.push(`Recovery ${m.recoveryScore}%`);
-    if (m.hrv !== null) parts.push(`HRV ${m.hrv}ms`);
-    if (m.restingHr !== null) parts.push(`Resting HR ${m.restingHr}bpm`);
-    
-    // Sleep metrics
-    if (m.sleepHours !== null) parts.push(`Sleep ${m.sleepHours.toFixed(1)}h`);
-    if (m.sleepScore !== null) parts.push(`Sleep Score ${m.sleepScore}%`);
-    
-    // Additional metrics
-    if (m.spO2 !== null) parts.push(`SpO2 ${m.spO2}%`);
-    if (m.readiness !== null) parts.push(`Readiness ${m.readiness}/10`);
-    
-    // Subjective wellness
-    if (m.fatigue !== null) parts.push(`Fatigue ${m.fatigue}/10`);
-    if (m.soreness !== null) parts.push(`Soreness ${m.soreness}/10`);
-    if (m.stress !== null) parts.push(`Stress ${m.stress}/10`);
-    if (m.mood !== null) parts.push(`Mood ${m.mood}/10`);
-    
-    return parts.join(', ');
-  }).join('\n')
+  return metrics
+    .map((m) => {
+      const parts = [`**${new Date(m.date).toLocaleDateString()}**:`]
+
+      // Recovery metrics
+      if (m.recoveryScore !== null) parts.push(`Recovery ${m.recoveryScore}%`)
+      if (m.hrv !== null) parts.push(`HRV ${m.hrv}ms`)
+      if (m.restingHr !== null) parts.push(`Resting HR ${m.restingHr}bpm`)
+
+      // Sleep metrics
+      if (m.sleepHours !== null) parts.push(`Sleep ${m.sleepHours.toFixed(1)}h`)
+      if (m.sleepScore !== null) parts.push(`Sleep Score ${m.sleepScore}%`)
+
+      // Additional metrics
+      if (m.spO2 !== null) parts.push(`SpO2 ${m.spO2}%`)
+      if (m.readiness !== null) parts.push(`Readiness ${m.readiness}/10`)
+
+      // Subjective wellness
+      if (m.fatigue !== null) parts.push(`Fatigue ${m.fatigue}/10`)
+      if (m.soreness !== null) parts.push(`Soreness ${m.soreness}/10`)
+      if (m.stress !== null) parts.push(`Stress ${m.stress}/10`)
+      if (m.mood !== null) parts.push(`Mood ${m.mood}/10`)
+
+      return parts.join(', ')
+    })
+    .join('\n')
 }
 
 /**
@@ -490,19 +504,19 @@ export function buildMetricsSummary(metrics: any[]): string {
  * @param includeRawJson Whether to include the complete rawJson field (default: false)
  */
 export function buildComprehensiveWorkoutSummary(workouts: any[], includeRawJson = false): string {
-  const summary = buildWorkoutSummary(workouts);
-  
+  const summary = buildWorkoutSummary(workouts)
+
   if (!includeRawJson) {
-    return summary;
+    return summary
   }
-  
+
   // Add raw JSON data for workouts that have it
   const rawDataSection = workouts
-    .filter(w => w.rawJson)
+    .filter((w) => w.rawJson)
     .map((w, idx) => {
-      return `\n### Raw Data for Workout ${idx + 1}:\n\`\`\`json\n${JSON.stringify(w.rawJson, null, 2)}\n\`\`\``;
+      return `\n### Raw Data for Workout ${idx + 1}:\n\`\`\`json\n${JSON.stringify(w.rawJson, null, 2)}\n\`\`\``
     })
-    .join('\n');
-  
-  return rawDataSection ? `${summary}\n\n## Complete Raw Data\n${rawDataSection}` : summary;
+    .join('\n')
+
+  return rawDataSection ? `${summary}\n\n## Complete Raw Data\n${rawDataSection}` : summary
 }

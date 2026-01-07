@@ -12,7 +12,17 @@ defineRouteMeta({
             type: 'object',
             required: ['resourceType', 'resourceId'],
             properties: {
-              resourceType: { type: 'string', enum: ['WORKOUT', 'REPORT', 'NUTRITION', 'PLANNED_WORKOUT', 'TRAINING_PLAN', 'WELLNESS'] },
+              resourceType: {
+                type: 'string',
+                enum: [
+                  'WORKOUT',
+                  'REPORT',
+                  'NUTRITION',
+                  'PLANNED_WORKOUT',
+                  'TRAINING_PLAN',
+                  'WELLNESS'
+                ]
+              },
               resourceId: { type: 'string' },
               expiresIn: { type: 'number', description: 'Expiration in seconds' }
             }
@@ -116,15 +126,28 @@ export default defineEventHandler(async (event) => {
   const config = useRuntimeConfig()
   const siteUrl = config.public.siteUrl || 'http://localhost:3000'
   let sharePath = ''
-  
-  switch(resourceType) {
-    case 'REPORT': sharePath = '/share/profile'; break;
-    case 'WORKOUT': sharePath = '/share/workouts'; break;
-    case 'NUTRITION': sharePath = '/share/nutrition'; break;
-    case 'PLANNED_WORKOUT': sharePath = '/share/planned-workout'; break;
-    case 'TRAINING_PLAN': sharePath = '/share/plan'; break;
-    case 'WELLNESS': sharePath = '/share/wellness'; break;
-    default: sharePath = `/share/${resourceType.toLowerCase()}`;
+
+  switch (resourceType) {
+    case 'REPORT':
+      sharePath = '/share/profile'
+      break
+    case 'WORKOUT':
+      sharePath = '/share/workouts'
+      break
+    case 'NUTRITION':
+      sharePath = '/share/nutrition'
+      break
+    case 'PLANNED_WORKOUT':
+      sharePath = '/share/planned-workout'
+      break
+    case 'TRAINING_PLAN':
+      sharePath = '/share/plan'
+      break
+    case 'WELLNESS':
+      sharePath = '/share/wellness'
+      break
+    default:
+      sharePath = `/share/${resourceType.toLowerCase()}`
   }
 
   return {

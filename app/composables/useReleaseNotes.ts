@@ -1,7 +1,7 @@
 export const useReleaseNotes = () => {
   const STORAGE_KEY = 'coach-wattz-last-seen-release'
   const config = useRuntimeConfig()
-  
+
   // State
   const hasNewRelease = ref(false)
   const currentReleaseContent = ref<string | null>(null)
@@ -15,15 +15,17 @@ export const useReleaseNotes = () => {
 
     loading.value = true
     try {
-      const { version, content } = await $fetch<{ version: string, content: string | null }>('/api/releases/current')
-      
+      const { version, content } = await $fetch<{ version: string; content: string | null }>(
+        '/api/releases/current'
+      )
+
       if (!content) {
         hasNewRelease.value = false
         return
       }
 
       const lastSeenVersion = localStorage.getItem(STORAGE_KEY)
-      
+
       // If we haven't seen this version yet, mark as new
       if (lastSeenVersion !== version) {
         hasNewRelease.value = true
@@ -45,7 +47,7 @@ export const useReleaseNotes = () => {
     hasNewRelease.value = false
     isReleaseModalOpen.value = false
   }
-  
+
   function openReleaseModal() {
     isReleaseModalOpen.value = true
   }

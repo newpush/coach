@@ -141,13 +141,12 @@ export default defineEventHandler(async (event) => {
     if (data && data.blocks) {
       const workoutsNeedingTokens: string[] = []
       const workoutIds: string[] = []
-      
-      
+
       // @ts-expect-error - data type is any
       data.blocks.forEach((block: any) => {
         block.weeks.forEach((week: any) => {
           week.workouts.forEach((workout: any) => {
-             workoutIds.push(workout.id)
+            workoutIds.push(workout.id)
           })
         })
       })
@@ -160,42 +159,44 @@ export default defineEventHandler(async (event) => {
         }
       })
 
-      const tokenMap = new Map(existingTokens.map(t => [t.resourceId, t.token]))
+      const tokenMap = new Map(existingTokens.map((t) => [t.resourceId, t.token]))
 
       // Identify workouts needing tokens
-      
+
       // @ts-expect-error - data type is any
       data.blocks.forEach((block: any) => {
         block.weeks.forEach((week: any) => {
           week.workouts.forEach((workout: any) => {
             if (!tokenMap.has(workout.id)) {
-               workoutsNeedingTokens.push(workout.id)
+              workoutsNeedingTokens.push(workout.id)
             }
           })
         })
       })
-      
+
       if (workoutsNeedingTokens.length > 0) {
         // Generate tokens for any workouts that don't have them yet
-        await Promise.all(workoutsNeedingTokens.map(async (workoutId) => {
-           const newToken = await prisma.shareToken.create({
-            data: {
-              userId: (data as any).userId,
-              resourceType: 'PLANNED_WORKOUT',
-              resourceId: workoutId,
-            }
+        await Promise.all(
+          workoutsNeedingTokens.map(async (workoutId) => {
+            const newToken = await prisma.shareToken.create({
+              data: {
+                userId: (data as any).userId,
+                resourceType: 'PLANNED_WORKOUT',
+                resourceId: workoutId
+              }
+            })
+            tokenMap.set(workoutId, newToken.token)
           })
-          tokenMap.set(workoutId, newToken.token)
-        }))
+        )
       }
 
       // Attach tokens to workouts in the response
-      
+
       // @ts-expect-error - data type is any
       data.blocks.forEach((block: any) => {
         block.weeks.forEach((week: any) => {
           week.workouts.forEach((workout: any) => {
-             workout.shareToken = { token: tokenMap.get(workout.id) }
+            workout.shareToken = { token: tokenMap.get(workout.id) }
           })
         })
       })

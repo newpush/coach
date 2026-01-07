@@ -1,23 +1,23 @@
-import fs from 'fs';
-import path from 'path';
+import fs from 'fs'
+import path from 'path'
 // @ts-expect-error - fit-file-parser types are missing or incompatible
-import FitParser from 'fit-file-parser';
+import FitParser from 'fit-file-parser'
 
-const filename = process.argv[2];
+const filename = process.argv[2]
 
 if (!filename) {
-  console.error('Please provide a filename');
-  process.exit(1);
+  console.error('Please provide a filename')
+  process.exit(1)
 }
 
-const filePath = path.resolve(filename);
+const filePath = path.resolve(filename)
 
 if (!fs.existsSync(filePath)) {
-  console.error(`File not found: ${filePath}`);
-  process.exit(1);
+  console.error(`File not found: ${filePath}`)
+  process.exit(1)
 }
 
-const content = fs.readFileSync(filePath);
+const content = fs.readFileSync(filePath)
 
 const fitParser = new FitParser({
   force: true,
@@ -25,13 +25,13 @@ const fitParser = new FitParser({
   lengthUnit: 'km',
   temperatureUnit: 'celsius',
   elapsedRecordField: true,
-  mode: 'list',
-});
+  mode: 'list'
+})
 
 fitParser.parse(content, (error: any, data: any) => {
   if (error) {
-    console.error('Error parsing file:', error);
+    console.error('Error parsing file:', error)
   } else {
-    console.log(JSON.stringify(data, null, 2));
+    console.log(JSON.stringify(data, null, 2))
   }
-});
+})

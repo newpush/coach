@@ -51,17 +51,17 @@ defineRouteMeta({
 
 export default defineEventHandler(async (event) => {
   const session = await getServerSession(event)
-  
+
   if (!session?.user) {
     throw createError({
       statusCode: 401,
       message: 'Unauthorized'
     })
   }
-  
+
   const userId = (session.user as any).id
   const body = await readBody(event)
-  
+
   // Validate required fields
   if (!body.title || !body.date || !body.durationSec) {
     throw createError({
@@ -69,7 +69,7 @@ export default defineEventHandler(async (event) => {
       message: 'Title, date, and duration are required'
     })
   }
-  
+
   try {
     // Create a manual workout entry
     const workout = await workoutRepository.create({
@@ -86,7 +86,7 @@ export default defineEventHandler(async (event) => {
       rpe: body.rpe ? parseInt(body.rpe) : null,
       plannedWorkoutId: body.plannedWorkoutId || null
     })
-    
+
     // Calculate CTL/ATL for the new workout
     try {
       const { ctl, atl } = await calculateWorkoutStress(workout.id, userId)
@@ -96,7 +96,7 @@ export default defineEventHandler(async (event) => {
       console.error('Error calculating workout stress metrics:', error)
       // Don't fail the request if stress calculation fails
     }
-    
+
     // If linked to a planned workout, mark it as completed
     if (body.plannedWorkoutId) {
       await prisma.plannedWorkout.update({
@@ -104,7 +104,7 @@ export default defineEventHandler(async (event) => {
         data: { completed: true }
       })
     }
-    
+
     return {
       success: true,
       workout

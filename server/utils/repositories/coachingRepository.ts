@@ -71,7 +71,7 @@ export const coachingRepository = {
 
     // Generate a simple 6-char code
     const code = Math.random().toString(36).substring(2, 8).toUpperCase()
-    
+
     return (prisma as any).coachingInvite.create({
       data: {
         athleteId,

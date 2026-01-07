@@ -43,14 +43,14 @@ defineRouteMeta({
 
 export default defineEventHandler(async (event) => {
   const session = await getServerSession(event)
-  
+
   if (!session?.user?.email) {
     throw createError({
       statusCode: 401,
       statusMessage: 'Unauthorized'
     })
   }
-  
+
   try {
     const user = await prisma.user.findUnique({
       where: { email: session.user.email },
@@ -61,14 +61,14 @@ export default defineEventHandler(async (event) => {
         }
       }
     })
-    
+
     if (!user) {
       throw createError({
         statusCode: 404,
         statusMessage: 'User not found'
       })
     }
-    
+
     return {
       success: true,
       goals: user.goals

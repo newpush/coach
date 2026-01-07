@@ -7,30 +7,35 @@ A conversational AI interface that allows users to manage their entire training 
 ## Key Features
 
 ### 1. **Complete Workout Management**
+
 - Create new planned workouts
 - Modify existing workouts (reschedule, change duration/intensity, update description)
 - Delete workouts from schedule
 - All changes sync automatically to Intervals.icu
 
 ### 2. **Intelligent Context Awareness**
+
 - AI sees the next 14 days of planned workouts upfront
 - AI knows your weekly training availability
 - AI understands your current training plan
 - No need to repeat context—the AI remembers
 
 ### 3. **Smart Availability Management**
+
 - Update when you can train each day
 - Set equipment constraints (bike, gym access)
 - Define location preferences (indoor/outdoor)
 - AI validates workouts against availability
 
 ### 4. **AI-Powered Plan Generation**
+
 - Generate multi-day training plans (1-14 days)
 - AI considers your fitness, recovery, and availability
 - Always asks for confirmation before generating
 - Respects equipment and time constraints
 
 ### 5. **Reliable Sync with Intervals.icu**
+
 - All changes sync immediately when possible
 - If sync fails, changes are saved locally
 - Automatic retry in the background every 5 minutes
@@ -50,17 +55,20 @@ A conversational AI interface that allows users to manage their entire training 
 ## Technical Architecture Highlights
 
 ### Database Changes
+
 - **New Table**: `SyncQueue` for managing Intervals.icu sync retries
 - **Updated Table**: `PlannedWorkout` with sync status tracking
 
 ### API Endpoints
+
 - **New**: `GET /api/planned-workouts/:id` - Get workout details
 - **New**: `PATCH /api/planned-workouts/:id` - Update workout
 - **Enhanced**: All endpoints handle sync retry logic
 
 ### Sync Strategy
+
 ```
-User Action → Save Locally → Attempt Sync → Success? 
+User Action → Save Locally → Attempt Sync → Success?
                                               ↓
                                           Yes → Done ✓
                                               ↓
@@ -76,21 +84,27 @@ User Action → Save Locally → Attempt Sync → Success?
 ## Implementation Plan (6 Phases)
 
 ### **Phase 1: Foundation** (2-3 days)
+
 Database schema updates, new API endpoints, sync utilities
 
 ### **Phase 2: Chat Tools** (3-4 days)
+
 Implement all 8 AI tools with proper validation and error handling
 
 ### **Phase 3: Context Enhancement** (2 days)
+
 Add planned workouts, availability, and current plan to chat context
 
 ### **Phase 4: Sync Management** (2-3 days)
+
 Background jobs, retry logic, conflict resolution
 
 ### **Phase 5: Testing** (2-3 days)
+
 Comprehensive testing of all scenarios and edge cases
 
 ### **Phase 6: Polish** (1-2 days)
+
 Documentation, UI improvements, performance optimization
 
 **Total Estimated Time**: 12-17 days
@@ -98,35 +112,38 @@ Documentation, UI improvements, performance optimization
 ## Example User Interactions
 
 ### Creating a Workout
+
 ```
 User: "Add a 90-minute endurance ride for tomorrow morning"
-AI: "Got it! I've added a 90-minute endurance ride for tomorrow (Dec 7) at 8:00 AM. 
+AI: "Got it! I've added a 90-minute endurance ride for tomorrow (Dec 7) at 8:00 AM.
      Target TSS: 65. Synced to Intervals.icu ✓"
 ```
 
 ### Modifying a Workout
+
 ```
 User: "My Tuesday ride needs to move to Wednesday"
-AI: "Done! I've moved your 'Interval Training' workout from Tuesday to Wednesday. 
+AI: "Done! I've moved your 'Interval Training' workout from Tuesday to Wednesday.
      It's updated in Intervals.icu ✓"
 ```
 
 ### Generating a Plan
+
 ```
 User: "Can you create a plan for next week?"
-AI: "I can generate a 7-day training plan starting Monday. Based on your current 
-     fitness (7/10) and availability, I'll balance intensity with recovery. 
+AI: "I can generate a 7-day training plan starting Monday. Based on your current
+     fitness (7/10) and availability, I'll balance intensity with recovery.
      Should I go ahead?"
 
 User: "Yes"
 AI: "Generating your plan... ⏳
-     
+
      Your plan is ready! Here's what I've created:
-     
+
      📅 Weekly Overview (Dec 9-15)
      - Total TSS: 425
      - 5 workouts + 2 recovery days
-     
+
      Monday: Endurance Ride (90min, TSS 70)
      Tuesday: Strength Training (60min)
      Wednesday: Recovery Ride (45min, TSS 35)
@@ -134,16 +151,17 @@ AI: "Generating your plan... ⏳
      Friday: Rest Day
      Saturday: Long Ride (120min, TSS 110)
      Sunday: Active Recovery (30min walk)
-     
-     Each workout respects your availability and equipment access. 
+
+     Each workout respects your availability and equipment access.
      Want me to add any of these to your schedule?"
 ```
 
 ### Checking Availability
+
 ```
 User: "What's my availability for this week?"
 AI: "Here's your training schedule:
-    
+
     Monday: Morning, Evening (bike access)
     Tuesday: Afternoon (gym only, no bike)
     Wednesday: All day (bike access, outdoor only)
@@ -151,7 +169,7 @@ AI: "Here's your training schedule:
     Friday: Rest day
     Saturday: All day (bike access)
     Sunday: Morning (no equipment)
-    
+
     Need to adjust anything?"
 ```
 
@@ -167,11 +185,13 @@ AI: "Here's your training schedule:
 ## Risk Mitigation
 
 ### Technical Risks
+
 - **Intervals.icu API failures** → Handled by sync queue with retry
 - **Data inconsistency** → Local-first approach ensures data safety
 - **Complex conflicts** → Clear validation and user feedback
 
 ### User Experience Risks
+
 - **Confusion about sync status** → Always communicate sync state clearly
 - **Accidental overwrites** → Confirmation required for plan generation
 - **Lost changes** → Everything saved locally first
@@ -179,6 +199,7 @@ AI: "Here's your training schedule:
 ## Success Metrics
 
 After implementation, we'll track:
+
 1. **Tool Usage** - Which tools are used most
 2. **Sync Success Rate** - Target: >95%
 3. **User Satisfaction** - Qualitative feedback

@@ -56,7 +56,7 @@ defineRouteMeta({
 
 export default defineEventHandler(async (event) => {
   const session = await getServerSession(event)
-  
+
   if (!session?.user?.email) {
     throw createError({
       statusCode: 401,
@@ -89,7 +89,7 @@ export default defineEventHandler(async (event) => {
   const user = await prisma.user.findUnique({
     where: { email: session.user.email }
   })
-  
+
   if (!user) {
     throw createError({
       statusCode: 404,
@@ -124,7 +124,7 @@ export default defineEventHandler(async (event) => {
 
     // If no valid explanation exists, trigger generation job with per-user concurrency
     await tasks.trigger(
-      "generate-score-explanations",
+      'generate-score-explanations',
       { userId: user.id },
       { concurrencyKey: user.id }
     )

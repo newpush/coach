@@ -35,6 +35,6 @@ export default defineEventHandler(async (event) => {
 
   const athleteId = (session.user as any).id
   const invite = await coachingRepository.getActiveInvite(athleteId)
-  
+
   return invite || { status: 'NONE' }
 })

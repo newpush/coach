@@ -25,11 +25,6 @@
       "Bash(pnpm:*)",
       "Bash(./scripts/backup-database.sh:*)"
     ],
-    "deny": [
-      "Read(./.env)",
-      "Read(./.env.local)",
-      "Read(./.env.production)",
-      "Read(./secrets/**)"
-    ]
+    "deny": ["Read(./.env)", "Read(./.env.local)", "Read(./.env.production)", "Read(./secrets/**)"]
   }
 }

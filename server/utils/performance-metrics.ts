@@ -1,6 +1,6 @@
 /**
  * Performance Metrics Utility
- * 
+ *
  * Implements advanced analytics for workout analysis:
  * 1. W' Balance (Anaerobic Work Capacity)
  * 2. Efficiency Factor (EF) Decay
@@ -108,10 +108,10 @@ export function calculateStabilityMetrics(
     return (Math.sqrt(variance) / mean) * 100
   }
 
-  const overallCoV = getCoV(stream.filter(v => v > 10))
-  
+  const overallCoV = getCoV(stream.filter((v) => v > 10))
+
   const intervalStability = intervals
-    .filter(interval => interval.type === 'WORK')
+    .filter((interval) => interval.type === 'WORK')
     .map((interval, idx) => {
       const segment = stream.slice(interval.start_index, interval.end_index + 1)
       return {
@@ -129,7 +129,7 @@ export function calculateStabilityMetrics(
 
 /**
  * Calculate W' Balance (Anaerobic Battery)
- * 
+ *
  * Tracks the depletion and replenishment of anaerobic work capacity.
  * Based on the Skiba (2012) model.
  */
@@ -147,8 +147,8 @@ export function calculateWPrimeBalance(
   for (let i = 0; i < powerStream.length; i++) {
     const power = powerStream[i]!
     // Default to 1 second interval if time stream is irregular or missing
-    const dt = i > 0 ? (timeStream[i]! - timeStream[i - 1]!) : 1
-    
+    const dt = i > 0 ? timeStream[i]! - timeStream[i - 1]! : 1
+
     // Ensure positive time delta
     const interval = Math.max(0.1, dt)
 
@@ -161,21 +161,21 @@ export function calculateWPrimeBalance(
       // Recovery: Exponential recharge (Skiba 2012 model)
       // W'bal = W' - (W' - W'bal_prev) * e^(-t/tau)
       // tau = 546 * e^(-0.01 * (CP - Power)) + 316
-      
+
       const diff = ftp - power
       // Avoid division by zero or extreme values in tau calculation
       const safeDiff = Math.max(0, diff)
-      
+
       const tau = 546 * Math.exp(-0.01 * safeDiff) + 316
-      
+
       currentWPrime = wPrime - (wPrime - currentWPrime) * Math.exp(-interval / tau)
     }
 
     // Clamp to max W' (cannot recover more than full capacity)
     if (currentWPrime > wPrime) currentWPrime = wPrime
-    
+
     wPrimeBalance.push(currentWPrime)
-    
+
     if (currentWPrime < minWPrimeBalance) minWPrimeBalance = currentWPrime
   }
 
@@ -187,7 +187,7 @@ export function calculateWPrimeBalance(
 
 /**
  * Calculate Efficiency Factor (EF) Decay
- * 
+ *
  * Measures aerobic decoupling by tracking Power:HR ratio over time.
  * Uses a rolling average to smooth the data.
  */
@@ -203,12 +203,12 @@ export function calculateEfficiencyFactorDecay(
 
   const rawEF: number[] = []
   const smoothedEF: number[] = []
-  
+
   // 1. Calculate raw EF for valid points
   for (let i = 0; i < powerStream.length; i++) {
     const power = powerStream[i]!
     const hr = hrStream[i]!
-    
+
     // Avoid division by zero and unrealistic HR values (e.g. < 40)
     if (hr > 40) {
       rawEF.push(power / hr)
@@ -218,49 +218,50 @@ export function calculateEfficiencyFactorDecay(
   }
 
   // 2. Apply rolling average
-  // Assuming 1 sample per second roughly. 
+  // Assuming 1 sample per second roughly.
   // For variable recording rates, this simple window might be slightly inaccurate but sufficient for trends.
   const windowSize = windowSizeSeconds // samples
-  
+
   for (let i = 0; i < rawEF.length; i++) {
     let sum = 0
     let count = 0
-    
+
     const start = Math.max(0, i - Math.floor(windowSize / 2))
     const end = Math.min(rawEF.length, i + Math.floor(windowSize / 2))
-    
+
     for (let j = start; j < end; j++) {
       if (rawEF[j]! > 0) {
         sum += rawEF[j]!
         count++
       }
     }
-    
+
     smoothedEF.push(count > 0 ? sum / count : 0)
   }
 
   // 3. Calculate Decay (First Half vs Second Half)
-  // We use the middle 80% of data to avoid warmup/cooldown artifacts if desired, 
+  // We use the middle 80% of data to avoid warmup/cooldown artifacts if desired,
   // but standard decoupling uses halves. Let's use first half vs second half excluding first 10 mins warmup if possible.
-  
+
   // Standard implementation: Split entire smoothed array
   const midpoint = Math.floor(smoothedEF.length / 2)
-  const firstHalf = smoothedEF.slice(0, midpoint).filter(v => v > 0)
-  const secondHalf = smoothedEF.slice(midpoint).filter(v => v > 0)
-  
-  const getAvg = (arr: number[]) => arr.length > 0 ? arr.reduce((a, b) => a + b, 0) / arr.length : 0
-  
+  const firstHalf = smoothedEF.slice(0, midpoint).filter((v) => v > 0)
+  const secondHalf = smoothedEF.slice(midpoint).filter((v) => v > 0)
+
+  const getAvg = (arr: number[]) =>
+    arr.length > 0 ? arr.reduce((a, b) => a + b, 0) / arr.length : 0
+
   const firstHalfAvg = getAvg(firstHalf)
   const secondHalfAvg = getAvg(secondHalf)
-  
-  // Decay is percentage drop. 
+
+  // Decay is percentage drop.
   // If EF drops, efficiency is worsening (higher HR for same Power).
   // Decoupling is typically defined as: (FirstHalf - SecondHalf) / FirstHalf * 100?
   // Actually, aerobic decoupling (Pw:HR) is usually calculated as:
   // (Avg Power 1st Half / Avg HR 1st Half) vs (Avg Power 2nd Half / Avg HR 2nd Half).
   // A positive decoupling means efficiency decreased (EF went down).
   // Standard formula: ((EF1 - EF2) / EF1) * 100
-  
+
   let totalDecay = 0
   if (firstHalfAvg > 0) {
     totalDecay = ((firstHalfAvg - secondHalfAvg) / firstHalfAvg) * 100
@@ -298,19 +299,19 @@ export function calculateQuadrantAnalysis(
     q3: 0,
     q4: 0
   }
-  
+
   let totalValidSeconds = 0
 
   for (let i = 0; i < powerStream.length; i++) {
     const power = powerStream[i]!
     const cadence = cadenceStream[i]!
-    
+
     // Ignore zeros/coasting for quadrant distribution?
     // Usually QA includes everything, but zeros skew Q3/Q4 massively.
     // Let's include everything but maybe note that Q3/Q4 includes coasting.
     // Or filter out non-pedaling?
     // Let's filter out non-pedaling (cadence < 10 or power < 10) to see "Pedaling Style".
-    
+
     if (cadence < 10 && power < 10) continue // Coasting/Stopping
 
     totalValidSeconds++

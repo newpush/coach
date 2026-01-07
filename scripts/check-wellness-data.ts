@@ -16,18 +16,18 @@ async function checkWellnessData() {
       dob: true
     }
   })
-  
+
   console.log('User:', user)
-  
+
   if (!user) {
     console.log('No user found')
     return
   }
-  
+
   // Get wellness data for last 7 days
   const sevenDaysAgo = new Date()
   sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
-  
+
   const wellness = await prisma.wellness.findMany({
     where: {
       userId: user.id,
@@ -40,9 +40,9 @@ async function checkWellnessData() {
     },
     take: 10
   })
-  
+
   console.log('\nWellness records found:', wellness.length)
-  wellness.forEach(w => {
+  wellness.forEach((w) => {
     console.log(`\nDate: ${w.date.toISOString().split('T')[0]}`)
     console.log(`  Resting HR: ${w.restingHr}`)
     console.log(`  HRV: ${w.hrv}`)
@@ -53,7 +53,7 @@ async function checkWellnessData() {
 
 checkWellnessData()
   .then(() => process.exit(0))
-  .catch(err => {
+  .catch((err) => {
     console.error(err)
     process.exit(1)
   })

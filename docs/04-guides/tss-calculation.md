@@ -7,6 +7,7 @@ Calculate Training Stress Score (TSS) and Heart Rate Stress Score (HRSS) from Wo
 ## Problem Statement
 
 Currently, TSS values are only present for:
+
 - Intervals.icu workouts (pre-calculated)
 - Some Strava workouts with power meters
 - Manually entered workouts
@@ -24,6 +25,7 @@ Most workouts have `tss = null` because they don't come with pre-calculated TSS 
 ## Data Available
 
 ### WorkoutStream Table
+
 ```typescript
 {
   watts: Json?       // Array of power values in watts
@@ -34,6 +36,7 @@ Most workouts have `tss = null` because they don't come with pre-calculated TSS 
 ```
 
 ### User Profile
+
 ```typescript
 {
   ftp: Int?          // Functional Threshold Power
@@ -70,7 +73,7 @@ function calculateNormalizedPower(wattsArray: number[]): number {
     const sum = wattsArray.slice(i, i + 30).reduce((a, b) => a + b, 0)
     rolling.push(sum / 30)
   }
-  
+
   // 4th power average, then 4th root
   const fourthPower = rolling.reduce((sum, p) => sum + Math.pow(p, 4), 0) / rolling.length
   return Math.pow(fourthPower, 0.25)
@@ -88,29 +91,29 @@ export async function calculateTSSFromPowerStream(
     where: { id: userId },
     select: { ftp: true }
   })
-  
+
   if (!user?.ftp) return null
-  
+
   // Get workout and stream
   const workout = await prisma.workout.findUnique({
     where: { id: workoutId },
     include: { streams: true }
   })
-  
+
   if (!workout?.streams?.watts) return null
-  
+
   const wattsArray = workout.streams.watts as number[]
   const durationSeconds = workout.durationSec
-  
+
   // Calculate NP
   const np = calculateNormalizedPower(wattsArray)
-  
+
   // Calculate IF (Intensity Factor)
   const if = np / user.ftp
-  
+
   // Calculate TSS
   const tss = (durationSeconds * np * if) / (user.ftp * 3600) * 100
-  
+
   return tss
 }
 
@@ -126,29 +129,29 @@ export async function calculateHRSSFromHRStream(
     where: { id: userId },
     select: { maxHr: true, restingHr: true, lthr: true }
   })
-  
+
   if (!user?.maxHr || !user?.restingHr || !user?.lthr) return null
-  
+
   // Get workout and stream
   const workout = await prisma.workout.findUnique({
     where: { id: workoutId },
     include: { streams: true }
   })
-  
+
   if (!workout?.streams?.heartrate) return null
-  
+
   const hrArray = workout.streams.heartrate as number[]
   const durationSeconds = workout.durationSec
-  
+
   // Calculate average HR
   const avgHr = hrArray.reduce((a, b) => a + b, 0) / hrArray.length
-  
+
   // Calculate HRR (Heart Rate Reserve)
   const hrr = (avgHr - user.restingHr) / (user.maxHr - user.restingHr)
-  
+
   // Calculate HRSS
   const hrss = (durationSeconds * avgHr * hrr) / (user.lthr * 3600) * 100
-  
+
   return hrss
 }
 
@@ -160,7 +163,7 @@ export async function calculateAndUpdateStressFromStreams(
   userId: string
 ): Promise<{ tss?: number; hrss?: number } | null> {
   const result: { tss?: number; hrss?: number } = {}
-  
+
   // Try power-based TSS first
   const tss = await calculateTSSFromPowerStream(workoutId, userId)
   if (tss !== null) {
@@ -171,7 +174,7 @@ export async function calculateAndUpdateStressFromStreams(
     })
     return result
   }
-  
+
   // Fallback to HR-based HRSS
   const hrss = await calculateHRSSFromHRStream(workoutId, userId)
   if (hrss !== null) {
@@ -184,7 +187,7 @@ export async function calculateAndUpdateStressFromStreams(
     })
     return result
   }
-  
+
   return null
 }
 ```
@@ -194,6 +197,7 @@ export async function calculateAndUpdateStressFromStreams(
 **File**: `trigger/ingest-strava-streams.ts`
 
 After stream data is saved:
+
 ```typescript
 // Calculate TSS from the newly ingested stream data
 await calculateAndUpdateStressFromStreams(workoutId, userId)
@@ -235,19 +239,16 @@ async function main() {
       title: true
     }
   })
-  
+
   console.log(`Found ${workouts.length} workouts with streams but no TSS`)
-  
+
   let calculated = 0
   let failed = 0
-  
+
   for (const workout of workouts) {
     try {
-      const result = await calculateAndUpdateStressFromStreams(
-        workout.id,
-        workout.userId
-      )
-      
+      const result = await calculateAndUpdateStressFromStreams(workout.id, workout.userId)
+
       if (result) {
         calculated++
         console.log(`✓ ${workout.title}: TSS=${result.tss ?? result.hrss}`)
@@ -260,13 +261,13 @@ async function main() {
       console.error(`✗ ${workout.title}: ${error.message}`)
     }
   }
-  
+
   console.log(`\nComplete: ${calculated} calculated, ${failed} failed`)
-  
+
   // Recalculate CTL/ATL for all users
-  const users = new Set(workouts.map(w => w.userId))
+  const users = new Set(workouts.map((w) => w.userId))
   for (const userId of users) {
-    const firstWorkout = workouts.find(w => w.userId === userId)
+    const firstWorkout = workouts.find((w) => w.userId === userId)
     if (firstWorkout) {
       await recalculateStressAfterDate(userId, firstWorkout.date)
     }
@@ -279,6 +280,7 @@ main()
 ### 5. Update UI to Show Data Source
 
 In activity cards, show where TSS came from:
+
 ```vue
 <UTooltip :text="`Training load${getTSSSource(activity)}`">
   <span class="inline-flex items-center gap-0.5">

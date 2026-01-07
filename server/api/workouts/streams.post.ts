@@ -48,21 +48,21 @@ defineRouteMeta({
 
 export default defineEventHandler(async (event) => {
   const session = await getServerSession(event)
-  
+
   if (!session?.user) {
     throw createError({
       statusCode: 401,
       message: 'Unauthorized'
     })
   }
-  
+
   const body = await readBody(event)
   const { workoutIds } = body
-  
+
   if (!workoutIds || !Array.isArray(workoutIds) || workoutIds.length === 0) {
     return []
   }
-  
+
   // Verify workouts belong to user
   const workouts = await prisma.workout.findMany({
     where: {
@@ -73,34 +73,44 @@ export default defineEventHandler(async (event) => {
       id: true
     }
   })
-  
-  const verifiedIds = workouts.map(w => w.id)
-  
+
+  const verifiedIds = workouts.map((w) => w.id)
+
   if (verifiedIds.length === 0) {
     return []
   }
-  
+
   // Fetch streams for verified workouts
   const streams = await prisma.workoutStream.findMany({
     where: {
       workoutId: { in: verifiedIds }
     }
   })
-  
+
   // Downsample streams to prevent large payloads (Fixes COACH-WATTS-A)
   const TARGET_POINTS = 2000
-  const streamKeys = ['time', 'watts', 'heartrate', 'cadence', 'velocity', 'altitude', 'distance', 'grade_smooth', 'latlng']
-  
-  return streams.map(stream => {
+  const streamKeys = [
+    'time',
+    'watts',
+    'heartrate',
+    'cadence',
+    'velocity',
+    'altitude',
+    'distance',
+    'grade_smooth',
+    'latlng'
+  ]
+
+  return streams.map((stream) => {
     // If time stream is short enough, return as is
     if (!stream.time || !Array.isArray(stream.time) || stream.time.length <= TARGET_POINTS) {
       return stream
     }
-    
+
     const processedStream = { ...stream }
     const step = stream.time.length / TARGET_POINTS
-    
-    streamKeys.forEach(key => {
+
+    streamKeys.forEach((key) => {
       // @ts-expect-error - Dynamic access
       const data = processedStream[key]
       if (data && Array.isArray(data)) {
@@ -115,7 +125,7 @@ export default defineEventHandler(async (event) => {
         processedStream[key] = sampled
       }
     })
-    
+
     return processedStream
   })
 })

@@ -36,14 +36,14 @@ export default defineEventHandler(async (event) => {
   // We look for a workout in the same training week? Or just any planned workout for the user on that date?
   // Usually, a user can only have one primary planned workout per day in this system context?
   // Let's assume we are swapping within the plan structure.
-  
+
   // We should constrain by the same training plan context to be safe, but simple date check is robust enough for now.
   // We check for "PlannedWorkout" on that date.
-  
+
   // To align dates perfectly (ignoring time if stored as datetime but logically date), we might need range or exact match.
   // The schema says `date DateTime @db.Date`. So Prisma handles it as midnight UTC usually.
   // Let's ensure targetDate is normalized.
-  
+
   // Find conflicting workout
   const conflictingWorkout = await prisma.plannedWorkout.findFirst({
     where: {
@@ -62,7 +62,7 @@ export default defineEventHandler(async (event) => {
         data: { date: sourceWorkout.date }
       })
     }
-    
+
     // Move source to target
     await tx.plannedWorkout.update({
       where: { id: workoutId },

@@ -3,7 +3,7 @@ import { prisma } from '../server/utils/db'
 
 async function backfillWorkoutMetadata() {
   console.log('Starting workout metadata backfill...')
-  
+
   // Get all workouts with rawJson
   const workouts = await prisma.workout.findMany({
     where: {
@@ -21,18 +21,18 @@ async function backfillWorkoutMetadata() {
       gearId: true
     }
   })
-  
+
   console.log(`Found ${workouts.length} workouts to process`)
-  
+
   let updated = 0
   let skipped = 0
   let errors = 0
-  
+
   for (const workout of workouts) {
     try {
       const raw = workout.rawJson as any
       const updates: any = {}
-      
+
       // Extract fields based on source
       if (workout.source === 'strava') {
         // Strava fields
@@ -64,7 +64,7 @@ async function backfillWorkoutMetadata() {
         }
         // Intervals doesn't provide device_name, commute, private, or gear_id
       }
-      
+
       // Update if we have any changes
       if (Object.keys(updates).length > 0) {
         await prisma.workout.update({
@@ -72,7 +72,7 @@ async function backfillWorkoutMetadata() {
           data: updates
         })
         updated++
-        
+
         if (updated % 10 === 0) {
           console.log(`Progress: ${updated} workouts updated`)
         }
@@ -84,12 +84,12 @@ async function backfillWorkoutMetadata() {
       errors++
     }
   }
-  
+
   console.log('\nBackfill complete!')
   console.log(`Updated: ${updated}`)
   console.log(`Skipped: ${skipped}`)
   console.log(`Errors: ${errors}`)
-  
+
   // Show sample of updated data
   console.log('\nSample of updated workouts:')
   const samples = await prisma.workout.findMany({
@@ -115,18 +115,20 @@ async function backfillWorkoutMetadata() {
     take: 5,
     orderBy: { date: 'desc' }
   })
-  
-  console.table(samples.map(w => ({
-    source: w.source,
-    title: w.title.substring(0, 30),
-    date: w.date.toISOString().split('T')[0],
-    calories: w.calories,
-    elapsed: w.elapsedTimeSec,
-    device: w.deviceName?.substring(0, 20),
-    commute: w.commute,
-    private: w.isPrivate,
-    gear: w.gearId
-  })))
+
+  console.table(
+    samples.map((w) => ({
+      source: w.source,
+      title: w.title.substring(0, 30),
+      date: w.date.toISOString().split('T')[0],
+      calories: w.calories,
+      elapsed: w.elapsedTimeSec,
+      device: w.deviceName?.substring(0, 20),
+      commute: w.commute,
+      private: w.isPrivate,
+      gear: w.gearId
+    }))
+  )
 }
 
 backfillWorkoutMetadata()

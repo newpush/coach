@@ -112,16 +112,16 @@ export default defineEventHandler(async (event) => {
 
   // Reconstruct history
   // We combine current FTP (most authoritative for "now") with historical snapshots
-  
+
   const ftpByMonth = new Map<string, { date: Date; ftp: number; title: string }>()
-  
+
   // 1. Process historical data points
-  workouts.forEach(workout => {
+  workouts.forEach((workout) => {
     if (!workout.ftp) return
-    
+
     const monthKey = new Date(workout.date).toISOString().slice(0, 7) // YYYY-MM
     const existing = ftpByMonth.get(monthKey)
-    
+
     // Keep the most recent FTP value for each month
     if (!existing || new Date(workout.date) > existing.date) {
       ftpByMonth.set(monthKey, {
@@ -137,22 +137,22 @@ export default defineEventHandler(async (event) => {
   if (user.ftp) {
     const currentMonthKey = new Date().toISOString().slice(0, 7)
     const existing = ftpByMonth.get(currentMonthKey)
-    
+
     // If the latest workout FTP is different from User Profile FTP, it means the profile was likely updated manually
     // So we treat the User Profile FTP as the latest data point
     if (!existing || existing.ftp !== user.ftp) {
-        ftpByMonth.set(currentMonthKey, {
-            date: new Date(),
-            ftp: user.ftp,
-            title: 'Current Setting'
-        })
+      ftpByMonth.set(currentMonthKey, {
+        date: new Date(),
+        ftp: user.ftp,
+        title: 'Current Setting'
+      })
     }
   }
 
   // Convert to array and sort by date
   const ftpData = Array.from(ftpByMonth.values())
     .sort((a, b) => a.date.getTime() - b.date.getTime())
-    .map(item => ({
+    .map((item) => ({
       date: item.date,
       month: item.date.toLocaleString('en-US', { month: 'short', year: 'numeric' }),
       ftp: item.ftp,
@@ -163,15 +163,16 @@ export default defineEventHandler(async (event) => {
   // Current FTP is always the profile FTP (source of truth for "Now")
   const lastFtpEntry = ftpData.length > 0 ? ftpData[ftpData.length - 1] : null
   const currentFTP = user.ftp || (lastFtpEntry ? lastFtpEntry.ftp : null)
-  
+
   // Starting FTP is the first data point in the period
   const firstFtpEntry = ftpData.length > 0 ? ftpData[0] : null
   const startingFTP = firstFtpEntry ? firstFtpEntry.ftp : null
-  
+
   // Peak is max over the period
-  const peakFTP = ftpData.length > 0 ? Math.max(...ftpData.map(d => d.ftp)) : null
-  
-  const improvement = startingFTP && currentFTP ? ((currentFTP - startingFTP) / startingFTP * 100) : null
+  const peakFTP = ftpData.length > 0 ? Math.max(...ftpData.map((d) => d.ftp)) : null
+
+  const improvement =
+    startingFTP && currentFTP ? ((currentFTP - startingFTP) / startingFTP) * 100 : null
 
   return {
     data: ftpData,

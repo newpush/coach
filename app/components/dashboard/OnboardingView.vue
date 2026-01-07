@@ -2,14 +2,20 @@
   <div class="space-y-8">
     <!-- Hero Section -->
     <div class="text-center space-y-4 py-8">
-      <div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-primary-100 dark:bg-primary-900/30 mb-4">
-        <UIcon name="i-heroicons-rocket-launch" class="w-8 h-8 text-primary-600 dark:text-primary-400" />
+      <div
+        class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-primary-100 dark:bg-primary-900/30 mb-4"
+      >
+        <UIcon
+          name="i-heroicons-rocket-launch"
+          class="w-8 h-8 text-primary-600 dark:text-primary-400"
+        />
       </div>
       <h1 class="text-3xl font-bold text-gray-900 dark:text-white tracking-tight">
         Welcome to Coach Watts
       </h1>
       <p class="max-w-2xl mx-auto text-lg text-gray-600 dark:text-gray-300">
-        Your AI-powered endurance coach is ready. Connect your training apps to get personalized insights, recovery analysis, and daily recommendations.
+        Your AI-powered endurance coach is ready. Connect your training apps to get personalized
+        insights, recovery analysis, and daily recommendations.
       </p>
     </div>
 
@@ -21,16 +27,25 @@
           <div class="absolute top-0 right-0 p-4 opacity-10">
             <UIcon name="i-heroicons-chart-bar" class="w-32 h-32" />
           </div>
-          
+
           <div class="relative z-10">
             <div class="flex items-start gap-4 mb-6">
-              <div class="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center flex-shrink-0 overflow-hidden">
-                <img src="/images/logos/intervals.png" alt="Intervals.icu Logo" class="w-8 h-8 object-contain" >
+              <div
+                class="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center flex-shrink-0 overflow-hidden"
+              >
+                <img
+                  src="/images/logos/intervals.png"
+                  alt="Intervals.icu Logo"
+                  class="w-8 h-8 object-contain"
+                />
               </div>
               <div>
-                <h3 class="text-lg font-bold text-gray-900 dark:text-white">Connect Intervals.icu</h3>
+                <h3 class="text-lg font-bold text-gray-900 dark:text-white">
+                  Connect Intervals.icu
+                </h3>
                 <p class="text-gray-600 dark:text-gray-400 mt-1">
-                  Required for your athlete profile, power data, and training calendar. This is the core of your AI coach.
+                  Required for your athlete profile, power data, and training calendar. This is the
+                  core of your AI coach.
                 </p>
               </div>
             </div>
@@ -45,9 +60,9 @@
               >
                 Connect Now
               </UButton>
-              <a 
-                href="https://intervals.icu" 
-                target="_blank" 
+              <a
+                href="https://intervals.icu"
+                target="_blank"
                 class="text-sm font-medium text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 underline decoration-dotted"
               >
                 What is Intervals.icu?
@@ -59,16 +74,24 @@
         <!-- Secondary Connections Grid -->
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
           <!-- Strava -->
-          <UCard 
-            class="transition-all" 
+          <UCard
+            class="transition-all"
             :class="[
-              isStravaDisabled ? 'opacity-60 cursor-not-allowed grayscale' : 'hover:ring-2 hover:ring-orange-500/20 cursor-pointer'
+              isStravaDisabled
+                ? 'opacity-60 cursor-not-allowed grayscale'
+                : 'hover:ring-2 hover:ring-orange-500/20 cursor-pointer'
             ]"
             @click="!isStravaDisabled && navigateTo('/connect-strava')"
           >
             <div class="flex items-center gap-3 mb-3">
-              <div class="w-8 h-8 bg-white rounded-md flex items-center justify-center overflow-hidden ring-1 ring-gray-200 dark:ring-gray-700">
-                <img src="/images/logos/strava.svg" alt="Strava Logo" class="w-5 h-5 object-contain" >
+              <div
+                class="w-8 h-8 bg-white rounded-md flex items-center justify-center overflow-hidden ring-1 ring-gray-200 dark:ring-gray-700"
+              >
+                <img
+                  src="/images/logos/strava.svg"
+                  alt="Strava Logo"
+                  class="w-5 h-5 object-contain"
+                />
               </div>
               <h4 class="font-bold text-gray-900 dark:text-white">Strava</h4>
             </div>
@@ -76,7 +99,11 @@
               Import activities, segments, and social training data.
             </p>
             <UTooltip
-              :text="isStravaDisabled ? 'Strava integration is temporarily unavailable on coachwatts.com' : ''"
+              :text="
+                isStravaDisabled
+                  ? 'Strava integration is temporarily unavailable on coachwatts.com'
+                  : ''
+              "
               :popper="{ placement: 'top' }"
             >
               <UButton
@@ -94,10 +121,19 @@
           </UCard>
 
           <!-- WHOOP -->
-          <UCard class="hover:ring-2 hover:ring-red-500/20 transition-all cursor-pointer" @click="navigateTo('/connect-whoop')">
+          <UCard
+            class="hover:ring-2 hover:ring-red-500/20 transition-all cursor-pointer"
+            @click="navigateTo('/connect-whoop')"
+          >
             <div class="flex items-center gap-3 mb-3">
-              <div class="w-8 h-8 bg-white rounded-md flex items-center justify-center overflow-hidden ring-1 ring-gray-200 dark:ring-gray-700">
-                <img src="/images/logos/whoop_square.svg" alt="WHOOP Logo" class="w-5 h-5 object-contain" >
+              <div
+                class="w-8 h-8 bg-white rounded-md flex items-center justify-center overflow-hidden ring-1 ring-gray-200 dark:ring-gray-700"
+              >
+                <img
+                  src="/images/logos/whoop_square.svg"
+                  alt="WHOOP Logo"
+                  class="w-5 h-5 object-contain"
+                />
               </div>
               <h4 class="font-bold text-gray-900 dark:text-white">WHOOP</h4>
             </div>
@@ -115,12 +151,21 @@
               Connect
             </UButton>
           </UCard>
-          
+
           <!-- Yazio -->
-          <UCard class="hover:ring-2 hover:ring-green-500/20 transition-all cursor-pointer" @click="navigateTo('/connect-yazio')">
+          <UCard
+            class="hover:ring-2 hover:ring-green-500/20 transition-all cursor-pointer"
+            @click="navigateTo('/connect-yazio')"
+          >
             <div class="flex items-center gap-3 mb-3">
-              <div class="w-8 h-8 bg-white rounded-md flex items-center justify-center overflow-hidden ring-1 ring-gray-200 dark:ring-gray-700">
-                <img src="/images/logos/yazio_square.webp" alt="Yazio Logo" class="w-5 h-5 object-contain" >
+              <div
+                class="w-8 h-8 bg-white rounded-md flex items-center justify-center overflow-hidden ring-1 ring-gray-200 dark:ring-gray-700"
+              >
+                <img
+                  src="/images/logos/yazio_square.webp"
+                  alt="Yazio Logo"
+                  class="w-5 h-5 object-contain"
+                />
               </div>
               <h4 class="font-bold text-gray-900 dark:text-white">Yazio</h4>
             </div>
@@ -145,7 +190,9 @@
       <div class="lg:col-span-1">
         <UCard class="bg-gray-50 dark:bg-gray-800/50 sticky top-4">
           <template #header>
-            <h3 class="font-bold text-sm uppercase tracking-wider text-gray-500">Getting Started</h3>
+            <h3 class="font-bold text-sm uppercase tracking-wider text-gray-500">
+              Getting Started
+            </h3>
           </template>
 
           <div class="relative pl-2 space-y-6">
@@ -154,8 +201,13 @@
 
             <!-- Step 1: Account Created -->
             <div class="relative flex items-start gap-4">
-              <div class="relative z-10 w-7 h-7 rounded-full bg-green-100 dark:bg-green-900 flex items-center justify-center border-2 border-white dark:border-gray-900">
-                <UIcon name="i-heroicons-check" class="w-4 h-4 text-green-600 dark:text-green-400" />
+              <div
+                class="relative z-10 w-7 h-7 rounded-full bg-green-100 dark:bg-green-900 flex items-center justify-center border-2 border-white dark:border-gray-900"
+              >
+                <UIcon
+                  name="i-heroicons-check"
+                  class="w-4 h-4 text-green-600 dark:text-green-400"
+                />
               </div>
               <div>
                 <p class="font-bold text-sm text-gray-900 dark:text-white">Account Ready</p>
@@ -165,7 +217,9 @@
 
             <!-- Step 2: Connect Intervals -->
             <div class="relative flex items-start gap-4">
-              <div class="relative z-10 w-7 h-7 rounded-full bg-white dark:bg-gray-800 border-2 border-primary-500 flex items-center justify-center animate-pulse">
+              <div
+                class="relative z-10 w-7 h-7 rounded-full bg-white dark:bg-gray-800 border-2 border-primary-500 flex items-center justify-center animate-pulse"
+              >
                 <div class="w-2.5 h-2.5 rounded-full bg-primary-500" />
               </div>
               <div>
@@ -176,7 +230,9 @@
 
             <!-- Step 3: Analysis -->
             <div class="relative flex items-start gap-4 opacity-50">
-              <div class="relative z-10 w-7 h-7 rounded-full bg-gray-100 dark:bg-gray-800 border-2 border-gray-300 dark:border-gray-600 flex items-center justify-center">
+              <div
+                class="relative z-10 w-7 h-7 rounded-full bg-gray-100 dark:bg-gray-800 border-2 border-gray-300 dark:border-gray-600 flex items-center justify-center"
+              >
                 <span class="text-[10px] font-bold text-gray-500">3</span>
               </div>
               <div>
@@ -187,7 +243,9 @@
 
             <!-- Step 4: First Report -->
             <div class="relative flex items-start gap-4 opacity-50">
-              <div class="relative z-10 w-7 h-7 rounded-full bg-gray-100 dark:bg-gray-800 border-2 border-gray-300 dark:border-gray-600 flex items-center justify-center">
+              <div
+                class="relative z-10 w-7 h-7 rounded-full bg-gray-100 dark:bg-gray-800 border-2 border-gray-300 dark:border-gray-600 flex items-center justify-center"
+              >
                 <span class="text-[10px] font-bold text-gray-500">4</span>
               </div>
               <div>
@@ -203,10 +261,10 @@
 </template>
 
 <script setup lang="ts">
-const { signIn } = useAuth()
+  const { signIn } = useAuth()
 
-const isStravaDisabled = computed(() => {
-  if (import.meta.server) return false
-  return window.location.hostname === 'coachwatts.com'
-})
+  const isStravaDisabled = computed(() => {
+    if (import.meta.server) return false
+    return window.location.hostname === 'coachwatts.com'
+  })
 </script>

@@ -4,7 +4,7 @@ import { prisma } from '../../utils/db'
 
 export default defineEventHandler(async (event) => {
   const session = await getServerSession(event)
-  
+
   // Strict admin check
   if (!session?.user?.isAdmin) {
     throw createError({

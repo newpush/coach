@@ -35,9 +35,9 @@ export async function getEffectiveUserId(event: H3Event): Promise<string> {
   // Verify coaching relationship
   const hasRelationship = await coachingRepository.checkRelationship(userId, actAsUserId)
   if (!hasRelationship) {
-    throw createError({ 
-      statusCode: 403, 
-      message: 'You do not have permission to access this athlete\'s data' 
+    throw createError({
+      statusCode: 403,
+      message: "You do not have permission to access this athlete's data"
     })
   }
 

@@ -101,7 +101,7 @@ model Integration {
   id             String    @id @default(uuid())
   userId         String
   provider       String    // "intervals", "whoop", "strava", "garmin"
-  
+
   // Auth Data
   accessToken    String
   refreshToken   String?
@@ -129,7 +129,7 @@ model Workout {
   userId          String
   externalId      String   // ID from the source (e.g., Strava Activity ID)
   source          String   // "intervals", "strava"
-  
+
   // Core Data
   date            DateTime
   title           String
@@ -140,19 +140,19 @@ model Workout {
   durationSec     Int
   distanceMeters  Float?
   elevationGain   Int?
-  
+
   // Power & Heart Rate
   averageWatts    Int?
   maxWatts        Int?
   normalizedPower Int?
   averageHr       Int?
   maxHr           Int?
-  
+
   // Training Load
   tss             Float?   // Training Stress Score
   if              Float?   // Intensity Factor
   kilojoules      Int?
-  
+
   // Raw Data storage (optional, for re-analysis)
   rawJson         Json?    // Store the original full payload if needed
 
@@ -172,15 +172,15 @@ model DailyMetric {
   // Heart & Recovery
   hrv            Float?   // rMSSD (ms)
   restingHr      Int?
-  
+
   // Sleep
   sleepScore     Int?     // 0-100
   hoursSlept     Float?
-  
+
   // Proprietary Scores (Normalized)
   recoveryScore  Int?     // 0-100 (Whoop style)
   strainScore    Float?   // 0-21 (Whoop style) or similar
-  
+
   spO2           Float?
 
   user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -197,20 +197,20 @@ model Report {
   userId         String
   type           String   // "WEEKLY_ANALYSIS", "RACE_PREP", "DAILY_SUGGESTION"
   status         String   // "PENDING", "PROCESSING", "COMPLETED", "FAILED"
-  
+
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
-  
+
   // Metadata
   dateRangeStart DateTime
   dateRangeEnd   DateTime
   modelVersion   String?  // e.g., "gemini-2.5-pro"
-  
+
   // Content
   markdown       String?  @db.Text
   latex          String?  @db.Text // If we generated a formal document
   pdfUrl         String?  // URL to stored PDF in S3/Blob storage
-  
+
   // Structured Suggestions (for the "Coach" agent)
   suggestions    Json?    // e.g., { "action": "rest", "reason": "HRV low" }
 
@@ -224,23 +224,25 @@ model Report {
 
 **Purpose:** Central user profile and authentication anchor
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `id` | UUID | Primary key |
-| `email` | String | Unique email (required for auth) |
-| `name` | String? | Display name |
-| `image` | String? | Profile picture URL |
-| `emailVerified` | DateTime? | Email verification timestamp |
-| `ftp` | Int? | Functional Threshold Power in watts |
-| `maxHr` | Int? | Maximum heart rate |
-| `weight` | Float? | Weight in kg for power/weight calculations |
-| `dob` | DateTime? | Date of birth for age-graded metrics |
+| Field           | Type      | Description                                |
+| --------------- | --------- | ------------------------------------------ |
+| `id`            | UUID      | Primary key                                |
+| `email`         | String    | Unique email (required for auth)           |
+| `name`          | String?   | Display name                               |
+| `image`         | String?   | Profile picture URL                        |
+| `emailVerified` | DateTime? | Email verification timestamp               |
+| `ftp`           | Int?      | Functional Threshold Power in watts        |
+| `maxHr`         | Int?      | Maximum heart rate                         |
+| `weight`        | Float?    | Weight in kg for power/weight calculations |
+| `dob`           | DateTime? | Date of birth for age-graded metrics       |
 
 **Coaching Settings:**
+
 - FTP, maxHr, weight, dob are used for personalized training zones
 - These can be auto-updated from integration data or manually set
 
 **Relationships:**
+
 - Has many: Accounts (OAuth providers)
 - Has many: Sessions (active login sessions)
 - Has many: Integrations (Whoop, Intervals, etc.)
@@ -252,13 +254,13 @@ model Report {
 
 **Purpose:** NuxtAuth/NextAuth standard OAuth connections
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `provider` | String | OAuth provider (google, github, etc.) |
-| `providerAccountId` | String | User's ID in the provider system |
-| `access_token` | String? | OAuth access token |
-| `refresh_token` | String? | OAuth refresh token |
-| `expires_at` | Int? | Token expiration timestamp |
+| Field               | Type    | Description                           |
+| ------------------- | ------- | ------------------------------------- |
+| `provider`          | String  | OAuth provider (google, github, etc.) |
+| `providerAccountId` | String  | User's ID in the provider system      |
+| `access_token`      | String? | OAuth access token                    |
+| `refresh_token`     | String? | OAuth refresh token                   |
+| `expires_at`        | Int?    | Token expiration timestamp            |
 
 **Composite Primary Key:** `[provider, providerAccountId]`
 
@@ -268,11 +270,11 @@ model Report {
 
 **Purpose:** Active login sessions
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `sessionToken` | String | Unique session identifier |
-| `userId` | String | Reference to User |
-| `expires` | DateTime | Session expiration |
+| Field          | Type     | Description               |
+| -------------- | -------- | ------------------------- |
+| `sessionToken` | String   | Unique session identifier |
+| `userId`       | String   | Reference to User         |
+| `expires`      | DateTime | Session expiration        |
 
 **Security:** Sessions expire and must be refreshed
 
@@ -280,20 +282,21 @@ model Report {
 
 **Purpose:** External fitness app OAuth connections and sync status
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `provider` | String | "intervals", "whoop", "strava", "garmin" |
-| `accessToken` | String | API access token (encrypted) |
-| `refreshToken` | String? | Token refresh capability |
-| `expiresAt` | DateTime? | Token expiration |
-| `externalUserId` | String? | User's ID in external system |
-| `lastSyncAt` | DateTime? | Last successful data sync |
-| `syncStatus` | String? | "SUCCESS", "FAILED", "SYNCING" |
-| `errorMessage` | String? | Details if sync failed |
+| Field            | Type      | Description                              |
+| ---------------- | --------- | ---------------------------------------- |
+| `provider`       | String    | "intervals", "whoop", "strava", "garmin" |
+| `accessToken`    | String    | API access token (encrypted)             |
+| `refreshToken`   | String?   | Token refresh capability                 |
+| `expiresAt`      | DateTime? | Token expiration                         |
+| `externalUserId` | String?   | User's ID in external system             |
+| `lastSyncAt`     | DateTime? | Last successful data sync                |
+| `syncStatus`     | String?   | "SUCCESS", "FAILED", "SYNCING"           |
+| `errorMessage`   | String?   | Details if sync failed                   |
 
 **Unique Constraint:** `[userId, provider]` - One connection per provider per user
 
 **Security Consideration:**
+
 - Access tokens should be encrypted at rest
 - Consider using a secrets manager for production
 - Implement token refresh logic before expiration
@@ -302,26 +305,27 @@ model Report {
 
 **Purpose:** Normalized training activity data from multiple sources
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `externalId` | String | Source system's activity ID |
-| `source` | String | "intervals", "strava", "garmin" |
-| `date` | DateTime | Activity start time |
-| `title` | String | Activity name |
-| `type` | String? | "Ride", "Run", "WeightTraining" |
-| `durationSec` | Int | Duration in seconds |
-| `distanceMeters` | Float? | Distance covered |
-| `averageWatts` | Int? | Average power output |
-| `normalizedPower` | Int? | NP (weighted average) |
-| `tss` | Float? | Training Stress Score |
-| `if` | Float? | Intensity Factor (NP/FTP) |
-| `rawJson` | Json? | Original API response |
+| Field             | Type     | Description                     |
+| ----------------- | -------- | ------------------------------- |
+| `externalId`      | String   | Source system's activity ID     |
+| `source`          | String   | "intervals", "strava", "garmin" |
+| `date`            | DateTime | Activity start time             |
+| `title`           | String   | Activity name                   |
+| `type`            | String?  | "Ride", "Run", "WeightTraining" |
+| `durationSec`     | Int      | Duration in seconds             |
+| `distanceMeters`  | Float?   | Distance covered                |
+| `averageWatts`    | Int?     | Average power output            |
+| `normalizedPower` | Int?     | NP (weighted average)           |
+| `tss`             | Float?   | Training Stress Score           |
+| `if`              | Float?   | Intensity Factor (NP/FTP)       |
+| `rawJson`         | Json?    | Original API response           |
 
 **Unique Constraint:** `[userId, source, externalId]` - Prevents duplicate imports
 
 **Index:** `[userId, date]` - Optimizes time-range queries
 
 **Key Metrics:**
+
 - **TSS (Training Stress Score):** Quantifies training load
 - **IF (Intensity Factor):** Measures workout intensity relative to FTP
 - **Normalized Power:** Better indicator than average power for variable efforts
@@ -330,17 +334,17 @@ model Report {
 
 **Purpose:** Daily health and recovery data
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `date` | Date | Calendar date (YYYY-MM-DD) |
-| `source` | String | "whoop", "garmin", "oura" |
-| `hrv` | Float? | Heart Rate Variability (rMSSD in ms) |
-| `restingHr` | Int? | Resting heart rate |
-| `sleepScore` | Int? | 0-100 sleep quality score |
-| `hoursSlept` | Float? | Total sleep duration |
-| `recoveryScore` | Int? | 0-100 recovery readiness |
-| `strainScore` | Float? | 0-21 daily strain |
-| `spO2` | Float? | Blood oxygen saturation |
+| Field           | Type   | Description                          |
+| --------------- | ------ | ------------------------------------ |
+| `date`          | Date   | Calendar date (YYYY-MM-DD)           |
+| `source`        | String | "whoop", "garmin", "oura"            |
+| `hrv`           | Float? | Heart Rate Variability (rMSSD in ms) |
+| `restingHr`     | Int?   | Resting heart rate                   |
+| `sleepScore`    | Int?   | 0-100 sleep quality score            |
+| `hoursSlept`    | Float? | Total sleep duration                 |
+| `recoveryScore` | Int?   | 0-100 recovery readiness             |
+| `strainScore`   | Float? | 0-21 daily strain                    |
+| `spO2`          | Float? | Blood oxygen saturation              |
 
 **Unique Constraint:** `[userId, date]` - One record per day per user
 
@@ -350,25 +354,27 @@ model Report {
 
 **Purpose:** AI-generated coaching insights and recommendations
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `type` | String | Report category |
-| `status` | String | Processing state |
-| `dateRangeStart` | DateTime | Analysis period start |
-| `dateRangeEnd` | DateTime | Analysis period end |
-| `modelVersion` | String? | AI model used |
-| `markdown` | Text? | Report in Markdown format |
-| `latex` | Text? | Report in LaTeX format |
-| `pdfUrl` | String? | Link to generated PDF |
-| `suggestions` | Json? | Structured recommendations |
+| Field            | Type     | Description                |
+| ---------------- | -------- | -------------------------- |
+| `type`           | String   | Report category            |
+| `status`         | String   | Processing state           |
+| `dateRangeStart` | DateTime | Analysis period start      |
+| `dateRangeEnd`   | DateTime | Analysis period end        |
+| `modelVersion`   | String?  | AI model used              |
+| `markdown`       | Text?    | Report in Markdown format  |
+| `latex`          | Text?    | Report in LaTeX format     |
+| `pdfUrl`         | String?  | Link to generated PDF      |
+| `suggestions`    | Json?    | Structured recommendations |
 
 **Report Types:**
+
 - `WEEKLY_ANALYSIS`: Comprehensive weekly review
 - `RACE_PREP`: Pre-race taper analysis
 - `DAILY_SUGGESTION`: Morning coaching brief
 - `CUSTOM`: User-requested analysis
 
 **Status Flow:**
+
 ```
 PENDING → PROCESSING → COMPLETED
                     ↓
@@ -376,6 +382,7 @@ PENDING → PROCESSING → COMPLETED
 ```
 
 **Suggestions JSON Structure:**
+
 ```json
 {
   "action": "reduce_intensity",
@@ -390,9 +397,11 @@ PENDING → PROCESSING → COMPLETED
 ### Critical Indexes
 
 1. **Workout Queries:**
+
    ```prisma
    @@index([userId, date])
    ```
+
    - Optimizes time-range queries for analysis
    - Most common query pattern: "workouts in last 30 days"
 
@@ -402,6 +411,7 @@ PENDING → PROCESSING → COMPLETED
    @@unique([userId, date])
    @@unique([userId, provider])
    ```
+
    - Prevents data duplication
    - Ensures data integrity
 
@@ -410,6 +420,7 @@ PENDING → PROCESSING → COMPLETED
 **Common Queries:**
 
 1. Get recent workouts:
+
 ```typescript
 await prisma.workout.findMany({
   where: {
@@ -423,6 +434,7 @@ await prisma.workout.findMany({
 ```
 
 2. Get daily metrics for date range:
+
 ```typescript
 await prisma.dailyMetric.findMany({
   where: {
@@ -437,6 +449,7 @@ await prisma.dailyMetric.findMany({
 ```
 
 3. Get user with all integrations:
+
 ```typescript
 await prisma.user.findUnique({
   where: { id: userId },
@@ -455,11 +468,13 @@ await prisma.user.findUnique({
 ### Cascade Deletion
 
 All user-related data is deleted when user is deleted:
+
 ```prisma
 onDelete: Cascade
 ```
 
 **Affected Tables:**
+
 - Accounts
 - Sessions
 - Integrations
@@ -470,6 +485,7 @@ onDelete: Cascade
 ### Data Validation
 
 **Application Level:**
+
 - FTP must be > 0 and < 500 watts (realistic range)
 - Weight must be > 30 and < 200 kg
 - Recovery scores: 0-100
@@ -477,6 +493,7 @@ onDelete: Cascade
 - Dates: not in future (for historical data)
 
 **Database Level:**
+
 - NOT NULL constraints on critical fields
 - UNIQUE constraints prevent duplicates
 - Foreign key constraints ensure referential integrity
@@ -499,16 +516,19 @@ npx prisma generate
 ### Future Migrations
 
 **Adding a field:**
+
 ```bash
 npx prisma migrate dev --name add_vo2max_to_user
 ```
 
 **Changing a field:**
+
 ```bash
 npx prisma migrate dev --name make_ftp_required
 ```
 
 **Best Practices:**
+
 - Always test migrations in development first
 - Backup production database before applying
 - Use descriptive migration names
@@ -519,11 +539,13 @@ npx prisma migrate dev --name make_ftp_required
 ### Sensitive Data
 
 **Access Tokens:**
+
 - Should be encrypted at rest
 - Consider using Prisma field-level encryption
 - Alternative: Store in secrets manager (AWS Secrets Manager, Vault)
 
 **User Data:**
+
 - Implement Row-Level Security (RLS) in production
 - Never expose tokens in API responses
 - Use environment variables for database connection
@@ -531,6 +553,7 @@ npx prisma migrate dev --name make_ftp_required
 ### Access Control
 
 **Prisma Middleware:**
+
 ```typescript
 prisma.$use(async (params, next) => {
   if (params.model === 'Workout') {
@@ -566,6 +589,7 @@ prisma.$use(async (params, next) => {
 ### Planned Additions
 
 1. **Race/Event Tracking:**
+
 ```prisma
 model Race {
   id          String   @id @default(uuid())
@@ -579,6 +603,7 @@ model Race {
 ```
 
 2. **Training Plans:**
+
 ```prisma
 model TrainingPlan {
   id          String   @id @default(uuid())
@@ -591,12 +616,13 @@ model TrainingPlan {
 ```
 
 3. **Social Features:**
+
 ```prisma
 model Following {
   followerId  String
   followingId String
   createdAt   DateTime @default(now())
-  
+
   @@id([followerId, followingId])
 }
 ```

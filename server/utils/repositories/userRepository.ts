@@ -69,7 +69,7 @@ export const userRepository = {
    * but ideally we would track LTHR separately.
    */
   async getLthrForDate(userId: string, date: Date): Promise<number | null> {
-    // For now, we rely on current Max HR from profile as the anchor, 
+    // For now, we rely on current Max HR from profile as the anchor,
     // since we don't have LTHR snapshots on workouts yet (schema limitation).
     // TODO: Add lthr to Workout model for snapshots
     const user = await prisma.user.findUnique({
@@ -78,10 +78,10 @@ export const userRepository = {
     })
 
     if (user?.maxHr) {
-        // Estimate LTHR as ~90% of Max HR for now if not available
-        return Math.round(user.maxHr * 0.9)
+      // Estimate LTHR as ~90% of Max HR for now if not available
+      return Math.round(user.maxHr * 0.9)
     }
-    
+
     return null
   },
 
@@ -89,31 +89,31 @@ export const userRepository = {
    * Get effective Max HR for a date
    */
   async getMaxHrForDate(userId: string, date: Date): Promise<number | null> {
-      // Similar to FTP, we could look for workouts with maxHr data,
-      // but Max HR doesn't fluctuate like FTP. Current profile is usually safe.
-      // However, for strict historical accuracy, we could look at workouts.
-      const workout = await prisma.workout.findFirst({
-        where: {
-          userId,
-          date: { lte: date },
-          maxHr: { not: null }
-        },
-        orderBy: { date: 'desc' },
-        select: { maxHr: true }
-      })
+    // Similar to FTP, we could look for workouts with maxHr data,
+    // but Max HR doesn't fluctuate like FTP. Current profile is usually safe.
+    // However, for strict historical accuracy, we could look at workouts.
+    const workout = await prisma.workout.findFirst({
+      where: {
+        userId,
+        date: { lte: date },
+        maxHr: { not: null }
+      },
+      orderBy: { date: 'desc' },
+      select: { maxHr: true }
+    })
 
-      if (workout?.maxHr) {
-          // Note: Workout maxHr is the max reached in that workout, NOT the user's physiological max.
-          // So actually, using workout.maxHr is incorrect for "What was my Max HR setting?".
-          // We should stick to the User profile for now unless we add a UserHistory table.
-      }
+    if (workout?.maxHr) {
+      // Note: Workout maxHr is the max reached in that workout, NOT the user's physiological max.
+      // So actually, using workout.maxHr is incorrect for "What was my Max HR setting?".
+      // We should stick to the User profile for now unless we add a UserHistory table.
+    }
 
-      const user = await prisma.user.findUnique({
-          where: { id: userId },
-          select: { maxHr: true }
-      })
-      
-      return user?.maxHr || null
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { maxHr: true }
+    })
+
+    return user?.maxHr || null
   },
 
   /**

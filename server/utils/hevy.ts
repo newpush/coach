@@ -54,8 +54,8 @@ export async function fetchHevyWorkouts(
   // Try api-key header
   const response = await fetch(`${HEVY_API_BASE}/workouts?page=${page}&pageSize=${pageSize}`, {
     headers: {
-      'api-key': apiKey,
-    },
+      'api-key': apiKey
+    }
   })
 
   if (!response.ok) {
@@ -69,11 +69,14 @@ export async function fetchHevyWorkouts(
 /**
  * Fetch a specific workout details
  */
-export async function fetchHevyWorkoutDetails(apiKey: string, workoutId: string): Promise<HevyWorkout> {
+export async function fetchHevyWorkoutDetails(
+  apiKey: string,
+  workoutId: string
+): Promise<HevyWorkout> {
   const response = await fetch(`${HEVY_API_BASE}/workouts/${workoutId}`, {
     headers: {
-      'api-key': apiKey,
-    },
+      'api-key': apiKey
+    }
   })
 
   if (!response.ok) {
@@ -86,18 +89,21 @@ export async function fetchHevyWorkoutDetails(apiKey: string, workoutId: string)
 /**
  * Fetch specific exercise template details
  */
-export async function fetchHevyExerciseTemplate(apiKey: string, templateId: string): Promise<HevyExerciseTemplate> {
-   const response = await fetch(`${HEVY_API_BASE}/exercise_templates/${templateId}`, {
+export async function fetchHevyExerciseTemplate(
+  apiKey: string,
+  templateId: string
+): Promise<HevyExerciseTemplate> {
+  const response = await fetch(`${HEVY_API_BASE}/exercise_templates/${templateId}`, {
     headers: {
-      'api-key': apiKey,
-    },
+      'api-key': apiKey
+    }
   })
 
   if (!response.ok) {
-     // If not found or error, return a placeholder or throw
-     throw new Error(`Hevy Template Error: ${response.status}`)
+    // If not found or error, return a placeholder or throw
+    throw new Error(`Hevy Template Error: ${response.status}`)
   }
-  
+
   return await response.json()
 }
 
@@ -118,11 +124,11 @@ export function normalizeHevyWorkout(hevyWorkout: HevyWorkout, userId: string) {
     description: hevyWorkout.description,
     type: 'WeightTraining',
     durationSec: durationSec > 0 ? durationSec : 0,
-    
+
     // Metrics that Hevy might calculate (or we calculate from sets)
     // We can sum up volume (tonnage)
     kilojoules: null, // Hevy doesn't provide kJ
-    
+
     // Raw data
     rawJson: hevyWorkout as any
   }

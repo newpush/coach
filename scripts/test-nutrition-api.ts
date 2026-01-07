@@ -4,9 +4,9 @@ import pg from 'pg'
 
 async function testNutritionAccess() {
   console.log('Testing Prisma Nutrition model access...')
-  
+
   const pool = new pg.Pool({
-    connectionString: process.env.DATABASE_URL,
+    connectionString: process.env.DATABASE_URL
   })
   const adapter = new PrismaPg(pool)
   const prisma = new PrismaClient({ adapter })
@@ -16,7 +16,10 @@ async function testNutritionAccess() {
     console.log('1. Checking if Nutrition model exists in Prisma client...')
     if (!prisma.nutrition) {
       console.error('❌ Nutrition model NOT found in Prisma client!')
-      console.log('Available models:', Object.keys(prisma).filter(k => !k.startsWith('_') && !k.startsWith('$')))
+      console.log(
+        'Available models:',
+        Object.keys(prisma).filter((k) => !k.startsWith('_') && !k.startsWith('$'))
+      )
       return
     }
     console.log('✅ Nutrition model exists in Prisma client')
@@ -27,7 +30,7 @@ async function testNutritionAccess() {
       orderBy: { date: 'desc' },
       take: 5
     })
-    
+
     console.log(`✅ Found ${nutrition.length} nutrition records`)
     if (nutrition.length > 0) {
       console.log('\nFirst record:')

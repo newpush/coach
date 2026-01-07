@@ -5,7 +5,7 @@ defineRouteMeta({
   openAPI: {
     tags: ['Availability'],
     summary: 'Get training availability',
-    description: 'Returns the user\'s weekly training availability preferences.',
+    description: "Returns the user's weekly training availability preferences.",
     responses: {
       200: {
         description: 'Success',
@@ -35,20 +35,20 @@ defineRouteMeta({
 
 export default defineEventHandler(async (event) => {
   const session = await getServerSession(event)
-  
+
   if (!session?.user) {
-    throw createError({ 
+    throw createError({
       statusCode: 401,
-      message: 'Unauthorized' 
+      message: 'Unauthorized'
     })
   }
-  
+
   const userId = (session.user as any).id
-  
+
   const availability = await prisma.trainingAvailability.findMany({
     where: { userId },
     orderBy: { dayOfWeek: 'asc' }
   })
-  
+
   return availability
 })

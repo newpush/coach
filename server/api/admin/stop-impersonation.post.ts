@@ -3,7 +3,7 @@ import { getServerSession } from '../../utils/session'
 
 export default defineEventHandler(async (event) => {
   const session = await getServerSession(event)
-  
+
   if (!session?.user) {
     return { success: false, error: 'Not authenticated' }
   }

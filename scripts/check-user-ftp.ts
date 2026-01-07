@@ -46,7 +46,6 @@ async function main() {
       }
     })
     console.log('Workout found:', workout)
-
   } catch (error) {
     console.error('Error:', error)
   } finally {

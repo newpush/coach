@@ -2,7 +2,6 @@ import { getServerSession } from '../../utils/session'
 import { prisma } from '../../utils/db'
 import { generateStructuredAnalysis } from '../../utils/gemini'
 
-
 defineRouteMeta({
   openAPI: {
     tags: ['Scores'],
@@ -70,7 +69,7 @@ interface TrendAnalysis {
 
 export default defineEventHandler(async (event) => {
   const session = await getServerSession(event)
-  
+
   if (!session?.user?.email) {
     throw createError({
       statusCode: 401,
@@ -80,11 +79,11 @@ export default defineEventHandler(async (event) => {
 
   const body = await readBody(event)
   const { days = 30, summary } = body
-  
+
   const user = await prisma.user.findUnique({
     where: { email: session.user.email }
   })
-  
+
   if (!user) {
     throw createError({
       statusCode: 404,
@@ -94,7 +93,7 @@ export default defineEventHandler(async (event) => {
 
   const startDate = new Date()
   startDate.setDate(startDate.getDate() - days)
-  
+
   // Get recent workouts
   const workouts = await prisma.workout.findMany({
     where: {
@@ -128,85 +127,82 @@ SUMMARY (Last ${days} days):
 - Execution: ${summary.avgExecution?.toFixed(1)}/10
 
 RECENT WORKOUTS:
-${workouts.map(w => {
-  const distance = w.distanceMeters ? `${(w.distanceMeters / 1000).toFixed(1)}km` : '';
-  const duration = w.durationSec ? `${Math.round(w.durationSec / 60)}min` : '';
-  return `- ${w.date.toISOString().split('T')[0]}: ${w.title || w.type} ${distance} ${duration}`.trim()
-}).join('\n')}
+${workouts
+  .map((w) => {
+    const distance = w.distanceMeters ? `${(w.distanceMeters / 1000).toFixed(1)}km` : ''
+    const duration = w.durationSec ? `${Math.round(w.durationSec / 60)}min` : ''
+    return `- ${w.date.toISOString().split('T')[0]}: ${w.title || w.type} ${distance} ${duration}`.trim()
+  })
+  .join('\n')}
 
 Provide a structured analysis focusing on patterns and actionable insights.`
 
   const schema = {
-    type: "object",
+    type: 'object',
     properties: {
       executive_summary: {
-        type: "string",
-        description: "2-3 sentence summary of current performance level and key patterns"
+        type: 'string',
+        description: '2-3 sentence summary of current performance level and key patterns'
       },
       sections: {
-        type: "array",
-        description: "Analysis sections for different aspects",
+        type: 'array',
+        description: 'Analysis sections for different aspects',
         items: {
-          type: "object",
+          type: 'object',
           properties: {
             title: {
-              type: "string",
+              type: 'string',
               description: "Section title (e.g., 'Technical Execution', 'Effort Management')"
             },
             status: {
-              type: "string",
-              enum: ["excellent", "good", "moderate", "needs_improvement"],
-              description: "Current status"
+              type: 'string',
+              enum: ['excellent', 'good', 'moderate', 'needs_improvement'],
+              description: 'Current status'
             },
             analysis_points: {
-              type: "array",
-              items: { type: "string" },
-              description: "2-3 specific observations about this aspect"
+              type: 'array',
+              items: { type: 'string' },
+              description: '2-3 specific observations about this aspect'
             }
           },
-          required: ["title", "status", "analysis_points"]
+          required: ['title', 'status', 'analysis_points']
         }
       },
       recommendations: {
-        type: "array",
-        description: "3-4 actionable improvement recommendations",
+        type: 'array',
+        description: '3-4 actionable improvement recommendations',
         items: {
-          type: "object",
+          type: 'object',
           properties: {
             title: {
-              type: "string",
-              description: "Brief recommendation title"
+              type: 'string',
+              description: 'Brief recommendation title'
             },
             description: {
-              type: "string",
-              description: "Detailed actionable step"
+              type: 'string',
+              description: 'Detailed actionable step'
             },
             priority: {
-              type: "string",
-              enum: ["high", "medium", "low"],
-              description: "Priority level"
+              type: 'string',
+              enum: ['high', 'medium', 'low'],
+              description: 'Priority level'
             }
           },
-          required: ["title", "description", "priority"]
+          required: ['title', 'description', 'priority']
         }
       }
     },
-    required: ["executive_summary", "sections", "recommendations"]
+    required: ['executive_summary', 'sections', 'recommendations']
   }
 
   try {
-    const analysis = await generateStructuredAnalysis<TrendAnalysis>(
-      prompt,
-      schema,
-      'flash',
-      {
-        userId: user.id,
-        operation: 'workout_trends_explanation',
-        entityType: 'Workout',
-        entityId: undefined // This is a trend analysis, not a specific entity
-      }
-    )
-    
+    const analysis = await generateStructuredAnalysis<TrendAnalysis>(prompt, schema, 'flash', {
+      userId: user.id,
+      operation: 'workout_trends_explanation',
+      entityType: 'Workout',
+      entityId: undefined // This is a trend analysis, not a specific entity
+    })
+
     return {
       analysis,
       score: summary.avgOverall,

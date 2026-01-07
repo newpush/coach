@@ -62,16 +62,8 @@
         </div>
 
         <div class="pt-2 border-t border-gray-200 dark:border-gray-700 flex justify-between">
-            <UButton
-                size="xs"
-                variant="ghost"
-                color="neutral"
-                label="Reset"
-                @click="reset"
-            />
-             <span class="text-xs text-gray-500 self-center">
-                {{ selectedCount }} selected
-             </span>
+          <UButton size="xs" variant="ghost" color="neutral" label="Reset" @click="reset" />
+          <span class="text-xs text-gray-500 self-center"> {{ selectedCount }} selected </span>
         </div>
       </div>
     </template>
@@ -79,110 +71,111 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+  import { computed, ref } from 'vue'
 
-interface Column {
-  id: string
-  header: string
-  [key: string]: any
-}
-
-const props = defineProps<{
-  columns: Column[]
-  modelValue: string[] // Ordered list of selected IDs
-  defaultColumns?: string[]
-}>()
-
-const emit = defineEmits<{
-  (e: 'update:modelValue', value: string[]): void
-}>()
-
-const searchQuery = ref('')
-
-// When not searching, we show the SELECTED columns in their order, followed by UNSELECTED columns
-// OR just the list of available columns, but that makes reordering the *selected* ones hard if they are mixed.
-// Better approach:
-// 1. Show all columns in the list.
-// 2. But the order of the list should reflect the user's preference?
-//    If I move "Date" below "Type", "Date" should physically move in the list.
-//    So the list passed to `v-for` should be the `modelValue` (selected IDs) + `unselected IDs`.
-
-const orderedAllColumns = computed(() => {
-  // 1. Start with selected IDs in order
-  const selected = props.modelValue
-    .map(id => props.columns.find(c => c.id === id))
-    .filter(Boolean) as Column[]
-
-  // 2. Add remaining unselected columns (in their original definition order)
-  const unselected = props.columns.filter(c => !props.modelValue.includes(c.id))
-
-  return [...selected, ...unselected]
-})
-
-const displayColumns = computed(() => {
-  if (!searchQuery.value) return orderedAllColumns.value
-  
-  const query = searchQuery.value.toLowerCase()
-  return props.columns.filter(c => 
-    c.header.toLowerCase().includes(query)
-  )
-})
-
-const selectedCount = computed(() => props.modelValue.length)
-
-function isSelected(id: string) {
-  return props.modelValue.includes(id)
-}
-
-function toggleColumn(id: string, isChecked: boolean) {
-  const current = [...props.modelValue]
-  if (isChecked) {
-    // Add to end
-    current.push(id)
-  } else {
-    // Remove
-    const idx = current.indexOf(id)
-    if (idx > -1) {
-      current.splice(idx, 1)
-    }
+  interface Column {
+    id: string
+    header: string
+    [key: string]: any
   }
-  emit('update:modelValue', current)
-}
 
-function moveColumn(index: number, direction: number) {
-  // We can only reorder the visible/selected columns in the `modelValue` array
-  // The `orderedAllColumns` computed reflects `modelValue` + `unselected`.
-  // `index` here is the index in `orderedAllColumns`.
-  
-  // If we try to move an item that is NOT selected (i.e. in the unselected chunk), 
-  // we probably shouldn't be reordering it relative to selected ones in this view 
-  // unless we select it first.
-  // But my UI only shows move buttons `v-if="isSelected(col.id)"`.
-  
-  // So `index` is guaranteed to be within the `selected` part of `orderedAllColumns`
-  // which corresponds exactly to `props.modelValue`.
-  
-  const current = [...props.modelValue]
-  const newIndex = index + direction
-  
-  if (newIndex < 0 || newIndex >= current.length) return
-  
-  // Swap
-  const temp = current[index]
-  const target = current[newIndex]
-  if (temp !== undefined && target !== undefined) {
-    current[index] = target
-    current[newIndex] = temp
+  const props = defineProps<{
+    columns: Column[]
+    modelValue: string[] // Ordered list of selected IDs
+    defaultColumns?: string[]
+  }>()
+
+  const emit = defineEmits<{
+    (e: 'update:modelValue', value: string[]): void
+  }>()
+
+  const searchQuery = ref('')
+
+  // When not searching, we show the SELECTED columns in their order, followed by UNSELECTED columns
+  // OR just the list of available columns, but that makes reordering the *selected* ones hard if they are mixed.
+  // Better approach:
+  // 1. Show all columns in the list.
+  // 2. But the order of the list should reflect the user's preference?
+  //    If I move "Date" below "Type", "Date" should physically move in the list.
+  //    So the list passed to `v-for` should be the `modelValue` (selected IDs) + `unselected IDs`.
+
+  const orderedAllColumns = computed(() => {
+    // 1. Start with selected IDs in order
+    const selected = props.modelValue
+      .map((id) => props.columns.find((c) => c.id === id))
+      .filter(Boolean) as Column[]
+
+    // 2. Add remaining unselected columns (in their original definition order)
+    const unselected = props.columns.filter((c) => !props.modelValue.includes(c.id))
+
+    return [...selected, ...unselected]
+  })
+
+  const displayColumns = computed(() => {
+    if (!searchQuery.value) return orderedAllColumns.value
+
+    const query = searchQuery.value.toLowerCase()
+    return props.columns.filter((c) => c.header.toLowerCase().includes(query))
+  })
+
+  const selectedCount = computed(() => props.modelValue.length)
+
+  function isSelected(id: string) {
+    return props.modelValue.includes(id)
+  }
+
+  function toggleColumn(id: string, isChecked: boolean) {
+    const current = [...props.modelValue]
+    if (isChecked) {
+      // Add to end
+      current.push(id)
+    } else {
+      // Remove
+      const idx = current.indexOf(id)
+      if (idx > -1) {
+        current.splice(idx, 1)
+      }
+    }
     emit('update:modelValue', current)
   }
-}
 
-function reset() {
-    if (props.defaultColumns) {
-        emit('update:modelValue', [...props.defaultColumns])
-    } else {
-        // Default to all
-        emit('update:modelValue', props.columns.map(c => c.id))
+  function moveColumn(index: number, direction: number) {
+    // We can only reorder the visible/selected columns in the `modelValue` array
+    // The `orderedAllColumns` computed reflects `modelValue` + `unselected`.
+    // `index` here is the index in `orderedAllColumns`.
+
+    // If we try to move an item that is NOT selected (i.e. in the unselected chunk),
+    // we probably shouldn't be reordering it relative to selected ones in this view
+    // unless we select it first.
+    // But my UI only shows move buttons `v-if="isSelected(col.id)"`.
+
+    // So `index` is guaranteed to be within the `selected` part of `orderedAllColumns`
+    // which corresponds exactly to `props.modelValue`.
+
+    const current = [...props.modelValue]
+    const newIndex = index + direction
+
+    if (newIndex < 0 || newIndex >= current.length) return
+
+    // Swap
+    const temp = current[index]
+    const target = current[newIndex]
+    if (temp !== undefined && target !== undefined) {
+      current[index] = target
+      current[newIndex] = temp
+      emit('update:modelValue', current)
     }
-}
+  }
+
+  function reset() {
+    if (props.defaultColumns) {
+      emit('update:modelValue', [...props.defaultColumns])
+    } else {
+      // Default to all
+      emit(
+        'update:modelValue',
+        props.columns.map((c) => c.id)
+      )
+    }
+  }
 </script>

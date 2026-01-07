@@ -31,29 +31,39 @@ The Task Dependency System provides a hierarchical view of all data processing t
 ## Task Hierarchy
 
 ### Level 1: Data Ingestion
+
 Tasks that sync data from external integrations (can run in parallel):
+
 - **Sync Intervals.icu**: Workouts, wellness, planned workouts
 - **Sync Whoop**: Recovery metrics, sleep data, strain
 - **Sync Yazio**: Nutrition data and meal logs
 - **Sync Strava**: Activity data
 
 ### Level 2: AI Analysis
+
 Tasks that analyze individual data items (depends on Level 1):
+
 - **Analyze Workouts**: AI analysis of recent workouts
 - **Analyze Nutrition**: AI analysis of nutrition entries
 
 ### Level 3: Athlete Profile
+
 Task that creates comprehensive profile (depends on Level 2):
+
 - **Generate Athlete Profile**: Synthesizes all analyzed data into athlete profile
 
 ### Level 4: Reports & Planning
+
 Tasks that generate insights and plans (depends on Level 3):
+
 - **Generate Weekly Report**: Performance analysis and insights
 - **Generate Training Plan**: Next week's training plan
 - **Today's Training**: Daily workout recommendations
 
 ### Level 5: Performance Insights
+
 Tasks that create detailed explanations (depends on Level 4):
+
 - **Performance Insights**: Detailed score explanations and trends
 
 ## Dependency Rules
@@ -89,6 +99,7 @@ Tasks that create detailed explanations (depends on Level 4):
 ### Progress Updates
 
 The system provides:
+
 - Real-time task status updates
 - Individual task progress (0-100%)
 - Overall pipeline progress
@@ -98,11 +109,13 @@ The system provides:
 ## API Endpoints
 
 ### POST `/api/orchestrate/full-sync`
+
 Starts the full synchronization and analysis pipeline.
 
 **Authentication**: Required
 
 **Response**:
+
 ```json
 {
   "success": true,
@@ -111,11 +124,13 @@ Starts the full synchronization and analysis pipeline.
 ```
 
 ### GET `/api/orchestrate/progress`
+
 Server-Sent Events stream for real-time progress updates.
 
 **Authentication**: Required
 
 **Event Types**:
+
 - `init`: Initial state when connecting
 - `task_update`: Individual task status change
 - `progress`: Overall progress update
@@ -146,6 +161,7 @@ Tasks are defined in `types/task-dependencies.ts` with:
 To add a new task to the system:
 
 1. **Define the task** in `TASK_DEPENDENCIES` in `types/task-dependencies.ts`:
+
 ```typescript
 'new-task-id': {
   id: 'new-task-id',
@@ -199,6 +215,7 @@ The system handles errors at multiple levels:
 ## Future Enhancements
 
 Potential improvements:
+
 1. Historical sync logs and analytics
 2. Ability to retry individual failed tasks
 3. Configurable task priorities

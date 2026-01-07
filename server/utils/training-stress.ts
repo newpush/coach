@@ -1,6 +1,6 @@
 /**
  * Training Stress Metrics Calculation Service
- * 
+ *
  * Implements the Performance Management Chart (PMC) methodology for tracking:
  * - CTL (Chronic Training Load) - 42-day weighted average representing "Fitness"
  * - ATL (Acute Training Load) - 7-day weighted average representing "Fatigue"
@@ -126,7 +126,7 @@ export async function calculatePMCForDateRange(
   initialATL: number = 0
 ): Promise<PMCMetrics[]> {
   const { prisma } = await import('./db')
-  
+
   // Fetch workouts for TSS calculation
   const workouts = await prisma.workout.findMany({
     where: {
@@ -136,7 +136,7 @@ export async function calculatePMCForDateRange(
     },
     orderBy: { date: 'asc' }
   })
-  
+
   // Fetch wellness data for "Source of Truth" CTL/ATL
   const wellness = await prisma.wellness.findMany({
     where: {
@@ -153,7 +153,7 @@ export async function calculatePMCForDateRange(
   let ctl = initialCTL
   let atl = initialATL
   const results: PMCMetrics[] = []
-  
+
   // Map date string (YYYY-MM-DD) to daily TSS sum
   const dailyTSS = new Map<string, number>()
   for (const workout of workouts) {
@@ -161,11 +161,11 @@ export async function calculatePMCForDateRange(
     const tss = getStressScore(workout)
     dailyTSS.set(dateKey, (dailyTSS.get(dateKey) || 0) + tss)
   }
-  
+
   // Map date string to "Known" CTL/ATL from Wellness (Source of Truth)
   // or use Workouts as fallback if Wellness is missing but Workout has valid CTL/ATL
-  const knownMetrics = new Map<string, { ctl: number, atl: number }>()
-  
+  const knownMetrics = new Map<string, { ctl: number; atl: number }>()
+
   // 1. Populate from Wellness (Highest Priority)
   for (const w of wellness) {
     if (w.ctl !== null && w.atl !== null) {
@@ -173,7 +173,7 @@ export async function calculatePMCForDateRange(
       knownMetrics.set(dateKey, { ctl: w.ctl, atl: w.atl })
     }
   }
-  
+
   // 2. Populate from Workouts (Fallback)
   for (const w of workouts) {
     // Only use if not already set by Wellness
@@ -182,22 +182,22 @@ export async function calculatePMCForDateRange(
       knownMetrics.set(dateKey, { ctl: w.ctl!, atl: w.atl! })
     }
   }
-  
+
   // Iterate through each day in the range
   const currentDate = new Date(startDate)
   // Reset time to midnight to avoid issues
   currentDate.setHours(0, 0, 0, 0)
-  
+
   const endDateTime = new Date(endDate)
   endDateTime.setHours(23, 59, 59, 999)
 
   while (currentDate <= endDateTime) {
     const dateKey = currentDate.toISOString().split('T')[0] ?? ''
     const tss = dailyTSS.get(dateKey) || 0
-    
+
     // Check if we have a known "Truth" value for this day
     const known = knownMetrics.get(dateKey)
-    
+
     if (known) {
       // Resync our running calculation to the stored truth
       ctl = known.ctl
@@ -217,7 +217,7 @@ export async function calculatePMCForDateRange(
       tsb,
       tss
     })
-    
+
     // Move to next day
     currentDate.setDate(currentDate.getDate() + 1)
   }
@@ -233,21 +233,18 @@ export async function getInitialPMCValues(
   beforeDate: Date
 ): Promise<{ ctl: number; atl: number }> {
   const { prisma } = await import('./db')
-  
+
   // Find last workout with metrics
   const lastWorkout = await prisma.workout.findFirst({
     where: {
       userId,
       date: { lt: beforeDate },
       isDuplicate: false,
-      OR: [
-        { ctl: { not: null } },
-        { atl: { not: null } }
-      ]
+      OR: [{ ctl: { not: null } }, { atl: { not: null } }]
     },
     orderBy: { date: 'desc' }
   })
-  
+
   // Find last wellness with metrics
   const lastWellness = await prisma.wellness.findFirst({
     where: {
@@ -262,10 +259,10 @@ export async function getInitialPMCValues(
   // Compare dates to find the most recent one
   let startCTL = 0
   let startATL = 0
-  
+
   const workoutDate = lastWorkout?.date ? new Date(lastWorkout.date).getTime() : 0
   const wellnessDate = lastWellness?.date ? new Date(lastWellness.date).getTime() : 0
-  
+
   if (workoutDate > wellnessDate && lastWorkout) {
     startCTL = lastWorkout.ctl ?? 0
     startATL = lastWorkout.atl ?? 0
@@ -286,7 +283,7 @@ export async function getInitialPMCValues(
  */
 export async function backfillPMCMetrics(userId: string): Promise<number> {
   const { prisma } = await import('./db')
-  
+
   const workouts = await prisma.workout.findMany({
     where: {
       userId,
@@ -308,7 +305,7 @@ export async function backfillPMCMetrics(userId: string): Promise<number> {
       where: { id: workout.id },
       data: { ctl, atl }
     })
-    
+
     updated++
   }
 
@@ -320,7 +317,7 @@ export async function backfillPMCMetrics(userId: string): Promise<number> {
  */
 export async function getCurrentFitnessSummary(userId: string) {
   const { prisma } = await import('./db')
-  
+
   const latestWorkout = await prisma.workout.findFirst({
     where: {
       userId,
@@ -330,7 +327,7 @@ export async function getCurrentFitnessSummary(userId: string) {
     },
     orderBy: { date: 'desc' }
   })
-  
+
   const latestWellness = await prisma.wellness.findFirst({
     where: {
       userId,
@@ -344,12 +341,17 @@ export async function getCurrentFitnessSummary(userId: string) {
   let ctl = 0
   let atl = 0
   let lastUpdated: Date | null = null
-  
+
   const workoutDate = latestWorkout?.date ? new Date(latestWorkout.date).getTime() : 0
   const wellnessDate = latestWellness?.date ? new Date(latestWellness.date).getTime() : 0
-  
+
   // Prioritize Wellness if it's the same day or newer (Wellness is usually end-of-day summary)
-  if (wellnessDate >= workoutDate && latestWellness && latestWellness.ctl !== null && latestWellness.atl !== null) {
+  if (
+    wellnessDate >= workoutDate &&
+    latestWellness &&
+    latestWellness.ctl !== null &&
+    latestWellness.atl !== null
+  ) {
     ctl = latestWellness.ctl
     atl = latestWellness.atl
     lastUpdated = latestWellness.date

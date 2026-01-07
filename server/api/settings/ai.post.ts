@@ -13,7 +13,10 @@ defineRouteMeta({
           schema: {
             type: 'object',
             properties: {
-              aiPersona: { type: 'string', enum: ['Analytical', 'Supportive', 'Drill Sergeant', 'Motivational'] },
+              aiPersona: {
+                type: 'string',
+                enum: ['Analytical', 'Supportive', 'Drill Sergeant', 'Motivational']
+              },
               aiModelPreference: { type: 'string', enum: ['flash', 'pro'] },
               aiAutoAnalyzeWorkouts: { type: 'boolean' },
               aiAutoAnalyzeNutrition: { type: 'boolean' }

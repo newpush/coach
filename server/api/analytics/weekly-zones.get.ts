@@ -65,7 +65,7 @@ export default defineEventHandler(async (event) => {
 
   const endDate = new Date()
   const startDate = new Date()
-  startDate.setDate(startDate.getDate() - (weeks * 7))
+  startDate.setDate(startDate.getDate() - weeks * 7)
 
   // 1. Get user for zone definitions
   const user = await userRepository.getById(userId)
@@ -86,12 +86,15 @@ export default defineEventHandler(async (event) => {
   })
 
   // 3. Prepare buckets
-  const weeklyData = new Map<string, {
-    weekStart: string,
-    powerZones: number[],
-    hrZones: number[],
-    totalDuration: number
-  }>()
+  const weeklyData = new Map<
+    string,
+    {
+      weekStart: string
+      powerZones: number[]
+      hrZones: number[]
+      totalDuration: number
+    }
+  >()
 
   const getWeekStart = (date: Date) => {
     const d = new Date(date)
@@ -105,7 +108,7 @@ export default defineEventHandler(async (event) => {
   // Pre-fill weeks to ensure gaps are shown
   for (let i = 0; i <= weeks; i++) {
     const d = new Date(startDate)
-    d.setDate(d.getDate() + (i * 7))
+    d.setDate(d.getDate() + i * 7)
     const start = getWeekStart(d)
     const key = start.toISOString().split('T')[0]
     if (key) {
@@ -121,18 +124,18 @@ export default defineEventHandler(async (event) => {
   // 4. Aggregate
   for (const workout of workouts) {
     if (!workout.streams) continue
-    
+
     const weekStart = getWeekStart(workout.date)
     const key = weekStart.toISOString().split('T')[0]
     if (!key) continue
-    
+
     const bucket = weeklyData.get(key)
     if (!bucket) continue
 
     // Get zones for this workout
-    const ftp = workout.ftp || await userRepository.getFtpForDate(userId, workout.date)
+    const ftp = workout.ftp || (await userRepository.getFtpForDate(userId, workout.date))
     const lthr = await userRepository.getLthrForDate(userId, workout.date)
-    
+
     // Check if user has custom zones, otherwise calculate
     const pZones = (user.powerZones as any) || calculatePowerZones(ftp)
     const hZones = (user.hrZones as any) || calculateHrZones(lthr, user.maxHr)
@@ -145,7 +148,7 @@ export default defineEventHandler(async (event) => {
     for (let i = 0; i < time.length; i++) {
       const currentTime = time[i]
       if (currentTime === undefined || currentTime === null) continue
-      
+
       const prevTime = i === 0 ? currentTime : time[i - 1]
       const delta = i === 0 ? 0 : currentTime - (prevTime || 0)
       if (delta <= 0 || delta > 10) continue // Skip pauses
@@ -173,22 +176,22 @@ export default defineEventHandler(async (event) => {
   // 5. Finalize results
   const result = Array.from(weeklyData.values())
     .sort((a, b) => a.weekStart.localeCompare(b.weekStart))
-    .map(w => ({
+    .map((w) => ({
       ...w,
-      powerZones: w.powerZones.map(s => Math.round((s / 3600) * 10) / 10),
-      hrZones: w.hrZones.map(s => Math.round((s / 3600) * 10) / 10),
+      powerZones: w.powerZones.map((s) => Math.round((s / 3600) * 10) / 10),
+      hrZones: w.hrZones.map((s) => Math.round((s / 3600) * 10) / 10),
       totalDuration: Math.round((w.totalDuration / 3600) * 10) / 10
     }))
 
   // Use the same HR zone calculation logic for labels as used in aggregation
   // Get LTHR for today to generate current zone labels
   const currentLthr = await userRepository.getLthrForDate(userId, new Date())
-  
+
   return {
     weeks: result,
     zoneLabels: {
-      power: calculatePowerZones(user.ftp || 200).map(z => z.name),
-      hr: calculateHrZones(currentLthr, user.maxHr || 190).map(z => z.name)
+      power: calculatePowerZones(user.ftp || 200).map((z) => z.name),
+      hr: calculateHrZones(currentLthr, user.maxHr || 190).map((z) => z.name)
     }
   }
 })

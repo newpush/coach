@@ -4,32 +4,32 @@
 export type TaskStatus = 'pending' | 'running' | 'completed' | 'failed' | 'skipped'
 
 export type TaskCategory =
-  | 'ingestion'      // Data sync from integrations
-  | 'cleanup'        // Data cleanup and deduplication
-  | 'analysis'       // AI analysis of individual items
-  | 'profile'        // Athlete profile generation
-  | 'reports'        // Report generation
-  | 'planning'       // Training plan generation
-  | 'insights'       // Performance insights
+  | 'ingestion' // Data sync from integrations
+  | 'cleanup' // Data cleanup and deduplication
+  | 'analysis' // AI analysis of individual items
+  | 'profile' // Athlete profile generation
+  | 'reports' // Report generation
+  | 'planning' // Training plan generation
+  | 'insights' // Performance insights
 
 export interface TaskDefinition {
   id: string
   name: string
   description: string
   category: TaskCategory
-  
+
   // Dependencies - tasks that must complete before this one
   dependsOn: string[]
-  
+
   // Estimated duration in seconds
   estimatedDuration: number
-  
+
   // Whether this task is required for the full sync
   required: boolean
-  
+
   // API endpoint to trigger this task
   endpoint?: string
-  
+
   // Trigger.dev task ID
   triggerId?: string
 }
@@ -73,7 +73,7 @@ export const TASK_DEPENDENCIES: Record<string, TaskDefinition> = {
     endpoint: '/api/integrations/sync',
     triggerId: 'ingest-intervals'
   },
-  
+
   'ingest-whoop': {
     id: 'ingest-whoop',
     name: 'Sync Whoop',
@@ -85,7 +85,7 @@ export const TASK_DEPENDENCIES: Record<string, TaskDefinition> = {
     endpoint: '/api/integrations/sync',
     triggerId: 'ingest-whoop'
   },
-  
+
   'ingest-yazio': {
     id: 'ingest-yazio',
     name: 'Sync Yazio',
@@ -97,7 +97,7 @@ export const TASK_DEPENDENCIES: Record<string, TaskDefinition> = {
     endpoint: '/api/integrations/sync',
     triggerId: 'ingest-yazio'
   },
-  
+
   'ingest-strava': {
     id: 'ingest-strava',
     name: 'Sync Strava',
@@ -109,7 +109,7 @@ export const TASK_DEPENDENCIES: Record<string, TaskDefinition> = {
     endpoint: '/api/integrations/sync',
     triggerId: 'ingest-strava'
   },
-  
+
   // ========================================
   // LEVEL 1.5: DATA CLEANUP
   // ========================================
@@ -124,7 +124,7 @@ export const TASK_DEPENDENCIES: Record<string, TaskDefinition> = {
     endpoint: '/api/workouts/deduplicate',
     triggerId: 'deduplicate-workouts'
   },
-  
+
   // ========================================
   // LEVEL 2: AI ANALYSIS
   // ========================================
@@ -139,7 +139,7 @@ export const TASK_DEPENDENCIES: Record<string, TaskDefinition> = {
     endpoint: '/api/workouts/analyze-all',
     triggerId: 'analyze-last-3-workouts'
   },
-  
+
   'analyze-nutrition': {
     id: 'analyze-nutrition',
     name: 'Analyze Nutrition',
@@ -151,7 +151,7 @@ export const TASK_DEPENDENCIES: Record<string, TaskDefinition> = {
     endpoint: '/api/nutrition/analyze-all',
     triggerId: 'analyze-last-7-nutrition'
   },
-  
+
   // ========================================
   // LEVEL 3: ATHLETE PROFILE
   // ========================================
@@ -166,7 +166,7 @@ export const TASK_DEPENDENCIES: Record<string, TaskDefinition> = {
     endpoint: '/api/profile/generate',
     triggerId: 'generate-athlete-profile'
   },
-  
+
   // ========================================
   // LEVEL 4: REPORTS & PLANNING
   // ========================================
@@ -181,7 +181,7 @@ export const TASK_DEPENDENCIES: Record<string, TaskDefinition> = {
     endpoint: '/api/reports/generate',
     triggerId: 'generate-weekly-report'
   },
-  
+
   'generate-weekly-nutrition-report': {
     id: 'generate-weekly-nutrition-report',
     name: 'Weekly Nutrition Report',
@@ -193,11 +193,11 @@ export const TASK_DEPENDENCIES: Record<string, TaskDefinition> = {
     endpoint: '/api/reports/generate',
     triggerId: 'generate-weekly-report'
   },
-  
+
   'generate-weekly-plan': {
     id: 'generate-weekly-plan',
     name: 'Generate Training Plan',
-    description: 'Create next week\'s training plan based on athlete profile',
+    description: "Create next week's training plan based on athlete profile",
     category: 'planning',
     dependsOn: ['generate-athlete-profile'],
     estimatedDuration: 100,
@@ -205,11 +205,11 @@ export const TASK_DEPENDENCIES: Record<string, TaskDefinition> = {
     endpoint: '/api/plans/generate',
     triggerId: 'generate-weekly-plan'
   },
-  
+
   'generate-daily-recommendations': {
     id: 'generate-daily-recommendations',
-    name: 'Today\'s Training',
-    description: 'Generate today\'s workout recommendations',
+    name: "Today's Training",
+    description: "Generate today's workout recommendations",
     category: 'planning',
     dependsOn: ['generate-athlete-profile'],
     estimatedDuration: 45,
@@ -217,7 +217,7 @@ export const TASK_DEPENDENCIES: Record<string, TaskDefinition> = {
     endpoint: '/api/recommendations/today',
     triggerId: 'daily-coach'
   },
-  
+
   // ========================================
   // LEVEL 5: PERFORMANCE INSIGHTS
   // ========================================
@@ -226,7 +226,11 @@ export const TASK_DEPENDENCIES: Record<string, TaskDefinition> = {
     name: 'Performance Insights',
     description: 'Generate detailed explanations for performance scores and trends',
     category: 'insights',
-    dependsOn: ['generate-athlete-profile', 'generate-weekly-workout-report', 'generate-weekly-nutrition-report'],
+    dependsOn: [
+      'generate-athlete-profile',
+      'generate-weekly-workout-report',
+      'generate-weekly-nutrition-report'
+    ],
     estimatedDuration: 80,
     required: false,
     endpoint: '/api/scores/generate-explanations',
@@ -241,30 +245,30 @@ export function getTasksByLevel(): TaskDefinition[][] {
   const levels: TaskDefinition[][] = []
   const processed = new Set<string>()
   const tasks = Object.values(TASK_DEPENDENCIES)
-  
+
   while (processed.size < tasks.length) {
     const currentLevel: TaskDefinition[] = []
-    
+
     for (const task of tasks) {
       if (processed.has(task.id)) continue
-      
+
       // Check if all dependencies are processed
-      const allDepsProcessed = task.dependsOn.every(dep => processed.has(dep))
-      
+      const allDepsProcessed = task.dependsOn.every((dep) => processed.has(dep))
+
       if (allDepsProcessed) {
         currentLevel.push(task)
         processed.add(task.id)
       }
     }
-    
+
     if (currentLevel.length === 0) {
       // Circular dependency or error
       break
     }
-    
+
     levels.push(currentLevel)
   }
-  
+
   return levels
 }
 
@@ -272,9 +276,7 @@ export function getTasksByLevel(): TaskDefinition[][] {
  * Get all tasks that depend on a given task
  */
 export function getDependentTasks(taskId: string): TaskDefinition[] {
-  return Object.values(TASK_DEPENDENCIES).filter(task =>
-    task.dependsOn.includes(taskId)
-  )
+  return Object.values(TASK_DEPENDENCIES).filter((task) => task.dependsOn.includes(taskId))
 }
 
 /**
@@ -286,9 +288,9 @@ export function canExecuteTask(
 ): boolean {
   const task = TASK_DEPENDENCIES[taskId]
   if (!task) return false
-  
+
   // Check if all dependencies are completed
-  return task.dependsOn.every(depId => {
+  return task.dependsOn.every((depId) => {
     const depState = states[depId]
     return depState && depState.status === 'completed'
   })
@@ -297,23 +299,21 @@ export function canExecuteTask(
 /**
  * Calculate overall progress based on task states
  */
-export function calculateOverallProgress(
-  states: Record<string, TaskExecutionState>
-): number {
+export function calculateOverallProgress(states: Record<string, TaskExecutionState>): number {
   const tasks = Object.values(TASK_DEPENDENCIES)
   const totalDuration = tasks.reduce((sum, t) => sum + t.estimatedDuration, 0)
-  
+
   let completedDuration = 0
   for (const task of tasks) {
     const state = states[task.id]
     if (!state) continue
-    
+
     if (state.status === 'completed') {
       completedDuration += task.estimatedDuration
     } else if (state.status === 'running' && state.progress) {
       completedDuration += task.estimatedDuration * (state.progress / 100)
     }
   }
-  
+
   return Math.round((completedDuration / totalDuration) * 100)
 }

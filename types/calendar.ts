@@ -5,13 +5,13 @@ export interface CalendarActivity {
   type?: string
   source: 'completed' | 'planned'
   status: 'completed' | 'planned' | 'missed' | 'completed_plan'
-  
+
   // Normalized metrics
   duration?: number // seconds
   distance?: number // meters
   tss?: number
   intensity?: number // 0-1+
-  
+
   // Completed specific
   rpe?: number
   feel?: number
@@ -30,7 +30,7 @@ export interface CalendarActivity {
   commute?: boolean
   isPrivate?: boolean
   gearId?: string
-  
+
   // Planned specific
   plannedDuration?: number
   plannedDistance?: number
@@ -42,7 +42,7 @@ export interface CalendarActivity {
     tss?: number
     type?: string
   } | null
-  
+
   // Training Load
   ctl?: number | null // Chronic Training Load (Fitness)
   atl?: number | null // Acute Training Load (Fatigue)
@@ -68,7 +68,7 @@ export interface CalendarActivity {
     recoveryScore?: number | null // Recovery score 0-100
     weight?: number | null // Weight in kg
   } | null
-  
+
   // UI helpers
   color?: string
   icon?: string

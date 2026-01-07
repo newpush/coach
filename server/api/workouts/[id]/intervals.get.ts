@@ -22,7 +22,8 @@ defineRouteMeta({
   openAPI: {
     tags: ['Workouts'],
     summary: 'Get workout intervals',
-    description: 'Detects and analyzes intervals within a workout based on power, pace, or heart rate.',
+    description:
+      'Detects and analyzes intervals within a workout based on power, pace, or heart rate.',
     parameters: [
       {
         name: 'id',
@@ -127,7 +128,7 @@ export default defineEventHandler(async (event) => {
   }
 
   const streams = workout.streams
-  
+
   // Debug stream availability
   console.log(`[Intervals API] Processing streams for workout ${workoutId}`)
   console.log(`[Intervals API] Stream keys: ${Object.keys(streams).join(', ')}`)
@@ -142,7 +143,7 @@ export default defineEventHandler(async (event) => {
   }
 
   const time = getStreamData(streams.time)
-  
+
   if (!time || time.length === 0) {
     console.log(`[Intervals API] No time stream found or empty.`)
     return {
@@ -174,7 +175,7 @@ export default defineEventHandler(async (event) => {
   // Advanced metrics heavily rely on FTP
   // We use workout.ftp (snapshot) or user.ftp (current)
   const effectiveFtp = workout.ftp || user.ftp
-  
+
   console.log(`[Intervals API] Advanced Metrics Requirements:`)
   console.log(`  - Workout FTP: ${workout.ftp}`)
   console.log(`  - User FTP: ${user.ftp}`)
@@ -217,9 +218,8 @@ export default defineEventHandler(async (event) => {
   const hrRecovery = hasHr ? calculateHeartRateRecovery(time, hrStream!) : null
 
   // 4. Advanced Metrics (Drift, Coasting, Surges)
-  const decoupling = (hasWatts && hasHr)
-    ? calculateAerobicDecoupling(time, wattsStream!, hrStream!)
-    : null
+  const decoupling =
+    hasWatts && hasHr ? calculateAerobicDecoupling(time, wattsStream!, hrStream!) : null
 
   const coasting = hasWatts
     ? calculateCoastingStats(time, wattsStream!, cadenceStream || [], velocityStream || [])
@@ -229,14 +229,13 @@ export default defineEventHandler(async (event) => {
   // Fallback to 250 for display if both are missing (can be refined later)
   const calculationFtp = workout.ftp || user?.ftp || 250
 
-  const surges = (hasWatts && calculationFtp)
-    ? detectSurgesAndFades(time, wattsStream!, calculationFtp)
-    : []
+  const surges =
+    hasWatts && calculationFtp ? detectSurgesAndFades(time, wattsStream!, calculationFtp) : []
 
   // 5. New Advanced Analytics (W' Bal, EF Decay, Quadrants)
   // Fallback: If no FTP set, try to estimate from max power?
   // No, dangerous. Instead, log the missing requirement clearly.
-  
+
   let wPrime = null
   if (hasWatts && calculationFtp) {
     try {
@@ -269,53 +268,53 @@ export default defineEventHandler(async (event) => {
       console.error(`[Intervals API] Error calculating Quadrants:`, e)
     }
   } else {
-    console.log(`[Intervals API] Skipping Quadrants: hasWatts=${hasWatts}, hasCadence=${hasCadence}, ftp=${calculationFtp}`)
+    console.log(
+      `[Intervals API] Skipping Quadrants: hasWatts=${hasWatts}, hasCadence=${hasCadence}, ftp=${calculationFtp}`
+    )
   }
 
   // 5. New Extended Advanced Metrics (Fatigue sensitivity, Stability, Recovery Trend)
-  const fatigueSensitivity = (hasWatts && hasHr)
-    ? calculateFatigueSensitivity(wattsStream!, hrStream!, time)
-    : null
+  const fatigueSensitivity =
+    hasWatts && hasHr ? calculateFatigueSensitivity(wattsStream!, hrStream!, time) : null
 
   const powerStability = hasWatts
     ? calculateStabilityMetrics(wattsStream!, detectedIntervals)
     : null
 
-  const paceStability = (velocityStream && velocityStream.length > 0)
-    ? calculateStabilityMetrics(velocityStream!, detectedIntervals)
-    : null
+  const paceStability =
+    velocityStream && velocityStream.length > 0
+      ? calculateStabilityMetrics(velocityStream!, detectedIntervals)
+      : null
 
-  const recoveryTrend = hasHr
-    ? calculateRecoveryRateTrend(time, hrStream!, detectedIntervals)
-    : []
+  const recoveryTrend = hasHr ? calculateRecoveryRateTrend(time, hrStream!, detectedIntervals) : []
 
   // Enrich intervals with stats from other streams
-  const enrichedIntervals = detectedIntervals.map(interval => {
+  const enrichedIntervals = detectedIntervals.map((interval) => {
     const startIdx = interval.start_index
     const endIdx = interval.end_index
-    
+
     const stats: any = { ...interval }
-    
+
     // Add avg Power if available and not already set
     if (hasWatts && detectionMetric !== 'power') {
       const vals = wattsStream!.slice(startIdx, endIdx + 1)
       stats.avg_power = vals.reduce((a, b) => a + b, 0) / vals.length
       stats.max_power = Math.max(...vals)
     }
-    
+
     // Add avg HR if available
     if (hasHr) {
       const vals = hrStream!.slice(startIdx, endIdx + 1)
       stats.avg_heartrate = vals.reduce((a, b) => a + b, 0) / vals.length
       stats.max_heartrate = Math.max(...vals)
     }
-    
+
     // Add avg Pace if available
     if (velocityStream) {
       const vals = velocityStream!.slice(startIdx, endIdx + 1)
       stats.avg_pace = vals.reduce((a, b) => a + b, 0) / vals.length
     }
-    
+
     // Add avg Cadence if available
     if (hasCadence) {
       const vals = cadenceStream!.slice(startIdx, endIdx + 1)
@@ -324,11 +323,11 @@ export default defineEventHandler(async (event) => {
 
     return stats
   })
-  
+
   // Sample data for chart (return ~500 points for performance)
   const sampleRate = Math.max(1, Math.floor(time.length / 500))
-  const sample = (data: number[]) => data ? data.filter((_, i) => i % sampleRate === 0) : []
-  
+  const sample = (data: number[]) => (data ? data.filter((_, i) => i % sampleRate === 0) : [])
+
   const chartData = {
     time: sample(time),
     power: hasWatts ? sample(wattsStream!) : [],

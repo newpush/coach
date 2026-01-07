@@ -33,7 +33,7 @@ async function main() {
 
   const filename = path.basename(absolutePath)
   const fileBuffer = fs.readFileSync(absolutePath)
-  
+
   // Create hash for deduplication
   const hash = crypto.createHash('sha256').update(fileBuffer).digest('hex')
 
@@ -83,7 +83,7 @@ async function main() {
 
   console.log('Extracting and saving streams...')
   const streams = extractFitStreams(fitData.records)
-  
+
   // Create stream record
   await prisma.workoutStream.upsert({
     where: { workoutId: workout.id },
@@ -99,8 +99,7 @@ async function main() {
   console.log(`Successfully ingested workout: ${workout.id}`)
 }
 
-main()
-  .catch(e => {
-    console.error('Error:', e)
-    process.exit(1)
-  })
+main().catch((e) => {
+  console.error('Error:', e)
+  process.exit(1)
+})

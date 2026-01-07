@@ -4,7 +4,7 @@ import { prisma } from '../server/utils/db'
 async function checkHiddenWorkouts() {
   // Cast prisma to any to avoid type issues with script execution context
   const db = prisma as any
-  
+
   const ids = [
     '64d11491-fe95-4c6c-9b18-a066c3d7fc40',
     '5671b447-e901-44cb-a69e-304954b11b87',
@@ -14,7 +14,7 @@ async function checkHiddenWorkouts() {
   ]
 
   console.log('Checking workouts...')
-  
+
   const workouts = await db.workout.findMany({
     where: {
       id: { in: ids }
@@ -29,12 +29,14 @@ async function checkHiddenWorkouts() {
   })
 
   console.log('Found workouts:', workouts)
-  
+
   if (workouts.length === 0) {
     console.log('No workouts found with these IDs. They might have been deleted.')
   } else {
     workouts.forEach((w: any) => {
-        console.log(`- ${w.title} (${w.id}): isDuplicate=${w.isDuplicate}, source=${w.source}, date=${w.date}`)
+      console.log(
+        `- ${w.title} (${w.id}): isDuplicate=${w.isDuplicate}, source=${w.source}, date=${w.date}`
+      )
     })
   }
 }

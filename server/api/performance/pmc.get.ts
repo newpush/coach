@@ -64,42 +64,42 @@ defineRouteMeta({
 
 export default defineEventHandler(async (event) => {
   const session = await getServerSession(event)
-  
+
   if (!session?.user) {
-    throw createError({ 
+    throw createError({
       statusCode: 401,
-      message: 'Unauthorized' 
+      message: 'Unauthorized'
     })
   }
-  
+
   const query = getQuery(event)
   const days = parseInt(query.days as string) || 90
   const userId = (session.user as any).id
-  
+
   // Get current fitness summary first to determine the true end date
   const summary = await getCurrentFitnessSummary(userId)
-  
+
   let endDate = new Date()
-  
+
   // If we have data from "tomorrow" (timezone diff), extend the chart to include it
   // But cap it at 48 hours to prevent showing far future dates
   if (summary.lastUpdated && new Date(summary.lastUpdated) > endDate) {
     const lastUpdate = new Date(summary.lastUpdated)
     const maxDate = new Date()
     maxDate.setDate(maxDate.getDate() + 2) // Max 2 days ahead
-    
+
     if (lastUpdate < maxDate) {
       endDate = lastUpdate
       endDate.setUTCHours(23, 59, 59, 999)
     }
   }
-  
+
   const startDate = new Date()
   startDate.setDate(startDate.getDate() - days)
-  
+
   // Get initial CTL/ATL values from before the date range
   const initialValues = await getInitialPMCValues(userId, startDate)
-  
+
   // Calculate PMC for date range
   const metrics = await calculatePMCForDateRange(
     startDate,
@@ -108,12 +108,12 @@ export default defineEventHandler(async (event) => {
     initialValues.ctl,
     initialValues.atl
   )
-  
+
   // Calculate average TSS (per workout in the period)
   const totalTSS = metrics.reduce((sum, m) => sum + m.tss, 0)
-  const workoutCount = metrics.filter(m => m.tss > 0).length
+  const workoutCount = metrics.filter((m) => m.tss > 0).length
   const avgTSS = workoutCount > 0 ? totalTSS / workoutCount : 0
-  
+
   // Format data for chart
   const data = metrics.map((m: PMCMetrics) => ({
     date: m.date.toISOString(),
@@ -122,7 +122,7 @@ export default defineEventHandler(async (event) => {
     tsb: m.tsb,
     tss: m.tss
   }))
-  
+
   return {
     data,
     summary: {

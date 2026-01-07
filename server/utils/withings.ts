@@ -119,15 +119,15 @@ export async function refreshWithingsToken(integration: Integration): Promise<In
   const response = await fetch('https://wbsapi.withings.net/v2/oauth2', {
     method: 'POST',
     headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
+      'Content-Type': 'application/x-www-form-urlencoded'
     },
     body: new URLSearchParams({
       action: 'requesttoken',
       grant_type: 'refresh_token',
       refresh_token: integration.refreshToken,
       client_id: clientId,
-      client_secret: clientSecret,
-    }).toString(),
+      client_secret: clientSecret
+    }).toString()
   })
 
   const data = await response.json()
@@ -146,7 +146,7 @@ export async function refreshWithingsToken(integration: Integration): Promise<In
     data: {
       accessToken: tokenData.access_token,
       refreshToken: tokenData.refresh_token,
-      expiresAt,
+      expiresAt
     }
   })
 
@@ -160,7 +160,7 @@ function isTokenExpired(integration: Integration): boolean {
   if (!integration.expiresAt) {
     return false // If no expiry is set, assume it's valid (though typically it should be set)
   }
-  
+
   const now = new Date()
   const expiryWithBuffer = new Date(integration.expiresAt.getTime() - 5 * 60 * 1000) // 5 minutes buffer
   return now >= expiryWithBuffer
@@ -188,26 +188,26 @@ export async function fetchWithingsMeasures(
 ): Promise<WithingsMeasureGroup[]> {
   // Ensure we have a valid token before making the request
   const validIntegration = await ensureValidToken(integration)
-  
+
   const url = new URL('https://wbsapi.withings.net/measure')
   url.searchParams.set('action', 'getmeas')
   url.searchParams.set('access_token', validIntegration.accessToken)
   url.searchParams.set('startdate', Math.floor(startDate.getTime() / 1000).toString())
   url.searchParams.set('enddate', Math.floor(endDate.getTime() / 1000).toString())
   url.searchParams.set('category', '1') // 1: Real measures, 2: User objectives
-  
+
   if (measureTypes.length > 0) {
     url.searchParams.set('meastypes', measureTypes.join(','))
   }
-  
+
   console.log('[Withings] Fetching measures:', {
     startDate: startDate.toISOString(),
     endDate: endDate.toISOString()
   })
-  
+
   const response = await fetch(url.toString())
   const data: WithingsMeasureResponse = await response.json()
-  
+
   if (data.status !== 0) {
     // 401: Invalid access token
     if (data.status === 401) {
@@ -217,17 +217,17 @@ export async function fetchWithingsMeasures(
       url.searchParams.set('access_token', refreshedIntegration.accessToken)
       const retryResponse = await fetch(url.toString())
       const retryData: WithingsMeasureResponse = await retryResponse.json()
-      
+
       if (retryData.status !== 0) {
         throw new Error(`Withings API error after refresh: Status ${retryData.status}`)
       }
-      
+
       return retryData.body.measuregrps || []
     }
-    
+
     throw new Error(`Withings API error: Status ${data.status}`)
   }
-  
+
   return data.body.measuregrps || []
 }
 
@@ -241,7 +241,7 @@ export async function fetchWithingsActivities(
 ): Promise<WithingsActivity[]> {
   // Ensure we have a valid token before making the request
   const validIntegration = await ensureValidToken(integration)
-  
+
   const url = new URL('https://wbsapi.withings.net/v2/measure')
   url.searchParams.set('action', 'getactivity')
   url.searchParams.set('access_token', validIntegration.accessToken)
@@ -251,16 +251,19 @@ export async function fetchWithingsActivities(
   url.searchParams.set('enddate', Math.floor(endDate.getTime() / 1000).toString())
   // Comma separated list of data fields to retrieve
   // Retrieve everything available
-  url.searchParams.set('data_fields', 'steps,distance,elevation,soft,moderate,intense,active,calories,totalcalories,hr_average,hr_min,hr_max,hr_zone_0,hr_zone_1,hr_zone_2,hr_zone_3')
-  
+  url.searchParams.set(
+    'data_fields',
+    'steps,distance,elevation,soft,moderate,intense,active,calories,totalcalories,hr_average,hr_min,hr_max,hr_zone_0,hr_zone_1,hr_zone_2,hr_zone_3'
+  )
+
   console.log('[Withings] Fetching activities:', {
     startDate: startDate.toISOString(),
     endDate: endDate.toISOString()
   })
-  
+
   const response = await fetch(url.toString())
   const data: WithingsActivityResponse = await response.json()
-  
+
   if (data.status !== 0) {
     // 401: Invalid access token
     if (data.status === 401) {
@@ -270,17 +273,17 @@ export async function fetchWithingsActivities(
       url.searchParams.set('access_token', refreshedIntegration.accessToken)
       const retryResponse = await fetch(url.toString())
       const retryData: WithingsActivityResponse = await retryResponse.json()
-      
+
       if (retryData.status !== 0) {
         throw new Error(`Withings API error after refresh: Status ${retryData.status}`)
       }
-      
+
       return retryData.body.activities || []
     }
-    
+
     throw new Error(`Withings API error: Status ${data.status}`)
   }
-  
+
   return data.body.activities || []
 }
 
@@ -300,7 +303,7 @@ export function normalizeWithingsMeasureGroup(group: WithingsMeasureGroup, userI
   const date = new Date(group.date * 1000)
   // Normalize to YYYY-MM-DD for storage
   const dateOnly = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()))
-  
+
   let weight: number | null = null
   let fatRatio: number | null = null
   let muscleMass: number | null = null
@@ -308,10 +311,10 @@ export function normalizeWithingsMeasureGroup(group: WithingsMeasureGroup, userI
   let boneMass: number | null = null
   let heartRate: number | null = null
   let spo2: number | null = null
-  
+
   for (const measure of group.measures) {
     const value = getWithingsValue(measure.value, measure.unit)
-    
+
     switch (measure.type) {
       case WITHINGS_MEASURE_TYPES.WEIGHT:
         // Convert kg to our standard if needed (we store in kg)
@@ -337,12 +340,12 @@ export function normalizeWithingsMeasureGroup(group: WithingsMeasureGroup, userI
         break
     }
   }
-  
+
   // Only return if we have at least one meaningful metric
   if (!weight && !fatRatio && !heartRate && !spo2) {
     return null
   }
-  
+
   return {
     userId,
     date: dateOnly,
@@ -369,21 +372,24 @@ export function normalizeWithingsMeasureGroup(group: WithingsMeasureGroup, userI
  */
 export function normalizeWithingsActivity(activity: WithingsActivity, userId: string) {
   // Only process if activity has meaningful data
-  if (!activity.data || (!activity.data.steps && !activity.data.active && !activity.data.totalcalories)) {
+  if (
+    !activity.data ||
+    (!activity.data.steps && !activity.data.active && !activity.data.totalcalories)
+  ) {
     return null
   }
 
   // Parse dates
   const startDate = new Date(activity.startdate * 1000)
   const endDate = new Date(activity.enddate * 1000)
-  
+
   // If enddate is missing or invalid, default to startdate + active time or just same day
   const effectiveEndDate = isNaN(endDate.getTime()) ? startDate : endDate
-  
+
   // Duration: Use 'active' time if available (seconds), otherwise calculate from dates
   let durationSec = activity.data.active || 0
   if (durationSec === 0 && effectiveEndDate.getTime() > startDate.getTime()) {
-      durationSec = Math.round((effectiveEndDate.getTime() - startDate.getTime()) / 1000)
+    durationSec = Math.round((effectiveEndDate.getTime() - startDate.getTime()) / 1000)
   }
 
   // Activity type mapping (Withings 'category' is undocumented in public API docs as specific sport,
@@ -395,7 +401,7 @@ export function normalizeWithingsActivity(activity: WithingsActivity, userId: st
   // It is daily steps, daily calories, etc.
   // This maps better to a "DailyMetric" or "Wellness" entry rather than a "Workout".
   // However, Withings DOES have a "getworkouts" endpoint for specific workouts.
-  // The user asked for "Withings also support workouts" pointing to "measure-getmeas"? 
+  // The user asked for "Withings also support workouts" pointing to "measure-getmeas"?
   // No, the link provided was "measure-getmeas", but that is for body measures.
   // The link title said "measure-getmeas" but maybe they meant "v2/measure?action=getworkouts"?
   // Let's assume for now we want actual workouts if available.
@@ -404,7 +410,7 @@ export function normalizeWithingsActivity(activity: WithingsActivity, userId: st
   // If the user said "Withings also support workouts", they probably mean they want Workouts synced.
   // The endpoint for workouts is 'v2/measure?action=getworkouts'.
   // Let's add support for that instead of 'getactivity' which is daily summary.
-  
+
   return null // Placeholder as we shouldn't use getactivity for Workouts table
 }
 
@@ -453,34 +459,38 @@ export async function fetchWithingsWorkouts(
   endDate: Date
 ): Promise<WithingsWorkout[]> {
   const validIntegration = await ensureValidToken(integration)
-  
+
   const url = new URL('https://wbsapi.withings.net/v2/measure')
   url.searchParams.set('action', 'getworkouts')
   url.searchParams.set('access_token', validIntegration.accessToken)
   url.searchParams.set('startdateymd', startDate.toISOString().split('T')[0] ?? '')
   url.searchParams.set('enddateymd', endDate.toISOString().split('T')[0] ?? '')
-  url.searchParams.set('data_fields', 'steps,distance,elevation,calories,hr_average,hr_min,hr_max,hr_zone_0,hr_zone_1,hr_zone_2,hr_zone_3,manual_calories,algo_pause_duration')
-  
+  url.searchParams.set(
+    'data_fields',
+    'steps,distance,elevation,calories,hr_average,hr_min,hr_max,hr_zone_0,hr_zone_1,hr_zone_2,hr_zone_3,manual_calories,algo_pause_duration'
+  )
+
   console.log('[Withings] Fetching workouts:', {
     startDate: startDate.toISOString().split('T')[0],
     endDate: endDate.toISOString().split('T')[0]
   })
-  
+
   const response = await fetch(url.toString())
   const data: WithingsWorkoutResponse = await response.json()
-  
+
   if (data.status !== 0) {
-      if (data.status === 401) {
-          const refreshedIntegration = await refreshWithingsToken(validIntegration)
-          url.searchParams.set('access_token', refreshedIntegration.accessToken)
-          const retryResponse = await fetch(url.toString())
-          const retryData: WithingsWorkoutResponse = await retryResponse.json()
-          if (retryData.status !== 0) throw new Error(`Withings API error after refresh: Status ${retryData.status}`)
-          return retryData.body.series || []
-      }
-      throw new Error(`Withings API error: Status ${data.status}`)
+    if (data.status === 401) {
+      const refreshedIntegration = await refreshWithingsToken(validIntegration)
+      url.searchParams.set('access_token', refreshedIntegration.accessToken)
+      const retryResponse = await fetch(url.toString())
+      const retryData: WithingsWorkoutResponse = await retryResponse.json()
+      if (retryData.status !== 0)
+        throw new Error(`Withings API error after refresh: Status ${retryData.status}`)
+      return retryData.body.series || []
+    }
+    throw new Error(`Withings API error: Status ${data.status}`)
   }
-  
+
   return data.body.series || []
 }
 
@@ -493,106 +503,110 @@ export async function fetchWithingsIntraday(
   endDate: Date
 ): Promise<Record<string, any>> {
   const validIntegration = await ensureValidToken(integration)
-  
+
   const url = new URL('https://wbsapi.withings.net/v2/measure')
   url.searchParams.set('action', 'getintradayactivity')
   url.searchParams.set('access_token', validIntegration.accessToken)
   // Intraday API uses startdate/enddate (unix)
   url.searchParams.set('startdate', Math.floor(startDate.getTime() / 1000).toString())
   url.searchParams.set('enddate', Math.floor(endDate.getTime() / 1000).toString())
-  
+
   // Request heart rate and other available high-frequency data
   // Steps, elevation, calories, distance, stroke, pool_lap, duration, heart_rate, spo2_auto, rmssd, sdnn1, hrv_quality
-  url.searchParams.set('data_fields', 'heart_rate,steps,elevation,calories,distance,duration,spo2_auto,rmssd,sdnn1,hrv_quality')
-  
+  url.searchParams.set(
+    'data_fields',
+    'heart_rate,steps,elevation,calories,distance,duration,spo2_auto,rmssd,sdnn1,hrv_quality'
+  )
+
   const response = await fetch(url.toString())
   const data: any = await response.json()
-  
+
   if (data.status !== 0) {
-      if (data.status === 401) {
-          const refreshedIntegration = await refreshWithingsToken(validIntegration)
-          url.searchParams.set('access_token', refreshedIntegration.accessToken)
-          const retryResponse = await fetch(url.toString())
-          const retryData: any = await retryResponse.json()
-          if (retryData.status !== 0) throw new Error(`Withings API error after refresh: Status ${retryData.status}`)
-          // Return raw series object (keys are timestamps)
-          return retryData.body.series || {}
-      }
-      throw new Error(`Withings API error: Status ${data.status}`)
+    if (data.status === 401) {
+      const refreshedIntegration = await refreshWithingsToken(validIntegration)
+      url.searchParams.set('access_token', refreshedIntegration.accessToken)
+      const retryResponse = await fetch(url.toString())
+      const retryData: any = await retryResponse.json()
+      if (retryData.status !== 0)
+        throw new Error(`Withings API error after refresh: Status ${retryData.status}`)
+      // Return raw series object (keys are timestamps)
+      return retryData.body.series || {}
+    }
+    throw new Error(`Withings API error: Status ${data.status}`)
   }
-  
+
   // Return raw series object (keys are timestamps)
   return data.body.series || {}
 }
 
 export function normalizeWithingsWorkout(workout: WithingsWorkout, userId: string) {
-    // Map Withings categories to our types
-    // https://developer.withings.com/developer-guide/v3/integration-guide/public-health-data-api/data-api/all-categories-and-classification/
-    const categoryMap: Record<number, string> = {
-        1: 'Walk',
-        2: 'Run',
-        3: 'Hike',
-        6: 'Ride', // Cycling
-        7: 'Swim',
-        9: 'Ski', // Downhill
-        10: 'Rowing',
-        11: 'Elliptical',
-        16: 'WeightTraining', // Fitness
-        18: 'Golf',
-        19: 'Hike', // Trekking
-        20: 'Dance',
-        21: 'IceSkate',
-        22: 'Pickleball', // Racquet sports approximation
-        23: 'Rowing', // Indoors
-        24: 'Yoga', // Yoga
-        25: 'Volleyball',
-        26: 'Other', // Boxing
-        28: 'Other', // Other
-        31: 'Kayaking',
-        32: 'Kitesurf',
-        33: 'Surfing',
-        35: 'RockClimbing', // Climbing
-        187: 'Walk', // Fruit Ninja? 
-        188: 'Run', // Hyrule? 
-        // Add more as needed
-    }
-    
-    const type = categoryMap[workout.category] || 'Other'
-    
-    const startDate = new Date(workout.startdate * 1000)
-    // Adjust for timezone if provided
-    // Withings API documentation states 'startdate' is the number of seconds since epoch.
-    // However, we've observed cases (e.g. America/New_York) where the timestamp is shifted by the timezone offset relative to true UTC.
-    // e.g. 09:08 Local NY time -> 14:08 UTC stored by Withings.
-    // Strava stores 09:08 UTC for the same event (implying 04:08 Local NY time, OR Strava is ignoring timezone).
-    // If the user confirms Strava is correct, then Withings is +5h.
-    // We stick to the provided timestamp but rely on deduplication logic to handle these shifts.
-    
-    const endDate = new Date(workout.enddate * 1000)
-    let durationSec = Math.round((endDate.getTime() - startDate.getTime()) / 1000)
-    
-    // Adjust for pauses if available
-    if (workout.data.algo_pause_duration) {
-        durationSec -= workout.data.algo_pause_duration
-    }
-    
-    return {
-        userId,
-        externalId: `withings-${workout.id}`,
-        source: 'withings',
-        date: startDate,
-        title: `Withings ${type}`,
-        description: `Imported from Withings. Category: ${workout.category}`,
-        type,
-        durationSec,
-        distanceMeters: workout.data.distance,
-        elevationGain: workout.data.elevation,
-        calories: (workout.data.calories || 0) + (workout.data.manual_calories || 0),
-        averageHr: workout.data.hr_average,
-        maxHr: workout.data.hr_max,
-        // Raw data
-        rawJson: workout
-    }
+  // Map Withings categories to our types
+  // https://developer.withings.com/developer-guide/v3/integration-guide/public-health-data-api/data-api/all-categories-and-classification/
+  const categoryMap: Record<number, string> = {
+    1: 'Walk',
+    2: 'Run',
+    3: 'Hike',
+    6: 'Ride', // Cycling
+    7: 'Swim',
+    9: 'Ski', // Downhill
+    10: 'Rowing',
+    11: 'Elliptical',
+    16: 'WeightTraining', // Fitness
+    18: 'Golf',
+    19: 'Hike', // Trekking
+    20: 'Dance',
+    21: 'IceSkate',
+    22: 'Pickleball', // Racquet sports approximation
+    23: 'Rowing', // Indoors
+    24: 'Yoga', // Yoga
+    25: 'Volleyball',
+    26: 'Other', // Boxing
+    28: 'Other', // Other
+    31: 'Kayaking',
+    32: 'Kitesurf',
+    33: 'Surfing',
+    35: 'RockClimbing', // Climbing
+    187: 'Walk', // Fruit Ninja?
+    188: 'Run' // Hyrule?
+    // Add more as needed
+  }
+
+  const type = categoryMap[workout.category] || 'Other'
+
+  const startDate = new Date(workout.startdate * 1000)
+  // Adjust for timezone if provided
+  // Withings API documentation states 'startdate' is the number of seconds since epoch.
+  // However, we've observed cases (e.g. America/New_York) where the timestamp is shifted by the timezone offset relative to true UTC.
+  // e.g. 09:08 Local NY time -> 14:08 UTC stored by Withings.
+  // Strava stores 09:08 UTC for the same event (implying 04:08 Local NY time, OR Strava is ignoring timezone).
+  // If the user confirms Strava is correct, then Withings is +5h.
+  // We stick to the provided timestamp but rely on deduplication logic to handle these shifts.
+
+  const endDate = new Date(workout.enddate * 1000)
+  let durationSec = Math.round((endDate.getTime() - startDate.getTime()) / 1000)
+
+  // Adjust for pauses if available
+  if (workout.data.algo_pause_duration) {
+    durationSec -= workout.data.algo_pause_duration
+  }
+
+  return {
+    userId,
+    externalId: `withings-${workout.id}`,
+    source: 'withings',
+    date: startDate,
+    title: `Withings ${type}`,
+    description: `Imported from Withings. Category: ${workout.category}`,
+    type,
+    durationSec,
+    distanceMeters: workout.data.distance,
+    elevationGain: workout.data.elevation,
+    calories: (workout.data.calories || 0) + (workout.data.manual_calories || 0),
+    averageHr: workout.data.hr_average,
+    maxHr: workout.data.hr_max,
+    // Raw data
+    rawJson: workout
+  }
 }
 
 export interface WithingsSleepSummary {
@@ -653,35 +667,39 @@ export async function fetchWithingsSleep(
   endDate: Date
 ): Promise<WithingsSleepSummary[]> {
   const validIntegration = await ensureValidToken(integration)
-  
+
   const url = new URL('https://wbsapi.withings.net/v2/sleep')
   url.searchParams.set('action', 'getsummary')
   url.searchParams.set('access_token', validIntegration.accessToken)
   url.searchParams.set('startdateymd', startDate.toISOString().split('T')[0] ?? '')
   url.searchParams.set('enddateymd', endDate.toISOString().split('T')[0] ?? '')
   // Request all useful fields
-  url.searchParams.set('data_fields', 'total_timeinbed,total_sleep_time,asleepduration,lightsleepduration,remsleepduration,deepsleepduration,sleep_efficiency,sleep_latency,wakeup_latency,wakeupduration,wakeupcount,waso,nb_rem_episodes,out_of_bed_count,hr_average,hr_min,hr_max,rr_average,rr_min,rr_max,breathing_quality_assessment,breathing_disturbances_intensity,snoring,snoringepisodecount,sleep_score,apnea_hypopnea_index')
-  
+  url.searchParams.set(
+    'data_fields',
+    'total_timeinbed,total_sleep_time,asleepduration,lightsleepduration,remsleepduration,deepsleepduration,sleep_efficiency,sleep_latency,wakeup_latency,wakeupduration,wakeupcount,waso,nb_rem_episodes,out_of_bed_count,hr_average,hr_min,hr_max,rr_average,rr_min,rr_max,breathing_quality_assessment,breathing_disturbances_intensity,snoring,snoringepisodecount,sleep_score,apnea_hypopnea_index'
+  )
+
   console.log('[Withings] Fetching sleep:', {
     startDate: startDate.toISOString().split('T')[0],
     endDate: endDate.toISOString().split('T')[0]
   })
-  
+
   const response = await fetch(url.toString())
   const data: WithingsSleepResponse = await response.json()
-  
+
   if (data.status !== 0) {
-      if (data.status === 401) {
-          const refreshedIntegration = await refreshWithingsToken(validIntegration)
-          url.searchParams.set('access_token', refreshedIntegration.accessToken)
-          const retryResponse = await fetch(url.toString())
-          const retryData: WithingsSleepResponse = await retryResponse.json()
-          if (retryData.status !== 0) throw new Error(`Withings API error after refresh: Status ${retryData.status}`)
-          return retryData.body.series || []
-      }
-      throw new Error(`Withings API error: Status ${data.status}`)
+    if (data.status === 401) {
+      const refreshedIntegration = await refreshWithingsToken(validIntegration)
+      url.searchParams.set('access_token', refreshedIntegration.accessToken)
+      const retryResponse = await fetch(url.toString())
+      const retryData: WithingsSleepResponse = await retryResponse.json()
+      if (retryData.status !== 0)
+        throw new Error(`Withings API error after refresh: Status ${retryData.status}`)
+      return retryData.body.series || []
+    }
+    throw new Error(`Withings API error: Status ${data.status}`)
   }
-  
+
   return data.body.series || []
 }
 
@@ -689,37 +707,37 @@ export async function fetchWithingsSleep(
  * Normalizes Withings sleep data into our Wellness format
  */
 export function normalizeWithingsSleep(sleep: WithingsSleepSummary, userId: string) {
-    if (!sleep.data.total_sleep_time && !sleep.data.asleepduration) {
-        return null
-    }
+  if (!sleep.data.total_sleep_time && !sleep.data.asleepduration) {
+    return null
+  }
 
-    const date = new Date(sleep.startdate * 1000)
-    // Normalize to YYYY-MM-DD for storage
-    // Use the date string from Withings as it represents the "night of" date usually
-    const dateOnly = new Date(sleep.date)
-    
-    // Fallback if date parsing fails
-    if (isNaN(dateOnly.getTime())) {
-        return null
-    }
+  const date = new Date(sleep.startdate * 1000)
+  // Normalize to YYYY-MM-DD for storage
+  // Use the date string from Withings as it represents the "night of" date usually
+  const dateOnly = new Date(sleep.date)
 
-    return {
-        userId,
-        date: dateOnly,
-        sleepSeconds: sleep.data.total_sleep_time || sleep.data.asleepduration,
-        sleepQuality: sleep.data.sleep_score, // 0-100
-        restingHr: sleep.data.hr_average,
-        // Calculate HRV from available data if possible, otherwise null
-        // Withings sleep summary doesn't provide RMSSD/SDNN directly in summary unless specifically requested
-        // and even then, it's often not in the standard summary fields or requires specific devices.
-        // We'll leave HRV null for now unless we switch to `get` (high freq) which is heavy.
-        
-        rawJson: {
-            withings_sleep: {
-                id: sleep.id,
-                model: sleep.model,
-                data: sleep.data
-            }
-        }
+  // Fallback if date parsing fails
+  if (isNaN(dateOnly.getTime())) {
+    return null
+  }
+
+  return {
+    userId,
+    date: dateOnly,
+    sleepSeconds: sleep.data.total_sleep_time || sleep.data.asleepduration,
+    sleepQuality: sleep.data.sleep_score, // 0-100
+    restingHr: sleep.data.hr_average,
+    // Calculate HRV from available data if possible, otherwise null
+    // Withings sleep summary doesn't provide RMSSD/SDNN directly in summary unless specifically requested
+    // and even then, it's often not in the standard summary fields or requires specific devices.
+    // We'll leave HRV null for now unless we switch to `get` (high freq) which is heavy.
+
+    rawJson: {
+      withings_sleep: {
+        id: sleep.id,
+        model: sleep.model,
+        data: sleep.data
+      }
     }
+  }
 }
