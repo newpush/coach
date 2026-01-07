@@ -18,6 +18,7 @@ export default defineEventHandler(async (event) => {
       select: {
         id: true,
         name: true,
+        country: true,
         ftp: true,
         weight: true,
         maxHr: true,
@@ -224,6 +225,7 @@ export default defineEventHandler(async (event) => {
       },
       profile: {
         name: user.name,
+        country: user.country,
         age: age,
         weight: recentWeight,
         ftp: user.ftp,
