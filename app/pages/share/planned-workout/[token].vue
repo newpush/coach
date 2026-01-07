@@ -3,7 +3,7 @@
     <!-- Loading State -->
     <div v-if="pending" class="flex items-center justify-center py-12">
       <div class="text-center">
-        <div class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-primary-500"></div>
+        <div class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-primary-500"/>
         <p class="mt-4 text-sm text-gray-600 dark:text-gray-400">Loading shared workout...</p>
       </div>
     </div>
@@ -40,15 +40,15 @@
             </h1>
             <div class="flex flex-wrap gap-3 text-sm text-gray-600 dark:text-gray-400">
               <div class="flex items-center gap-1">
-                <span class="i-heroicons-calendar w-4 h-4"></span>
+                <span class="i-heroicons-calendar w-4 h-4"/>
                 {{ formatDate(workout.date) }}
               </div>
               <div v-if="workout.type" class="flex items-center gap-1">
-                <span class="i-heroicons-tag w-4 h-4"></span>
+                <span class="i-heroicons-tag w-4 h-4"/>
                 {{ workout.type }}
               </div>
               <div class="flex items-center gap-1">
-                <span class="i-heroicons-clock w-4 h-4"></span>
+                <span class="i-heroicons-clock w-4 h-4"/>
                 {{ formatDuration(workout.durationSec) }}
               </div>
             </div>
@@ -84,16 +84,16 @@
         <div v-if="workout.trainingWeek" class="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
           <div class="text-xs text-gray-500 dark:text-gray-400 mb-2">Training Context</div>
           <div class="flex flex-wrap gap-2 text-sm">
-            <UBadge color="neutral" variant="soft" v-if="workout.trainingWeek.block?.plan?.goal?.title">
+            <UBadge v-if="workout.trainingWeek.block?.plan?.goal?.title" color="neutral" variant="soft">
               Goal: {{ workout.trainingWeek.block.plan.goal.title }}
             </UBadge>
-            <UBadge color="neutral" variant="soft" v-if="workout.trainingWeek.block?.name">
+            <UBadge v-if="workout.trainingWeek.block?.name" color="neutral" variant="soft">
               {{ workout.trainingWeek.block.name }}
             </UBadge>
-            <UBadge color="neutral" variant="soft" v-if="workout.trainingWeek.weekNumber">
+            <UBadge v-if="workout.trainingWeek.weekNumber" color="neutral" variant="soft">
               Week {{ workout.trainingWeek.weekNumber }}
             </UBadge>
-            <UBadge color="neutral" variant="soft" v-if="workout.trainingWeek.focus || workout.trainingWeek.block?.primaryFocus">
+            <UBadge v-if="workout.trainingWeek.focus || workout.trainingWeek.block?.primaryFocus" color="neutral" variant="soft">
               Focus: {{ workout.trainingWeek.focus || workout.trainingWeek.block.primaryFocus }}
             </UBadge>
           </div>

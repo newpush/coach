@@ -2,7 +2,7 @@
   <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
     <div v-if="loading" class="flex items-center justify-center py-12">
       <div class="text-center">
-        <div class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-primary-500"></div>
+        <div class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-primary-500"/>
         <p class="mt-4 text-sm text-gray-600 dark:text-gray-400">Loading shared wellness data...</p>
       </div>
     </div>
@@ -36,7 +36,7 @@
             </h1>
             <div class="flex flex-wrap gap-3 text-sm text-gray-600 dark:text-gray-400">
               <div class="flex items-center gap-1">
-                <span class="i-heroicons-calendar w-4 h-4"></span>
+                <span class="i-heroicons-calendar w-4 h-4"/>
                 {{ formatDate(wellness.date) }}
               </div>
             </div>
@@ -48,7 +48,7 @@
       <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div v-if="wellness.recoveryScore" class="bg-gradient-to-br from-green-50 to-green-100 dark:from-green-900/20 dark:to-green-800/30 rounded-lg p-6 shadow-sm border border-green-200 dark:border-green-800/30">
           <div class="flex items-center justify-between mb-2">
-            <span class="i-heroicons-heart w-6 h-6 text-green-600 dark:text-green-400"></span>
+            <span class="i-heroicons-heart w-6 h-6 text-green-600 dark:text-green-400"/>
           </div>
           <div class="text-3xl font-bold text-green-900 dark:text-green-100">
             {{ wellness.recoveryScore }}%
@@ -58,7 +58,7 @@
 
         <div v-if="wellness.readiness" class="bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-900/20 dark:to-blue-800/30 rounded-lg p-6 shadow-sm border border-blue-200 dark:border-blue-800/30">
           <div class="flex items-center justify-between mb-2">
-            <span class="i-heroicons-bolt w-6 h-6 text-blue-600 dark:text-blue-400"></span>
+            <span class="i-heroicons-bolt w-6 h-6 text-blue-600 dark:text-blue-400"/>
           </div>
           <div class="text-3xl font-bold text-blue-900 dark:text-blue-100">
             {{ wellness.readiness }}{{ wellness.readiness > 10 ? '%' : '/10' }}
@@ -68,7 +68,7 @@
 
         <div v-if="wellness.sleepHours" class="bg-gradient-to-br from-indigo-50 to-indigo-100 dark:from-indigo-900/20 dark:to-indigo-800/30 rounded-lg p-6 shadow-sm border border-indigo-200 dark:border-indigo-800/30">
           <div class="flex items-center justify-between mb-2">
-            <span class="i-heroicons-moon w-6 h-6 text-indigo-600 dark:text-indigo-400"></span>
+            <span class="i-heroicons-moon w-6 h-6 text-indigo-600 dark:text-indigo-400"/>
           </div>
           <div class="text-3xl font-bold text-indigo-900 dark:text-indigo-100">
             {{ wellness.sleepHours.toFixed(1) }}h
@@ -78,7 +78,7 @@
 
         <div v-if="wellness.hrv" class="bg-gradient-to-br from-purple-50 to-purple-100 dark:from-purple-900/20 dark:to-purple-800/30 rounded-lg p-6 shadow-sm border border-purple-200 dark:border-purple-800/30">
           <div class="flex items-center justify-between mb-2">
-            <span class="i-heroicons-heart-pulse w-6 h-6 text-purple-600 dark:text-purple-400"></span>
+            <span class="i-heroicons-heart-pulse w-6 h-6 text-purple-600 dark:text-purple-400"/>
           </div>
           <div class="text-3xl font-bold text-purple-900 dark:text-purple-100">
             {{ Math.round(wellness.hrv) }}
@@ -90,14 +90,14 @@
       <!-- AI Analysis Section (Read Only) -->
       <div v-if="wellness.aiAnalysisJson" class="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-6 border border-gray-200 dark:border-gray-700">
         <div class="flex items-center gap-2 mb-4">
-          <span class="i-heroicons-sparkles w-5 h-5 text-primary-500"></span>
+          <span class="i-heroicons-sparkles w-5 h-5 text-primary-500"/>
           <h2 class="text-lg font-bold text-gray-900 dark:text-white">AI Analysis</h2>
         </div>
         
         <!-- Executive Summary -->
         <div class="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 rounded-lg p-6 border border-blue-200 dark:border-blue-800 mb-6">
           <h3 class="text-base font-semibold text-blue-900 dark:text-blue-100 mb-4 flex items-center gap-2">
-            <span class="i-heroicons-light-bulb w-5 h-5"></span>
+            <span class="i-heroicons-light-bulb w-5 h-5"/>
             Quick Take
           </h3>
           <p class="text-base text-gray-800 dark:text-gray-200 leading-relaxed">{{ wellness.aiAnalysisJson.executive_summary }}</p>
@@ -123,7 +123,7 @@
                   :key="pIndex"
                   class="flex items-start gap-2 text-sm text-gray-700 dark:text-gray-300"
                 >
-                  <span class="i-heroicons-chevron-right w-4 h-4 mt-0.5 text-primary-500 flex-shrink-0"></span>
+                  <span class="i-heroicons-chevron-right w-4 h-4 mt-0.5 text-primary-500 flex-shrink-0"/>
                   <span>{{ point }}</span>
                 </li>
               </ul>
@@ -136,7 +136,7 @@
           <!-- Strengths -->
           <div v-if="wellness.aiAnalysisJson.strengths && wellness.aiAnalysisJson.strengths.length > 0" class="bg-green-50 dark:bg-green-900/20 rounded-lg p-6 border border-green-200 dark:border-green-800">
             <h3 class="text-lg font-semibold text-green-900 dark:text-green-100 mb-3 flex items-center gap-2">
-              <span class="i-heroicons-check-circle w-5 h-5"></span>
+              <span class="i-heroicons-check-circle w-5 h-5"/>
               Strengths
             </h3>
             <ul class="space-y-2">
@@ -145,7 +145,7 @@
                 :key="index"
                 class="flex items-start gap-2 text-sm text-green-800 dark:text-green-200"
               >
-                <span class="i-heroicons-plus-circle w-4 h-4 mt-0.5 flex-shrink-0"></span>
+                <span class="i-heroicons-plus-circle w-4 h-4 mt-0.5 flex-shrink-0"/>
                 <span>{{ strength }}</span>
               </li>
             </ul>
@@ -154,7 +154,7 @@
           <!-- Weaknesses -->
           <div v-if="wellness.aiAnalysisJson.weaknesses && wellness.aiAnalysisJson.weaknesses.length > 0" class="bg-orange-50 dark:bg-orange-900/20 rounded-lg p-6 border border-orange-200 dark:border-orange-800">
             <h3 class="text-lg font-semibold text-orange-900 dark:text-orange-100 mb-3 flex items-center gap-2">
-              <span class="i-heroicons-exclamation-triangle w-5 h-5"></span>
+              <span class="i-heroicons-exclamation-triangle w-5 h-5"/>
               Areas for Improvement
             </h3>
             <ul class="space-y-2">
@@ -163,7 +163,7 @@
                 :key="index"
                 class="flex items-start gap-2 text-sm text-orange-800 dark:text-orange-200"
               >
-                <span class="i-heroicons-arrow-trending-up w-4 h-4 mt-0.5 flex-shrink-0"></span>
+                <span class="i-heroicons-arrow-trending-up w-4 h-4 mt-0.5 flex-shrink-0"/>
                 <span>{{ weakness }}</span>
               </li>
             </ul>

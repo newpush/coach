@@ -2,7 +2,7 @@
   <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
     <div v-if="pending" class="flex items-center justify-center py-12">
       <div class="text-center">
-        <div class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-primary-500"></div>
+        <div class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-primary-500"/>
         <p class="mt-4 text-sm text-gray-600 dark:text-gray-400">Loading profile...</p>
       </div>
     </div>
@@ -45,7 +45,7 @@
                 </h1>
                 <div class="flex flex-wrap gap-3 text-sm text-gray-600 dark:text-gray-400">
                   <div class="flex items-center gap-1">
-                    <span class="i-heroicons-calendar w-4 h-4"></span>
+                    <span class="i-heroicons-calendar w-4 h-4"/>
                     Generated: {{ formatDate(profile.createdAt) }}
                   </div>
                 </div>
@@ -60,7 +60,7 @@
             <!-- Executive Summary (Quick Take style) -->
             <div v-if="profile.analysisJson?.executive_summary" class="mt-6 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 rounded-lg p-6 border border-blue-200 dark:border-blue-800">
               <h3 class="text-base font-semibold text-blue-900 dark:text-blue-100 mb-4 flex items-center gap-2">
-                <span class="i-heroicons-light-bulb w-5 h-5"></span>
+                <span class="i-heroicons-light-bulb w-5 h-5"/>
                 Executive Summary
               </h3>
               <p class="text-base text-gray-800 dark:text-gray-200 leading-relaxed">
@@ -83,12 +83,12 @@
               <!-- Strengths -->
               <div class="bg-green-50 dark:bg-green-900/20 rounded-lg p-5 border border-green-200 dark:border-green-800">
                 <h3 class="text-base font-semibold text-green-900 dark:text-green-100 mb-3 flex items-center gap-2">
-                  <span class="i-heroicons-check-circle w-5 h-5"></span>
+                  <span class="i-heroicons-check-circle w-5 h-5"/>
                   Strengths
                 </h3>
                 <ul class="space-y-2">
                   <li v-for="strength in profile.analysisJson.training_characteristics.strengths" :key="strength" class="flex items-start gap-2 text-sm text-green-800 dark:text-green-200">
-                    <span class="i-heroicons-plus-circle w-4 h-4 mt-0.5 flex-shrink-0"></span>
+                    <span class="i-heroicons-plus-circle w-4 h-4 mt-0.5 flex-shrink-0"/>
                     <span>{{ strength }}</span>
                   </li>
                 </ul>
@@ -97,12 +97,12 @@
               <!-- Areas for Development -->
               <div class="bg-orange-50 dark:bg-orange-900/20 rounded-lg p-5 border border-orange-200 dark:border-orange-800">
                 <h3 class="text-base font-semibold text-orange-900 dark:text-orange-100 mb-3 flex items-center gap-2">
-                  <span class="i-heroicons-arrow-trending-up w-5 h-5"></span>
+                  <span class="i-heroicons-arrow-trending-up w-5 h-5"/>
                   Areas for Development
                 </h3>
                 <ul class="space-y-2">
                   <li v-for="area in profile.analysisJson.training_characteristics.areas_for_development" :key="area" class="flex items-start gap-2 text-sm text-orange-800 dark:text-orange-200">
-                      <span class="i-heroicons-exclamation-circle w-4 h-4 mt-0.5 flex-shrink-0"></span>
+                      <span class="i-heroicons-exclamation-circle w-4 h-4 mt-0.5 flex-shrink-0"/>
                     <span>{{ area }}</span>
                   </li>
                 </ul>
@@ -130,7 +130,7 @@
                   <div v-if="profile.analysisJson.recovery_profile.key_observations?.length" class="pt-3 border-t border-gray-100 dark:border-gray-700">
                       <ul class="space-y-2">
                       <li v-for="(obs, idx) in profile.analysisJson.recovery_profile.key_observations" :key="idx" class="flex items-start gap-2 text-sm text-gray-600 dark:text-gray-300">
-                        <span class="i-heroicons-chevron-right w-4 h-4 mt-0.5 text-pink-500 flex-shrink-0"></span>
+                        <span class="i-heroicons-chevron-right w-4 h-4 mt-0.5 text-pink-500 flex-shrink-0"/>
                         <span>{{ obs }}</span>
                       </li>
                     </ul>
@@ -177,7 +177,7 @@
                 <h4 class="text-sm font-semibold text-gray-900 dark:text-white mb-2">Limitations</h4>
                 <ul class="space-y-1">
                   <li v-for="limit in profile.analysisJson.planning_context.limitations" :key="limit" class="flex items-start gap-2 text-sm text-gray-600 dark:text-gray-400">
-                    <span class="w-1.5 h-1.5 rounded-full bg-orange-400 mt-1.5 flex-shrink-0"></span>
+                    <span class="w-1.5 h-1.5 rounded-full bg-orange-400 mt-1.5 flex-shrink-0"/>
                     <span>{{ limit }}</span>
                   </li>
                 </ul>
@@ -186,7 +186,7 @@
                 <h4 class="text-sm font-semibold text-gray-900 dark:text-white mb-2">Opportunities</h4>
                 <ul class="space-y-1">
                   <li v-for="opp in profile.analysisJson.planning_context.opportunities" :key="opp" class="flex items-start gap-2 text-sm text-gray-600 dark:text-gray-400">
-                    <span class="w-1.5 h-1.5 rounded-full bg-green-400 mt-1.5 flex-shrink-0"></span>
+                    <span class="w-1.5 h-1.5 rounded-full bg-green-400 mt-1.5 flex-shrink-0"/>
                     <span>{{ opp }}</span>
                   </li>
                 </ul>

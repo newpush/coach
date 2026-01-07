@@ -3,7 +3,7 @@
     <!-- Loading State -->
     <div v-if="pending" class="flex items-center justify-center py-12">
       <div class="text-center">
-        <div class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-primary-500"></div>
+        <div class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-primary-500"/>
         <p class="mt-4 text-sm text-gray-600 dark:text-gray-400">Loading shared training plan...</p>
       </div>
     </div>
@@ -40,15 +40,15 @@
             </h1>
             <div class="flex flex-wrap gap-3 text-sm text-gray-600 dark:text-gray-400">
                <div v-if="plan.goal?.title" class="flex items-center gap-1">
-                <span class="i-heroicons-trophy w-4 h-4 text-amber-500"></span>
+                <span class="i-heroicons-trophy w-4 h-4 text-amber-500"/>
                 Goal: {{ plan.goal.title }}
               </div>
               <div v-if="plan.startDate" class="flex items-center gap-1">
-                <span class="i-heroicons-calendar w-4 h-4"></span>
+                <span class="i-heroicons-calendar w-4 h-4"/>
                 Starts {{ formatDate(plan.startDate) }}
               </div>
               <div v-if="plan.blocks?.length" class="flex items-center gap-1">
-                <span class="i-heroicons-squares-2x2 w-4 h-4"></span>
+                <span class="i-heroicons-squares-2x2 w-4 h-4"/>
                 {{ plan.blocks.length }} Blocks
               </div>
             </div>
@@ -69,7 +69,7 @@
       <div v-for="block in plan.blocks" :key="block.id" class="space-y-4">
         <div class="flex items-center justify-between">
            <h2 class="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
-             <span class="i-heroicons-cube-transparent w-6 h-6 text-primary-500"></span>
+             <span class="i-heroicons-cube-transparent w-6 h-6 text-primary-500"/>
              {{ block.name }}
            </h2>
            <UBadge color="neutral" variant="soft">{{ block.weeks?.length || 0 }} Weeks</UBadge>

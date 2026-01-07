@@ -2,7 +2,7 @@
   <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
     <div v-if="loading" class="flex items-center justify-center py-12">
       <div class="text-center">
-        <div class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-primary-500"></div>
+        <div class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-primary-500"/>
         <p class="mt-4 text-sm text-gray-600 dark:text-gray-400">Loading shared workout...</p>
       </div>
     </div>
@@ -39,15 +39,15 @@
                 </h1>
                 <div class="flex flex-wrap gap-3 text-sm text-gray-600 dark:text-gray-400">
                   <div class="flex items-center gap-1">
-                    <span class="i-heroicons-calendar w-4 h-4"></span>
+                    <span class="i-heroicons-calendar w-4 h-4"/>
                     {{ formatDate(workout.date) }}
                   </div>
                   <div v-if="workout.type" class="flex items-center gap-1">
-                    <span class="i-heroicons-tag w-4 h-4"></span>
+                    <span class="i-heroicons-tag w-4 h-4"/>
                     {{ workout.type }}
                   </div>
                   <div class="flex items-center gap-1">
-                    <span class="i-heroicons-clock w-4 h-4"></span>
+                    <span class="i-heroicons-clock w-4 h-4"/>
                     {{ formatDuration(workout.durationSec) }}
                   </div>
                 </div>
@@ -207,14 +207,14 @@
       <!-- AI Analysis Section -->
       <div v-if="workout.aiAnalysisJson" class="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-6 border border-gray-200 dark:border-gray-700">
         <div class="flex items-center gap-2 mb-4">
-          <span class="i-heroicons-sparkles w-5 h-5 text-primary-500"></span>
+          <span class="i-heroicons-sparkles w-5 h-5 text-primary-500"/>
           <h2 class="text-lg font-bold text-gray-900 dark:text-white">AI Analysis</h2>
         </div>
         
         <!-- Executive Summary -->
         <div class="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 rounded-lg p-6 border border-blue-200 dark:border-blue-800 mb-6">
           <h3 class="text-base font-semibold text-blue-900 dark:text-blue-100 mb-4 flex items-center gap-2">
-            <span class="i-heroicons-light-bulb w-5 h-5"></span>
+            <span class="i-heroicons-light-bulb w-5 h-5"/>
             Quick Take
           </h3>
           <p class="text-base text-gray-800 dark:text-gray-200 leading-relaxed">{{ workout.aiAnalysisJson.executive_summary }}</p>
@@ -240,7 +240,7 @@
                   :key="pIndex"
                   class="flex items-start gap-2 text-sm text-gray-700 dark:text-gray-300"
                 >
-                  <span class="i-heroicons-chevron-right w-4 h-4 mt-0.5 text-primary-500 flex-shrink-0"></span>
+                  <span class="i-heroicons-chevron-right w-4 h-4 mt-0.5 text-primary-500 flex-shrink-0"/>
                   <span>{{ point }}</span>
                 </li>
               </ul>
@@ -253,7 +253,7 @@
           <!-- Strengths -->
           <div v-if="workout.aiAnalysisJson.strengths && workout.aiAnalysisJson.strengths.length > 0" class="bg-green-50 dark:bg-green-900/20 rounded-lg p-6 border border-green-200 dark:border-green-800">
             <h3 class="text-lg font-semibold text-green-900 dark:text-green-100 mb-3 flex items-center gap-2">
-              <span class="i-heroicons-check-circle w-5 h-5"></span>
+              <span class="i-heroicons-check-circle w-5 h-5"/>
               Strengths
             </h3>
             <ul class="space-y-2">
@@ -262,7 +262,7 @@
                 :key="index"
                 class="flex items-start gap-2 text-sm text-green-800 dark:text-green-200"
               >
-                <span class="i-heroicons-plus-circle w-4 h-4 mt-0.5 flex-shrink-0"></span>
+                <span class="i-heroicons-plus-circle w-4 h-4 mt-0.5 flex-shrink-0"/>
                 <span>{{ strength }}</span>
               </li>
             </ul>
@@ -271,7 +271,7 @@
           <!-- Weaknesses -->
           <div v-if="workout.aiAnalysisJson.weaknesses && workout.aiAnalysisJson.weaknesses.length > 0" class="bg-orange-50 dark:bg-orange-900/20 rounded-lg p-6 border border-orange-200 dark:border-orange-800">
             <h3 class="text-lg font-semibold text-orange-900 dark:text-orange-100 mb-3 flex items-center gap-2">
-              <span class="i-heroicons-exclamation-triangle w-5 h-5"></span>
+              <span class="i-heroicons-exclamation-triangle w-5 h-5"/>
               Areas for Improvement
             </h3>
             <ul class="space-y-2">
@@ -280,7 +280,7 @@
                 :key="index"
                 class="flex items-start gap-2 text-sm text-orange-800 dark:text-orange-200"
               >
-                <span class="i-heroicons-arrow-trending-up w-4 h-4 mt-0.5 flex-shrink-0"></span>
+                <span class="i-heroicons-arrow-trending-up w-4 h-4 mt-0.5 flex-shrink-0"/>
                 <span>{{ weakness }}</span>
               </li>
             </ul>
