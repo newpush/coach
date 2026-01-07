@@ -197,6 +197,10 @@ export default defineEventHandler(async (event) => {
         })
       })
     }
+  } else if (shareToken.resourceType === 'WELLNESS') {
+    data = await prisma.wellness.findUnique({
+      where: { id: shareToken.resourceId }
+    })
   }
 
   if (!data) {
