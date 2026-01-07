@@ -90,7 +90,18 @@ const primaryColor = '#22c55e'
 
 const latLngs = computed(() => {
   if (!props.coordinates || !Array.isArray(props.coordinates)) return []
-  return props.coordinates
+  
+  // Filter out invalid coordinates to prevent Leaflet errors (COACH-WATTS-10)
+  return props.coordinates.filter(coord => {
+    if (!coord) return false
+    if (Array.isArray(coord)) {
+      return coord.length >= 2 && 
+             typeof coord[0] === 'number' && !isNaN(coord[0]) &&
+             typeof coord[1] === 'number' && !isNaN(coord[1])
+    }
+    return typeof coord.lat === 'number' && !isNaN(coord.lat) &&
+           typeof coord.lng === 'number' && !isNaN(coord.lng)
+  })
 })
 
 const startPoint = computed(() => latLngs.value.length > 0 ? latLngs.value[0] : null)

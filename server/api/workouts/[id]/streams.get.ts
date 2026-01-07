@@ -105,10 +105,60 @@ export default defineEventHandler(async (event) => {
     
     if (workoutStream.lapSplits && Array.isArray(workoutStream.lapSplits)) {
        const strategy = analyzePacingStrategy(workoutStream.lapSplits)
-       return {
-         ...workoutStream,
-         pacingStrategy: strategy
+       
+       // Downsample high-frequency streams to reduce payload size (Fixes COACH-WATTS-B)
+       const TARGET_POINTS = 2000
+       const streamKeys = ['time', 'watts', 'heartrate', 'cadence', 'velocity', 'altitude', 'distance', 'grade_smooth', 'latlng']
+       
+       const processedStream = { ...workoutStream, pacingStrategy: strategy }
+       
+       // Only downsample if time stream is long enough
+       if (workoutStream.time && Array.isArray(workoutStream.time) && workoutStream.time.length > TARGET_POINTS) {
+         const step = workoutStream.time.length / TARGET_POINTS
+         
+         streamKeys.forEach(key => {
+           // @ts-ignore - Dynamic access to known keys
+           const streamData = (processedStream as any)[key]
+           if (streamData && Array.isArray(streamData)) {
+             const sampled: any[] = []
+             for (let i = 0; i < TARGET_POINTS; i++) {
+               const index = Math.floor(i * step)
+               if (index < streamData.length) {
+                 sampled.push(streamData[index])
+               }
+             }
+             // @ts-ignore
+             (processedStream as any)[key] = sampled
+           }
+         })
        }
+       
+       return processedStream
+    }
+
+    // Default downsampling if no lapSplits logic triggered
+    const TARGET_POINTS = 2000
+    if (workoutStream.time && Array.isArray(workoutStream.time) && workoutStream.time.length > TARGET_POINTS) {
+         const processedStream = { ...workoutStream }
+         const step = workoutStream.time.length / TARGET_POINTS
+         const streamKeys = ['time', 'watts', 'heartrate', 'cadence', 'velocity', 'altitude', 'distance', 'grade_smooth', 'latlng']
+         
+         streamKeys.forEach(key => {
+           // @ts-ignore
+           const streamData = (processedStream as any)[key]
+           if (streamData && Array.isArray(streamData)) {
+             const sampled: any[] = []
+             for (let i = 0; i < TARGET_POINTS; i++) {
+               const index = Math.floor(i * step)
+               if (index < streamData.length) {
+                 sampled.push(streamData[index])
+               }
+             }
+             // @ts-ignore
+             (processedStream as any)[key] = sampled
+           }
+         })
+         return processedStream
     }
 
     return workoutStream
