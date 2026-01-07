@@ -57,7 +57,7 @@ export const recommendTodayActivityTask = task({
     
     // Set date to start of day
     const today = new Date(date);
-    today.setHours(0, 0, 0, 0);
+    // today.setHours(0, 0, 0, 0); // Removed to prevent timezone shifting. Input is already UTC midnight.
     
     logger.log("Starting today's activity recommendation", { userId, date: today });
     

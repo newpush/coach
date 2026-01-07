@@ -1,4 +1,6 @@
 import { getServerSession } from '../../utils/session'
+import { getUserTimezone, getUserLocalDate } from '../../utils/date'
+import { prisma } from '../../utils/db'
 
 defineRouteMeta({
   openAPI: {
@@ -44,8 +46,9 @@ export default defineEventHandler(async (event) => {
   }
   
   const userId = (session.user as any).id
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
+  
+  const timezone = await getUserTimezone(userId)
+  const today = getUserLocalDate(timezone)
   
   // Find most recent recommendation for today
   const recommendation = await prisma.activityRecommendation.findFirst({

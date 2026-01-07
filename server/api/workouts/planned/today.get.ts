@@ -1,5 +1,6 @@
 import { getServerSession } from '../../../utils/session'
 import { prisma } from '../../../utils/db'
+import { getUserTimezone, getUserLocalDate } from '../../../utils/date'
 
 defineRouteMeta({
   openAPI: {
@@ -40,8 +41,10 @@ export default defineEventHandler(async (event) => {
   }
   
   const userId = (session.user as any).id
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
+  
+  // Get user's timezone-aware "today" (UTC midnight of their local date)
+  const timezone = await getUserTimezone(userId)
+  const today = getUserLocalDate(timezone)
   
   const nextDay = new Date(today)
   nextDay.setDate(nextDay.getDate() + 1)

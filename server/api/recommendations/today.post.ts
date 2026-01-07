@@ -1,5 +1,7 @@
 import { getServerSession } from '../../utils/session'
+import { getUserTimezone, getUserLocalDate } from '../../utils/date'
 import { tasks } from '@trigger.dev/sdk/v3'
+import { prisma } from '../../utils/db'
 
 defineRouteMeta({
   openAPI: {
@@ -39,8 +41,9 @@ export default defineEventHandler(async (event) => {
   }
   
   const userId = (session.user as any).id
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
+  
+  const timezone = await getUserTimezone(userId)
+  const today = getUserLocalDate(timezone)
   
   const body = await readBody(event)
   const userFeedback = body?.userFeedback
