@@ -264,7 +264,7 @@ export const ingestWithingsTask = task({
                      }
                      
                      if (hrStream.length > 0) {
-                         // @ts-ignore
+                         // @ts-expect-error - streams property added dynamically
                          normalizedWorkout.streams = {
                              time: timeStream,
                              heartrate: hrStream

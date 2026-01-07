@@ -84,7 +84,7 @@ export const generateTrainingBlockTask = task({
     // 2. Format Availability Context
     const scheduleContext = availability.map(day => {
       const dayName = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][day.dayOfWeek];
-      let slots = [];
+      const slots = [];
       if (day.morning) slots.push("Morning");
       if (day.afternoon) slots.push("Afternoon");
       if (day.evening) slots.push("Evening");
