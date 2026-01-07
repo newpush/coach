@@ -96,9 +96,9 @@ export default defineEventHandler(async (event) => {
     // We'll return null if not available, frontend handles it
     let decoupling = null
     if (w.rawJson && typeof w.rawJson === 'object') {
-        // @ts-ignore
+        // @ts-expect-error - dynamic property access
         if (w.rawJson.decoupling) decoupling = w.rawJson.decoupling
-        // @ts-ignore
+        // @ts-expect-error - dynamic property access
         if (w.rawJson.aerobic_decoupling) decoupling = w.rawJson.aerobic_decoupling
     }
 

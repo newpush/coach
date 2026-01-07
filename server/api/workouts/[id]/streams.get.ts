@@ -117,7 +117,7 @@ export default defineEventHandler(async (event) => {
          const step = workoutStream.time.length / TARGET_POINTS
          
          streamKeys.forEach(key => {
-           // @ts-ignore - Dynamic access to known keys
+           // @ts-expect-error - Dynamic access to known keys
            const streamData = (processedStream as any)[key]
            if (streamData && Array.isArray(streamData)) {
              const sampled: any[] = []
@@ -127,7 +127,7 @@ export default defineEventHandler(async (event) => {
                  sampled.push(streamData[index])
                }
              }
-             // @ts-ignore
+             // @ts-expect-error - Dynamic assignment to stream keys
              (processedStream as any)[key] = sampled
            }
          })
@@ -144,7 +144,7 @@ export default defineEventHandler(async (event) => {
          const streamKeys = ['time', 'watts', 'heartrate', 'cadence', 'velocity', 'altitude', 'distance', 'grade_smooth', 'latlng']
          
          streamKeys.forEach(key => {
-           // @ts-ignore
+           // @ts-expect-error - Dynamic access to known keys
            const streamData = (processedStream as any)[key]
            if (streamData && Array.isArray(streamData)) {
              const sampled: any[] = []
@@ -154,7 +154,7 @@ export default defineEventHandler(async (event) => {
                  sampled.push(streamData[index])
                }
              }
-             // @ts-ignore
+             // @ts-expect-error - Dynamic assignment to stream keys
              (processedStream as any)[key] = sampled
            }
          })

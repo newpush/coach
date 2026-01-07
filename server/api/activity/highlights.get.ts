@@ -82,7 +82,7 @@ export default defineEventHandler(async (event) => {
   let totalDuration = 0
   let totalDistance = 0
   let totalTSS = 0
-  let workoutCount = workouts.length
+  const workoutCount = workouts.length
   
   workouts.forEach(w => {
     totalDuration += w.durationSec || 0

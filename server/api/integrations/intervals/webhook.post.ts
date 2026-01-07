@@ -100,7 +100,7 @@ export default defineEventHandler(async (event) => {
           await IntervalsService.syncActivities(userId, startDate, endDate)
           break
 
-        case 'ACTIVITY_UPDATED':
+        case 'ACTIVITY_UPDATED': {
           const activityDateStr = intervalEvent.activity?.start_date_local || intervalEvent.activity?.start_date
           if (activityDateStr) {
             const actDate = new Date(activityDateStr)
@@ -114,6 +114,7 @@ export default defineEventHandler(async (event) => {
           }
           await IntervalsService.syncActivities(userId, startDate, endDate)
           break
+        }
 
         case 'WELLNESS_UPDATED':
           startDate = new Date()
@@ -121,7 +122,7 @@ export default defineEventHandler(async (event) => {
           await IntervalsService.syncWellness(userId, startDate, endDate)
           break
 
-        case 'FITNESS_UPDATED':
+        case 'FITNESS_UPDATED': {
           const records = intervalEvent.records || []
           if (records.length > 0) {
             const dates = records.map((r: any) => new Date(r.id).getTime())
@@ -133,8 +134,9 @@ export default defineEventHandler(async (event) => {
           }
           await IntervalsService.syncWellness(userId, startDate, endDate)
           break
+        }
 
-        case 'ACTIVITY_DELETED':
+        case 'ACTIVITY_DELETED': {
           const deletedActivityId = intervalEvent.activity?.id || intervalEvent.id
           if (deletedActivityId) {
             await IntervalsService.deleteActivity(userId, deletedActivityId.toString())
@@ -144,8 +146,9 @@ export default defineEventHandler(async (event) => {
           startDate.setDate(startDate.getDate() - 1)
           await IntervalsService.syncActivities(userId, startDate, endDate)
           break
+        }
         
-        case 'CALENDAR_UPDATED':
+        case 'CALENDAR_UPDATED': {
           const deletedEvents = intervalEvent.deleted_events || []
           if (deletedEvents.length > 0) {
             const deletedIds = deletedEvents.map((id: any) => id.toString())
@@ -159,6 +162,7 @@ export default defineEventHandler(async (event) => {
           endDate.setDate(endDate.getDate() + 28)
           await IntervalsService.syncPlannedWorkouts(userId, startDate, endDate)
           break
+        }
 
         default:
           console.log(`[Intervals Webhook] Unhandled event type: ${type}`)

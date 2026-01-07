@@ -107,7 +107,7 @@ export default defineEventHandler(async (event) => {
   const totalRetries = usageData.reduce((sum: number, u: any) => sum + u.retryCount, 0)
 
   // Group data based on groupBy parameter
-  let groupedData: Record<string, any> = {}
+  const groupedData: Record<string, any> = {}
 
   if (groupBy === 'operation') {
     usageData.forEach((usage: any) => {

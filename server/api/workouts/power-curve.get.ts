@@ -132,7 +132,7 @@ export default defineEventHandler(async (event) => {
   
   const processWorkoutsToCurve = (workouts: any[]) => {
       let max1s = 0
-      let max20m = 0 // Est from FTP or best 20m effort
+      const max20m = 0 // Est from FTP or best 20m effort
       
       workouts.forEach(w => {
           if (w.maxWatts > max1s) max1s = w.maxWatts

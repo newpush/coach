@@ -136,7 +136,7 @@ export default defineEventHandler(async (event) => {
 // Helper function to calculate block structure
 function calculateBlocks(startDate: Date, totalWeeks: number, strategy: string, goal?: any) {
   const blocks = []
-  let currentDate = new Date(startDate)
+  const currentDate = new Date(startDate)
   
   // 1. Analyze Event Demands
   const event = goal?.events?.[0]

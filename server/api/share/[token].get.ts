@@ -48,7 +48,7 @@ export default defineEventHandler(async (event) => {
     })
   }
 
-  // @ts-ignore
+  // @ts-expect-error - prisma client model might be missing in types
   const shareToken = await prisma.shareToken.findUnique({
     where: { token },
     include: {
@@ -142,7 +142,8 @@ export default defineEventHandler(async (event) => {
       const workoutsNeedingTokens: string[] = []
       const workoutIds: string[] = []
       
-      // @ts-ignore
+      
+      // @ts-expect-error - data type is any
       data.blocks.forEach((block: any) => {
         block.weeks.forEach((week: any) => {
           week.workouts.forEach((workout: any) => {
@@ -162,7 +163,8 @@ export default defineEventHandler(async (event) => {
       const tokenMap = new Map(existingTokens.map(t => [t.resourceId, t.token]))
 
       // Identify workouts needing tokens
-      // @ts-ignore
+      
+      // @ts-expect-error - data type is any
       data.blocks.forEach((block: any) => {
         block.weeks.forEach((week: any) => {
           week.workouts.forEach((workout: any) => {
@@ -188,7 +190,8 @@ export default defineEventHandler(async (event) => {
       }
 
       // Attach tokens to workouts in the response
-      // @ts-ignore
+      
+      // @ts-expect-error - data type is any
       data.blocks.forEach((block: any) => {
         block.weeks.forEach((week: any) => {
           week.workouts.forEach((workout: any) => {

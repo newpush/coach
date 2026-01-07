@@ -101,7 +101,7 @@ export default defineEventHandler(async (event) => {
     const step = stream.time.length / TARGET_POINTS
     
     streamKeys.forEach(key => {
-      // @ts-ignore - Dynamic access
+      // @ts-expect-error - Dynamic access
       const data = processedStream[key]
       if (data && Array.isArray(data)) {
         const sampled: any[] = []
@@ -111,7 +111,7 @@ export default defineEventHandler(async (event) => {
             sampled.push(data[index])
           }
         }
-        // @ts-ignore
+        // @ts-expect-error - Dynamic assignment to stream keys
         processedStream[key] = sampled
       }
     })
