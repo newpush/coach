@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { format } from 'date-fns'
+import WebhookChart from '~/components/admin/WebhookChart.vue'
 
 definePageMeta({
   layout: 'admin',
@@ -16,6 +17,8 @@ const { data, pending, refresh } = await useFetch('/api/admin/webhooks', {
   },
   watch: [page]
 })
+
+const { data: stats, pending: statsPending } = await useFetch('/api/admin/webhook-stats')
 
 const columns = [
   {
@@ -78,9 +81,48 @@ useHead({
         icon="i-heroicons-arrow-path"
         color="neutral"
         variant="ghost"
-        :loading="pending"
-        @click="() => refresh()"
+        :loading="pending || statsPending"
+        @click="() => { refresh(); refreshNuxtData('/api/admin/webhook-stats'); }"
       />
+    </div>
+
+    <!-- Charts -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <UCard>
+        <template #header>
+          <div class="flex items-center justify-between">
+            <h3 class="text-base font-semibold leading-6 text-gray-900 dark:text-white">
+              Hourly Volume (Last 24h)
+            </h3>
+          </div>
+        </template>
+        <div v-if="statsPending" class="h-64 flex items-center justify-center">
+          <UIcon name="i-lucide-loader-2" class="animate-spin h-8 w-8 text-gray-400" />
+        </div>
+        <WebhookChart 
+          v-else-if="stats?.hourly" 
+          :data="stats.hourly" 
+          period="hour" 
+        />
+      </UCard>
+
+      <UCard>
+        <template #header>
+          <div class="flex items-center justify-between">
+            <h3 class="text-base font-semibold leading-6 text-gray-900 dark:text-white">
+              Daily Volume (Last 7 Days)
+            </h3>
+          </div>
+        </template>
+        <div v-if="statsPending" class="h-64 flex items-center justify-center">
+          <UIcon name="i-lucide-loader-2" class="animate-spin h-8 w-8 text-gray-400" />
+        </div>
+        <WebhookChart 
+          v-else-if="stats?.daily" 
+          :data="stats.daily" 
+          period="day" 
+        />
+      </UCard>
     </div>
 
     <UCard>
@@ -171,3 +213,4 @@ useHead({
     </UModal>
   </div>
 </template>
+
