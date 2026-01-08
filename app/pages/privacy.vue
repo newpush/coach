@@ -306,8 +306,8 @@
           <p>If you have any questions about this Privacy Policy or our data practices:</p>
           <div class="mt-4 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
             <p><strong>TheNewPush, LLC</strong></p>
-            <p>[Insert Baltimore Street Address]</p>
-            <p>Baltimore, MD [Zip Code]</p>
+            <p>3700 O'Donnell Street, Suite 200</p>
+            <p>Baltimore, MD 21224</p>
             <p>United States</p>
             <p class="mt-2">
               Email:
