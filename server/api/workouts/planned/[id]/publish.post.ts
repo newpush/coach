@@ -44,7 +44,8 @@ export default defineEventHandler(async (event) => {
   const isLocal =
     workout.syncStatus === 'LOCAL_ONLY' ||
     workout.externalId.startsWith('ai_gen_') ||
-    workout.externalId.startsWith('ai-gen-')
+    workout.externalId.startsWith('ai-gen-') ||
+    workout.externalId.startsWith('adhoc-')
 
   // Prepare workout data
   let workoutDoc = ''
