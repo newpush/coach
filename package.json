@@ -87,7 +87,7 @@
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
-    "postinstall": "prisma generate && nuxt prepare",
+    "postinstall": "prisma generate",
     "preview": "nuxt preview",
     "prisma:generate": "prisma generate",
     "release": "release-it",
