@@ -115,6 +115,9 @@
               <li>
                 <NuxtLink to="/terms" class="hover:text-primary">Terms</NuxtLink>
               </li>
+              <li>
+                <NuxtLink to="/cookies" class="hover:text-primary">Cookies</NuxtLink>
+              </li>
             </ul>
           </div>
         </div>
