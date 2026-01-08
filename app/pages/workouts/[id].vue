@@ -244,6 +244,12 @@
                     <span :class="getSourceBadgeClass(workout.source)">
                       {{ workout.source }}
                     </span>
+                    <img
+                      v-if="workout.source === 'strava'"
+                      src="/images/logos/strava_powered_by.png"
+                      alt="Powered by Strava"
+                      class="h-6 w-auto self-center"
+                    />
                   </div>
                 </div>
 
