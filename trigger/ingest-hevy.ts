@@ -1,9 +1,11 @@
 import { logger, task } from '@trigger.dev/sdk/v3'
 import { userIngestionQueue } from './queues'
 import { prisma } from '../server/utils/db'
-import { workoutRepository } from '../server/utils/repositories/workoutRepository'
-import { calculateWorkoutStress } from '../server/utils/calculate-workout-stress'
-import { getUserTimezone, getStartOfDayUTC } from '../server/utils/date'
+import {
+  fetchHevyWorkouts,
+  fetchHevyExerciseTemplate,
+  normalizeHevyWorkout
+} from '../server/utils/hevy'
 
 export const ingestHevyTask = task({
   id: 'ingest-hevy',
