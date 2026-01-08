@@ -60,7 +60,6 @@ export const IntervalsService = {
       return true
     })
 
-    const pacingActivityTypes = ['Run', 'Ride', 'VirtualRide', 'Walk', 'Hike']
     let upsertedCount = 0
 
     for (const activity of activities) {
@@ -88,8 +87,8 @@ export const IntervalsService = {
         )
       }
 
-      // Sync stream data if applicable
-      if (upsertedWorkout.type && pacingActivityTypes.includes(upsertedWorkout.type)) {
+      // Sync stream data if available
+      if (activity.stream_types && activity.stream_types.length > 0) {
         try {
           await IntervalsService.syncActivityStream(userId, upsertedWorkout.id, activity.id)
         } catch (error) {

@@ -82,6 +82,9 @@ interface IntervalsActivity {
   // Balance
   avg_lr_balance?: number
 
+  // Streams available
+  stream_types?: string[]
+
   [key: string]: any
 }
 
