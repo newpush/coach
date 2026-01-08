@@ -725,8 +725,7 @@ function buildWorkoutAnalysisPrompt(workoutData: any, timezone: string): string 
       prompt += `- Efficiency Factor (EF): ${formatMetric(workoutData.efficiency_factor, 2)} (Watts/HR - higher is better)\n`
     }
     if (workoutData.decoupling !== undefined) {
-      const decouplingPct = workoutData.decoupling * 100
-      prompt += `- Decoupling: ${formatMetric(decouplingPct, 1)}%\n`
+      prompt += `- Decoupling: ${formatMetric(workoutData.decoupling, 1)}%\n`
       prompt += `  - <5% = Excellent aerobic efficiency, 5-10% = Good, >10% = Needs aerobic work\n`
     }
     if (workoutData.power_hr_ratio) {
