@@ -1176,7 +1176,7 @@
       await $fetch(`/api/planned-workouts/${activity.id}`, {
         method: 'PATCH',
         body: {
-          date: date.toISOString()
+          date: format(date, 'yyyy-MM-dd')
         }
       })
 
