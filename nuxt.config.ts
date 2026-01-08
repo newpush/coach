@@ -63,6 +63,10 @@ export default defineNuxtConfig({
           route: '/_docs/swagger'
         }
       }
+    },
+    // Ensure unhead is properly bundled/traced
+    externals: {
+      inline: ['unhead']
     }
   },
 
