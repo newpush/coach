@@ -212,10 +212,10 @@
             </div>
 
             <!-- Mini Zone Chart -->
-            <div v-if="activity.source === 'completed'" class="mt-1.5">
+            <div v-if="activity.source === 'completed' && activity.hasStreams" class="mt-1.5">
               <MiniZoneChart
                 :workout-id="activity.id"
-                :auto-load="!streams?.[activity.id]"
+                :auto-load="false"
                 :stream-data="streams?.[activity.id]"
                 :user-zones="userZones"
               />

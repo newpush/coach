@@ -802,7 +802,10 @@
         return
       }
 
-      const ids = newActivities.filter((a) => a.source === 'completed').map((a) => a.id)
+      // Only fetch streams for completed workouts that actually have streams
+      const ids = newActivities
+        .filter((a) => a.source === 'completed' && a.hasStreams)
+        .map((a) => a.id)
 
       if (ids.length === 0) return
 
@@ -810,7 +813,10 @@
       try {
         const streams = await $fetch<any[]>('/api/workouts/streams', {
           method: 'POST',
-          body: { workoutIds: ids }
+          body: {
+            workoutIds: ids,
+            points: 150 // We only need enough points for approximate zone calculation
+          }
         })
 
         // Create map

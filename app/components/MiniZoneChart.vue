@@ -213,14 +213,25 @@
 
     try {
       error.value = false
-      // Fetch stream data and user profile in parallel
-      const results = await Promise.all([
-        $fetch(`/api/workouts/${props.workoutId}/streams`).catch(() => null),
-        $fetch('/api/profile').catch(() => null)
-      ])
 
-      const streams = results[0]
-      const profile = results[1]
+      // Use props.userZones if available, otherwise fetch profile
+      let profile = null
+      if (!props.userZones) {
+        // Fetch stream data and user profile in parallel if zones missing
+        const results = await Promise.all([
+          $fetch(`/api/workouts/${props.workoutId}/streams`).catch(() => null),
+          $fetch('/api/profile').catch(() => null)
+        ])
+        dataStream.value = results[0]
+        profile = results[1]
+      } else {
+        // Just fetch streams
+        dataStream.value = await $fetch(`/api/workouts/${props.workoutId}/streams`).catch(
+          () => null
+        )
+      }
+
+      const streams = dataStream.value
 
       if (!streams) {
         error.value = true
@@ -228,10 +239,8 @@
         return
       }
 
-      dataStream.value = streams
-
       // Set user zones or use defaults
-      zonesData.value = {
+      zonesData.value = props.userZones || {
         hrZones: profile?.profile?.hrZones || getDefaultHrZones(),
         powerZones: profile?.profile?.powerZones || getDefaultPowerZones()
       }
