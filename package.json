@@ -18,7 +18,7 @@
     "@tiptap/extension-text-align": "^3.15.1",
     "@tiptap/starter-kit": "^3.15.1",
     "@tiptap/vue-3": "^3.15.1",
-    "@trigger.dev/sdk": "4.3.1",
+    "@trigger.dev/sdk": "4.3.2",
     "@types/uuid": "^11.0.0",
     "@vue-leaflet/vue-leaflet": "^0.10.1",
     "@vueuse/core": "^11.3.0",
@@ -55,7 +55,7 @@
     "@release-it/conventional-changelog": "^10.0.4",
     "@tiptap/core": "^3.15.1",
     "@tiptap/pm": "^3.15.1",
-    "@trigger.dev/build": "4.3.1",
+    "@trigger.dev/build": "4.3.2",
     "@types/leaflet": "^1.9.21",
     "@types/node": "^24.10.4",
     "@types/pg": "^8.16.0",
@@ -116,5 +116,6 @@
     "*.{json,md,css,html,yml,yaml}": [
       "prettier --write"
     ]
-  }
+  },
+  "packageManager": "pnpm@9.13.0+sha512.beb9e2a803db336c10c9af682b58ad7181ca0fbd0d4119f2b33d5f2582e96d6c0d93c85b23869295b765170fbdaa92890c0da6ada457415039769edf3c959efe"
 }
