@@ -672,6 +672,7 @@ model PlannedWorkout {
   lastSyncedAt    DateTime?
   syncError       String?  @db.Text
   modifiedLocally Boolean  @default(false)
+  managedBy       String   @default("USER") // USER, COACH_WATTS
 
   // Periodization Link
   trainingWeekId  String?
