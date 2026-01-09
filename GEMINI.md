@@ -60,6 +60,7 @@ By following these guidelines, you can avoid common pitfalls and ensure that mod
 4.  **NEVER** run the dev server (HMR handles updates).
 5.  **USE** the Repository Pattern for data access.
 6.  **FOLLOW** the specific UI/UX guidelines for Nuxt UI.
+7.  **ALWAYS** request developer approval before pushing changes to the `master` branch.
 
 ### Database Verification
 
@@ -1362,6 +1363,7 @@ PENDING → PROCESSING → COMPLETED
    - Most common query pattern: "workouts in last 30 days"
 
 2. **Unique Constraints:**
+
    ```prisma
    @@unique([userId, source, externalId])
    @@unique([userId, date])
@@ -4610,3 +4612,5 @@ Follow these conventions to maintain consistency as the project grows.
 
 - Workout types, icons, and colors are centralized in `app/utils/activity-types.ts` (frontend) and `server/utils/activity-types.ts` (backend). Always refer to these files when adding new activity types or modifying icons/colors to maintain consistency across the dashboard and planning pages.
 - Activity icons have been switched to **Tabler Icons** (`i-tabler-...`) for a more consistent fitness look.
+- Use the `AiFeedback` component for any AI-generated content (recommendations, analysis, chat messages) to capture user feedback and link to LLM usage logs. It should be placed near the AI content, typically right-aligned below it. See `docs/02-features/ai-feedback.md` for usage details.
+  --- End of Context from: GEMINI.md ---

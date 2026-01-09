@@ -63,3 +63,9 @@ Verify that OAuth providers (Google, Strava, WHOOP, etc.) have the correct callb
 1.  **Auth Flow**: Test sign-in/sign-out to verify cookie configuration and redirect URLs.
 2.  **Integrations**: Verify that third-party integrations can complete their OAuth flows.
 3.  **Database**: Check logs for any connection errors or query failures immediately after startup.
+
+## 5. Version Control Protection
+
+### Master Branch Protection
+
+- **ALWAYS** request explicit developer approval before pushing any changes directly to the `master` branch.

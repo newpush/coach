@@ -212,3 +212,11 @@ const data = await prisma.model.findUnique({
   }
   ```
 - **Security**: Use `<!-- eslint-disable vue/no-v-html -->` only when absolutely necessary for trusted content (e.g., Markdown rendering). Wrap the directive around the specific element.
+
+---
+
+## 12. Git & Source Control
+
+### Main Branch Protection
+
+- **ALWAYS** request explicit developer approval before pushing any changes directly to the `master` branch.
