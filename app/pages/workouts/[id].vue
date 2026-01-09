@@ -1597,6 +1597,9 @@
         workout.value.aiAnalysisStatus = updated.aiAnalysisStatus
         workout.value.aiAnalyzedAt = updated.aiAnalyzedAt
         workout.value.planAdherence = updated.planAdherence
+        workout.value.llmUsageId = updated.llmUsageId
+        workout.value.feedback = updated.feedback
+        workout.value.feedbackText = updated.feedbackText
 
         // Check adherence status
         if (analyzingAdherence.value && updated.planAdherence?.analysisStatus === 'COMPLETED') {

@@ -1026,6 +1026,9 @@
         wellness.value.aiAnalysisJson = updated.aiAnalysisJson
         wellness.value.aiAnalysisStatus = updated.aiAnalysisStatus
         wellness.value.aiAnalyzedAt = updated.aiAnalyzedAt
+        wellness.value.llmUsageId = updated.llmUsageId
+        wellness.value.feedback = updated.feedback
+        wellness.value.feedbackText = updated.feedbackText
 
         if (updated.aiAnalysisStatus === 'COMPLETED' || updated.aiAnalysisStatus === 'FAILED') {
           analyzingWellness.value = false

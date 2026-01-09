@@ -794,6 +794,9 @@
         nutrition.value.aiAnalysisJson = updated.aiAnalysisJson
         nutrition.value.aiAnalysisStatus = updated.aiAnalysisStatus
         nutrition.value.aiAnalyzedAt = updated.aiAnalyzedAt
+        nutrition.value.llmUsageId = updated.llmUsageId
+        nutrition.value.feedback = updated.feedback
+        nutrition.value.feedbackText = updated.feedbackText
 
         // If completed or failed, stop polling
         if ((updated as any).aiAnalysisStatus === 'COMPLETED') {
