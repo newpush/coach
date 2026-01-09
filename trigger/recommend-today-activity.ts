@@ -3,6 +3,7 @@ import { generateStructuredAnalysis, buildWorkoutSummary } from '../server/utils
 import { prisma } from '../server/utils/db'
 import { workoutRepository } from '../server/utils/repositories/workoutRepository'
 import { wellnessRepository } from '../server/utils/repositories/wellnessRepository'
+import { formatUserDate } from '../server/utils/date'
 
 const recommendationSchema = {
   type: 'object',
@@ -153,6 +154,15 @@ export const recommendTodayActivityTask = task({
       day: 'numeric'
     })
 
+    // Split workouts into "Today's" and "Past"
+    const targetDateStr = formatUserDate(today, userTimezone, 'yyyy-MM-dd')
+    const todaysWorkouts = recentWorkouts.filter(
+      (w) => formatUserDate(w.date, userTimezone, 'yyyy-MM-dd') === targetDateStr
+    )
+    const pastWorkouts = recentWorkouts.filter(
+      (w) => formatUserDate(w.date, userTimezone, 'yyyy-MM-dd') !== targetDateStr
+    )
+
     // Build athlete profile context
     let athleteContext = ''
     if (athleteProfile?.analysisJson) {
@@ -264,8 +274,11 @@ ${todayMetric.spO2 ? `- SpO2: ${todayMetric.spO2}%` : ''}
     : 'No recovery data available'
 }
 
+TODAY'S COMPLETED TRAINING:
+${todaysWorkouts.length > 0 ? buildWorkoutSummary(todaysWorkouts) : 'None so far'}
+
 RECENT TRAINING (Last 7 days):
-${recentWorkouts.length > 0 ? buildWorkoutSummary(recentWorkouts) : 'No recent workouts'}
+${pastWorkouts.length > 0 ? buildWorkoutSummary(pastWorkouts) : 'No recent workouts'}
 
 ${
   userFeedback
@@ -299,6 +312,7 @@ DECISION CRITERIA:
 - Poor sleep (< 6 hours): Reduce volume/intensity
 - High recent TSS (> 400 in 3 days): Consider recovery
 - If it is late in the day (e.g. after 20:00) and the workout is not done, consider suggesting Rest or a very short/easy version, unless the user explicitly asks to train late.
+- **If TODAY'S COMPLETED TRAINING shows significant work done**: The user may have already done the planned workout or an alternative. If so, recommend REST or update the plan to reflect completion.
 
 Provide specific, actionable recommendations with clear reasoning.`
 
