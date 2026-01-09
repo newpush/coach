@@ -14,7 +14,7 @@ export async function syncPlannedWorkoutToIntervals(
   operation: 'CREATE' | 'UPDATE' | 'DELETE',
   workoutData: any,
   userId: string
-): Promise<{ success: boolean; synced: boolean; message?: string; error?: string }> {
+): Promise<{ success: boolean; synced: boolean; message?: string; error?: string; result?: any }> {
   try {
     // Get Intervals.icu integration
     const integration = await prisma.integration.findFirst({

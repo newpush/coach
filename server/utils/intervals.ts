@@ -188,6 +188,7 @@ export async function createIntervalsPlannedWorkout(
     durationSec?: number
     tss?: number
     workout_doc?: string
+    managedBy?: string
   }
 ): Promise<IntervalsPlannedWorkout> {
   const athleteId = getIntervalsAthleteId(integration)
@@ -211,9 +212,14 @@ export async function createIntervalsPlannedWorkout(
   const dateStr = `${year}-${month}-${day}T${hour}:${minute}:${second}`
 
   const workoutText = data.workout_doc || ''
-  const combinedDescription = data.description
+  let combinedDescription = data.description
     ? `${data.description}\n\n${workoutText}`.trim()
     : workoutText
+
+  // Append CoachWatts signature if managed by us
+  if (data.managedBy === 'COACH_WATTS' && !combinedDescription.includes('[CoachWatts]')) {
+    combinedDescription = `${combinedDescription}\n\n[CoachWatts]`.trim()
+  }
 
   const eventData: any = {
     start_date_local: dateStr,
@@ -309,6 +315,7 @@ export async function updateIntervalsPlannedWorkout(
     durationSec?: number
     tss?: number
     workout_doc?: string
+    managedBy?: string
   }
 ): Promise<IntervalsPlannedWorkout> {
   const athleteId = getIntervalsAthleteId(integration)
@@ -333,15 +340,22 @@ export async function updateIntervalsPlannedWorkout(
   if (data.title) eventData.name = data.title
 
   // Handle workout doc / description merge
-  if (data.workout_doc) {
-    const workoutText = data.workout_doc
+  if (data.workout_doc || data.description !== undefined) {
+    const workoutText = data.workout_doc || ''
     const description = data.description || ''
-    eventData.description = `${description}\n\n${workoutText}`.trim()
+    let combinedDescription = `${description}\n\n${workoutText}`.trim()
+
+    // Append CoachWatts signature if managed by us
+    if (data.managedBy === 'COACH_WATTS' && !combinedDescription.includes('[CoachWatts]')) {
+      combinedDescription = `${combinedDescription}\n\n[CoachWatts]`.trim()
+    }
+
+    eventData.description = combinedDescription
 
     // Don't send duration/tss if we have workout structure, let Intervals calculate it
     // Unless specifically requested? Usually safer to let Intervals calc it.
   } else {
-    if (data.description !== undefined) eventData.description = data.description
+    // Legacy path if just updating metadata
     if (data.durationSec) eventData.duration = data.durationSec
     if (data.tss) eventData.tss = data.tss
   }
@@ -826,6 +840,9 @@ export function normalizeIntervalsPlannedWorkout(event: IntervalsPlannedWorkout,
   // Structured workout data
   const structuredWorkout = event.workout_doc ?? (event.steps ? { steps: event.steps } : null)
 
+  // Detect CoachWatts management
+  const isCoachWatts = event.description?.includes('[CoachWatts]')
+
   return {
     userId,
     externalId: String(event.id), // Convert to string
@@ -840,6 +857,7 @@ export function normalizeIntervalsPlannedWorkout(event: IntervalsPlannedWorkout,
     workIntensity: workIntensity ? Math.round(workIntensity * 100) / 100 : null,
     structuredWorkout,
     completed: false,
+    managedBy: isCoachWatts ? 'COACH_WATTS' : 'USER',
     rawJson: event
   }
 }
