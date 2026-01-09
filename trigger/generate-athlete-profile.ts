@@ -1,5 +1,5 @@
 import { logger, task } from '@trigger.dev/sdk/v3'
-import { generateStructuredAnalysis } from '../server/utils/gemini'
+import { generateStructuredAnalysis, buildWorkoutSummary } from '../server/utils/gemini'
 import { prisma } from '../server/utils/db'
 import { workoutRepository } from '../server/utils/repositories/workoutRepository'
 import { wellnessRepository } from '../server/utils/repositories/wellnessRepository'
@@ -626,6 +626,9 @@ ${hrZoneDefinitions}
 
 WORKOUT INSIGHTS (from AI analysis):
 ${workoutInsights || 'No detailed workout analysis available'}
+
+RECENT TRAINING DETAILS (Last 20 sessions):
+${buildWorkoutSummary(recentWorkouts)}
 
 RECOVERY METRICS:
 ${wellnessSummary}
