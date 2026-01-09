@@ -228,8 +228,28 @@ export default defineEventHandler(async (event) => {
     }
   })
 
+  // Find associated LLM usage if we have a valid ID
+  let llmUsage = null
+  if (wellnessData.id) {
+    llmUsage = await prisma.llmUsage.findFirst({
+      where: {
+        entityId: wellnessData.id,
+        entityType: 'Wellness'
+      },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        feedback: true,
+        feedbackText: true
+      }
+    })
+  }
+
   return {
     ...wellnessData,
-    trends
+    trends,
+    llmUsageId: llmUsage?.id,
+    feedback: llmUsage?.feedback,
+    feedbackText: llmUsage?.feedbackText
   }
 })

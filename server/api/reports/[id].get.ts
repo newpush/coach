@@ -119,5 +119,24 @@ export default defineEventHandler(async (event) => {
     })
   }
 
-  return report
+  // Find associated LLM usage
+  const llmUsage = await prisma.llmUsage.findFirst({
+    where: {
+      entityId: report.id,
+      entityType: 'Report'
+    },
+    orderBy: { createdAt: 'desc' },
+    select: {
+      id: true,
+      feedback: true,
+      feedbackText: true
+    }
+  })
+
+  return {
+    ...report,
+    llmUsageId: llmUsage?.id,
+    feedback: llmUsage?.feedback,
+    feedbackText: llmUsage?.feedbackText
+  }
 })

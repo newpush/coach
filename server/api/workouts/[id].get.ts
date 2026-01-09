@@ -77,5 +77,24 @@ export default defineEventHandler(async (event) => {
     })
   }
 
-  return workout
+  // Find associated LLM usage
+  const llmUsage = await prisma.llmUsage.findFirst({
+    where: {
+      entityId: workout.id,
+      entityType: 'Workout'
+    },
+    orderBy: { createdAt: 'desc' },
+    select: {
+      id: true,
+      feedback: true,
+      feedbackText: true
+    }
+  })
+
+  return {
+    ...workout,
+    llmUsageId: llmUsage?.id,
+    feedback: llmUsage?.feedback,
+    feedbackText: llmUsage?.feedbackText
+  }
 })

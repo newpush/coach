@@ -66,9 +66,26 @@ export default defineEventHandler(async (event) => {
     })
   }
 
+  // Find associated LLM usage
+  const llmUsage = await prisma.llmUsage.findFirst({
+    where: {
+      entityId: nutrition.id,
+      entityType: 'Nutrition'
+    },
+    orderBy: { createdAt: 'desc' },
+    select: {
+      id: true,
+      feedback: true,
+      feedbackText: true
+    }
+  })
+
   // Format date to avoid timezone issues
   return {
     ...nutrition,
-    date: nutrition.date.toISOString().split('T')[0] // YYYY-MM-DD format
+    date: nutrition.date.toISOString().split('T')[0], // YYYY-MM-DD format
+    llmUsageId: llmUsage?.id,
+    feedback: llmUsage?.feedback,
+    feedbackText: llmUsage?.feedbackText
   }
 })
