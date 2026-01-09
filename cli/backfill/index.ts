@@ -4,19 +4,19 @@ import backfillTssCommand from './tss'
 import backfillPlannedWorkoutsCommand from './planned-workouts'
 import backfillWorkoutsCommand from './workouts'
 import backfillFeelCommand from './feel'
-import backfillProfileCommand from './profile'
+import backfillWellnessScoresCommand from './wellness-scores'
 import backfillManagedByCommand from './managed-by'
 
-const backfillCommand = new Command('backfill')
+const backfill = new Command('backfill')
 
-backfillCommand
-  .description('Backfill data/metrics')
-  .addCommand(backfillTssCommand)
+backfill
+  .description('Backfill data/fix schema issues')
   .addCommand(backfillMetricsCommand)
-  .addCommand(backfillProfileCommand)
+  .addCommand(backfillTssCommand)
   .addCommand(backfillPlannedWorkoutsCommand)
   .addCommand(backfillWorkoutsCommand)
   .addCommand(backfillFeelCommand)
+  .addCommand(backfillWellnessScoresCommand)
   .addCommand(backfillManagedByCommand)
 
-export default backfillCommand
+export default backfill
