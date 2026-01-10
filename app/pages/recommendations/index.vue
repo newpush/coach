@@ -6,37 +6,26 @@
           <div class="flex items-center gap-3">
             <UButton
               icon="i-heroicons-trash"
-              color="red"
-              variant="soft"
+              color="neutral"
+              variant="outline"
+              size="sm"
+              class="font-bold"
               :loading="clearing"
-              @click="clearAll"
+              @click="showClearModal = true"
             >
               Clear All
-            </UButton>
-            <UButton
-              icon="i-heroicons-arrow-path-rounded-square"
-              color="white"
-              variant="solid"
-              :loading="refreshingAdvice"
-              @click="refreshAdvice"
-            >
-              Refresh Advice
             </UButton>
             <UButton
               icon="i-heroicons-sparkles"
               color="primary"
               variant="solid"
-              :loading="generating"
-              @click="generateNew"
+              size="sm"
+              class="font-bold"
+              :loading="refreshingAdvice"
+              @click="refreshAdvice"
             >
-              Full Analysis
+              Update Recommendations
             </UButton>
-            <UButton
-              icon="i-heroicons-arrow-path"
-              color="gray"
-              variant="ghost"
-              @click="refreshAll"
-            />
           </div>
         </template>
       </UDashboardNavbar>
@@ -106,6 +95,46 @@
             </div>
           </template>
         </UTabs>
+
+        <!-- Clear Confirmation Modal -->
+        <UModal v-model:open="showClearModal">
+          <template #content>
+            <UCard :ui="{ ring: '', divide: 'divide-y divide-gray-100 dark:divide-gray-800' }">
+              <template #header>
+                <div class="flex items-center justify-between">
+                  <h3 class="text-base font-semibold leading-6 text-gray-900 dark:text-white">
+                    Clear All Recommendations?
+                  </h3>
+                  <UButton
+                    color="gray"
+                    variant="ghost"
+                    icon="i-heroicons-x-mark-20-solid"
+                    class="-my-1"
+                    @click="showClearModal = false"
+                  />
+                </div>
+              </template>
+
+              <div class="p-4">
+                <p class="text-sm text-gray-500 dark:text-gray-400">
+                  Are you sure you want to delete all active and historical recommendations? This
+                  action cannot be undone.
+                </p>
+              </div>
+
+              <template #footer>
+                <div class="flex justify-end gap-3">
+                  <UButton color="gray" variant="ghost" @click="showClearModal = false"
+                    >Cancel</UButton
+                  >
+                  <UButton color="red" variant="solid" :loading="clearing" @click="confirmClearAll"
+                    >Yes, Clear All</UButton
+                  >
+                </div>
+              </template>
+            </UCard>
+          </template>
+        </UModal>
       </div>
     </template>
   </UDashboardPanel>
@@ -122,10 +151,10 @@
   const toast = useToast()
 
   // State
-  const generating = ref(false) // For Full Analysis
   const refreshingAdvice = ref(false) // For Refresh Advice
   const clearing = ref(false)
   const isPolling = ref(false)
+  const showClearModal = ref(false)
   let pollInterval: NodeJS.Timeout | null = null
 
   // Polling Logic
@@ -138,7 +167,7 @@
         await refreshAll()
 
         // Show completion toast if we were polling
-        if (generating.value || refreshingAdvice.value) {
+        if (refreshingAdvice.value) {
           toast.add({
             title: 'Analysis Complete',
             description: 'New recommendations are ready.',
@@ -147,7 +176,6 @@
           })
         }
 
-        generating.value = false
         refreshingAdvice.value = false
       }
     } catch (error) {
@@ -181,9 +209,7 @@
   })
 
   // Actions
-  async function clearAll() {
-    if (!confirm('Are you sure you want to clear ALL recommendations?')) return
-
+  async function confirmClearAll() {
     clearing.value = true
     try {
       const res: any = await $fetch('/api/recommendations/clear', {
@@ -195,6 +221,7 @@
         description: `Removed ${res.count} recommendations.`,
         color: 'success'
       })
+      showClearModal.value = false
       await refreshAll()
     } catch (error: any) {
       toast.add({
@@ -208,7 +235,7 @@
   }
 
   async function refreshAdvice() {
-    if (refreshingAdvice.value || generating.value) return
+    if (refreshingAdvice.value) return
 
     refreshingAdvice.value = true
     try {
@@ -217,7 +244,7 @@
       })
 
       toast.add({
-        title: 'Refreshing Advice',
+        title: 'Update Started',
         description: 'Generating new recommendations based on your recent data...',
         color: 'info',
         icon: 'i-heroicons-arrow-path-rounded-square'
@@ -240,42 +267,6 @@
           color: 'error'
         })
         refreshingAdvice.value = false
-      }
-    }
-  }
-
-  async function generateNew() {
-    if (refreshingAdvice.value || generating.value) return
-
-    generating.value = true
-    try {
-      await $fetch('/api/scores/generate-explanations', {
-        method: 'POST'
-      })
-
-      toast.add({
-        title: 'Full Analysis Started',
-        description: 'AI is analyzing your trends. This may take a few minutes.',
-        color: 'success',
-        icon: 'i-heroicons-sparkles'
-      })
-
-      startPolling()
-    } catch (error: any) {
-      if (error.statusCode === 409) {
-        toast.add({
-          title: 'Already Running',
-          description: 'Analysis is already in progress. Waiting for completion...',
-          color: 'warning'
-        })
-        startPolling()
-      } else {
-        toast.add({
-          title: 'Error',
-          description: error.data?.message || 'Failed to start analysis',
-          color: 'error'
-        })
-        generating.value = false
       }
     }
   }

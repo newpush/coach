@@ -98,6 +98,11 @@
                 </template>
               </UCard>
 
+              <!-- AI Feedback -->
+              <div v-if="rec.llmUsageId" class="flex justify-end px-1">
+                <AiFeedback :llm-usage-id="rec.llmUsageId" />
+              </div>
+
               <!-- Action Plan / Implementation Guide -->
               <div v-if="rec.implementationGuide" class="space-y-4">
                 <h3
@@ -223,6 +228,11 @@
                       </ul>
                     </UCard>
                   </div>
+
+                  <!-- AI Feedback -->
+                  <div v-if="rec.implementationGuide.llmUsageId" class="flex justify-end px-1">
+                    <AiFeedback :llm-usage-id="rec.implementationGuide.llmUsageId" />
+                  </div>
                 </div>
               </div>
 
@@ -305,9 +315,6 @@
                       Period
                     </div>
                     <div class="font-medium text-sm">{{ rec.period }} Days</div>
-                  </div>
-                  <div v-if="rec.llmUsageId" class="pt-4 border-t">
-                    <AiFeedback :llm-usage-id="rec.llmUsageId" />
                   </div>
                 </div>
               </UCard>
