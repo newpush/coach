@@ -8,6 +8,7 @@ interface ImplementationGuide {
   tips_and_tricks: string[]
   common_pitfalls: string[]
   success_metrics: string[]
+  llmUsageId?: string
 }
 
 export const generateImplementationGuideTask = task({
@@ -82,8 +83,10 @@ JSON object matching the structure.`
     await prisma.recommendation.update({
       where: { id: recommendationId },
       data: {
-        implementationGuide: guide as any,
-        llmUsageId: usageId
+        implementationGuide: {
+          ...guide,
+          llmUsageId: usageId
+        } as any
       }
     })
 

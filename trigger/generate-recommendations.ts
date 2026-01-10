@@ -209,7 +209,10 @@ ${recentNutrition.map((n) => `- ${n.date.toISOString().split('T')[0]}: Score: ${
 
 INSTRUCTIONS:
 1. Review the EXISTING recommendations. Are they still relevant? Do they need to be updated based on new data?
-   - **CHECK THE GENERATED DATE**: If a recommendation was generated very recently (e.g. within the last 24-48 hours), be cautious about changing it unless there is drastic new data. Give the athlete time to comply.
+   - **CRITICAL - UPDATE THRESHOLD**: DO NOT update a recommendation just to rephrase it.
+   - **RECENT RECOMMENDATIONS**: If a recommendation is less than 3 days old, ONLY update it if there is a **SIGNIFICANT** change in the underlying data (e.g. a sudden drop in HRV, a missed key workout, a new injury flag).
+   - If the advice is still valid but the athlete hasn't acted yet, **LEAVE IT ALONE**. Do not generate an update.
+   - Only use 'updated_recommendations' if the *meaning* or *action* needs to change significantly.
    - If yes, use the 'updated_recommendations' array. Provide the ID and the new details.
    - If an existing recommendation has been addressed or is no longer relevant (e.g. issue fixed), mark it as **COMPLETED** or **DISMISSED**.
      - Use 'completed_recommendation_ids' for items successfully addressed.
