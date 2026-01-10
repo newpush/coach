@@ -119,12 +119,6 @@
           />
         </div>
 
-        <!-- AI Recommendations Section -->
-        <WorkoutRecommendations
-          v-if="!loading && allRecommendations.length > 0"
-          :recommendations="allRecommendations"
-        />
-
         <!-- Score Detail Modal -->
         <ScoreDetailModal
           v-model="showModal"
@@ -143,7 +137,6 @@
   import WorkoutSummary from '~/components/workouts/WorkoutSummary.vue'
   import WorkoutPerformance from '~/components/workouts/WorkoutPerformance.vue'
   import WorkoutCharts from '~/components/workouts/WorkoutCharts.vue'
-  import WorkoutRecommendations from '~/components/workouts/WorkoutRecommendations.vue'
   import WorkoutTable from '~/components/workouts/WorkoutTable.vue'
 
   const { formatDate, getUserLocalDate, timezone } = useFormat()
@@ -343,8 +336,6 @@
     color: undefined
   })
 
-  const allRecommendations = ref<any[]>([])
-
   // Generate all score explanations (batch job)
   async function generateExplanations() {
     generatingExplanations.value = true
@@ -360,11 +351,6 @@
         color: 'success',
         icon: 'i-heroicons-sparkles'
       })
-
-      // Refresh recommendations after a delay
-      setTimeout(async () => {
-        await fetchAllRecommendations()
-      }, 5000)
     } catch (error: any) {
       toast.add({
         title: 'Generation Failed',
@@ -433,43 +419,6 @@
       'Workout Execution': 'execution'
     }
     return mapping[title] || title.toLowerCase()
-  }
-
-  // Fetch all recommendations from the new centralized API
-  async function fetchAllRecommendations() {
-    try {
-      const recs: any[] = await $fetch('/api/recommendations', {
-        query: {
-          sourceType: 'workout',
-          status: 'ACTIVE'
-        }
-      })
-
-      // Map raw metric to display name
-      const metricLabels: Record<string, string> = {
-        overall: 'Overall Performance',
-        technical: 'Technical Execution',
-        effort: 'Effort Management',
-        pacing: 'Pacing Strategy',
-        execution: 'Workout Execution'
-      }
-
-      recs.forEach((rec) => {
-        rec.metric = metricLabels[rec.metric] || rec.metric
-      })
-
-      // Sort by priority: high > medium > low
-      const priorityOrder: Record<string, number> = { high: 1, medium: 2, low: 3 }
-      recs.sort((a, b) => {
-        const aPriority = priorityOrder[a.priority] || 999
-        const bPriority = priorityOrder[b.priority] || 999
-        return aPriority - bPriority
-      })
-
-      allRecommendations.value = recs
-    } catch (error) {
-      console.error('Error fetching recommendations:', error)
-    }
   }
 
   // Chart data computations
@@ -773,14 +722,8 @@
     currentPage.value = 1
   })
 
-  // Watch period changes and refetch recommendations
-  watch(selectedPeriod, async () => {
-    await fetchAllRecommendations()
-  })
-
   // Load data on mount
   onMounted(() => {
     fetchWorkouts()
-    fetchAllRecommendations()
   })
 </script>
