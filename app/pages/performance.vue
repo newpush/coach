@@ -15,7 +15,8 @@
             class="font-bold"
             @click="generateExplanations"
           >
-            <span class="hidden sm:inline">Insights</span>
+            <span class="sm:hidden">Generate</span>
+            <span class="hidden sm:inline">Generate Insights</span>
           </UButton>
         </template>
       </UDashboardNavbar>

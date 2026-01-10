@@ -431,51 +431,41 @@
     return mapping[title] || title.toLowerCase()
   }
 
-  // Fetch all recommendations from all metrics
+  // Fetch all recommendations from the new centralized API
   async function fetchAllRecommendations() {
-    const metrics = ['overall', 'technical', 'effort', 'pacing', 'execution']
-    const metricLabels: Record<string, string> = {
-      overall: 'Overall Performance',
-      technical: 'Technical Execution',
-      effort: 'Effort Management',
-      pacing: 'Pacing Strategy',
-      execution: 'Workout Execution'
-    }
-
-    const allRecs: any[] = []
-
-    for (const metric of metrics) {
-      try {
-        const response: any = await $fetch('/api/scores/explanation', {
-          query: {
-            type: 'workout',
-            period: selectedPeriod.value.toString(),
-            metric
-          }
-        })
-
-        if (response.analysis?.recommendations) {
-          response.analysis.recommendations.forEach((rec: any) => {
-            allRecs.push({
-              ...rec,
-              metric: metricLabels[metric]
-            })
-          })
+    try {
+      const recs: any[] = await $fetch('/api/recommendations', {
+        query: {
+          sourceType: 'workout',
+          status: 'ACTIVE'
         }
-      } catch (error) {
-        console.error(`Error fetching ${metric} recommendations:`, error)
+      })
+
+      // Map raw metric to display name
+      const metricLabels: Record<string, string> = {
+        overall: 'Overall Performance',
+        technical: 'Technical Execution',
+        effort: 'Effort Management',
+        pacing: 'Pacing Strategy',
+        execution: 'Workout Execution'
       }
+
+      recs.forEach((rec) => {
+        rec.metric = metricLabels[rec.metric] || rec.metric
+      })
+
+      // Sort by priority: high > medium > low
+      const priorityOrder: Record<string, number> = { high: 1, medium: 2, low: 3 }
+      recs.sort((a, b) => {
+        const aPriority = priorityOrder[a.priority] || 999
+        const bPriority = priorityOrder[b.priority] || 999
+        return aPriority - bPriority
+      })
+
+      allRecommendations.value = recs
+    } catch (error) {
+      console.error('Error fetching recommendations:', error)
     }
-
-    // Sort by priority: high > medium > low
-    const priorityOrder: Record<string, number> = { high: 1, medium: 2, low: 3 }
-    allRecs.sort((a, b) => {
-      const aPriority = priorityOrder[a.priority] || 999
-      const bPriority = priorityOrder[b.priority] || 999
-      return aPriority - bPriority
-    })
-
-    allRecommendations.value = allRecs
   }
 
   // Chart data computations
