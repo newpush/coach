@@ -37,6 +37,7 @@ AI-powered workout recommendation system that analyzes athlete's current recover
    - Last 7 days workouts
    - Recent TSS/load
    - CTL/ATL trends (fitness/fatigue)
+   - **AI Analysis Insights from Recent Workouts**: Strengths, weaknesses/areas for improvement, and previous technical recommendations captured during workout analysis.
 4. **Athlete Profile**
    - FTP, weight, max HR
    - Training goals/preferences
