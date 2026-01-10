@@ -579,7 +579,7 @@
             v-else-if="report.status === 'COMPLETED' && report.markdown"
             class="prose prose-lg max-w-none"
           >
-            <MDC :value="report.markdown" />
+            <MDC :value="report.markdown" :components="{}" />
           </UCard>
 
           <!-- Nutrition Analyzed -->

@@ -16,7 +16,7 @@
     <div v-else-if="error" class="py-8 text-center text-red-500">Failed to load changelog.</div>
 
     <div v-else class="prose dark:prose-invert max-w-none">
-      <MDC :value="data?.content || ''" />
+      <MDC :value="data?.content || ''" :components="{}" />
     </div>
   </UCard>
 </template>

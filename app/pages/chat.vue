@@ -257,8 +257,9 @@
   }
 
   // Helper to get text from message
-  function getTextFromMessage(message: Message): string {
-    return message.parts.find((p) => p.type === 'text')?.text || ''
+  function getTextFromMessage(message: any): string {
+    if (!message || !Array.isArray(message.parts)) return ''
+    return message.parts.find((p: any) => p.type === 'text')?.text || ''
   }
 
   // Helper to get charts from message
@@ -485,10 +486,10 @@
 
                     <!-- Text content with markdown support -->
                     <div
-                      v-if="getTextFromMessage(message as any)"
+                      v-if="getTextFromMessage(message)"
                       class="prose prose-sm dark:prose-invert max-w-none"
                     >
-                      <MDC :value="getTextFromMessage(message as any)" />
+                      <MDC :value="getTextFromMessage(message)" :components="{}" />
                     </div>
 
                     <!-- Inline charts -->
