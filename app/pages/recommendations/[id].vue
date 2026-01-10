@@ -15,6 +15,17 @@
         <template #right>
           <div v-if="rec" class="flex items-center gap-2">
             <UButton
+              icon="i-heroicons-chat-bubble-left-right"
+              color="primary"
+              variant="solid"
+              size="sm"
+              class="font-bold"
+              @click="chatAboutRecommendation"
+            >
+              <span class="hidden sm:inline">Chat about this</span>
+              <span class="sm:hidden">Chat</span>
+            </UButton>
+            <UButton
               :icon="rec.isPinned ? 'i-heroicons-paper-clip-solid' : 'i-heroicons-paper-clip'"
               :color="rec.isPinned ? 'primary' : 'neutral'"
               variant="ghost"
@@ -404,6 +415,14 @@
       generatingGuide.value = false
       toast.add({ title: 'Error', color: 'error' })
     }
+  }
+
+  function chatAboutRecommendation() {
+    if (!rec.value) return
+    navigateTo({
+      path: '/chat',
+      query: { recommendationId: rec.value.id }
+    })
   }
 
   async function togglePin() {

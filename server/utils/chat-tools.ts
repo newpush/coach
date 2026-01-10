@@ -486,6 +486,43 @@ export const chatToolDeclarations: FunctionDeclaration[] = [
       },
       required: ['type', 'title', 'labels', 'datasets']
     }
+  },
+  {
+    name: 'get_recommendation_details',
+    description:
+      'Get detailed information about a specific recommendation, including its full description, priority, history, and implementation guide (action plan). Use this when the user asks about a specific recommendation or wants to discuss it.',
+    parameters: {
+      type: SchemaType.OBJECT,
+      properties: {
+        recommendation_id: {
+          type: SchemaType.STRING,
+          description: 'The exact recommendation ID.'
+        }
+      },
+      required: ['recommendation_id']
+    }
+  },
+  {
+    name: 'list_recommendations',
+    description:
+      'List active recommendations for the athlete. Use this to see what the AI coach has currently suggested.',
+    parameters: {
+      type: SchemaType.OBJECT,
+      properties: {
+        status: {
+          type: SchemaType.STRING,
+          description: 'Filter by status: ACTIVE (default), COMPLETED, DISMISSED, or ALL.'
+        },
+        priority: {
+          type: SchemaType.STRING,
+          description: 'Filter by priority: high, medium, low.'
+        },
+        limit: {
+          type: SchemaType.NUMBER,
+          description: 'Maximum number of recommendations to return (default: 5).'
+        }
+      }
+    }
   }
 ]
 
@@ -545,6 +582,12 @@ export async function executeToolCall(toolName: string, args: any, userId: strin
 
       case 'create_chart':
         return await createChart(args)
+
+      case 'get_recommendation_details':
+        return await getRecommendationDetails(userId, timezone, args)
+
+      case 'list_recommendations':
+        return await listRecommendations(userId, timezone, args)
 
       default:
         return { error: `Unknown tool: ${toolName}` }
@@ -1440,6 +1483,76 @@ async function searchWorkouts(userId: string, timezone: string, args: any): Prom
       tss: w.tss ? Math.round(w.tss) : null,
       intensity_factor: w.intensity ? w.intensity.toFixed(2) : null,
       description: w.description
+    }))
+  }
+}
+
+/**
+ * Get details for a specific recommendation
+ */
+async function getRecommendationDetails(userId: string, timezone: string, args: any): Promise<any> {
+  const { recommendation_id } = args
+
+  const rec = await prisma.recommendation.findFirst({
+    where: {
+      id: recommendation_id,
+      userId
+    }
+  })
+
+  if (!rec) {
+    return { error: 'Recommendation not found' }
+  }
+
+  return {
+    id: rec.id,
+    title: rec.title,
+    description: rec.description,
+    priority: rec.priority,
+    status: rec.status,
+    type: rec.sourceType,
+    metric: rec.metric,
+    generated_at: formatUserDate(rec.generatedAt, timezone),
+    is_pinned: rec.isPinned,
+    implementation_guide: rec.implementationGuide || null,
+    history: rec.history || []
+  }
+}
+
+/**
+ * List recommendations
+ */
+async function listRecommendations(userId: string, timezone: string, args: any): Promise<any> {
+  const status = args.status || 'ACTIVE'
+  const priority = args.priority
+  const limit = args.limit || 5
+
+  const where: any = { userId }
+
+  if (status !== 'ALL') {
+    where.status = status
+  }
+
+  if (priority) {
+    where.priority = priority
+  }
+
+  const recs = await prisma.recommendation.findMany({
+    where,
+    orderBy: [{ isPinned: 'desc' }, { generatedAt: 'desc' }],
+    take: limit
+  })
+
+  return {
+    count: recs.length,
+    recommendations: recs.map((rec) => ({
+      id: rec.id,
+      title: rec.title,
+      priority: rec.priority,
+      status: rec.status,
+      type: rec.sourceType,
+      metric: rec.metric,
+      generated_at: formatUserDate(rec.generatedAt, timezone)
     }))
   }
 }

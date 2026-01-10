@@ -148,6 +148,21 @@
       // Clear query param
       router.replace({ query: {} })
     }
+
+    // Check for recommendation context
+    if (route.query.recommendationId) {
+      const recommendationId = route.query.recommendationId as string
+
+      // Create new chat
+      await createNewChat()
+
+      // Send initial message
+      input.value = `Can you explain this recommendation (ID: ${recommendationId}) in more detail?`
+      await onSubmit()
+
+      // Clear query param
+      router.replace({ query: {} })
+    }
   }
 
   async function selectRoom(roomId: string) {
