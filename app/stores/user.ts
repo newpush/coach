@@ -25,7 +25,8 @@ export const useUserStore = defineStore('user', () => {
   async function generateProfile() {
     generating.value = true
     try {
-      await $fetch('/api/profile/generate', { method: 'POST' })
+      const res: any = await $fetch('/api/profile/generate', { method: 'POST' })
+      const jobId = res.jobId
 
       toast.add({
         title: 'Profile Generation Started',
@@ -36,14 +37,14 @@ export const useUserStore = defineStore('user', () => {
 
       // Poll for completion
       poll(
-        () => $fetch('/api/profile/dashboard'),
+        () => $fetch(`/api/profile/status?jobId=${jobId}`),
         // @ts-expect-error - data type is unknown
-        (data) => data?.profile?.status === 'COMPLETED',
+        (data) => !data.isRunning,
         {
           // @ts-expect-error - data type is unknown
-          onSuccess: (data) => {
-            // @ts-expect-error - data type is unknown
-            profile.value = data.profile
+          onSuccess: async () => {
+            // Fetch the updated profile
+            await fetchProfile(true)
             generating.value = false
             toast.add({
               title: 'Profile Ready',
