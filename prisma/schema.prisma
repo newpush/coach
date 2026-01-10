@@ -83,6 +83,10 @@ model User {
   nutritionComplianceExplanationJson  Json?   // Structured nutrition analysis
   trainingConsistencyExplanationJson  Json?   // Structured consistency analysis
 
+  hrPowerAlignmentScore             Int?      // HR/Power alignment quality
+  hrPowerAlignmentExplanation       String?   // Alignment analysis
+  hrPowerAlignmentExplanationJson   Json?     // Structured alignment analysis
+
   // Relations
   accounts      Account[]
   sessions      Session[]
