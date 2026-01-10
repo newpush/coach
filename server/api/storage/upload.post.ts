@@ -16,7 +16,7 @@ export default defineEventHandler(async (event) => {
 
   // Assume single file upload
   const file = files[0]
-  if (!file.filename) {
+  if (!file || !file.filename) {
     throw createError({ statusCode: 400, message: 'Invalid file' })
   }
 
@@ -38,7 +38,8 @@ export default defineEventHandler(async (event) => {
   // 4. Generate unique filename to prevent collisions
   // Extract extension or default to bin if unknown
   const ext = file.filename.split('.').pop() || 'bin'
-  const uniqueFilename = `uploads/${session.user?.id || 'anonymous'}/${uuidv4()}.${ext}`
+  const userId = (session.user as any)?.id || 'anonymous'
+  const uniqueFilename = `uploads/${userId}/${uuidv4()}.${ext}`
 
   // 5. Upload
   try {

@@ -15,7 +15,7 @@ export default defineEventHandler(async (event) => {
   }
 
   const user = await prisma.user.update({
-    where: { id: session.user.id },
+    where: { id: (session.user as any).id },
     data: {
       termsAcceptedAt: new Date(),
       healthConsentAcceptedAt: new Date(),
