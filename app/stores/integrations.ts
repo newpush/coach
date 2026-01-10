@@ -28,6 +28,10 @@ export const useIntegrationStore = defineStore('integration', () => {
     () => integrationStatus.value?.integrations?.some((i) => i.provider === 'intervals') ?? false
   )
 
+  const whoopConnected = computed(
+    () => integrationStatus.value?.integrations?.some((i) => i.provider === 'whoop') ?? false
+  )
+
   const lastSyncTime = computed(() => {
     if (!integrationStatus.value?.integrations) return null
 
@@ -98,6 +102,7 @@ export const useIntegrationStore = defineStore('integration', () => {
     dataSyncStatus,
     syncingData,
     intervalsConnected,
+    whoopConnected,
     lastSyncTime,
     fetchStatus,
     syncAllData
