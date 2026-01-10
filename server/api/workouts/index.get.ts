@@ -100,6 +100,7 @@ export default defineEventHandler(async (event) => {
 
   const query = getQuery(event)
   const limit = query.limit ? parseInt(query.limit as string) : 50
+  const offset = query.offset ? parseInt(query.offset as string) : 0
   const startDate = query.startDate ? new Date(query.startDate as string) : undefined
   const endDate = query.endDate ? new Date(query.endDate as string) : undefined
   const includeDuplicates = query.includeDuplicates === 'true'
@@ -108,8 +109,29 @@ export default defineEventHandler(async (event) => {
     startDate,
     endDate,
     limit,
+    offset,
     includeDuplicates,
-    include: {
+    // Use select to optimize payload size (COACH-WATTS-7)
+    // We explicitly exclude rawJson, aiAnalysis, and other large text fields
+    select: {
+      id: true,
+      userId: true,
+      externalId: true,
+      source: true,
+      date: true,
+      title: true,
+      type: true,
+      durationSec: true,
+      distanceMeters: true,
+      averageWatts: true,
+      averageHr: true,
+      maxHr: true,
+      tss: true,
+      trainingLoad: true,
+      intensity: true,
+      overallScore: true,
+      aiAnalysisStatus: true,
+      isDuplicate: true,
       streams: {
         select: {
           id: true
