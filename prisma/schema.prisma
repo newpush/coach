@@ -113,11 +113,138 @@ model User {
   
   trainingPlans TrainingPlan[]
 
+  // OAuth & Audit Relations
+  oauthApps      OAuthApp[]
+  oauthConsents  OAuthConsent[]
+  oauthCodes     OAuthAuthCode[]
+  oauthTokens    OAuthToken[]
+  auditLogs      AuditLog[]
+
   // Coaching Relations
   coaches    CoachingRelationship[] @relation("AthleteRelation")
   athletes   CoachingRelationship[] @relation("CoachRelation")
   invites    CoachingInvite[]
 
+  @@index([createdAt])
+}
+
+// --------------------------------------
+// OAuth 2.0 Provider
+// --------------------------------------
+
+model OAuthApp {
+  id            String    @id @default(uuid())
+  name          String
+  description   String?   @db.Text
+  homepageUrl   String?
+  logoUrl       String?   // S3 URL
+
+  // Credentials
+  clientId      String    @unique @default(dbgenerated("gen_random_uuid()"))
+  clientSecret  String    // Hashed (bcrypt/argon2) - Only known to owner once
+
+  // Configuration
+  redirectUris  String[]  // Array of allowed callback URLs
+  isTrusted     Boolean   @default(false) // For internal system apps
+  isPublic      Boolean   @default(false) // Visible in a public "Works with" directory
+
+  // Ownership
+  ownerId       String
+  owner         User      @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  // Relations
+  tokens        OAuthToken[]
+  codes         OAuthAuthCode[]
+  consents      OAuthConsent[]
+
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([ownerId])
+}
+
+model OAuthConsent {
+  id            String    @id @default(uuid())
+  userId        String
+  appId         String
+  scopes        String[]  // Granted scopes e.g. ["user:read", "workout:read"]
+
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  app           OAuthApp  @relation(fields: [appId], references: [id], onDelete: Cascade)
+
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@unique([userId, appId])
+}
+
+model OAuthAuthCode {
+  code          String    @id @unique // High-entropy string
+  appId         String
+  userId        String
+
+  redirectUri   String
+  scopes        String[]
+  codeChallenge String?   // PKCE support
+  codeChallengeMethod String? @default("S256")
+
+  expiresAt     DateTime
+
+  app           OAuthApp  @relation(fields: [appId], references: [id], onDelete: Cascade)
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt     DateTime  @default(now())
+}
+
+model OAuthToken {
+  id            String    @id @default(uuid())
+
+  // Tokens
+  accessToken   String    @unique // Hashed or cryptographically secure random
+  refreshToken  String?   @unique
+
+  // Expiry
+  accessTokenExpiresAt  DateTime
+  refreshTokenExpiresAt DateTime?
+
+  // Context
+  appId         String
+  userId        String
+  scopes        String[]
+
+  app           OAuthApp  @relation(fields: [appId], references: [id], onDelete: Cascade)
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt     DateTime  @default(now())
+  lastUsedAt    DateTime?
+  lastIp        String?   // Audit: IP of last usage
+
+  @@index([accessToken])
+  @@index([refreshToken])
+}
+
+// --------------------------------------
+// System Auditing
+// --------------------------------------
+
+model AuditLog {
+  id            String    @id @default(uuid())
+  userId        String?   // Nullable for system actions or unauthenticated attempts
+  action        String    // e.g., "OAUTH_APP_CREATED", "TOKEN_REVOKED", "LOGIN_FAILED"
+  resourceType  String?   // "OAuthApp", "User", "Workout"
+  resourceId    String?   // ID of the affected resource
+
+  // Context
+  ipAddress     String?
+  userAgent     String?
+  metadata      Json?     // Detailed changes or context
+
+  createdAt     DateTime  @default(now())
+
+  user          User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([action])
   @@index([createdAt])
 }
 
