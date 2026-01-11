@@ -113,6 +113,8 @@ debugProfileCommand
       console.log(`Height:  ${user.height} ${user.heightUnits}`)
       console.log(`FTP:     ${user.ftp} W`)
       console.log(`Max HR:  ${user.maxHr} bpm`)
+      console.log(`HR Zones: ${JSON.stringify(user.hrZones || 'Default')}`)
+      console.log(`Power Zones: ${JSON.stringify(user.powerZones || 'Default')}`)
 
       console.log(chalk.bold('\n-- System --'))
       console.log(`Created: ${user.createdAt.toISOString()}`)

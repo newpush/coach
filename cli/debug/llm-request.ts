@@ -1,10 +1,31 @@
 import { Command } from 'commander'
-import { prisma } from '../../server/utils/db'
+import { PrismaClient } from '@prisma/client'
+import { PrismaPg } from '@prisma/adapter-pg'
+import pg from 'pg'
+import chalk from 'chalk'
 
 const llmRequestCommand = new Command('llm-request')
   .description('Inspect LLM usage request details')
   .argument('<id>', 'LlmUsage ID')
-  .action(async (id: string) => {
+  .option('--prod', 'Use production database')
+  .action(async (id: string, options) => {
+    const isProd = options.prod
+    const connectionString = isProd ? process.env.DATABASE_URL_PROD : process.env.DATABASE_URL
+
+    if (isProd) {
+      if (!connectionString) {
+        console.error(chalk.red('DATABASE_URL_PROD is not defined.'))
+        process.exit(1)
+      }
+      console.log(chalk.yellow('Using PRODUCTION database.'))
+    } else {
+      console.log(chalk.blue('Using DEVELOPMENT database.'))
+    }
+
+    const pool = new pg.Pool({ connectionString })
+    const adapter = new PrismaPg(pool)
+    const prisma = new PrismaClient({ adapter })
+
     try {
       const record = await prisma.llmUsage.findUnique({
         where: { id }

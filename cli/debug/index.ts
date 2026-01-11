@@ -1,18 +1,22 @@
 import { Command } from 'commander'
-import authLogicCommand from './auth-logic'
-import troubleshootWorkoutsCommand from './workout'
-import debugWebhookCommand from './webhook'
-import debugProfileCommand from './profile'
-import llmRequestCommand from './llm-request'
+import webhookCommand from './webhook'
+import profileCommand from './profile'
+import workoutCommand from './workout'
 import userStatsCommand from './user-stats'
+import llmRequestCommand from './llm-request'
+import athleteCommand from './athlete'
+import trainingLoadCommand from './training-load'
 
-const debugCommand = new Command('debug').description('Debug commands')
+const debugCommand = new Command('debug')
 
-debugCommand.addCommand(authLogicCommand)
-debugCommand.addCommand(troubleshootWorkoutsCommand)
-debugCommand.addCommand(debugWebhookCommand)
-debugCommand.addCommand(debugProfileCommand)
-debugCommand.addCommand(llmRequestCommand)
-debugCommand.addCommand(userStatsCommand)
+debugCommand
+  .description('Debugging utilities')
+  .addCommand(webhookCommand)
+  .addCommand(profileCommand)
+  .addCommand(workoutCommand)
+  .addCommand(userStatsCommand)
+  .addCommand(llmRequestCommand)
+  .addCommand(athleteCommand)
+  .addCommand(trainingLoadCommand)
 
 export default debugCommand
