@@ -380,6 +380,16 @@ ${projectedMetrics
       zoneDefinitions += `**Zone 2 (LTHR-based):** ${Math.round(user.lthr * 0.8)}-${Math.round(user.lthr * 0.9)} bpm (80-90% LTHR)\n`
     }
 
+    // Build current fitness context
+    const currentStatusContext = `
+CURRENT ATHLETE STATUS (Source of Truth):
+- Chronic Training Load (CTL/Fitness): ${currentFitness.ctl.toFixed(1)}
+- Acute Training Load (ATL/Fatigue): ${currentFitness.atl.toFixed(1)}
+- Training Stress Balance (TSB/Form): ${currentFitness.tsb.toFixed(1)} (${currentFitness.formStatus.status})
+- Status Description: ${currentFitness.formStatus.description}
+- Metrics Last Updated: ${currentFitness.lastUpdated ? formatUserDate(currentFitness.lastUpdated, userTimezone, 'MMM dd, HH:mm') : 'Unknown'}
+`
+
     // Build comprehensive prompt
     const prompt = `You are an expert cycling coach analyzing today's training for your athlete.
 
@@ -387,6 +397,8 @@ CURRENT CONTEXT:
 - Date: ${localDate}
 - Time: ${localTime}
 - Timezone: ${userTimezone}
+
+${currentStatusContext}
 
 ${athleteContext}
 ${planContext}
@@ -435,7 +447,11 @@ IMPORTANT: The user has explicitly provided this feedback. You MUST take it into
     : ''
 }
 
-CRITICAL: ALWAYS use the user's custom zones defined below.
+CRITICAL INSTRUCTIONS:
+1. ALWAYS use the user's custom zones defined below.
+2. PRIORITIZE the "CURRENT ATHLETE STATUS (Source of Truth)" metrics above for any fitness assessment.
+3. IGNORE any conflicting TSB/CTL values found in the "ATHLETE PROFILE" section if they differ from the Source of Truth, as they may be stale summaries.
+4. Refer to the "PROJECTED FITNESS TRENDS" for future state, but base your primary decision on the current TSB and recovery metrics.
 
 ${zoneDefinitions}
 

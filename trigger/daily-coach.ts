@@ -211,7 +211,12 @@ ${activeGoals.length > 0 ? `- Consider how today's recommendation impacts progre
 
 CRITICAL: Base your recommendation on the comprehensive training load data above, especially TSB (Form), not just today's recovery metrics. If Recovery Score is "Unknown", rely on TSB, HRV trend, and Sleep.
 
-Provide a structured recommendation for today's training${activeGoals.length > 0 ? ", considering the athlete's current goals and training load" : ''}.`
+Provide a structured recommendation for today's training${activeGoals.length > 0 ? ", considering the athlete's current goals and training load" : ''}.
+
+CRITICAL INSTRUCTIONS:
+1. PRIORITIZE the "Training Load & Form" metrics provided in the training context above for any fitness assessment.
+2. IGNORE any conflicting TSB/CTL values found in the "ATHLETE PROFILE" section if they differ from the fresh metrics, as the profile may contain stale summaries.
+3. Base your recommendation on the current TSB and recovery metrics.`
 
     logger.log('Generating suggestion with Gemini Flash')
 
