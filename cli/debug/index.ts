@@ -6,6 +6,7 @@ import userStatsCommand from './user-stats'
 import llmRequestCommand from './llm-request'
 import athleteCommand from './athlete'
 import trainingLoadCommand from './training-load'
+import debugWellnessCommand from './wellness'
 
 const debugCommand = new Command('debug')
 
@@ -18,5 +19,6 @@ debugCommand
   .addCommand(llmRequestCommand)
   .addCommand(athleteCommand)
   .addCommand(trainingLoadCommand)
+  .addCommand(debugWellnessCommand)
 
 export default debugCommand
