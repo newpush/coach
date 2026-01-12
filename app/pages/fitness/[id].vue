@@ -296,7 +296,7 @@
                     v-if="wellness.aiAnalysisJson.status"
                     :class="getStatusBadgeClass(wellness.aiAnalysisJson.status)"
                   >
-                    {{ wellness.aiAnalysisJson.status }}
+                    {{ formatStatus(wellness.aiAnalysisJson.status) }}
                   </span>
                 </div>
                 <p class="text-base text-gray-800 dark:text-gray-200 leading-relaxed">
@@ -355,7 +355,7 @@
                       {{ section.title }}
                     </h3>
                     <span :class="getStatusBadgeClass(section.status)">
-                      {{ section.status }}
+                      {{ formatStatus(section.status) }}
                     </span>
                   </div>
                   <div class="px-6 py-4">
@@ -543,6 +543,11 @@
                 >
               </div>
             </div>
+          </div>
+
+          <!-- Deep Sleep Analysis -->
+          <div v-if="sleepData" class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+            <SleepAnalysis :sleep="sleepData" />
           </div>
 
           <!-- Subjective Wellness -->
@@ -875,6 +880,7 @@
 
 <script setup lang="ts">
   import { marked } from 'marked'
+  import SleepAnalysis from '~/components/fitness/SleepAnalysis.vue'
 
   definePageMeta({
     middleware: 'auth'
@@ -895,6 +901,11 @@
 
   // Polling reference
   let pollingInterval: NodeJS.Timeout | null = null
+
+  // Computed
+  const sleepData = computed(() => {
+    return wellness.value?.rawJson?.sleep || null
+  })
 
   // Fetch wellness data
   async function fetchWellness() {
@@ -1071,6 +1082,11 @@
       day: 'numeric',
       timeZone: 'UTC' // Force UTC to prevent timezone shifts
     })
+  }
+
+  function formatStatus(status: string) {
+    if (!status) return ''
+    return status.replace(/_/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase())
   }
 
   function getStatusBadgeClass(status: string) {

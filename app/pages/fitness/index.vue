@@ -189,6 +189,11 @@
                   <th
                     class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
                   >
+                    HRV (SDNN)
+                  </th>
+                  <th
+                    class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
+                  >
                     Resting HR
                   </th>
                   <th
@@ -208,14 +213,14 @@
                 class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700"
               >
                 <tr v-for="i in 10" :key="i">
-                  <td v-for="j in 8" :key="j" class="px-6 py-4">
+                  <td v-for="j in 9" :key="j" class="px-6 py-4">
                     <USkeleton class="h-4 w-full" />
                   </td>
                 </tr>
               </tbody>
               <tbody v-else-if="filteredWellness.length === 0" class="bg-white dark:bg-gray-800">
                 <tr>
-                  <td colspan="8" class="p-8 text-center text-gray-600 dark:text-gray-400">
+                  <td colspan="9" class="p-8 text-center text-gray-600 dark:text-gray-400">
                     No wellness data found. Connect Intervals.icu and sync data to get started.
                   </td>
                 </tr>
@@ -255,6 +260,9 @@
                   </td>
                   <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-400">
                     {{ wellness.hrv ? Math.round(wellness.hrv) + 'ms' : '-' }}
+                  </td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-400">
+                    {{ wellness.hrvSdnn ? Math.round(wellness.hrvSdnn) + 'ms' : '-' }}
                   </td>
                   <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-400">
                     {{ wellness.restingHr ? wellness.restingHr + ' bpm' : '-' }}

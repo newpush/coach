@@ -50,8 +50,13 @@
 
     <template #body>
       <ClientOnly>
+        <!-- Loading State -->
+        <div v-if="isLoading" class="flex justify-center items-center py-24 min-h-[60vh]">
+          <UIcon name="i-heroicons-arrow-path" class="w-10 h-10 animate-spin text-primary-500" />
+        </div>
+
         <!-- Onboarding View (New User) -->
-        <div v-if="!integrationStore?.intervalsConnected" class="p-4 sm:p-6 max-w-6xl mx-auto">
+        <div v-else-if="!integrationStore?.intervalsConnected" class="p-4 sm:p-6 max-w-6xl mx-auto">
           <DashboardOnboardingView />
         </div>
 
@@ -257,6 +262,7 @@
 
   const upcomingWorkouts = ref<any[]>([])
   const loadingUpcoming = ref(false)
+  const isLoading = ref(true)
 
   const missingFields = computed(() => userStore.profile?.missingFields || [])
 
@@ -294,14 +300,18 @@
 
   // Initial data fetch
   onMounted(async () => {
-    await integrationStore.fetchStatus()
-    if (integrationStore.intervalsConnected) {
-      await Promise.all([
-        userStore.fetchProfile(),
-        recommendationStore.fetchTodayRecommendation(),
-        activityStore.fetchRecentActivity(),
-        fetchUpcomingWorkouts()
-      ])
+    try {
+      await integrationStore.fetchStatus()
+      if (integrationStore.intervalsConnected) {
+        await Promise.all([
+          userStore.fetchProfile(),
+          recommendationStore.fetchTodayRecommendation(),
+          activityStore.fetchRecentActivity(),
+          fetchUpcomingWorkouts()
+        ])
+      }
+    } finally {
+      isLoading.value = false
     }
   })
 
