@@ -82,8 +82,8 @@ Coach Watts connects seamlessly with:
 ### 1. Clone & Install
 
 ```bash
-git clone https://github.com/newpush/coach-wattz.git
-cd coach-wattz
+git clone https://github.com/newpush/coach.git
+cd coach
 pnpm install
 ```
 
