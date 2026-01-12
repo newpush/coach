@@ -7,8 +7,5 @@
     "statusBarItem.remoteForeground": "#15202b"
   },
   "peacock.color": "#cba6f7",
-  "cSpell.words": [
-    "nums",
-    "vueuse"
-  ]
+  "cSpell.words": ["nums", "vueuse"]
 }
