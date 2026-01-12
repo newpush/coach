@@ -36,10 +36,12 @@ backups/
 
 # Sentry Config File
 .env.sentry-build-plugin
-
+.secrets/
 .gemini/
 gha-creds-*.json
+application_default_credentials.json
 
 # Public Content
 content/social/
 gcs-key.json
+

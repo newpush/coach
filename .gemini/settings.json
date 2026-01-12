@@ -28,6 +28,18 @@
       "args": [
         "chrome-devtools-mcp@latest","--autoConnect", "--channel=beta"
       ]
+    },
+    "analytics-mcp": {
+      "command": "pipx",
+      "args": [
+        "run",
+        "analytics-mcp"
+      ],
+      "env": {
+        "GOOGLE_APPLICATION_CREDENTIALS": "/Users/hdkiller/.secrets/application_default_credentials.json",
+        "GOOGLE_PROJECT_ID": "coach-app-481412"
+      },
+      "trust": true
     }
   },
   "security": {
