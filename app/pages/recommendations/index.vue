@@ -378,7 +378,7 @@
     }
   }
 
-  const sortRecommendations = (recs: any[] | null) => {
+  const sortRecommendations = (recs: any[] | null | undefined) => {
     if (!recs) return []
     return [...recs].sort((a, b) => {
       // First by priority
