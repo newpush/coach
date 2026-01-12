@@ -88,6 +88,21 @@
     }
   })
 
+  const toolChartData = computed(() => {
+    if (!stats.value?.usageByTool) return { labels: [], datasets: [] }
+    return {
+      labels: stats.value.usageByTool.map((t) => t.name),
+      datasets: [
+        {
+          label: 'Tool Calls',
+          backgroundColor: '#0ea5e9', // Sky blue
+          data: stats.value.usageByTool.map((t) => t.count),
+          borderRadius: 4
+        }
+      ]
+    }
+  })
+
   const feedbackChartData = computed(() => {
     if (!stats.value?.feedback?.history) return { labels: [], datasets: [] }
     return {
@@ -160,7 +175,7 @@
           </UCard>
         </div>
 
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <!-- Usage by Model -->
           <UCard>
             <template #header>
@@ -197,6 +212,26 @@
               >
                 <span class="font-medium capitalize">{{ item.operation.replace(/_/g, ' ') }}</span>
                 <span class="text-gray-500 font-mono">${{ (item.cost || 0).toFixed(4) }}</span>
+              </div>
+            </div>
+          </UCard>
+
+          <!-- Usage by Tool -->
+          <UCard>
+            <template #header>
+              <h3 class="font-semibold">Top Tool Usage</h3>
+            </template>
+            <div class="h-64 relative">
+              <Bar :data="toolChartData" :options="barOptions" />
+            </div>
+            <div class="mt-4 space-y-2 border-t border-gray-100 dark:border-gray-800 pt-4">
+              <div
+                v-for="item in stats?.usageByTool.slice(0, 3)"
+                :key="item.name"
+                class="flex justify-between text-xs"
+              >
+                <span class="font-medium font-mono text-xs">{{ item.name }}</span>
+                <span class="text-gray-500">{{ item.count }} calls</span>
               </div>
             </div>
           </UCard>

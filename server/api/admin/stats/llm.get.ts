@@ -134,6 +134,24 @@ export default defineEventHandler(async (event) => {
     }
   })
 
+  // 9. Tool Usage Stats (from ChatMessage metadata)
+  const usageByToolRaw = await prisma.$queryRaw<{ name: string; count: bigint }[]>`
+    SELECT
+      tool as name,
+      COUNT(*) as count
+    FROM "ChatMessage",
+         jsonb_array_elements_text(metadata->'toolsUsed') as tool
+    WHERE "createdAt" >= ${thirtyDaysAgo}
+    GROUP BY tool
+    ORDER BY count DESC
+    LIMIT 20
+  `
+
+  const usageByTool = usageByToolRaw.map((row) => ({
+    name: row.name,
+    count: Number(row.count)
+  }))
+
   return {
     usageByModel: usageByModel
       .map((m) => ({
@@ -150,6 +168,7 @@ export default defineEventHandler(async (event) => {
         cost: o._sum.estimatedCost
       }))
       .sort((a, b) => b.count - a.count),
+    usageByTool,
     topSpenders: topSpendersDetails,
     recentFailures,
     tokens: {
