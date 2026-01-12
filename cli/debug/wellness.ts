@@ -46,20 +46,9 @@ debugWellnessCommand
         console.log(chalk.green(`User found: ${user.name || user.email} (${user.id})`))
       } else {
         // Find a user with wellness data if no user specified
-        console.log(chalk.gray('No user specified. Searching for recent wellness data...'))
-        const recentWellness = await prisma.wellness.findFirst({
-          orderBy: { date: 'desc' },
-          include: { user: true }
-        })
-        if (recentWellness) {
-          where.userId = recentWellness.userId
-          console.log(
-            chalk.green(`Using user: ${recentWellness.user.email} (${recentWellness.userId})`)
-          )
-        } else {
-          console.error(chalk.red('No wellness data found in database.'))
-          process.exit(1)
-        }
+        console.log(
+          chalk.gray('No user specified. Searching for recent wellness data across all users...')
+        )
       }
 
       if (options.date) {
@@ -157,9 +146,57 @@ debugWellnessCommand
           console.log(chalk.green('✓ All checked fields match raw data.'))
         }
 
-        // Special check for nested sources if present (Intervals often has sub-objects)
+        // --- Deep Inspection of Nested Structures ---
+
+        // 1. Whoop/Intervals Sleep Data
+        const sleep = raw.sleep || (raw.sleep?.score ? raw.sleep : null)
+        if (sleep) {
+          console.log(chalk.magenta('\n🔍 Detailed Sleep Data Found:'))
+          console.log(`  - Source ID:   ${sleep.id || 'N/A'}`)
+          if (sleep.score) {
+            const s = sleep.score
+            console.log(`  - Performance: ${chalk.white(s.sleep_performance_percentage)}%`)
+            console.log(
+              `  - Efficiency:  ${chalk.white(s.sleep_efficiency_percentage?.toFixed(1))}%`
+            )
+            console.log(`  - Consistency: ${chalk.white(s.sleep_consistency_percentage)}%`)
+            console.log(`  - Respiratory: ${chalk.white(s.respiratory_rate)} rpm`)
+
+            if (s.stage_summary) {
+              const stages = s.stage_summary
+              const toHours = (ms: number) => (ms / (1000 * 60 * 60)).toFixed(1)
+              console.log(
+                chalk.gray(
+                  `  - Stages: Deep ${toHours(stages.total_slow_wave_sleep_time_milli)}h | REM ${toHours(stages.total_rem_sleep_time_milli)}h | Light ${toHours(stages.total_light_sleep_time_milli)}h`
+                )
+              )
+            }
+          }
+        }
+
+        // 2. Sport Info (eFTP, etc.)
+        if (raw.sportInfo && Array.isArray(raw.sportInfo)) {
+          console.log(chalk.magenta('\n🔍 Sport Info Found:'))
+          raw.sportInfo.forEach((info: any, idx: number) => {
+            console.log(`  [${idx}] Type: ${info.type}`)
+            if (info.eftp) console.log(`      eFTP:   ${chalk.cyan(info.eftp.toFixed(0))} W`)
+            if (info.pMax) console.log(`      pMax:   ${chalk.cyan(info.pMax.toFixed(0))} W`)
+            if (info.wPrime) console.log(`      wPrime: ${chalk.cyan(info.wPrime.toFixed(0))} J`)
+          })
+        }
+
+        // 3. Recovery Details
+        if (raw.recovery?.score) {
+          console.log(chalk.magenta('\n🔍 Recovery Details:'))
+          const r = raw.recovery.score
+          if (r.skin_temp_celsius)
+            console.log(`  - Skin Temp: ${chalk.cyan(r.skin_temp_celsius)}°C`)
+          if (r.spo2_percentage) console.log(`  - SpO2: ${chalk.cyan(r.spo2_percentage)}%`)
+        }
+
+        // List all top-level keys for visibility
         if (options.verbose) {
-          console.log(chalk.gray('Raw Keys:'), Object.keys(raw).join(', '))
+          console.log(chalk.gray('\nRaw Keys:'), Object.keys(raw).join(', '))
         }
       }
     } catch (e: any) {
