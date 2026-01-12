@@ -116,7 +116,8 @@ export const wellnessRepository = {
   },
 
   /**
-   * Upsert a wellness entry
+   * Upsert a wellness entry with smart merging
+   * Only updates fields that are non-null in the updateData to prevent overwriting existing data with nulls
    */
   async upsert(
     userId: string,
@@ -124,6 +125,40 @@ export const wellnessRepository = {
     createData: Prisma.WellnessUncheckedCreateInput,
     updateData: Prisma.WellnessUncheckedUpdateInput
   ) {
+    // 1. Fetch existing record
+    const existing = await prisma.wellness.findUnique({
+      where: {
+        userId_date: {
+          userId,
+          date
+        }
+      }
+    })
+
+    // 2. If it exists, filter updateData to only include non-null values
+    let finalUpdateData = updateData
+
+    if (existing) {
+      finalUpdateData = {}
+      for (const [key, value] of Object.entries(updateData)) {
+        if (value !== null && value !== undefined) {
+          // Special handling for rawJson: merge instead of replace if possible
+          if (
+            key === 'rawJson' &&
+            typeof value === 'object' &&
+            existing.rawJson &&
+            typeof existing.rawJson === 'object'
+          ) {
+            // @ts-expect-error - Prisma JSON types are complex
+            finalUpdateData[key] = { ...existing.rawJson, ...value }
+          } else {
+            // @ts-expect-error - Dynamic assignment
+            finalUpdateData[key] = value
+          }
+        }
+      }
+    }
+
     return prisma.wellness.upsert({
       where: {
         userId_date: {
@@ -132,7 +167,7 @@ export const wellnessRepository = {
         }
       },
       create: createData,
-      update: updateData
+      update: finalUpdateData
     })
   }
 }

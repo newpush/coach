@@ -868,7 +868,7 @@ model Wellness {
   date              DateTime @db.Date // YYYY-MM-DD
   
   // Heart Rate Variability
-  hrv               Float?   // Heart Rate Variability (ms)
+  hrv               Float?   // Heart Rate Variability rMSSD (ms)
   hrvSdnn           Float?   // HRV SDNN - autonomic nervous system balance
   
   // Heart Rate
