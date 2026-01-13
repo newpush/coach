@@ -330,6 +330,24 @@
       </div>
     </template>
   </UModal>
+
+  <!-- Delete Template Confirmation Modal -->
+  <UModal
+    v-model:open="isDeleteModalOpen"
+    title="Delete Template"
+    description="Are you sure you want to permanently delete this template?"
+  >
+    <template #footer>
+      <div class="flex justify-end gap-2 w-full">
+        <UButton color="neutral" variant="ghost" @click="isDeleteModalOpen = false">
+          Cancel
+        </UButton>
+        <UButton color="error" :loading="deletingId !== null" @click="executeDeleteTemplate">
+          Delete
+        </UButton>
+      </div>
+    </template>
+  </UModal>
 </template>
 
 <script setup lang="ts">
@@ -354,6 +372,8 @@
   const loadingId = ref<string | null>(null)
   const deletingId = ref<string | null>(null)
   const isModalOpen = ref(false)
+  const isDeleteModalOpen = ref(false)
+  const templateToDeleteId = ref<string | null>(null)
   const selectedTemplate = ref<any>(null)
   const startDate = ref(getUserLocalDate().toISOString().split('T')[0])
   const activating = ref(false)
@@ -428,12 +448,17 @@
     }
   }
 
-  async function deleteTemplate(id: string) {
-    if (!confirm('Are you sure you want to permanently delete this template?')) return
+  function deleteTemplate(id: string) {
+    templateToDeleteId.value = id
+    isDeleteModalOpen.value = true
+  }
 
-    deletingId.value = id
+  async function executeDeleteTemplate() {
+    if (!templateToDeleteId.value) return
+
+    deletingId.value = templateToDeleteId.value
     try {
-      await $fetch(`/api/plans/${id}`, {
+      await $fetch(`/api/plans/${templateToDeleteId.value}`, {
         method: 'DELETE'
       })
 
@@ -452,6 +477,8 @@
       })
     } finally {
       deletingId.value = null
+      templateToDeleteId.value = null
+      isDeleteModalOpen.value = false
     }
   }
 

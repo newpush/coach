@@ -155,6 +155,32 @@
             />
           </template>
         </UModal>
+
+        <!-- New Plan Confirmation Modal -->
+        <UModal
+          v-model:open="isArchiveModalOpen"
+          title="Create New Plan"
+          description="Create a new plan? This will archive your current active plan."
+        >
+          <template #footer>
+            <div class="flex justify-end gap-2 w-full">
+              <UButton color="neutral" variant="ghost" @click="isArchiveModalOpen = false">
+                Cancel
+              </UButton>
+              <UButton
+                color="primary"
+                @click="
+                  () => {
+                    isArchiveModalOpen = false
+                    openWizard()
+                  }
+                "
+              >
+                Create Plan
+              </UButton>
+            </div>
+          </template>
+        </UModal>
       </div>
     </template>
   </UDashboardPanel>
@@ -175,6 +201,7 @@
   const showWizard = ref(false)
   const isPolling = ref(false)
   const autoTriggerStructure = ref(false)
+  const isArchiveModalOpen = ref(false)
   const toast = useToast()
 
   // Share state
@@ -247,9 +274,7 @@
   }
 
   function startNewPlan() {
-    if (confirm('Create a new plan? This will archive your current active plan.')) {
-      openWizard()
-    }
+    isArchiveModalOpen.value = true
   }
 
   function onPlanCreated(plan: any) {
