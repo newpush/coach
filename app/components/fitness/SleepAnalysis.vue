@@ -8,7 +8,7 @@
       </h3>
       <UBadge
         v-if="sleep.score.score_state === 'SCORED'"
-        :color="getScoreColor(sleep.score.sleep_performance_percentage)"
+        :color="getScoreColor(sleep.score.sleep_performance_percentage) as any"
         variant="subtle"
       >
         {{ sleep.score.sleep_performance_percentage }}% Performance
@@ -151,7 +151,7 @@
       </div>
       <UProgress
         :model-value="sleep.score.sleep_performance_percentage"
-        :color="getScoreColor(sleep.score.sleep_performance_percentage)"
+        :color="getScoreColor(sleep.score.sleep_performance_percentage) as any"
         size="lg"
       />
       <div class="mt-2 flex justify-between text-xs text-gray-500">

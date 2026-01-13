@@ -967,7 +967,14 @@
                 variant="subtle"
                 size="sm"
                 class="cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
-                @click="openStreamModal(stream)"
+                @click="
+                  openStreamModal({
+                    ...stream,
+                    label: stream.label || '',
+                    color: stream.color || '#000000',
+                    unit: stream.unit || ''
+                  })
+                "
               >
                 {{ stream.label }}
               </UBadge>

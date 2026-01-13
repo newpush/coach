@@ -205,7 +205,7 @@
   const clearing = ref(false)
   const isPolling = ref(false)
   const showClearModal = ref(false)
-  const selectedCategory = ref<string | null>(null)
+  const selectedCategory = ref<string | undefined>(undefined)
   let pollInterval: NodeJS.Timeout | null = null
   let currentJobId: string | null = null
 

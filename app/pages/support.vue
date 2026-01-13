@@ -173,11 +173,11 @@
 
   async function sendMessage() {
     if (!isAuthenticated.value && (!form.name || !form.email)) {
-      toast.add({ title: 'Name and Email are required', color: 'red' })
+      toast.add({ title: 'Name and Email are required', color: 'error' })
       return
     }
     if (!form.subject || !form.message) {
-      toast.add({ title: 'Subject and Message are required', color: 'red' })
+      toast.add({ title: 'Subject and Message are required', color: 'error' })
       return
     }
 
@@ -187,7 +187,7 @@
         method: 'POST',
         body: form
       })
-      toast.add({ title: 'Message sent successfully!', color: 'green' })
+      toast.add({ title: 'Message sent successfully!', color: 'success' })
       form.subject = ''
       form.message = ''
       // Keep name/email if guest for convenience? Or clear?
@@ -199,7 +199,7 @@
       toast.add({
         title: 'Failed to send message',
         description: error.message || 'Unknown error',
-        color: 'red'
+        color: 'error'
       })
     } finally {
       loading.value = false

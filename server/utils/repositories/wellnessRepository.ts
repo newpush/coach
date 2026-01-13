@@ -149,7 +149,6 @@ export const wellnessRepository = {
             existing.rawJson &&
             typeof existing.rawJson === 'object'
           ) {
-            // @ts-expect-error - Prisma JSON types are complex
             finalUpdateData[key] = { ...existing.rawJson, ...value }
           } else {
             // @ts-expect-error - Dynamic assignment

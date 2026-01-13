@@ -13,7 +13,7 @@ defineRouteMeta({
       {
         name: 'days',
         in: 'query',
-        schema: { oneOf: [{ type: 'integer' }, { type: 'string' }], default: 90 }
+        schema: { type: ['integer', 'string'], default: 90 }
       }
     ],
     responses: {

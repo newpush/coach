@@ -1,4 +1,4 @@
-import { getServerSession } from '#auth'
+import { getServerSession } from '../../utils/session'
 import { createAutotaskTicket } from '../../utils/autotask'
 import { prisma } from '../../utils/db'
 

@@ -119,7 +119,7 @@
 
       <template #footer>
         <div class="flex gap-2 justify-end w-full">
-          <UButton color="gray" variant="ghost" @click="isClearScheduleModalOpen = false"
+          <UButton color="neutral" variant="ghost" @click="isClearScheduleModalOpen = false"
             >Cancel</UButton
           >
           <UButton color="warning" :loading="clearingSchedule" @click="executeClearSchedule"
@@ -140,7 +140,7 @@
       </template>
       <template #footer>
         <div class="flex gap-2 justify-end w-full">
-          <UButton color="gray" variant="ghost" @click="isWipeProfilesModalOpen = false"
+          <UButton color="neutral" variant="ghost" @click="isWipeProfilesModalOpen = false"
             >Cancel</UButton
           >
           <UButton color="warning" :loading="wipingProfiles" @click="executeWipeProfiles"
@@ -160,7 +160,7 @@
       </template>
       <template #footer>
         <div class="flex gap-2 justify-end w-full">
-          <UButton color="gray" variant="ghost" @click="isWipeAnalysisModalOpen = false"
+          <UButton color="neutral" variant="ghost" @click="isWipeAnalysisModalOpen = false"
             >Cancel</UButton
           >
           <UButton color="warning" :loading="wipingAnalysis" @click="executeWipeAnalysis"
@@ -178,7 +178,7 @@
       </template>
       <template #footer>
         <div class="flex gap-2 justify-end w-full">
-          <UButton color="gray" variant="ghost" @click="isDeleteAccountModalOpen = false"
+          <UButton color="neutral" variant="ghost" @click="isDeleteAccountModalOpen = false"
             >Cancel</UButton
           >
           <UButton color="error" :loading="deletingAccount" @click="executeDeleteAccount"

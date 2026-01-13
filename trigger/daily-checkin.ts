@@ -27,6 +27,14 @@ const checkinSchema = {
   required: ['questions']
 }
 
+interface CheckinAnalysis {
+  questions: Array<{
+    id: string
+    text: string
+    reasoning: string
+  }>
+}
+
 export const generateDailyCheckinTask = task({
   id: 'generate-daily-checkin',
   maxDuration: 300,
@@ -331,7 +339,7 @@ OUTPUT JSON FORMAT:
 
     let currentLlmUsageId: string | undefined
 
-    const analysis = await generateStructuredAnalysis(
+    const analysis = await generateStructuredAnalysis<CheckinAnalysis>(
       prompt,
       checkinSchema,
       aiSettings.aiModelPreference,

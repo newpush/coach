@@ -13,7 +13,7 @@ defineRouteMeta({
       {
         name: 'months',
         in: 'query',
-        schema: { oneOf: [{ type: 'integer' }, { type: 'string' }], default: 12 }
+        schema: { type: ['integer', 'string'], default: 12 }
       }
     ],
     responses: {

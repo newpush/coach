@@ -18,7 +18,7 @@
           <p class="text-red-500">{{ error || checkin?.error || 'Generation failed' }}</p>
           <UButton
             label="Try Again"
-            color="red"
+            color="error"
             variant="soft"
             class="mt-4"
             @click="generate(true)"
@@ -29,7 +29,6 @@
           <UCard
             v-for="q in localQuestions"
             :key="q.id"
-            :ui="{ body: { padding: 'p-3 sm:p-4' }, header: { padding: 'p-3 sm:p-4' } }"
             class="cursor-pointer transition-all hover:ring-2 hover:ring-primary-500/20"
             :class="{ 'ring-2 ring-primary-500/10': isExpanded(q.id) }"
             @click="toggleExpand(q.id)"
@@ -42,7 +41,7 @@
               </label>
               <UButton
                 icon="i-heroicons-trash"
-                color="gray"
+                color="neutral"
                 variant="ghost"
                 size="xs"
                 class="-mr-1 -mt-1"
@@ -95,7 +94,7 @@
         <UButton
           v-if="localQuestions.length > 0"
           label="Regenerate"
-          color="gray"
+          color="neutral"
           variant="ghost"
           icon="i-heroicons-arrow-path"
           :loading="loading || isPending"
@@ -245,8 +244,9 @@
       // Only send answers for remaining questions
       const filteredAnswers: Record<string, string> = {}
       localQuestions.value.forEach((q) => {
-        if (answers.value[q.id]) {
-          filteredAnswers[q.id] = answers.value[q.id]
+        const answer = answers.value[q.id]
+        if (answer) {
+          filteredAnswers[q.id] = answer
         }
       })
 

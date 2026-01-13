@@ -168,7 +168,7 @@
               v-if="wellnessData.aiAnalysisJson && wellnessData.aiAnalysisStatus !== 'PROCESSING'"
               color="neutral"
               variant="link"
-              size="2xs"
+              size="xs"
               class="p-0 text-gray-400 hover:text-primary-500 dark:text-gray-500 dark:hover:text-primary-400 transition-colors font-medium"
               :loading="analyzingWellness"
               :disabled="analyzingWellness"
@@ -181,7 +181,7 @@
               icon="i-heroicons-arrow-path"
               color="primary"
               variant="ghost"
-              size="2xs"
+              size="xs"
               loading
               disabled
             >

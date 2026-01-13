@@ -593,6 +593,10 @@ model Workout {
   aiAnalysisStatus String? @default("NOT_STARTED") // NOT_STARTED, PENDING, PROCESSING, COMPLETED, FAILED
   aiAnalyzedAt    DateTime? // When the analysis was generated
   
+  // User Feedback
+  feedback        String?  // "THUMBS_UP", "THUMBS_DOWN"
+  feedbackText    String?  @db.Text
+
   // Performance Scores (1-10 scale for tracking over time)
   overallScore    Int?     // Overall workout quality score
   technicalScore  Int?     // Technical execution (form, technique, efficiency)
@@ -934,6 +938,10 @@ model Wellness {
   aiAnalysisStatus  String?  @default("NOT_STARTED") // NOT_STARTED, PENDING, PROCESSING, COMPLETED, FAILED
   aiAnalyzedAt      DateTime? // When the analysis was generated
 
+  // User Feedback
+  feedback          String?  // "THUMBS_UP", "THUMBS_DOWN"
+  feedbackText      String?  @db.Text
+
   // Notes
   comments          String?  @db.Text
   
@@ -984,6 +992,10 @@ model Nutrition {
   aiAnalysisStatus  String?  @default("NOT_STARTED") // NOT_STARTED, PENDING, PROCESSING, COMPLETED, FAILED
   aiAnalyzedAt      DateTime? // When the analysis was generated
   
+  // User Feedback
+  feedback          String?  // "THUMBS_UP", "THUMBS_DOWN"
+  feedbackText      String?  @db.Text
+
   // Nutrition Quality Scores (1-10 scale for tracking over time)
   overallScore      Int?     // Overall nutrition quality score
   macroBalanceScore Int?     // Macro distribution appropriateness
@@ -1079,6 +1091,10 @@ model Report {
   
   // Structured Suggestions (for the "Coach" agent)
   suggestions    Json?    // e.g., { "action": "rest", "reason": "HRV low" }
+
+  // User Feedback
+  feedback        String?  // "THUMBS_UP", "THUMBS_DOWN"
+  feedbackText    String?  @db.Text
 
   user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   workouts       ReportWorkout[]
