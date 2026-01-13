@@ -8,6 +8,7 @@ import athleteCommand from './athlete'
 import trainingLoadCommand from './training-load'
 import debugWellnessCommand from './wellness'
 import recommendationsCommand from './recommendations'
+import analyzeStreamsCommand from './analyze-streams'
 
 const debugCommand = new Command('debug')
 
@@ -22,5 +23,6 @@ debugCommand
   .addCommand(trainingLoadCommand)
   .addCommand(debugWellnessCommand)
   .addCommand(recommendationsCommand)
+  .addCommand(analyzeStreamsCommand)
 
 export default debugCommand

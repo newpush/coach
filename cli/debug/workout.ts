@@ -5,6 +5,15 @@ import { PrismaClient } from '@prisma/client'
 import { PrismaPg } from '@prisma/adapter-pg'
 import pg from 'pg'
 import { fetchIntervalsActivityStreams } from '../../server/utils/intervals'
+import {
+  calculateAveragePace,
+  calculatePaceVariability,
+  formatPace,
+  calculateLapSplits,
+  analyzePacingStrategy,
+  detectSurges
+} from '../../server/utils/pacing'
+import { IntervalsService } from '../../server/utils/services/intervalsService'
 
 const troubleshootWorkoutsCommand = new Command('workout')
 
@@ -20,6 +29,7 @@ troubleshootWorkoutsCommand
   .option('--date <date>', 'Filter by date (YYYY-MM-DD)')
   .option('--source <source>', 'Filter by source (intervals, strava, etc.)', 'intervals')
   .option('--check-streams', 'Verify streams against external API and DB')
+  .option('--re-sync-streams', 'Re-fetch and recalculate stream data from external API')
   .option('-v, --verbose', 'Show all fields even if they match')
   .action(async (url, options) => {
     let workoutId = options.id
@@ -339,11 +349,152 @@ troubleshootWorkoutsCommand
 
           if (dbStream) {
             console.log(chalk.green(`✓ DB Stream found (ID: ${dbStream.id})`))
+            const timeLen = Array.isArray(dbStream.time) ? dbStream.time.length : 0
+            const wattsLen = Array.isArray(dbStream.watts) ? dbStream.watts.length : 0
+            const hrLen = Array.isArray(dbStream.heartrate) ? dbStream.heartrate.length : 0
+            const velocityLen = Array.isArray(dbStream.velocity) ? dbStream.velocity.length : 0
+            const distLen = Array.isArray(dbStream.distance) ? dbStream.distance.length : 0
+
             console.log(
-              `  Data Points: Time=${dbStream.time.length}, Watts=${dbStream.watts?.length || 0}, HR=${dbStream.heartrate?.length || 0}`
+              `  Data Points: Time=${timeLen}, Watts=${wattsLen}, HR=${hrLen}, Velocity=${velocityLen}, Dist=${distLen}`
             )
+
+            console.log(chalk.bold(`  Pacing Metrics (Stored):`))
+            console.log(
+              `    Avg Pace: ${dbStream.avgPacePerKm ? formatPace(dbStream.avgPacePerKm) : 'N/A'}`
+            )
+            console.log(
+              `    Pace Variability: ${dbStream.paceVariability ? dbStream.paceVariability.toFixed(2) : 'N/A'}`
+            )
+
+            // Simulate Calculation
+            if (velocityLen > 0 && timeLen > 0 && distLen > 0) {
+              const simVariability = calculatePaceVariability(dbStream.velocity as number[])
+              const simAvgPace = calculateAveragePace(
+                (dbStream.time as number[])[timeLen - 1],
+                (dbStream.distance as number[])[distLen - 1]
+              )
+
+              console.log(chalk.bold(`  Pacing Metrics (Simulated):`))
+              console.log(`    Avg Pace: ${formatPace(simAvgPace)}`)
+              console.log(`    Pace Variability: ${simVariability.toFixed(2)}`)
+            } else {
+              console.log(
+                chalk.yellow(`  ⚠️  Cannot simulate pacing: missing velocity/time/dist arrays`)
+              )
+            }
           } else {
             console.log(chalk.red(`❌ DB Stream NOT found`))
+          }
+
+          if (options.reSyncStreams) {
+            console.log(chalk.bold.yellow(`\n=== Re-Syncing Streams ===`))
+            try {
+              const integration = await prisma.integration.findFirst({
+                where: { userId: w.userId, provider: 'intervals' }
+              })
+
+              if (!integration) {
+                throw new Error('Intervals.icu integration not found for user')
+              }
+
+              console.log(chalk.gray(`Fetching fresh streams from Intervals.icu...`))
+              const apiStreams = await fetchIntervalsActivityStreams(integration, w.externalId)
+
+              if (
+                !apiStreams.time ||
+                !apiStreams.time.data ||
+                (Array.isArray(apiStreams.time.data) && apiStreams.time.data.length === 0)
+              ) {
+                console.log(chalk.red(`❌ No stream data returned from API`))
+              } else {
+                // Extract data arrays
+                const timeData = (apiStreams.time?.data as number[]) || []
+                const distanceData = (apiStreams.distance?.data as number[]) || []
+                const velocityData = (apiStreams.velocity?.data as number[]) || []
+                const heartrateData = (apiStreams.heartrate?.data as number[]) || null
+                const cadenceData = (apiStreams.cadence?.data as number[]) || null
+                const wattsData = (apiStreams.watts?.data as number[]) || null
+                const altitudeData = (apiStreams.altitude?.data as number[]) || null
+                const latlngData = (apiStreams.latlng?.data as [number, number][]) || null
+                const gradeData = (apiStreams.grade?.data as number[]) || null
+                const movingData = (apiStreams.moving?.data as boolean[]) || null
+
+                // Calculate pacing metrics
+                let lapSplits = null
+                let paceVariability = null
+                let avgPacePerKm = null
+                let pacingStrategy = null
+                let surges = null
+
+                if (timeData.length > 0 && distanceData.length > 0) {
+                  lapSplits = calculateLapSplits(timeData, distanceData, 1000)
+                  if (velocityData.length > 0) {
+                    paceVariability = calculatePaceVariability(velocityData)
+                    const lastTime = timeData[timeData.length - 1]
+                    const lastDist = distanceData[distanceData.length - 1]
+                    if (lastTime !== undefined && lastDist !== undefined) {
+                      avgPacePerKm = calculateAveragePace(lastTime, lastDist)
+                    }
+                  }
+                  if (lapSplits && lapSplits.length >= 2) {
+                    pacingStrategy = analyzePacingStrategy(lapSplits)
+                  }
+                  if (velocityData.length > 20 && timeData.length > 20) {
+                    surges = detectSurges(velocityData, timeData)
+                  }
+                }
+
+                const result = await prisma.workoutStream.upsert({
+                  where: { workoutId: w.id },
+                  create: {
+                    workoutId: w.id,
+                    time: timeData,
+                    distance: distanceData,
+                    velocity: velocityData,
+                    heartrate: heartrateData,
+                    cadence: cadenceData,
+                    watts: wattsData,
+                    altitude: altitudeData,
+                    latlng: latlngData as any,
+                    grade: gradeData,
+                    moving: movingData,
+                    lapSplits: lapSplits as any,
+                    paceVariability,
+                    avgPacePerKm,
+                    pacingStrategy: pacingStrategy as any,
+                    surges: surges as any
+                  },
+                  update: {
+                    time: timeData,
+                    distance: distanceData,
+                    velocity: velocityData,
+                    heartrate: heartrateData,
+                    cadence: cadenceData,
+                    watts: wattsData,
+                    altitude: altitudeData,
+                    latlng: latlngData as any,
+                    grade: gradeData,
+                    moving: movingData,
+                    lapSplits: lapSplits as any,
+                    paceVariability,
+                    avgPacePerKm,
+                    pacingStrategy: pacingStrategy as any,
+                    surges: surges as any,
+                    updatedAt: new Date()
+                  }
+                })
+
+                console.log(chalk.green(`✓ Successfully re-synced streams for ${w.id}`))
+                console.log(
+                  `  New Data Points: Time=${(result.time as any[]).length}, Velocity=${(result.velocity as any[]).length}`
+                )
+                console.log(`  New Avg Pace: ${formatPace(result.avgPacePerKm)}`)
+                console.log(`  New Pace Variability: ${result.paceVariability?.toFixed(2)}`)
+              }
+            } catch (err: any) {
+              console.log(chalk.red(`❌ Error during re-sync: ${err.message}`))
+            }
           }
 
           // Fetch API Stream
