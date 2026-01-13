@@ -933,6 +933,28 @@
             </div>
           </div>
 
+          <!-- Data Streams Section -->
+          <div id="streams" class="scroll-mt-20" />
+          <div
+            v-if="availableStreams.length > 0"
+            class="bg-white dark:bg-gray-800 rounded-lg shadow p-6"
+          >
+            <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Data Streams</h3>
+            <div class="flex flex-wrap gap-2">
+              <UBadge
+                v-for="stream in availableStreams"
+                :key="stream.key"
+                color="neutral"
+                variant="subtle"
+                size="sm"
+                class="cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+                @click="openStreamModal(stream)"
+              >
+                {{ stream.label }}
+              </UBadge>
+            </div>
+          </div>
+
           <!-- Duplicate Workout Section -->
           <div id="duplicates" class="scroll-mt-20" />
           <div
@@ -1193,11 +1215,23 @@
       <UButton label="Close" color="neutral" variant="ghost" @click="isShareModalOpen = false" />
     </template>
   </UModal>
+
+  <!-- Stream Chart Modal -->
+  <StreamChartModal
+    v-if="selectedStream"
+    v-model:open="isStreamModalOpen"
+    :workout-id="workout?.id"
+    :stream-key="selectedStream.key"
+    :title="selectedStream.label"
+    :color="selectedStream.color"
+    :unit="selectedStream.unit"
+  />
 </template>
 
 <script setup lang="ts">
   import { marked } from 'marked'
   import PlanAdherence from '~/components/workouts/PlanAdherence.vue'
+  import StreamChartModal from '~/components/charts/streams/StreamChartModal.vue'
   import { metricTooltips } from '~/utils/tooltips'
 
   const { formatDate: baseFormatDate, formatDateTime } = useFormat()
@@ -1218,6 +1252,17 @@
   const sharing = ref(false)
   const promoting = ref(false)
   const isPromoteModalOpen = ref(false)
+
+  // Stream Modal State
+  const isStreamModalOpen = ref(false)
+  const selectedStream = ref<{ key: string; label: string; color: string; unit: string } | null>(
+    null
+  )
+
+  function openStreamModal(stream: { key: string; label: string; color: string; unit: string }) {
+    selectedStream.value = stream
+    isStreamModalOpen.value = true
+  }
 
   // Share functionality
   const isShareModalOpen = ref(false)
@@ -1446,6 +1491,47 @@
       })
 
     return metrics
+  })
+
+  // Available streams computed property
+  const availableStreams = computed(() => {
+    if (!workout.value || !workout.value.streams) return []
+    const streams = []
+
+    // Define stream metadata
+    const streamMetadata: Record<string, { label: string; color: string; unit: string }> = {
+      time: { label: 'Time', color: '#9ca3af', unit: 's' },
+      distance: { label: 'Distance', color: '#6b7280', unit: 'm' },
+      velocity: { label: 'Velocity', color: '#3b82f6', unit: 'm/s' },
+      heartrate: { label: 'Heart Rate', color: '#ef4444', unit: 'bpm' },
+      cadence: { label: 'Cadence', color: '#f59e0b', unit: 'rpm' },
+      watts: { label: 'Power', color: '#8b5cf6', unit: 'W' },
+      altitude: { label: 'Altitude', color: '#10b981', unit: 'm' },
+      latlng: { label: 'GPS', color: '#6366f1', unit: '' },
+      grade: { label: 'Grade', color: '#14b8a6', unit: '%' },
+      moving: { label: 'Moving', color: '#9ca3af', unit: '' },
+      torque: { label: 'Torque', color: '#f97316', unit: 'N-m' },
+      temp: { label: 'Temperature', color: '#06b6d4', unit: '°C' },
+      respiration: { label: 'Respiration', color: '#ec4899', unit: 'brpm' },
+      hrv: { label: 'HRV', color: '#84cc16', unit: 'ms' },
+      leftRightBalance: { label: 'L/R Balance', color: '#d946ef', unit: '%' }
+    }
+
+    const streamKeys = Object.keys(streamMetadata)
+
+    for (const key of streamKeys) {
+      if (
+        workout.value.streams[key] &&
+        Array.isArray(workout.value.streams[key]) &&
+        workout.value.streams[key].length > 0
+      ) {
+        streams.push({
+          key,
+          ...streamMetadata[key]
+        })
+      }
+    }
+    return streams
   })
 
   // Fetch workout data

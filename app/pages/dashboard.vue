@@ -96,7 +96,10 @@
             />
 
             <!-- Today's Recommendation Card -->
-            <DashboardTrainingRecommendationCard @open-details="openRecommendationModal" />
+            <DashboardTrainingRecommendationCard
+              @open-details="openRecommendationModal"
+              @open-checkin="openCheckinModal"
+            />
 
             <!-- Performance Overview Card -->
             <DashboardPerformanceScoresCard
@@ -231,6 +234,9 @@
 
   <!-- Training Load Modal -->
   <TrainingLoadModal v-model:open="showTrainingLoadModal" />
+
+  <!-- Daily Check-in Modal -->
+  <DashboardDailyCheckinModal v-model:open="showCheckinModal" />
 </template>
 
 <script setup lang="ts">
@@ -259,6 +265,7 @@
   const userStore = useUserStore()
   const recommendationStore = useRecommendationStore()
   const activityStore = useActivityStore()
+  const checkinStore = useCheckinStore()
 
   const showWelcome = useLocalStorage('dashboard-welcome-banner', true)
 
@@ -309,7 +316,8 @@
           userStore.fetchProfile(),
           recommendationStore.fetchTodayRecommendation(),
           activityStore.fetchRecentActivity(),
-          fetchUpcomingWorkouts()
+          fetchUpcomingWorkouts(),
+          checkinStore.fetchToday()
         ])
       }
     } finally {
@@ -326,7 +334,8 @@
           userStore.fetchProfile(),
           recommendationStore.fetchTodayRecommendation(),
           activityStore.fetchRecentActivity(),
-          fetchUpcomingWorkouts()
+          fetchUpcomingWorkouts(),
+          checkinStore.fetchToday()
         ])
       }
     }
@@ -379,6 +388,12 @@
 
   function openTrainingLoadModal() {
     showTrainingLoadModal.value = true
+  }
+
+  // Daily Check-in Modal
+  const showCheckinModal = ref(false)
+  function openCheckinModal() {
+    showCheckinModal.value = true
   }
 
   useHead({
