@@ -22,8 +22,14 @@ export const ATTRIBUTION_RULES: Record<string, AttributionRule> = {
     requiresDeviceName: false,
     textFormat: () => '', // Text is embedded in the logo
     logoHeightClass: 'h-8' // Strava logo often needs to be slightly larger to be legible
+  },
+  zwift: {
+    logoLight: '/images/logos/zwift_dark.webp',
+    logoDark: '/images/logos/zwift_white.webp',
+    requiresDeviceName: false,
+    textFormat: () => '',
+    logoHeightClass: 'h-6'
   }
-  // Future providers can be added here
 }
 
 export function getAttributionRule(provider: string): AttributionRule | undefined {

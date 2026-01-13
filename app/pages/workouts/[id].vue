@@ -236,16 +236,19 @@
                   </div>
                   <div class="flex gap-2">
                     <span
-                      v-if="workout.deviceName"
+                      v-if="workout.deviceName && !['garmin', 'zwift'].includes(workout.source)"
                       class="px-3 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200"
                     >
                       {{ workout.deviceName }}
                     </span>
-                    <span :class="getSourceBadgeClass(workout.source)">
+                    <span
+                      v-if="!['strava', 'garmin', 'zwift'].includes(workout.source)"
+                      :class="getSourceBadgeClass(workout.source)"
+                    >
                       {{ workout.source }}
                     </span>
                     <UiDataAttribution
-                      v-if="workout.source === 'strava' || workout.source === 'garmin'"
+                      v-if="['strava', 'garmin', 'zwift'].includes(workout.source)"
                       :provider="workout.source"
                       :device-name="workout.deviceName"
                       class="self-center"
