@@ -176,7 +176,11 @@
             class="flex flex-col items-center cursor-pointer group flex-1"
             @click="selectedBlockId = block.id"
           >
+            <div v-if="generatingBlockId === block.id" class="mb-2 z-10 bg-white dark:bg-gray-900">
+              <UIcon name="i-heroicons-arrow-path" class="w-4 h-4 animate-spin text-primary" />
+            </div>
             <div
+              v-else
               class="w-4 h-4 rounded-full border-2 transition-all mb-2 bg-white dark:bg-gray-900 z-10"
               :class="getBlockStatusColor(block)"
             />
@@ -518,6 +522,20 @@
         :loading="generatingAllStructures"
         @generate="generateAllStructureForWeek"
       />
+
+      <!-- Week Explanation / Coach's Note -->
+      <div
+        v-if="selectedWeek?.explanation"
+        class="mt-4 p-4 bg-primary/5 dark:bg-primary/10 rounded-lg border border-primary/20"
+      >
+        <div class="flex items-center gap-2 mb-2 text-primary font-semibold">
+          <UIcon name="i-heroicons-chat-bubble-left-right" class="w-5 h-5" />
+          <h3>Coach's Note</h3>
+        </div>
+        <p class="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">
+          {{ selectedWeek.explanation }}
+        </p>
+      </div>
     </div>
   </div>
 </template>
@@ -554,6 +572,7 @@
   const savingTemplate = ref(false)
   const abandoning = ref(false)
   const generatingWorkouts = ref(false)
+  const generatingBlockId = ref<string | null>(null)
   const generatingStructureForWorkoutId = ref<string | null>(null)
   const generatingAllStructures = ref(false)
   const adapting = ref<string | null>(null)
@@ -693,51 +712,79 @@
   async function generateWorkoutsForBlock() {
     if (!selectedBlockId.value) return
 
+    const blockId = selectedBlockId.value
     generatingWorkouts.value = true
+    generatingBlockId.value = blockId
+
     try {
-      await $fetch('/api/plans/generate-block', {
+      const response: any = await $fetch('/api/plans/generate-block', {
         method: 'POST',
-        body: { blockId: selectedBlockId.value }
+        body: { blockId }
       })
+
+      const jobId = response.jobId
 
       toast.add({
         title: 'Generation Started',
-        description: 'AI is generating workouts for this block. Refresh in a few moments.',
-        color: 'success'
+        description: 'AI is designing your training block. Please wait...',
+        color: 'info'
       })
 
-      // Auto refresh after a delay
-      // We poll until we see workouts, then trigger auto-structure if needed
-      const pollInterval = setInterval(() => {
-        emit('refresh')
+      // Poll for job completion
+      const pollInterval = setInterval(async () => {
+        try {
+          const statusRes: any = await $fetch(`/api/plans/status?jobId=${jobId}`)
 
-        // Check if we have workouts now
-        if (selectedWeek.value?.workouts?.length > 0) {
-          clearInterval(pollInterval)
-          generatingWorkouts.value = false
-          toast.add({ title: 'Workouts Generated', color: 'success' })
+          if (statusRes.completed) {
+            clearInterval(pollInterval)
+            generatingWorkouts.value = false
+            generatingBlockId.value = null
 
-          // Auto-trigger structure generation
-          generateAllStructureForWeek()
+            if (statusRes.status === 'SUCCESS' || statusRes.status === 'COMPLETED') {
+              toast.add({ title: 'Block Generated', color: 'success' })
+              emit('refresh')
+
+              // Wait for refresh to propagate, then trigger structure generation
+              nextTick(() => {
+                if (selectedBlockId.value === blockId) {
+                  generateAllStructureForWeek()
+                }
+              })
+            } else {
+              toast.add({
+                title: 'Generation Failed',
+                description: 'The AI task encountered an error.',
+                color: 'error'
+              })
+            }
+          }
+        } catch (e) {
+          console.error('Polling error', e)
+          // Don't clear interval on transient network errors, but maybe add max retries logic later
         }
-      }, 3000)
+      }, 2000)
 
-      // Safety timeout to stop polling
+      // Safety timeout (2 minutes)
       setTimeout(() => {
-        if (generatingWorkouts.value) {
+        if (generatingBlockId.value === blockId) {
           clearInterval(pollInterval)
           generatingWorkouts.value = false
-          // Let user retry if needed
+          generatingBlockId.value = null
+          toast.add({
+            title: 'Timeout',
+            description: 'Generation is taking longer than expected. Refresh manually.',
+            color: 'warning'
+          })
         }
-      }, 60000)
+      }, 120000)
     } catch (error: any) {
+      generatingWorkouts.value = false
+      generatingBlockId.value = null
       toast.add({
         title: 'Generation Failed',
         description: error.data?.message || 'Failed to trigger generation',
         color: 'error'
       })
-    } finally {
-      generatingWorkouts.value = false
     }
   }
 
