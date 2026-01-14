@@ -533,7 +533,7 @@ ${
     ? anchoredWorkouts
         .map(
           (w) =>
-            `- ${formatUserDate(w.date, timezone)}: ${w.title} (${w.type}, ${Math.round((w.durationSec || 0) / 60)}min) - KEEP THIS.`
+            `- ${formatDateUTC(w.date)}: ${w.title} (${w.type}, ${Math.round((w.durationSec || 0) / 60)}min) - KEEP THIS.`
         )
         .join('\n')
     : 'None'
@@ -545,7 +545,7 @@ ${
     ? contextWorkouts
         .map(
           (w) =>
-            `- ${formatUserDate(w.date, timezone)}: ${w.title} (${w.type}, ${Math.round((w.durationSec || 0) / 60)}min)`
+            `- ${formatDateUTC(w.date)}: ${w.title} (${w.type}, ${Math.round((w.durationSec || 0) / 60)}min)`
         )
         .join('\n')
     : 'None'

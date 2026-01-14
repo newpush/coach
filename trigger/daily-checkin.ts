@@ -4,7 +4,7 @@ import { prisma } from '../server/utils/db'
 import { workoutRepository } from '../server/utils/repositories/workoutRepository'
 import { wellnessRepository } from '../server/utils/repositories/wellnessRepository'
 import { dailyCheckinRepository } from '../server/utils/repositories/dailyCheckinRepository'
-import { formatUserDate } from '../server/utils/date'
+import { formatUserDate, formatDateUTC } from '../server/utils/date'
 import { calculateProjectedPMC, getCurrentFitnessSummary } from '../server/utils/training-stress'
 import { getUserAiSettings } from '../server/utils/ai-settings'
 
@@ -242,7 +242,7 @@ CURRENT TRAINING PLAN:
     if (upcomingEvents.length > 0) {
       eventsContext = `
 UPCOMING EVENTS (Next 14 Days):
-${upcomingEvents.map((e) => `- ${formatUserDate(e.date, userTimezone, 'EEE MMM dd')}: ${e.title} (${e.priority || 'B'})`).join('\n')}
+${upcomingEvents.map((e) => `- ${formatDateUTC(e.date, 'EEE MMM dd')}: ${e.title} (${e.priority || 'B'})`).join('\n')}
 `
     }
 
@@ -251,7 +251,7 @@ ${upcomingEvents.map((e) => `- ${formatUserDate(e.date, userTimezone, 'EEE MMM d
     if (futureWorkouts.length > 0) {
       upcomingWorkoutsContext = `
 UPCOMING PLANNED WORKOUTS (Next 7 Days):
-${futureWorkouts.map((w) => `- ${formatUserDate(w.date, userTimezone, 'EEE dd')}: ${w.title} (TSS: ${w.tss || 'N/A'})`).join('\n')}
+${futureWorkouts.map((w) => `- ${formatDateUTC(w.date, 'EEE dd')}: ${w.title} (TSS: ${w.tss || 'N/A'})`).join('\n')}
 `
     }
 
@@ -260,7 +260,7 @@ ${futureWorkouts.map((w) => `- ${formatUserDate(w.date, userTimezone, 'EEE dd')}
     if (projectedMetrics.length > 0) {
       projectedMetricsContext = `
 PROJECTED FITNESS TRENDS (Next 7 Days):
-${projectedMetrics.map((m) => `- ${formatUserDate(m.date, userTimezone, 'EEE dd')}: TSB=${Math.round(m.tsb)}`).join('\n')}
+${projectedMetrics.map((m) => `- ${formatDateUTC(m.date, 'EEE dd')}: TSB=${Math.round(m.tsb)}`).join('\n')}
 `
     }
 

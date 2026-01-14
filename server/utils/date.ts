@@ -111,6 +111,15 @@ export function formatUserDate(
 }
 
 /**
+ * Format a date in UTC.
+ * Useful for displaying dates that are stored as UTC Midnight (e.g. PlannedWorkout.date)
+ * without shifting them to the user's timezone.
+ */
+export function formatDateUTC(date: Date, formatStr: string = 'yyyy-MM-dd'): string {
+  return format(date, formatStr, { timeZone: 'UTC' })
+}
+
+/**
  * Get the user's current local date as a Date object set to UTC midnight.
  * This is useful for querying Prisma @db.Date columns.
  */

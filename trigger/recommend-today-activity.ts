@@ -5,7 +5,7 @@ import { workoutRepository } from '../server/utils/repositories/workoutRepositor
 import { wellnessRepository } from '../server/utils/repositories/wellnessRepository'
 import { activityRecommendationRepository } from '../server/utils/repositories/activityRecommendationRepository'
 import { recommendationRepository } from '../server/utils/repositories/recommendationRepository'
-import { formatUserDate } from '../server/utils/date'
+import { formatUserDate, getUserLocalDate, formatDateUTC } from '../server/utils/date'
 import { calculateProjectedPMC, getCurrentFitnessSummary } from '../server/utils/training-stress'
 import { analyzeWellness } from '../server/utils/services/wellness-analysis'
 import { getCheckinHistoryContext } from '../server/utils/services/checkin-service'
@@ -65,26 +65,60 @@ export const recommendTodayActivityTask = task({
     recommendationId?: string
     userFeedback?: string
   }) => {
-    const { userId, date, recommendationId, userFeedback } = payload
+    const { userId, date: payloadDate, recommendationId, userFeedback } = payload
 
-    // Set date to start of day
-    const today = new Date(date)
-    // today.setHours(0, 0, 0, 0); // Removed to prevent timezone shifting. Input is already UTC midnight.
-
-    logger.log("Starting today's activity recommendation", { userId, date: today })
+    logger.log("Starting today's activity recommendation", { userId, payloadDate })
 
     const aiSettings = await getUserAiSettings(userId)
-    logger.log('Using AI settings', {
-      model: aiSettings.aiModelPreference,
-      persona: aiSettings.aiPersona
+
+    // 1. Fetch User Profile & Timezone FIRST to establish "Today" correctly
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        ftp: true,
+        weight: true,
+        maxHr: true,
+        timezone: true,
+        lthr: true,
+        hrZones: true,
+        powerZones: true
+      }
     })
 
-    // Fetch all required data
+    const userTimezone = user?.timezone || 'UTC'
+
+    // 2. Calculate Effective Today based on User's Timezone
+    // This fixes issues where server time (UTC) might be ahead/behind user's local "Today"
+    const effectiveDate = getUserLocalDate(userTimezone)
+    const payloadDateObj = new Date(payloadDate)
+
+    logger.log('Timezone Context', {
+      userTimezone,
+      effectiveDate: effectiveDate.toISOString(),
+      payloadDate: payloadDateObj.toISOString()
+    })
+
+    // 3. Update Recommendation Date if needed
+    // If the payload date (likely server UTC) differs from user's local date, sync them.
+    if (recommendationId && effectiveDate.getTime() !== payloadDateObj.getTime()) {
+      logger.log('Date mismatch detected. Updating recommendation date to match user local date.', {
+        oldDate: payloadDateObj,
+        newDate: effectiveDate
+      })
+      await prisma.activityRecommendation.update({
+        where: { id: recommendationId },
+        data: { date: effectiveDate }
+      })
+    }
+
+    // Use effectiveDate for all subsequent queries
+    const today = effectiveDate
+
+    // Fetch remaining data
     const [
       plannedWorkout,
       todayMetric,
       recentWorkouts,
-      user,
       athleteProfile,
       activeGoals,
       futureWorkouts,
@@ -107,20 +141,6 @@ export const recommendTodayActivityTask = task({
         startDate: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
         orderBy: { date: 'desc' },
         includeDuplicates: false
-      }),
-
-      // User profile
-      prisma.user.findUnique({
-        where: { id: userId },
-        select: {
-          ftp: true,
-          weight: true,
-          maxHr: true,
-          timezone: true,
-          lthr: true,
-          hrZones: true,
-          powerZones: true
-        }
       }),
 
       // Latest athlete profile
@@ -256,7 +276,6 @@ export const recommendTodayActivityTask = task({
     )
 
     // Calculate local time context
-    const userTimezone = user?.timezone || 'UTC'
     const now = new Date()
     const localTime = now.toLocaleTimeString('en-US', {
       timeZone: userTimezone,
@@ -266,19 +285,12 @@ export const recommendTodayActivityTask = task({
     })
 
     // Use target date string for the prompt to ensure alignment with "Today"
-    // If today is UTC midnight (from DB or payload), formatUserDate might shift it to previous day in EST
-    // But since 'today' comes from payload/DB date which is MEANT to be "Start of Day User TZ",
-    // we should trust the input date DATE part if it was passed as string,
-    // OR if we are processing "Today", we want the User's Current Date.
-
-    // However, if the system is designed where 'date' payload is UTC Midnight representing the day,
-    // then 'formatUserDate' WILL shift it.
-    // We want the literal date string "YYYY-MM-DD" that matches the user's intent.
-    // If today is 2026-01-10T00:00:00Z, we want "2026-01-10".
-    const targetDateStr = today.toISOString().split('T')[0] // Force UTC Date string (Naive)
+    // Since 'today' is now strictly User Local Date @ UTC Midnight,
+    // toISOString().split('T')[0] will give the correct YYYY-MM-DD
+    const targetDateStr = today.toISOString().split('T')[0]
 
     // Format for display (Friday, January 10, 2026)
-    // We manually construct it to avoid timezone shift
+    // We construct it based on the effective today
     const targetDateObj = new Date(targetDateStr + 'T12:00:00') // Noon Local
     const localDate = targetDateObj.toLocaleDateString('en-US', {
       weekday: 'long',
@@ -288,7 +300,6 @@ export const recommendTodayActivityTask = task({
     })
 
     // Split workouts into "Today's" and "Past"
-    // Use the same naive split for comparison to match DB @db.Date behavior
     const todaysWorkouts = recentWorkouts.filter(
       (w) => formatUserDate(w.date, userTimezone, 'yyyy-MM-dd') === targetDateStr
     )
@@ -376,7 +387,7 @@ UPCOMING EVENTS (Next 14 Days):
 ${upcomingEvents
   .map(
     (e) =>
-      `- ${formatUserDate(e.date, userTimezone, 'EEE MMM dd')}: ${e.title} (${e.type || 'Event'}) - Priority: ${e.priority || 'B'}`
+      `- ${formatDateUTC(e.date, 'EEE MMM dd')}: ${e.title} (${e.type || 'Event'}) - Priority: ${e.priority || 'B'}`
   )
   .join('\n')}
 `
@@ -388,10 +399,7 @@ ${upcomingEvents
       upcomingContext = `
 UPCOMING PLANNED WORKOUTS (Next 14 Days):
 ${futureWorkouts
-  .map(
-    (w) =>
-      `- ${formatUserDate(w.date, userTimezone, 'EEE dd')}: ${w.title} (TSS: ${w.tss || 'N/A'})`
-  )
+  .map((w) => `- ${formatDateUTC(w.date, 'EEE dd')}: ${w.title} (TSS: ${w.tss || 'N/A'})`)
   .join('\n')}
 `
     }
@@ -404,7 +412,7 @@ PROJECTED FITNESS TRENDS (Next 14 Days based on plan):
 ${projectedMetrics
   .map(
     (m) =>
-      `- ${formatUserDate(m.date, userTimezone, 'EEE dd')}: CTL=${Math.round(m.ctl)}, TSB=${Math.round(m.tsb)}`
+      `- ${formatDateUTC(m.date, 'EEE dd')}: CTL=${Math.round(m.ctl)}, TSB=${Math.round(m.tsb)}`
   )
   .join('\n')}
 `

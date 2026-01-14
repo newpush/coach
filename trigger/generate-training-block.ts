@@ -267,9 +267,7 @@ ${profile.planning_context?.opportunities?.length ? `Opportunities: ${profile.pl
     const eventsList =
       block.plan.goal.events && block.plan.goal.events.length > 0
         ? block.plan.goal.events
-            .map(
-              (e: any) => `- ${e.title}: ${formatUserDate(e.date, timezone)} (${e.type || 'Race'})`
-            )
+            .map((e: any) => `- ${e.title}: ${formatDateUTC(e.date)} (${e.type || 'Race'})`)
             .join('\n')
         : `- Primary Event Date: ${formatUserDate(block.plan.goal.eventDate || block.plan.targetDate || new Date(), timezone)}`
 
@@ -342,7 +340,7 @@ ${
     ? anchoredWorkouts
         .map(
           (w) =>
-            `- ${formatUserDate(w.date, timezone)}: ${w.title} (${w.type}, ${Math.round((w.durationSec || 0) / 60)}min) - KEEP THIS.`
+            `- ${formatDateUTC(w.date)}: ${w.title} (${w.type}, ${Math.round((w.durationSec || 0) / 60)}min) - KEEP THIS.`
         )
         .join('\n')
     : 'None'
