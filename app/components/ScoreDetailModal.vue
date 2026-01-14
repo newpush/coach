@@ -236,6 +236,7 @@
   const getStatusColor = (
     status: string
   ): 'neutral' | 'primary' | 'secondary' | 'success' | 'info' | 'warning' | 'error' => {
+    if (!status) return 'neutral'
     const map: Record<
       string,
       'neutral' | 'primary' | 'secondary' | 'success' | 'info' | 'warning' | 'error'
@@ -249,6 +250,7 @@
   }
 
   const getStatusLabel = (status: string) => {
+    if (!status) return 'Unknown'
     return status
       .split('_')
       .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
