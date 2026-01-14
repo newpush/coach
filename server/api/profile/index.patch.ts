@@ -2,6 +2,7 @@ import { getServerSession } from '../../utils/session'
 import { z } from 'zod'
 import { prisma } from '../../utils/db'
 import { athleteMetricsService } from '../../utils/athleteMetricsService'
+import { logAction } from '../../utils/audit'
 
 defineRouteMeta({
   openAPI: {
@@ -157,6 +158,15 @@ export default defineEventHandler(async (event) => {
     const updatedUser = await prisma.user.update({
       where: { email: session.user.email },
       data: updateData
+    })
+
+    await logAction({
+      userId: updatedUser.id,
+      action: 'USER_PROFILE_UPDATED',
+      resourceType: 'User',
+      resourceId: updatedUser.id,
+      metadata: { fields: Object.keys(data) },
+      event
     })
 
     return {

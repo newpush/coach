@@ -1,5 +1,7 @@
 import { getServerSession } from '../../../utils/session'
 import { generateApiKey, hashApiKey } from '../../../utils/api-keys'
+import { prisma } from '../../../utils/db'
+import { logAction } from '../../../utils/audit'
 
 defineRouteMeta({
   openAPI: {
@@ -69,6 +71,15 @@ export default defineEventHandler(async (event) => {
       key: hashedKey,
       prefix
     }
+  })
+
+  await logAction({
+    userId: (session.user as any).id,
+    action: 'API_KEY_CREATED',
+    resourceType: 'ApiKey',
+    resourceId: apiKey.id,
+    metadata: { name: apiKey.name, prefix: apiKey.prefix },
+    event
   })
 
   return {

@@ -1,4 +1,5 @@
 import { oauthRepository } from '../../utils/repositories/oauthRepository'
+import { logAction } from '../../utils/audit'
 
 defineRouteMeta({
   openAPI: {
@@ -46,7 +47,18 @@ export default defineEventHandler(async (event) => {
     }
   }
 
-  await oauthRepository.revokeToken(token)
+  const revoked = await oauthRepository.revokeToken(token)
+
+  if (revoked) {
+    await logAction({
+      userId: revoked.userId,
+      action: 'TOKEN_REVOKED',
+      resourceType: 'OAuthToken',
+      resourceId: revoked.id,
+      metadata: { appId: revoked.appId, tokenTypeHint: body.token_type_hint },
+      event
+    })
+  }
 
   // RFC 7009: "The server responds with HTTP status code 200 if the token has
   // been revoked successfully or if the client submitted an invalid token."

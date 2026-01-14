@@ -1,6 +1,7 @@
 import { getServerSession } from '../../utils/session'
 import { tasks } from '@trigger.dev/sdk/v3'
 import { prisma } from '../../utils/db'
+import { logAction } from '../../utils/audit'
 
 defineRouteMeta({
   openAPI: {
@@ -51,6 +52,15 @@ export default defineEventHandler(async (event) => {
       tags: [`user:${userId}`]
     }
   )
+
+  await logAction({
+    userId,
+    action: 'USER_ACCOUNT_DELETION_REQUESTED',
+    resourceType: 'User',
+    resourceId: userId,
+    metadata: { jobId: handle.id },
+    event
+  })
 
   // Immediately invalidate sessions to prevent further access
   try {

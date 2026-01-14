@@ -1,4 +1,6 @@
 import { getServerSession } from '../../../utils/session'
+import { prisma } from '../../../utils/db'
+import { logAction } from '../../../utils/audit'
 
 defineRouteMeta({
   openAPI: {
@@ -68,6 +70,15 @@ export default defineEventHandler(async (event) => {
     where: {
       id
     }
+  })
+
+  await logAction({
+    userId: (session.user as any).id,
+    action: 'API_KEY_REVOKED',
+    resourceType: 'ApiKey',
+    resourceId: id,
+    metadata: { name: apiKey.name },
+    event
   })
 
   return {
