@@ -41,7 +41,7 @@
               icon="i-heroicons-arrow-path"
               size="sm"
               class="font-bold"
-              @click="integrationStore.syncAllData"
+              @click="handleSync"
             >
               <span class="hidden sm:inline">Sync Data</span>
               <span class="sm:hidden">Sync</span>
@@ -263,12 +263,53 @@
   })
 
   const config = useRuntimeConfig()
+  const toast = useToast()
 
   const integrationStore = useIntegrationStore()
   const userStore = useUserStore()
   const recommendationStore = useRecommendationStore()
   const activityStore = useActivityStore()
   const checkinStore = useCheckinStore()
+
+  // Background Task Monitoring
+  const { refresh: refreshRuns } = useUserRuns()
+  const { onTaskCompleted } = useUserRunsState()
+
+  async function handleSync() {
+    await integrationStore.syncAllData()
+    refreshRuns()
+  }
+
+  // Listen for sync completion
+  onTaskCompleted('ingest-all', async (run) => {
+    integrationStore.syncingData = false
+    await integrationStore.fetchStatus()
+    await Promise.all([
+      userStore.fetchProfile(),
+      recommendationStore.fetchTodayRecommendation(),
+      activityStore.fetchRecentActivity(),
+      fetchUpcomingWorkouts(),
+      checkinStore.fetchToday()
+    ])
+
+    toast.add({
+      title: 'Sync Complete',
+      description: 'Your data has been updated successfully!',
+      color: 'success',
+      icon: 'i-heroicons-check-circle'
+    })
+  })
+
+  // Listen for recommendation generation completion
+  onTaskCompleted('generate-recommendations', async (run) => {
+    await recommendationStore.fetchTodayRecommendation()
+    toast.add({
+      title: 'Recommendations Updated',
+      description: 'Your daily advice has been refreshed.',
+      color: 'success',
+      icon: 'i-heroicons-light-bulb'
+    })
+  })
 
   const showWelcome = useLocalStorage('dashboard-welcome-banner', true)
 

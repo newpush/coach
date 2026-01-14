@@ -5,6 +5,11 @@
         <template #leading>
           <UDashboardSidebarCollapse />
         </template>
+        <template #right>
+          <ClientOnly>
+            <DashboardTriggerMonitorButton />
+          </ClientOnly>
+        </template>
       </UDashboardNavbar>
 
       <UDashboardToolbar>

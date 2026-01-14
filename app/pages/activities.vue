@@ -7,6 +7,9 @@
         </template>
         <template #right>
           <div class="flex items-center gap-2">
+            <ClientOnly>
+              <DashboardTriggerMonitorButton />
+            </ClientOnly>
             <!-- View Switcher -->
             <div class="flex items-center bg-gray-100 dark:bg-gray-800 rounded-lg p-1">
               <UButton

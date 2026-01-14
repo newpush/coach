@@ -6,29 +6,34 @@
           <UDashboardSidebarCollapse />
         </template>
         <template #right>
-          <UButton
-            v-if="activePlan"
-            color="neutral"
-            variant="outline"
-            size="sm"
-            class="font-bold"
-            icon="i-heroicons-share"
-            @click="isShareModalOpen = true"
-          >
-            <span class="hidden sm:inline">Share</span>
-          </UButton>
-          <UButton
-            v-if="activePlan"
-            color="neutral"
-            variant="outline"
-            size="sm"
-            class="font-bold"
-            icon="i-heroicons-plus"
-            @click="startNewPlan"
-          >
-            <span class="hidden sm:inline">New Plan</span>
-            <span class="sm:hidden">New</span>
-          </UButton>
+          <div class="flex items-center gap-2">
+            <ClientOnly>
+              <DashboardTriggerMonitorButton />
+            </ClientOnly>
+            <UButton
+              v-if="activePlan"
+              color="neutral"
+              variant="outline"
+              size="sm"
+              class="font-bold"
+              icon="i-heroicons-share"
+              @click="isShareModalOpen = true"
+            >
+              <span class="hidden sm:inline">Share</span>
+            </UButton>
+            <UButton
+              v-if="activePlan"
+              color="neutral"
+              variant="outline"
+              size="sm"
+              class="font-bold"
+              icon="i-heroicons-plus"
+              @click="startNewPlan"
+            >
+              <span class="hidden sm:inline">New Plan</span>
+              <span class="sm:hidden">New</span>
+            </UButton>
+          </div>
         </template>
       </UDashboardNavbar>
     </template>

@@ -6,17 +6,22 @@
           <UDashboardSidebarCollapse />
         </template>
         <template #right>
-          <UButton
-            color="primary"
-            variant="solid"
-            icon="i-heroicons-user-plus"
-            size="sm"
-            class="font-bold"
-            @click="isConnectModalOpen = true"
-          >
-            <span class="hidden sm:inline">Add Athlete</span>
-            <span class="sm:hidden">Add</span>
-          </UButton>
+          <div class="flex items-center gap-2">
+            <ClientOnly>
+              <DashboardTriggerMonitorButton />
+            </ClientOnly>
+            <UButton
+              color="primary"
+              variant="solid"
+              icon="i-heroicons-user-plus"
+              size="sm"
+              class="font-bold"
+              @click="isConnectModalOpen = true"
+            >
+              <span class="hidden sm:inline">Add Athlete</span>
+              <span class="sm:hidden">Add</span>
+            </UButton>
+          </div>
         </template>
       </UDashboardNavbar>
     </template>
