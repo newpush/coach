@@ -37,37 +37,9 @@
         </div>
         <div v-else class="flex items-center gap-2">
           <UButton
-            color="error"
-            variant="ghost"
-            size="xs"
-            @click="$emit('disconnect', 'intervals')"
-          >
-            Disconnect
-          </UButton>
-          <UButton
-            color="neutral"
-            variant="outline"
-            size="xs"
-            class="font-bold"
-            icon="i-heroicons-user"
-            @click="$emit('sync-profile', 'intervals')"
-          >
-            Sync Profile
-          </UButton>
-          <UButton
-            color="neutral"
-            variant="outline"
-            size="xs"
-            class="font-bold"
-            icon="i-heroicons-arrow-path-rounded-square"
-            @click="advancedSyncModalOpen = true"
-          >
-            Advanced Sync
-          </UButton>
-          <UButton
             color="success"
             variant="solid"
-            size="xs"
+            size="sm"
             class="font-bold"
             icon="i-heroicons-arrow-path"
             :loading="syncingProviders.has('intervals')"
@@ -75,6 +47,15 @@
           >
             Sync Now
           </UButton>
+
+          <UDropdownMenu :items="intervalsActions">
+            <UButton
+              color="neutral"
+              variant="outline"
+              size="sm"
+              icon="i-heroicons-ellipsis-vertical"
+            />
+          </UDropdownMenu>
         </div>
       </div>
     </UCard>
@@ -98,16 +79,6 @@
       </div>
 
       <div class="flex flex-col gap-2 pt-4 border-t border-gray-100 dark:border-gray-800 mt-auto">
-        <div v-if="whoopConnected" class="flex justify-end mb-2">
-          <div class="flex items-center gap-2">
-            <span class="text-xs text-muted">Ingest Workouts</span>
-            <USwitch
-              :model-value="whoopIngestWorkouts"
-              size="xs"
-              @update:model-value="$emit('updateSetting', 'whoop', 'ingestWorkouts', $event)"
-            />
-          </div>
-        </div>
         <div class="flex items-center justify-end gap-2">
           <div v-if="!whoopConnected">
             <UButton color="neutral" variant="outline" @click="navigateTo('/connect-whoop')">
@@ -115,13 +86,10 @@
             </UButton>
           </div>
           <div v-else class="flex items-center gap-2">
-            <UButton color="error" variant="ghost" size="xs" @click="$emit('disconnect', 'whoop')">
-              Disconnect
-            </UButton>
             <UButton
               color="success"
               variant="solid"
-              size="xs"
+              size="sm"
               class="font-bold"
               icon="i-heroicons-arrow-path"
               :loading="syncingProviders.has('whoop')"
@@ -129,6 +97,14 @@
             >
               Sync Now
             </UButton>
+            <UDropdownMenu :items="whoopActions">
+              <UButton
+                color="neutral"
+                variant="outline"
+                size="sm"
+                icon="i-heroicons-ellipsis-vertical"
+              />
+            </UDropdownMenu>
           </div>
         </div>
       </div>
@@ -161,13 +137,10 @@
           </UButton>
         </div>
         <div v-else class="flex items-center gap-2">
-          <UButton color="error" variant="ghost" size="xs" @click="$emit('disconnect', 'withings')">
-            Disconnect
-          </UButton>
           <UButton
             color="success"
             variant="solid"
-            size="xs"
+            size="sm"
             class="font-bold"
             icon="i-heroicons-arrow-path"
             :loading="syncingProviders.has('withings')"
@@ -175,6 +148,14 @@
           >
             Sync Now
           </UButton>
+          <UDropdownMenu :items="withingsActions">
+            <UButton
+              color="neutral"
+              variant="outline"
+              size="sm"
+              icon="i-heroicons-ellipsis-vertical"
+            />
+          </UDropdownMenu>
         </div>
       </div>
     </UCard>
@@ -206,13 +187,10 @@
           </UButton>
         </div>
         <div v-else class="flex items-center gap-2">
-          <UButton color="error" variant="ghost" size="xs" @click="$emit('disconnect', 'yazio')">
-            Disconnect
-          </UButton>
           <UButton
             color="success"
             variant="solid"
-            size="xs"
+            size="sm"
             class="font-bold"
             icon="i-heroicons-arrow-path"
             :loading="syncingProviders.has('yazio')"
@@ -220,6 +198,14 @@
           >
             Sync Now
           </UButton>
+          <UDropdownMenu :items="yazioActions">
+            <UButton
+              color="neutral"
+              variant="outline"
+              size="sm"
+              icon="i-heroicons-ellipsis-vertical"
+            />
+          </UDropdownMenu>
         </div>
       </div>
     </UCard>
@@ -247,13 +233,10 @@
           </UButton>
         </div>
         <div v-else class="flex items-center gap-2">
-          <UButton color="error" variant="ghost" size="xs" @click="$emit('disconnect', 'hevy')">
-            Disconnect
-          </UButton>
           <UButton
             color="success"
             variant="solid"
-            size="xs"
+            size="sm"
             class="font-bold"
             icon="i-heroicons-arrow-path"
             :loading="syncingProviders.has('hevy')"
@@ -261,6 +244,14 @@
           >
             Sync Now
           </UButton>
+          <UDropdownMenu :items="hevyActions">
+            <UButton
+              color="neutral"
+              variant="outline"
+              size="sm"
+              icon="i-heroicons-ellipsis-vertical"
+            />
+          </UDropdownMenu>
         </div>
       </div>
     </UCard>
@@ -340,13 +331,10 @@
           </UTooltip>
         </div>
         <div v-else class="flex items-center gap-2">
-          <UButton color="error" variant="ghost" size="xs" @click="$emit('disconnect', 'strava')">
-            Disconnect
-          </UButton>
           <UButton
             color="success"
             variant="solid"
-            size="xs"
+            size="sm"
             class="font-bold"
             icon="i-heroicons-arrow-path"
             :loading="syncingProviders.has('strava')"
@@ -354,6 +342,14 @@
           >
             Sync Now
           </UButton>
+          <UDropdownMenu :items="stravaActions">
+            <UButton
+              color="neutral"
+              variant="outline"
+              size="sm"
+              icon="i-heroicons-ellipsis-vertical"
+            />
+          </UDropdownMenu>
         </div>
       </div>
     </UCard>
@@ -394,16 +390,7 @@
 </template>
 
 <script setup lang="ts">
-  const { signIn } = useAuth()
-  const advancedSyncModalOpen = ref(false)
-  const selectedDays = ref<number | undefined>()
-
-  const isStravaDisabled = computed(() => {
-    if (import.meta.server) return false
-    return window.location.hostname === 'coachwatts.com'
-  })
-
-  defineProps<{
+  const props = defineProps<{
     intervalsConnected: boolean
     whoopConnected: boolean
     whoopIngestWorkouts: boolean
@@ -414,10 +401,107 @@
     syncingProviders: Set<string>
   }>()
 
-  defineEmits<{
+  const { signIn } = useAuth()
+  const advancedSyncModalOpen = ref(false)
+  const selectedDays = ref<number | undefined>()
+  const emit = defineEmits<{
     disconnect: [provider: string]
     sync: [provider: string, days?: number]
     'sync-profile': [provider: string]
     updateSetting: [provider: string, setting: string, value: any]
   }>()
+
+  const intervalsActions = computed(() => [
+    [
+      {
+        label: 'Sync Profile',
+        icon: 'i-heroicons-user',
+        onSelect: () => emit('sync-profile', 'intervals')
+      },
+      {
+        label: 'Advanced Sync',
+        icon: 'i-heroicons-arrow-path-rounded-square',
+        onSelect: () => {
+          advancedSyncModalOpen.value = true
+        }
+      }
+    ],
+    [
+      {
+        label: 'Disconnect',
+        icon: 'i-heroicons-trash',
+        color: 'error' as const,
+        onSelect: () => emit('disconnect', 'intervals')
+      }
+    ]
+  ])
+
+  const whoopActions = computed(() => [
+    [
+      {
+        label: 'Ingest Workouts',
+        type: 'checkbox' as const,
+        checked: props.whoopIngestWorkouts,
+        onUpdateChecked: (checked: boolean) =>
+          emit('updateSetting', 'whoop', 'ingestWorkouts', checked)
+      }
+    ],
+    [
+      {
+        label: 'Disconnect',
+        icon: 'i-heroicons-trash',
+        color: 'error' as const,
+        onSelect: () => emit('disconnect', 'whoop')
+      }
+    ]
+  ])
+
+  const withingsActions = computed(() => [
+    [
+      {
+        label: 'Disconnect',
+        icon: 'i-heroicons-trash',
+        color: 'error' as const,
+        onSelect: () => emit('disconnect', 'withings')
+      }
+    ]
+  ])
+
+  const yazioActions = computed(() => [
+    [
+      {
+        label: 'Disconnect',
+        icon: 'i-heroicons-trash',
+        color: 'error' as const,
+        onSelect: () => emit('disconnect', 'yazio')
+      }
+    ]
+  ])
+
+  const hevyActions = computed(() => [
+    [
+      {
+        label: 'Disconnect',
+        icon: 'i-heroicons-trash',
+        color: 'error' as const,
+        onSelect: () => emit('disconnect', 'hevy')
+      }
+    ]
+  ])
+
+  const stravaActions = computed(() => [
+    [
+      {
+        label: 'Disconnect',
+        icon: 'i-heroicons-trash',
+        color: 'error' as const,
+        onSelect: () => emit('disconnect', 'strava')
+      }
+    ]
+  ])
+
+  const isStravaDisabled = computed(() => {
+    if (import.meta.server) return false
+    return window.location.hostname === 'coachwatts.com'
+  })
 </script>
