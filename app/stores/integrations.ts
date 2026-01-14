@@ -65,25 +65,14 @@ export const useIntegrationStore = defineStore('integration', () => {
 
       toast.add({
         title: 'Data Sync Started',
-        description: 'Syncing data from all connected integrations. This may take a minute...',
+        description:
+          'Syncing data from all connected integrations. You can monitor progress in the dashboard.',
         color: 'success',
         icon: 'i-heroicons-arrow-path'
       })
-
-      // We rely on the caller or a separate polling mechanism to update the data
-      // or we can implement polling here if needed.
-      // For now, let's refresh status after a delay
-      setTimeout(async () => {
-        await fetchStatus()
-        toast.add({
-          title: 'Sync Complete',
-          description: 'Your data has been updated successfully!',
-          color: 'success',
-          icon: 'i-heroicons-check-circle'
-        })
-      }, 10000)
     } catch (error: any) {
       console.error('Error syncing data:', error)
+      syncingData.value = false
 
       toast.add({
         title: 'Sync Failed',
@@ -91,8 +80,6 @@ export const useIntegrationStore = defineStore('integration', () => {
         color: 'error',
         icon: 'i-heroicons-exclamation-circle'
       })
-    } finally {
-      syncingData.value = false
     }
   }
 

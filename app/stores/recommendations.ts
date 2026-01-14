@@ -9,7 +9,8 @@ export const useRecommendationStore = defineStore('recommendation', () => {
   const generatingAdHoc = ref(false)
   const currentRecommendationId = ref<string | null>(null)
   const toast = useToast()
-  const { poll } = usePolling()
+  const { refresh: refreshRuns } = useUserRuns()
+  const { onTaskCompleted } = useUserRunsState()
 
   // We need to know if intervals is connected to fetch
   const integrationStore = useIntegrationStore()
@@ -49,14 +50,11 @@ export const useRecommendationStore = defineStore('recommendation', () => {
 
     generating.value = true
     try {
-      const result: any = await $fetch('/api/recommendations/today', {
+      await $fetch('/api/recommendations/today', {
         method: 'POST',
         body: { userFeedback }
       })
-      currentRecommendationId.value = result.recommendationId
-
-      // Initial fetch to show processing state if API returns it immediately
-      await fetchTodayRecommendation()
+      refreshRuns()
 
       toast.add({
         title: userFeedback ? 'Regenerating Recommendation' : 'Analysis Started',
@@ -66,45 +64,8 @@ export const useRecommendationStore = defineStore('recommendation', () => {
         color: 'success',
         icon: 'i-heroicons-arrow-path'
       })
-
-      poll(
-        () => $fetch('/api/recommendations/today'),
-        (data: any) => {
-          // Check matching ID and completed status
-          return data && data.id === currentRecommendationId.value && data.status === 'COMPLETED'
-        },
-        {
-          onSuccess: (data) => {
-            todayRecommendation.value = data
-            generating.value = false
-            currentRecommendationId.value = null
-            toast.add({
-              title: 'Analysis Complete',
-              description: 'Your training recommendation is ready!',
-              color: 'success',
-              icon: 'i-heroicons-check-circle'
-            })
-          },
-          onMaxAttemptsReached: () => {
-            generating.value = false
-            currentRecommendationId.value = null
-            toast.add({
-              title: 'Analysis Taking Longer',
-              description: 'The analysis is still running. Please check back in a moment.',
-              color: 'warning',
-              icon: 'i-heroicons-clock'
-            })
-          },
-          onError: (error) => {
-            generating.value = false
-            currentRecommendationId.value = null
-            console.error('Recommendation polling error:', error)
-          }
-        }
-      )
     } catch (error: any) {
       generating.value = false
-      currentRecommendationId.value = null
       toast.add({
         title: 'Generation Failed',
         description: error.data?.message || 'Failed to generate recommendation',
@@ -123,33 +84,40 @@ export const useRecommendationStore = defineStore('recommendation', () => {
       })
 
       if (success) {
+        refreshRuns()
         toast.add({
           title: 'Generating Workout',
           description: 'AI is designing your workout...',
           color: 'success'
         })
-
-        poll(
-          () => $fetch('/api/workouts/planned/today'),
-          (data) => !!data,
-          {
-            onSuccess: async (data) => {
-              todayWorkout.value = data
-              generatingAdHoc.value = false
-              toast.add({ title: 'Workout Ready', color: 'success' })
-              // Auto-generate recommendation for the new workout
-              await generateTodayRecommendation()
-            },
-            interval: 2000,
-            maxAttempts: 30
-          }
-        )
       }
     } catch (error) {
       generatingAdHoc.value = false
       toast.add({ title: 'Generation Failed', color: 'error' })
     }
   }
+
+  // Listeners
+  onTaskCompleted('recommend-today-activity', async (run) => {
+    // Assuming the task output contains the recommendation or we fetch it
+    await fetchTodayRecommendation()
+    generating.value = false
+    currentRecommendationId.value = null
+    toast.add({
+      title: 'Analysis Complete',
+      description: 'Your training recommendation is ready!',
+      color: 'success',
+      icon: 'i-heroicons-check-circle'
+    })
+  })
+
+  onTaskCompleted('generate-ad-hoc-workout', async (run) => {
+    await fetchTodayWorkout()
+    generatingAdHoc.value = false
+    toast.add({ title: 'Workout Ready', color: 'success' })
+    // Auto-generate recommendation for the new workout
+    await generateTodayRecommendation()
+  })
 
   async function acceptRecommendation(id: string) {
     if (!id) return

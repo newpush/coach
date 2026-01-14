@@ -35,6 +35,32 @@ export const useReportStore = defineStore('report', () => {
     }
   }
 
+  // Background Task Monitoring
+  const { refresh: refreshRuns } = useUserRuns()
+  const { onTaskCompleted } = useUserRunsState()
+
+  // Listeners for all report tasks
+  const reportTasks = [
+    'generate-custom-report',
+    'analyze-last-3-workouts',
+    'analyze-last-3-nutrition',
+    'analyze-last-7-nutrition',
+    'generate-weekly-report'
+  ]
+
+  reportTasks.forEach((taskId) => {
+    onTaskCompleted(taskId, async () => {
+      await fetchReports()
+      generating.value = false
+      toast.add({
+        title: 'Report Ready',
+        description: 'Your report has been generated successfully.',
+        color: 'success',
+        icon: 'i-heroicons-check-circle'
+      })
+    })
+  })
+
   async function generateReport(type: string, config?: any) {
     generating.value = true
     try {
@@ -45,6 +71,7 @@ export const useReportStore = defineStore('report', () => {
         method: 'POST',
         body
       })
+      refreshRuns()
 
       toast.add({
         title: 'Report Generation Started',
@@ -58,6 +85,7 @@ export const useReportStore = defineStore('report', () => {
 
       return result.reportId
     } catch (error: any) {
+      generating.value = false
       toast.add({
         title: 'Generation Failed',
         description: error.data?.message || error.message || 'Failed to start report generation',
@@ -65,8 +93,6 @@ export const useReportStore = defineStore('report', () => {
         icon: 'i-heroicons-exclamation-circle'
       })
       throw error
-    } finally {
-      generating.value = false
     }
   }
 
