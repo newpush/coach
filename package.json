@@ -56,6 +56,7 @@
   "devDependencies": {
     "@iconify-json/heroicons": "^1.2.3",
     "@iconify-json/lucide": "^1.2.82",
+    "@iconify-json/simple-icons": "^1.2.66",
     "@iconify-json/tabler": "^1.2.26",
     "@nuxt/eslint": "^1.12.1",
     "@release-it/conventional-changelog": "^10.0.4",
