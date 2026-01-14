@@ -49,7 +49,12 @@ export default defineEventHandler(async (event) => {
       // Process remote deletions
       const results = await Promise.allSettled(
         pastWorkouts.map(async (workout) => {
-          if (workout.externalId && !workout.externalId.startsWith('ai_gen')) {
+          if (
+            workout.externalId &&
+            !workout.externalId.startsWith('ai_gen') &&
+            !workout.externalId.startsWith('tmpl_') &&
+            /^\d+$/.test(workout.externalId)
+          ) {
             await deleteIntervalsPlannedWorkout(integration, workout.externalId)
             remoteDeleteCount++
           }
