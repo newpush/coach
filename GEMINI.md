@@ -31,3 +31,4 @@
   - `app/components/dashboard/TriggerMonitor.vue`: A collapsible widget that displays active background tasks with status animations and duration timers.
   - `app/components/dashboard/TriggerMonitorButton.vue`: A navbar button with a badge showing the count of active tasks.
   - `onTaskCompleted(taskIdentifier, callback)`: A helper in `useUserRuns` to allow components to react globally when specific background tasks finish, replacing legacy polling logic.
+- Resolved `DailyCheckin` schema drift where `userNotes` column was missing in Prod/migrations but present in schema/local. Fixed by manually creating the migration file and resolving it locally. Enforced `npx prisma migrate dev` workflow in `RULES.md` to prevent recurrence.

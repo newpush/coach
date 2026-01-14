@@ -11,13 +11,14 @@ This file aggregates all critical development rules and guidelines for the Coach
 
 ### Schema Changes & Migrations
 
-1.  **Scaffold Migrations**: Always use the CLI. Do NOT manually create migration files.
-2.  **Workflow**:
+1.  **Scaffold Migrations**: Always use the CLI (`npx prisma migrate dev`). Do NOT manually create migration files unless fixing drift.
+2.  **Mandatory Migration File**: NEVER commit a change to `prisma/schema.prisma` without the corresponding migration file in `prisma/migrations`.
+3.  **Workflow**:
     - Edit `prisma/schema.prisma`.
-    - Generate SQL: `pnpm prisma migrate dev --name <name> --create-only`.
-    - **Review/Edit** the generated SQL if needed.
-    - Apply: `pnpm prisma migrate dev`.
-3.  **Consistency**: Ensure migration history matches the schema.
+    - Run `npx prisma migrate dev --name <descriptive-name>`.
+    - This creates the migration file AND applies it locally.
+    - Commit both the schema change and the new migration folder.
+4.  **Fixing Drift**: If local DB has changes not in migration history (e.g., from `db push`), use `npx prisma migrate diff` to generate SQL, manually create the file, and `npx prisma migrate resolve --applied` to fix.
 
 ### Verification
 
@@ -128,10 +129,14 @@ This file aggregates all critical development rules and guidelines for the Coach
 
 ## 8. Troubleshooting & CLI
 
-- **Preference**: Always prefer extending the project CLI (`cli/`) over creating one-off scripts in `scripts/`.
-- **Execution**: Run CLI commands using `pnpm cw:cli [command]`.
-- **Existing Tools**: Use `pnpm cw:cli debug workout` for data ingestion issues.
-- **Scripts**: If a standalone script is absolutely necessary, use `dotenv/config` and import the shared `prisma` instance. Run with `pnpm exec tsx scripts/script-name.ts`.
+- **Preference**: **ALWAYS** prefer extending the project CLI (`cli/`) over creating one-off scripts in `scripts/`. This ensures consistency and reusability.
+- **Documentation**: Refer to [docs/04-guides/cli-reference.md](docs/04-guides/cli-reference.md) for full usage and command reference.
+- **Execution**: Run CLI commands using `npm run cw:cli -- [command]`.
+- **Key Capabilities**:
+  - `db compare`: Check for schema drift between local and production.
+  - `debug workout`: specific data ingestion issues.
+  - `users search`: Find user details.
+- **Ad-Hoc Scripts**: If a standalone script is _absolutely_ necessary (e.g., a one-time migration fix), use `dotenv/config` and import the shared `prisma` instance. Run with `npx tsx scripts/script-name.ts`.
 
 ---
 
