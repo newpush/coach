@@ -1,7 +1,7 @@
 steps:
   - name: 'node:20-alpine'
     env:
-      - NODE_OPTIONS=--max-old-space-size=4096
+      - NODE_OPTIONS=--max-old-space-size=8192
       - DATABASE_URL=$_DATABASE_URL
     args:
       - '-c'
@@ -13,7 +13,7 @@ steps:
   - name: 'node:20-alpine'
     env:
       - DATABASE_URL=$_DATABASE_URL
-      - NODE_OPTIONS=--max-old-space-size=4096
+      - NODE_OPTIONS=--max-old-space-size=8192
     args:
       - '-c'
       - |
@@ -23,7 +23,7 @@ steps:
   - name: gcr.io/k8s-skaffold/pack
     env:
       - GOOGLE_ENTRYPOINT=$_ENTRYPOINT
-      - NODE_OPTIONS=--max-old-space-size=4096
+      - NODE_OPTIONS=--max-old-space-size=8192
       - DATABASE_URL=$_DATABASE_URL
       - NUXT_AUTH_ORIGIN=$_NUXT_AUTH_ORIGIN
       - SENTRY_AUTH_TOKEN=$_SENTRY_AUTH_TOKEN
@@ -38,7 +38,7 @@ steps:
       - '--publish'
       - '--cache-image=$_AR_HOSTNAME/$_AR_PROJECT_ID/$_AR_REPOSITORY/cache-image:latest'
       - '--env=GOOGLE_ENTRYPOINT'
-      - '--env=NODE_OPTIONS=--max-old-space-size=4096'
+      - '--env=NODE_OPTIONS=--max-old-space-size=8192'
       - '--env=DATABASE_URL'
       - '--env=NUXT_AUTH_ORIGIN'
       - '--env=SENTRY_AUTH_TOKEN'
