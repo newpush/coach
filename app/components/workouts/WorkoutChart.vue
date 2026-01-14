@@ -10,9 +10,9 @@
     <div v-else class="space-y-4">
       <!-- Legend -->
       <div class="flex items-center gap-4 text-xs">
-        <div class="flex items-center gap-1.5">
-          <div class="w-3 h-3 rounded-sm bg-amber-500" />
-          <span class="text-muted">Power (% FTP)</span>
+        <div class="flex items-center gap-2">
+          <div class="w-3 h-3 rounded-xs bg-amber-500" />
+          <span class="text-xs text-muted">Planned Intensity</span>
         </div>
         <div class="flex items-center gap-1.5">
           <div class="w-3 h-1 bg-white border border-gray-400 border-dashed" />

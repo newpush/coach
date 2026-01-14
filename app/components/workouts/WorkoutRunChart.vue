@@ -11,7 +11,7 @@
       <!-- Legend -->
       <div class="flex items-center gap-4 text-xs">
         <div class="flex items-center gap-1.5">
-          <div class="w-3 h-3 rounded-sm bg-blue-500" />
+          <div class="w-3 h-3 rounded-xs bg-blue-500" />
           <span class="text-muted">Intensity (% LTHR)</span>
         </div>
       </div>

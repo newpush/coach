@@ -386,7 +386,7 @@
                   data.advanced.powerStability || data.advanced.paceStability
                 ).intervalStability.slice(0, 8)"
                 :key="i.index"
-                class="flex-1 h-8 rounded-sm"
+                class="flex-1 h-8 rounded-xs"
                 :class="i.cov < 5 ? 'bg-green-500' : i.cov < 10 ? 'bg-amber-500' : 'bg-red-500'"
                 :title="`${i.label}: ${i.cov.toFixed(1)}% variation`"
               />

@@ -3,7 +3,7 @@
     <div
       v-for="(step, index) in steps"
       :key="index"
-      class="rounded-sm"
+      class="rounded-xs"
       :style="getStepStyle(step)"
       :title="`${step.name}: ${formatDuration(step.durationSeconds)}`"
     />
