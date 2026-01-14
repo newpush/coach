@@ -82,11 +82,13 @@ export function useTriggerRun(runId: Ref<string | null>) {
     if (!runId.value) return
 
     try {
-      const data = await $fetch(`/api/runs/${runId.value}`)
-      updateState(data.status, data.output, data.error)
+      const data = (await $fetch(`/api/runs/${runId.value}`)) as any
+      if (!Array.isArray(data)) {
+        updateState(data.status, data.output, data.error)
 
-      if (isFinalStatus(data.status)) {
-        stopPolling()
+        if (isFinalStatus(data.status)) {
+          stopPolling()
+        }
       }
     } catch (err) {
       // If polling fails (e.g. 404 or 500), we might want to stop or retry

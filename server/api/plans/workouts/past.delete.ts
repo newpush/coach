@@ -62,14 +62,12 @@ export default defineEventHandler(async (event) => {
       )
 
       // Log errors if any
-      results.forEach((result, index) => {
-        if (result.status === 'rejected') {
-          console.error(
-            `Failed to delete past Intervals workout ${pastWorkouts[index].externalId}:`,
-            result.reason
-          )
-        }
-      })
+            results.forEach((result, index) => {
+              if (result.status === 'rejected') {
+                const workout = pastWorkouts[index]
+                console.error(`Failed to delete past Intervals workout ${workout?.externalId || 'unknown'}:`, result.reason)
+              }
+            })
     }
 
     // 2. Delete from local DB

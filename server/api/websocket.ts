@@ -64,7 +64,6 @@ function startSubscription(peer: any, iteratorFn: () => AsyncIterable<any>, subI
   if (peerSubs) peerSubs.add(cancel)
   ;(async () => {
     try {
-      // @ts-expect-error - Types might be missing for async iterators in some setups
       for await (const run of iteratorFn()) {
         if (!isSubscribed) break
 
