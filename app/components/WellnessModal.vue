@@ -439,10 +439,24 @@
   const loading = ref(false)
   const wellnessData = ref<any>(null)
   const trendData = ref<any[]>([])
-
-  // AI Analysis State
   const analyzingWellness = ref(false)
-  let pollingInterval: NodeJS.Timeout | null = null
+
+  // Background Task Monitoring
+  const { refresh: refreshRuns } = useUserRuns()
+  const { onTaskCompleted } = useUserRunsState()
+
+  // Listeners
+  onTaskCompleted('analyze-wellness', async (run) => {
+    if (props.date) {
+      await fetchWellnessData(props.date)
+    }
+    analyzingWellness.value = false
+    toast.add({
+      title: 'Analysis Complete',
+      color: 'success',
+      icon: 'i-heroicons-check-circle'
+    })
+  })
 
   // Watch for date changes to fetch data
   watch(
@@ -460,20 +474,12 @@
     async (isOpen) => {
       if (isOpen && props.date) {
         await fetchWellnessData(props.date)
-      } else if (!isOpen) {
-        stopPolling()
       }
     }
   )
 
-  // Cleanup on unmount
-  onUnmounted(() => {
-    stopPolling()
-  })
-
   async function fetchWellnessData(date: Date) {
     loading.value = true
-    stopPolling()
 
     try {
       const dateStr = formatDateFns(date, 'yyyy-MM-dd')
@@ -481,11 +487,6 @@
       // Fetch wellness data for the specific date
       const response = await $fetch(`/api/wellness/${dateStr}`)
       wellnessData.value = response
-
-      // If processing, start polling
-      if (wellnessData.value?.aiAnalysisStatus === 'PROCESSING') {
-        startPolling()
-      }
 
       // Fetch 7-day trend data
       const startDate = formatDateFns(subDays(date, 6), 'yyyy-MM-dd')
@@ -539,6 +540,7 @@
       if (wellnessData.value) {
         wellnessData.value.aiAnalysisStatus = result.status || 'PROCESSING'
       }
+      refreshRuns()
 
       toast.add({
         title: 'Analysis Started',
@@ -546,8 +548,6 @@
         color: 'info',
         icon: 'i-heroicons-sparkles'
       })
-
-      startPolling()
     } catch (e: any) {
       console.error('Error triggering wellness analysis:', e)
       analyzingWellness.value = false
@@ -557,49 +557,6 @@
         color: 'error',
         icon: 'i-heroicons-exclamation-circle'
       })
-    }
-  }
-
-  function startPolling() {
-    if (pollingInterval) clearInterval(pollingInterval)
-
-    pollingInterval = setInterval(async () => {
-      if (!wellnessData.value?.id) return
-
-      try {
-        const updated = (await $fetch(`/api/wellness/${wellnessData.value.id}`)) as any
-
-        if (wellnessData.value) {
-          wellnessData.value.aiAnalysisJson = updated.aiAnalysisJson
-          wellnessData.value.aiAnalysisStatus = updated.aiAnalysisStatus
-          wellnessData.value.aiAnalyzedAt = updated.aiAnalyzedAt
-          wellnessData.value.llmUsageId = updated.llmUsageId
-          wellnessData.value.feedback = updated.feedback
-          wellnessData.value.feedbackText = updated.feedbackText
-        }
-
-        if (updated.aiAnalysisStatus === 'COMPLETED' || updated.aiAnalysisStatus === 'FAILED') {
-          analyzingWellness.value = false
-          stopPolling()
-
-          if (updated.aiAnalysisStatus === 'COMPLETED') {
-            toast.add({
-              title: 'Analysis Complete',
-              color: 'success',
-              icon: 'i-heroicons-check-circle'
-            })
-          }
-        }
-      } catch (e) {
-        console.error('Error polling wellness status:', e)
-      }
-    }, 3000)
-  }
-
-  function stopPolling() {
-    if (pollingInterval) {
-      clearInterval(pollingInterval)
-      pollingInterval = null
     }
   }
 

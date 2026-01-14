@@ -161,6 +161,28 @@
     }
   }
 
+  // Background Task Monitoring
+  const { refresh: refreshRuns } = useUserRuns()
+  const { onTaskCompleted } = useUserRunsState()
+
+  // Listeners
+  onTaskCompleted('generate-daily-checkin', async (run) => {
+    // Refresh checkin data
+    await fetchToday()
+    if (checkin.value?.status === 'COMPLETED') {
+      localQuestions.value = checkin.value.questions || []
+      useCheckinStore().currentCheckin = checkin.value
+      // Note: we don't need to manually set loading=false because fetchToday handles it
+      // but if we were stuck in "loading" state from generate(), we might.
+      // However, generate() sets loading=true then makes API call then sets checkin value.
+      // The UI shows loader based on `loading || isPending`.
+      // `isPending` checks `checkin.status`.
+      // So once `fetchToday` updates `checkin` to COMPLETED, `isPending` becomes false.
+    } else if (checkin.value?.status === 'FAILED') {
+      error.value = 'Generation failed'
+    }
+  })
+
   async function fetchToday() {
     try {
       loading.value = true
@@ -173,11 +195,6 @@
         data.questions.forEach((q: any) => {
           if (q.answer) answers.value[q.id] = q.answer
         })
-
-        // If pending or processing, poll
-        if (data.status === 'PENDING' || data.status === 'PROCESSING') {
-          pollStatus(data.id)
-        }
       } else {
         // Generate if not found
         await generate(false)
@@ -185,9 +202,6 @@
     } catch (e: any) {
       error.value = e.message
     } finally {
-      // Only turn off loading if we are NOT polling
-      // If we are polling, isPending will be true, so UI shows loading
-      // But local 'loading' state can be false.
       loading.value = false
     }
   }
@@ -203,38 +217,13 @@
       checkin.value = data
       localQuestions.value = data.questions || []
       answers.value = {} // Reset answers on regenerate
-      pollStatus(data.id)
+
+      refreshRuns()
     } catch (e: any) {
       error.value = e.message
+    } finally {
       loading.value = false
     }
-  }
-
-  let pollInterval: any = null
-
-  function pollStatus(id: string) {
-    if (pollInterval) clearInterval(pollInterval)
-
-    pollInterval = setInterval(async () => {
-      try {
-        const data = await $fetch<any>('/api/checkin/today') // simple poll
-        checkin.value = data // Update checkin state on every poll to reflect status
-
-        if (data.status === 'COMPLETED') {
-          localQuestions.value = data.questions || []
-          useCheckinStore().currentCheckin = data
-          clearInterval(pollInterval)
-          pollInterval = null
-        } else if (data.status === 'FAILED') {
-          error.value = 'Generation failed'
-          clearInterval(pollInterval)
-          pollInterval = null
-        }
-      } catch (e) {
-        clearInterval(pollInterval)
-        pollInterval = null
-      }
-    }, 2000)
   }
 
   async function submit() {
@@ -284,13 +273,7 @@
     (isOpen) => {
       if (isOpen) {
         fetchToday()
-      } else {
-        if (pollInterval) clearInterval(pollInterval)
       }
     }
   )
-
-  onUnmounted(() => {
-    if (pollInterval) clearInterval(pollInterval)
-  })
 </script>

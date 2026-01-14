@@ -580,6 +580,55 @@
   const publishingId = ref<string | null>(null)
   const toast = useToast()
 
+  // Background Task Monitoring
+  const { refresh: refreshRuns } = useUserRuns()
+  const { onTaskCompleted } = useUserRunsState()
+
+  // Listeners
+  onTaskCompleted('generate-training-block', async () => {
+    emit('refresh')
+    generatingWorkouts.value = false
+    generatingBlockId.value = null
+    toast.add({ title: 'Block Generated', color: 'success' })
+
+    // Wait for refresh to propagate, then trigger structure generation if needed
+    nextTick(() => {
+      if (selectedBlockId.value) {
+        generateAllStructureForWeek()
+      }
+    })
+  })
+
+  onTaskCompleted('generate-structured-workout', async (run) => {
+    emit('refresh')
+    generatingStructureForWorkoutId.value = null
+    // If we were running a batch, we might want to check progress, but simplicity:
+    // If generatingAllStructures is true, we can check if all are done or just wait for all triggers.
+    // The previous logic was polling. Here we get an event per workout.
+    // We can rely on the user seeing them update or just leave generatingAllStructures true until
+    // we detect all are done (complex state tracking).
+    // For now, let's keep it simple: we don't turn off generatingAllStructures here
+    // unless we track the count.
+    // Actually, `generateAllStructureForWeek` sets it to false immediately after triggering batch in the new logic below?
+    // No, we should probably just let the UI update.
+  })
+
+  onTaskCompleted('adapt-training-plan', async () => {
+    emit('refresh')
+    adapting.value = null
+    toast.add({
+      title: 'Adaptation Complete',
+      description: 'Your plan has been updated.',
+      color: 'success'
+    })
+  })
+
+  onTaskCompleted('generate-weekly-plan', async () => {
+    emit('refresh')
+    generatingWorkouts.value = false
+    toast.add({ title: 'Plan Updated', description: 'Check the new schedule.', color: 'info' })
+  })
+
   // Computed
   const currentBlock = computed(() => {
     // Find block encompassing "today" in user's timezone
@@ -717,66 +766,17 @@
     generatingBlockId.value = blockId
 
     try {
-      const response: any = await $fetch('/api/plans/generate-block', {
+      await $fetch('/api/plans/generate-block', {
         method: 'POST',
         body: { blockId }
       })
-
-      const jobId = response.jobId
+      refreshRuns()
 
       toast.add({
         title: 'Generation Started',
         description: 'AI is designing your training block. Please wait...',
         color: 'info'
       })
-
-      // Poll for job completion
-      const pollInterval = setInterval(async () => {
-        try {
-          const statusRes: any = await $fetch(`/api/plans/status?jobId=${jobId}`)
-
-          if (statusRes.completed) {
-            clearInterval(pollInterval)
-            generatingWorkouts.value = false
-            generatingBlockId.value = null
-
-            if (statusRes.status === 'SUCCESS' || statusRes.status === 'COMPLETED') {
-              toast.add({ title: 'Block Generated', color: 'success' })
-              emit('refresh')
-
-              // Wait for refresh to propagate, then trigger structure generation
-              nextTick(() => {
-                if (selectedBlockId.value === blockId) {
-                  generateAllStructureForWeek()
-                }
-              })
-            } else {
-              toast.add({
-                title: 'Generation Failed',
-                description: 'The AI task encountered an error.',
-                color: 'error'
-              })
-            }
-          }
-        } catch (e) {
-          console.error('Polling error', e)
-          // Don't clear interval on transient network errors, but maybe add max retries logic later
-        }
-      }, 2000)
-
-      // Safety timeout (2 minutes)
-      setTimeout(() => {
-        if (generatingBlockId.value === blockId) {
-          clearInterval(pollInterval)
-          generatingWorkouts.value = false
-          generatingBlockId.value = null
-          toast.add({
-            title: 'Timeout',
-            description: 'Generation is taking longer than expected. Refresh manually.',
-            color: 'warning'
-          })
-        }
-      }, 120000)
     } catch (error: any) {
       generatingWorkouts.value = false
       generatingBlockId.value = null
@@ -794,19 +794,13 @@
       await $fetch(`/api/workouts/planned/${workoutId}/generate-structure`, {
         method: 'POST'
       })
+      refreshRuns()
 
       toast.add({
         title: 'Generating...',
         description: 'AI is designing your workout structure. This takes a moment.',
         color: 'info'
       })
-
-      // Poll for update or refresh
-      // For simplicity, we trigger a full plan refresh after a delay
-      setTimeout(() => {
-        emit('refresh')
-        generatingStructureForWorkoutId.value = null
-      }, 5000)
     } catch (error: any) {
       toast.add({
         title: 'Generation Failed',
@@ -845,45 +839,18 @@
           )
         )
       }
+      refreshRuns()
 
-      // Poll for completion
       toast.add({
         title: 'Generation Queued',
         description: 'Waiting for AI to finish designing workouts...',
         color: 'info'
       })
-
-      let attempts = 0
-      const maxAttempts = 20
-      const pollInterval = setInterval(() => {
-        attempts++
-        emit('refresh')
-
-        // Check if all workouts in the current week have structure now
-        // We need to access the LATEST prop data, which might have updated via emit('refresh') -> parent refresh -> prop update
-        // Since props are reactive, selectedWeek should reflect the new state
-        const updatedPending = selectedWeek.value?.workouts.filter((w: any) => !w.structuredWorkout)
-
-        if (updatedPending?.length === 0) {
-          clearInterval(pollInterval)
-          generatingAllStructures.value = false
-          toast.add({ title: 'Generation Complete', color: 'success' })
-        } else if (attempts >= maxAttempts) {
-          clearInterval(pollInterval)
-          generatingAllStructures.value = false
-          toast.add({
-            title: 'Generation Complete (Timeout)',
-            description: 'Some workouts might still be processing. Refresh manually if needed.',
-            color: 'warning'
-          })
-        }
-      }, 3000)
-
-      // We return early and let the interval handle the final state
-      return
     } catch (error) {
       console.error('Batch generation failed', error)
       toast.add({ title: 'Batch Generation Failed', color: 'error' })
+    } finally {
+      // We stop the spinner here, and let individual updates happen via WebSocket
       generatingAllStructures.value = false
     }
   }
@@ -898,6 +865,7 @@
           adaptationType: type
         }
       })
+      refreshRuns()
 
       toast.add({
         title: 'Adaptation Started',
@@ -906,17 +874,12 @@
       })
 
       showAdaptModal.value = false
-
-      setTimeout(() => {
-        emit('refresh')
-      }, 15000)
     } catch (error: any) {
       toast.add({
         title: 'Adaptation Failed',
         description: error.data?.message || 'Failed to trigger adaptation',
         color: 'error'
       })
-    } finally {
       adapting.value = null
     }
   }
@@ -974,6 +937,7 @@
           instructions
         }
       })
+      refreshRuns()
 
       toast.add({
         title: 'Plan Generation Started',
@@ -981,23 +945,6 @@
           'AI is redesigning your week based on your instructions. This may take a minute.',
         color: 'success'
       })
-
-      // Poll for updates
-      const pollInterval = setInterval(() => {
-        emit('refresh')
-        // We could optimize this by checking a status endpoint,
-        // but simple refreshing works for now to see new workouts appear
-
-        // Stop polling after some time or logic?
-        // Ideally the backend returns a job ID and we poll that status.
-        // For now, let's just refresh periodically for a minute
-      }, 5000)
-
-      setTimeout(() => {
-        clearInterval(pollInterval)
-        generatingWorkouts.value = false
-        toast.add({ title: 'Plan Updated', description: 'Check the new schedule.', color: 'info' })
-      }, 45000)
     } catch (error: any) {
       console.error(error)
       toast.add({

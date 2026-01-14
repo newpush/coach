@@ -5,14 +5,28 @@
         <div class="flex items-center justify-between">
           <div class="flex items-center gap-2">
             <UIcon name="i-heroicons-cpu-chip" class="w-5 h-5 text-gray-900 dark:text-white" />
-            <h3 class="font-semibold text-sm">Background Tasks</h3>
+            <div class="flex items-center gap-1.5">
+              <h3 class="font-semibold text-sm">Background Tasks</h3>
+              <UTooltip
+                :text="
+                  isConnected ? 'Real-time updates active' : 'Polling mode (WebSocket disconnected)'
+                "
+              >
+                <div
+                  class="w-2 h-2 rounded-full shrink-0 cursor-help"
+                  :class="
+                    isConnected ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]' : 'bg-red-500'
+                  "
+                />
+              </UTooltip>
+            </div>
             <UBadge v-if="activeCount > 0" size="xs" color="primary" variant="subtle">
               {{ activeCount }} running
             </UBadge>
           </div>
           <div class="flex items-center gap-1">
             <UButton
-              color="gray"
+              color="neutral"
               variant="ghost"
               size="xs"
               icon="i-heroicons-arrow-path"
@@ -20,7 +34,7 @@
               @click="refresh"
             />
             <UButton
-              color="gray"
+              color="neutral"
               variant="ghost"
               size="xs"
               icon="i-heroicons-x-mark"
@@ -30,14 +44,14 @@
         </div>
       </template>
 
-      <div class="max-h-96 overflow-y-auto">
-        <div v-if="runs.length === 0" class="p-4 text-center text-gray-500 text-sm">
+      <div class="max-h-96 overflow-y-auto flex flex-col">
+        <div v-if="displayedRuns.length === 0" class="p-4 text-center text-gray-500 text-sm">
           No active tasks.
         </div>
 
         <div v-else class="divide-y divide-gray-100 dark:divide-gray-800">
           <div
-            v-for="run in runs"
+            v-for="run in displayedRuns"
             :key="run.id"
             class="p-3 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors group relative"
           >
@@ -85,7 +99,7 @@
               >
                 <UTooltip text="Stop task">
                   <UButton
-                    color="red"
+                    color="error"
                     variant="soft"
                     size="xs"
                     icon="i-heroicons-stop"
@@ -113,6 +127,15 @@
             </div>
           </div>
         </div>
+
+        <div
+          v-if="hasMoreHistory"
+          class="p-2 text-center border-t border-gray-100 dark:border-gray-800"
+        >
+          <UButton variant="ghost" size="xs" color="neutral" @click="loadMore">
+            Load previous runs
+          </UButton>
+        </div>
       </div>
     </UCard>
   </div>
@@ -127,10 +150,11 @@
 
   const emit = defineEmits(['update:modelValue'])
 
-  const { runs, refresh, isLoading, cancelRun } = useUserRuns()
+  const { runs, refresh, isLoading, cancelRun, isConnected } = useUserRuns()
   const { formatDate } = useFormat()
   const now = useNow({ interval: 1000 })
   const cancellingId = ref<string | null>(null)
+  const historyLimit = ref(5)
 
   const activeCount = computed(
     () =>
@@ -138,6 +162,35 @@
         ['EXECUTING', 'QUEUED', 'WAITING_FOR_DEPLOY', 'REATTEMPTING'].includes(r.status)
       ).length
   )
+
+  const displayedRuns = computed(() => {
+    const active: any[] = []
+    const history: any[] = []
+
+    // Runs are already sorted by date desc from the store
+    runs.value.forEach((run) => {
+      if (isRunning(run.status)) {
+        active.push(run)
+      } else {
+        history.push(run)
+      }
+    })
+
+    return [...active, ...history.slice(0, historyLimit.value)]
+  })
+
+  const hasMoreHistory = computed(() => {
+    const historyCount = runs.value.filter((r) => !isRunning(r.status)).length
+    return historyCount > historyLimit.value
+  })
+
+  const loadMore = () => {
+    historyLimit.value += 10
+  }
+
+  onMounted(() => {
+    // Component mounted
+  })
 
   const close = () => {
     emit('update:modelValue', false)
@@ -161,21 +214,21 @@
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'EXECUTING':
-        return 'blue'
+        return 'primary'
       case 'QUEUED':
-        return 'orange'
+        return 'warning'
       case 'WAITING_FOR_DEPLOY':
-        return 'yellow'
+        return 'warning'
       case 'COMPLETED':
-        return 'green'
+        return 'success'
       case 'FAILED':
-        return 'red'
+        return 'error'
       case 'CANCELED':
-        return 'gray'
+        return 'neutral'
       case 'TIMED_OUT':
-        return 'red'
+        return 'error'
       default:
-        return 'gray'
+        return 'neutral'
     }
   }
 
