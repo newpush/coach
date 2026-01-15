@@ -11,26 +11,14 @@ import { Command } from 'commander'
 export const startCommand = new Command('start')
   .description('Start the webhook worker')
   .action(async () => {
-    const connectionString = process.env.REDIS_URL
+    const connectionString = process.env.REDIS_URL || 'redis://localhost:6379'
 
     console.log(chalk.blue.bold('Initializing Webhook Worker...'))
-    if (connectionString) {
-      console.log(chalk.gray(`Using REDIS_URL connection string`))
-    } else {
-      console.log(chalk.gray(`Using individual Redis host/port settings`))
-    }
+    console.log(chalk.gray(`Using REDIS_URL connection string`))
 
-    const connection = connectionString
-      ? new IORedis(connectionString, {
-          maxRetriesPerRequest: null,
-          password: process.env.REDIS_PASSWORD || undefined
-        })
-      : new IORedis({
-          host: process.env.REDIS_HOST || 'localhost',
-          port: parseInt(process.env.REDIS_PORT || '6379'),
-          password: process.env.REDIS_PASSWORD || undefined,
-          maxRetriesPerRequest: null
-        })
+    const connection = new IORedis(connectionString, {
+      maxRetriesPerRequest: null // Required by BullMQ
+    })
 
     const concurrency = parseInt(process.env.CW_WORKER_QUEUE_WEBHOOK_CONCURRENCY || '1')
 
