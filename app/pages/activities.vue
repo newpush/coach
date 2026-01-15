@@ -355,7 +355,7 @@
                         class="p-2 rounded-lg border dark:border-gray-800 bg-white dark:bg-gray-900 shadow-sm flex items-center justify-between gap-3"
                         @click="openActivity(activity)"
                       >
-                        <div class="flex items-center gap-3 overflow-hidden">
+                        <div class="flex items-center gap-3 overflow-hidden flex-1">
                           <UIcon
                             :name="getActivityIcon(activity.type || '')"
                             class="w-5 h-5 shrink-0"
@@ -378,11 +378,19 @@
                             </div>
                           </div>
                         </div>
-                        <div
-                          v-if="activity.tss || activity.plannedTss"
-                          class="text-xs font-bold text-green-600 shrink-0"
-                        >
-                          {{ Math.round(activity.tss || activity.plannedTss || 0) }}
+
+                        <div class="flex items-center gap-2 shrink-0">
+                          <MiniWorkoutChart
+                            v-if="activity.structuredWorkout"
+                            :workout="activity.structuredWorkout"
+                            class="w-12 h-8 opacity-75"
+                          />
+                          <div
+                            v-if="activity.tss || activity.plannedTss"
+                            class="text-xs font-bold text-green-600 shrink-0"
+                          >
+                            {{ Math.round(activity.tss || activity.plannedTss || 0) }}
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -428,6 +436,13 @@
                 <div class="whitespace-nowrap">
                   {{ formatDateForList(row.original.date) }}
                 </div>
+              </template>
+
+              <template #chart-cell="{ row }">
+                <div v-if="row.original.structuredWorkout" class="w-24 h-10">
+                  <MiniWorkoutChart :workout="row.original.structuredWorkout" />
+                </div>
+                <span v-else class="text-gray-400 text-xs">-</span>
               </template>
 
               <template #title-cell="{ row }">
@@ -743,6 +758,7 @@
   import { useStorage } from '@vueuse/core'
   import type { CalendarActivity } from '../../types/calendar'
   import WorkoutMatcher from '~/components/workouts/WorkoutMatcher.vue'
+  import MiniWorkoutChart from '~/components/workouts/MiniWorkoutChart.vue'
 
   definePageMeta({
     middleware: 'auth',
@@ -1216,6 +1232,7 @@
   const availableColumns = [
     { accessorKey: 'type', header: 'Type', id: 'type' },
     { accessorKey: 'date', header: 'Date', id: 'date' },
+    { accessorKey: 'chart', header: 'Structure', id: 'chart' },
     { accessorKey: 'title', header: 'Name', id: 'title' },
     { accessorKey: 'duration', header: 'Duration', id: 'duration' },
     { accessorKey: 'distance', header: 'Distance', id: 'distance' },

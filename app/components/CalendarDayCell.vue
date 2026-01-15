@@ -217,7 +217,15 @@
               </div>
             </div>
 
-            <!-- Mini Zone Chart -->
+            <!-- Mini Workout Chart (Structured Planned) -->
+            <div v-if="activity.source === 'planned' && activity.structuredWorkout" class="mt-1.5">
+              <MiniWorkoutChart
+                :workout="activity.structuredWorkout"
+                class="w-full h-6 opacity-75"
+              />
+            </div>
+
+            <!-- Mini Zone Chart (Completed Streams) -->
             <div v-if="activity.source === 'completed' && activity.hasStreams" class="mt-1.5">
               <MiniZoneChart
                 :workout-id="activity.id"
@@ -273,6 +281,8 @@
 <script setup lang="ts">
   import { format, isToday as isTodayFn, isSameMonth } from 'date-fns'
   import type { CalendarActivity } from '../../types/calendar'
+  import MiniWorkoutChart from '~/components/workouts/MiniWorkoutChart.vue'
+  import MiniZoneChart from '~/components/MiniZoneChart.vue'
 
   const props = defineProps<{
     date: Date
