@@ -9,16 +9,16 @@ const eventSchema = z.object({
   startTime: z.string().optional(),
   type: z.string().optional(),
   subType: z.string().optional(),
-  priority: z.enum(['A', 'B', 'C']).default('B'),
+  priority: z.enum(['A', 'B', 'C']).or(z.literal('')).nullable().optional(),
   isVirtual: z.boolean().default(false),
   isPublic: z.boolean().default(false),
   country: z.string().optional(),
   city: z.string().optional(),
   location: z.string().optional(),
   websiteUrl: z.string().url().optional().or(z.literal('')),
-  distance: z.number().optional(),
-  elevation: z.number().optional(),
-  expectedDuration: z.number().optional(),
+  distance: z.number().nullable().optional(),
+  elevation: z.number().nullable().optional(),
+  expectedDuration: z.number().nullable().optional(),
   terrain: z.string().optional(),
   goalIds: z.array(z.string()).optional()
 })
@@ -42,6 +42,7 @@ export default defineEventHandler(async (event) => {
   try {
     const updatedEvent = await eventRepository.update(id, userId, {
       ...result.data,
+      priority: result.data.priority || null,
       date: new Date(result.data.date)
     })
 

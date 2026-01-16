@@ -106,6 +106,7 @@
     meta: [{ name: 'description', content: 'Manage your racing calendar and training milestones.' }]
   })
 
+  const toast = useToast()
   const loading = ref(true)
   const events = ref<any[]>([])
   const isEventFormOpen = ref(false)
@@ -148,7 +149,7 @@
       events.value = data
     } catch (error) {
       console.error('Error fetching events:', error)
-      useToast().add({
+      toast.add({
         title: 'Error',
         description: 'Failed to load events',
         color: 'error'
@@ -171,7 +172,7 @@
   function onEventSaved() {
     isEventFormOpen.value = false
     fetchEvents()
-    useToast().add({
+    toast.add({
       title: 'Success',
       description: editingEvent.value ? 'Event updated successfully' : 'Event created successfully',
       color: 'success'
@@ -192,7 +193,7 @@
         method: 'DELETE'
       })
 
-      useToast().add({
+      toast.add({
         title: 'Success',
         description: 'Event deleted successfully',
         color: 'success'
@@ -200,7 +201,7 @@
       fetchEvents()
     } catch (error) {
       console.error('Error deleting event:', error)
-      useToast().add({
+      toast.add({
         title: 'Error',
         description: 'Failed to delete event',
         color: 'error'
