@@ -821,6 +821,39 @@ export function normalizeIntervalsWorkout(activity: IntervalsActivity, userId: s
   }
 }
 
+export function cleanIntervalsDescription(description: string): string {
+  if (!description) return ''
+
+  // 1. Remove CoachWatts signature
+  let cleanDesc = description
+    .replace(/\n\n\[CoachWatts\]/g, '')
+    .replace(/\[CoachWatts\]/g, '')
+    .trim()
+
+  // 2. Attempt to separate user description from workout definition
+  // We look for the start of the workout definition.
+  const lines = cleanDesc.split('\n')
+  let splitIndex = -1
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim()
+    // Heuristics for Intervals.icu workout text start
+    if (
+      /^(Warmup|Cooldown|Main Set)$/i.test(line) || // Section headers
+      /^(\d+x|(- )?\d+(m|s|h)\s+\d+)/.test(line) // Steps (Nx, 10m 50%, - Step 10m...)
+    ) {
+      splitIndex = i
+      break
+    }
+  }
+
+  if (splitIndex !== -1) {
+    cleanDesc = lines.slice(0, splitIndex).join('\n').trim()
+  }
+
+  return cleanDesc
+}
+
 export function normalizeIntervalsPlannedWorkout(event: IntervalsPlannedWorkout, userId: string) {
   // Intervals.icu sometimes uses different field names for planned metrics depending on the source/type
   const durationSec = event.duration ?? event.moving_time ?? event.workout_doc?.duration ?? null
@@ -843,12 +876,25 @@ export function normalizeIntervalsPlannedWorkout(event: IntervalsPlannedWorkout,
   // Detect CoachWatts management
   const isCoachWatts = event.description?.includes('[CoachWatts]')
 
+  // Clean description to avoid appending loop
+  let description = event.description || null
+  if (description) {
+    // Only clean if it looks like a structured workout or has our signature
+    if (structuredWorkout || isCoachWatts) {
+      description = cleanIntervalsDescription(description)
+    }
+
+    if (description === '') {
+      description = null
+    }
+  }
+
   return {
     userId,
     externalId: String(event.id), // Convert to string
     date: new Date(event.start_date_local),
     title: event.name || 'Unnamed Event',
-    description: event.description || null,
+    description: description,
     type: event.type || null,
     category: event.category || 'WORKOUT',
     durationSec: durationSec ? Math.round(durationSec) : null,
