@@ -110,7 +110,6 @@ export const recommendTodayActivityTask = task({
           userId,
           type: 'ATHLETE_PROFILE',
           status: 'QUEUED',
-          title: 'Athlete Profile (Auto-refresh for Recommendation)',
           dateRangeStart: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000), // 30 days back
           dateRangeEnd: new Date()
         }
