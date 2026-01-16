@@ -701,7 +701,7 @@ WORKOUT INSIGHTS (from AI analysis):
 ${workoutInsights || 'No detailed workout analysis available'}
 
 RECENT TRAINING DETAILS (Last 20 sessions):
-${buildWorkoutSummary(recentWorkouts)}
+${buildWorkoutSummary(recentWorkouts, timezone)}
 
 RECOVERY METRICS:
 ${wellnessSummary}${wellnessAnalysisSummary}

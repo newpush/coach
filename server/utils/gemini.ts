@@ -1,5 +1,6 @@
 import { GoogleGenerativeAI } from '@google/generative-ai'
 import { prisma } from './db'
+import { formatUserDate } from './date'
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!)
 
@@ -410,12 +411,16 @@ export async function generateStructuredAnalysis<T>(
   return JSON.parse(result.response.text())
 }
 
-export function buildWorkoutSummary(workouts: any[]): string {
+export function buildWorkoutSummary(workouts: any[], timezone?: string): string {
   return workouts
     .map((w, idx) => {
+      const dateStr = timezone
+        ? formatUserDate(w.date, timezone, 'MMM d, yyyy')
+        : new Date(w.date).toLocaleDateString()
+
       const lines = [
         `### Workout ${idx + 1}: ${w.title}`,
-        `- **Date**: ${new Date(w.date).toLocaleDateString()}`,
+        `- **Date**: ${dateStr}`,
         `- **Duration**: ${Math.round(w.durationSec / 60)} minutes`,
         `- **Type**: ${w.type || 'Unknown'}`
       ]
@@ -504,10 +509,14 @@ export function buildWorkoutSummary(workouts: any[]): string {
     .join('\n\n')
 }
 
-export function buildMetricsSummary(metrics: any[]): string {
+export function buildMetricsSummary(metrics: any[], timezone?: string): string {
   return metrics
     .map((m) => {
-      const parts = [`**${new Date(m.date).toLocaleDateString()}**:`]
+      const dateStr = timezone
+        ? formatUserDate(m.date, timezone, 'MMM d, yyyy')
+        : new Date(m.date).toLocaleDateString()
+
+      const parts = [`**${dateStr}**:`]
 
       // Recovery metrics
       if (m.recoveryScore !== null) parts.push(`Recovery ${m.recoveryScore}%`)
@@ -541,9 +550,14 @@ export function buildMetricsSummary(metrics: any[]): string {
  *
  * @param workouts Array of workout objects
  * @param includeRawJson Whether to include the complete rawJson field (default: false)
+ * @param timezone Optional timezone for date formatting
  */
-export function buildComprehensiveWorkoutSummary(workouts: any[], includeRawJson = false): string {
-  const summary = buildWorkoutSummary(workouts)
+export function buildComprehensiveWorkoutSummary(
+  workouts: any[],
+  includeRawJson = false,
+  timezone?: string
+): string {
+  const summary = buildWorkoutSummary(workouts, timezone)
 
   if (!includeRawJson) {
     return summary

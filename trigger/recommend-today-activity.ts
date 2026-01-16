@@ -585,10 +585,10 @@ ${wellnessAnalysisContext}
 ${checkinsSummary}
 
 TODAY'S COMPLETED TRAINING:
-${todaysWorkouts.length > 0 ? buildWorkoutSummary(todaysWorkouts) : 'None so far'}
+${todaysWorkouts.length > 0 ? buildWorkoutSummary(todaysWorkouts, userTimezone) : 'None so far'}
 
 RECENT TRAINING (Last 7 days):
-${pastWorkouts.length > 0 ? buildWorkoutSummary(pastWorkouts) : 'No recent workouts'}
+${pastWorkouts.length > 0 ? buildWorkoutSummary(pastWorkouts, userTimezone) : 'No recent workouts'}
 
 ${
   userFeedback

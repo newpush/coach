@@ -306,7 +306,7 @@ TODAY'S RECOVERY:
 ${todayMetric ? `Recovery: ${todayMetric.recoveryScore ?? 'N/A'}%, HRV: ${todayMetric.hrv ?? 'N/A'}ms, Sleep: ${todayMetric.sleepHours?.toFixed(1) ?? 'N/A'}h` : 'No recovery data'}
 
 RECENT TRAINING (Last 14 Days):
-${recentWorkouts.length > 0 ? buildWorkoutSummary(recentWorkouts.slice(0, 5)) : 'None'}
+${recentWorkouts.length > 0 ? buildWorkoutSummary(recentWorkouts.slice(0, 5), userTimezone) : 'None'}
 
 ${upcomingWorkoutsContext}
 ${eventsContext}
