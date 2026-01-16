@@ -207,7 +207,11 @@ ${profile.planning_context?.opportunities?.length ? `Opportunities: ${profile.pl
       endDate: Date
       validDays: Date[]
     }[] = []
-    let currentCursor = new Date(block.startDate)
+    // Force to UTC midnight to ensure calendar stability
+    const rawCursor = new Date(block.startDate)
+    let currentCursor = new Date(
+      Date.UTC(rawCursor.getUTCFullYear(), rawCursor.getUTCMonth(), rawCursor.getUTCDate())
+    )
     let calendarContext = ''
 
     for (let i = 0; i < block.durationWeeks; i++) {
@@ -478,10 +482,11 @@ Return valid JSON matching the schema provided.`
               }
 
               // Check for conflict with Anchor
+              // IMPORTANT: Use formatDateUTC to compare calendar days without timezone shifting
               if (anchorWorkoutIds?.length) {
-                const targetDateStr = formatUserDate(targetDate, timezone, 'yyyy-MM-dd')
+                const targetDateStr = formatDateUTC(targetDate)
                 const hasAnchor = anchoredWorkouts.some((anchor) => {
-                  const anchorDateStr = formatUserDate(anchor.date, timezone, 'yyyy-MM-dd')
+                  const anchorDateStr = formatDateUTC(anchor.date)
                   return anchorDateStr === targetDateStr
                 })
 

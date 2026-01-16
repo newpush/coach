@@ -13,7 +13,7 @@ import { wellnessRepository } from '../repositories/wellnessRepository'
 import { eventRepository } from '../repositories/eventRepository'
 import { normalizeTSS } from '../normalize-tss'
 import { calculateWorkoutStress } from '../calculate-workout-stress'
-import { getUserTimezone, getEndOfDayUTC } from '../date'
+import { getUserTimezone, getEndOfDayUTC, getStartOfDayUTC } from '../date'
 import { tasks } from '@trigger.dev/sdk/v3'
 import { userIngestionQueue } from '../../../trigger/queues'
 import {
@@ -271,7 +271,13 @@ export const IntervalsService = {
 
     let upsertedCount = 0
     for (const wellness of wellnessData) {
-      const wellnessDate = new Date(wellness.id)
+      // Force wellness date to UTC midnight (Intervals.icu returns 'YYYY-MM-DD' as id)
+      // This prevents timezone-based shifting when converting to Date object
+      const rawDate = new Date(wellness.id)
+      const wellnessDate = new Date(
+        Date.UTC(rawDate.getUTCFullYear(), rawDate.getUTCMonth(), rawDate.getUTCDate())
+      )
+
       const normalizedWellness = normalizeIntervalsWellness(wellness, userId, wellnessDate)
 
       await wellnessRepository.upsert(userId, wellnessDate, normalizedWellness, normalizedWellness)
@@ -417,9 +423,14 @@ export const IntervalsService = {
           intervalEvent.activity?.start_date_local || intervalEvent.activity?.start_date
         if (activityDateStr) {
           const actDate = new Date(activityDateStr)
-          startDate = new Date(actDate)
+          // Fetch user's timezone to calculate correct day range
+          const timezone = await getUserTimezone(userId)
+          // Sync wider range (previous day to next day in local time)
+          const localActDate = getStartOfDayUTC(timezone, actDate)
+
+          startDate = new Date(localActDate)
           startDate.setDate(startDate.getDate() - 1)
-          endDate = new Date(actDate)
+          endDate = new Date(localActDate)
           endDate.setDate(endDate.getDate() + 1)
         } else {
           startDate = new Date()

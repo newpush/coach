@@ -700,7 +700,7 @@ Maintain your **${aiSettings.aiPersona}** persona throughout the plan's reasonin
           const generatedDateStr = d.date
 
           const hasAnchor = anchoredWorkouts.some((anchor) => {
-            const anchorDateStr = formatUserDate(anchor.date, timezone, 'yyyy-MM-dd')
+            const anchorDateStr = formatDateUTC(anchor.date)
             return anchorDateStr === generatedDateStr
           })
 

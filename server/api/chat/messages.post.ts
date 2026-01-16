@@ -459,7 +459,8 @@ export default defineEventHandler(async (event) => {
 
   const trainingContext = await generateTrainingContext(userId, fourteenDaysAgo, new Date(), {
     includeZones: false, // Skip expensive zone calculation for chat context
-    period: 'Last 14 Days'
+    period: 'Last 14 Days',
+    timezone: userProfile?.timezone || 'UTC'
   })
 
   const formattedTrainingContext = formatTrainingContextForPrompt(trainingContext)
@@ -626,7 +627,7 @@ export default defineEventHandler(async (event) => {
 
   // 5. Build System Instruction with Current Time Context
   const now = new Date()
-  const userTimeZone = 'America/New_York' // TODO: Get from user preferences
+  const userTimeZone = userProfile?.timezone || 'UTC'
   const userTime = now.toLocaleString('en-US', {
     timeZone: userTimeZone,
     weekday: 'long',

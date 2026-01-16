@@ -83,9 +83,15 @@ export default defineEventHandler(async (event) => {
       })
     }
 
+    // Force date to UTC midnight to avoid timezone shift issues
+    const rawDate = new Date(body.date)
+    const forcedDate = new Date(
+      Date.UTC(rawDate.getUTCFullYear(), rawDate.getUTCMonth(), rawDate.getUTCDate())
+    )
+
     // Create the workout in Intervals.icu
     const intervalsWorkout = await createIntervalsPlannedWorkout(integration, {
-      date: new Date(body.date),
+      date: forcedDate,
       title: body.title,
       description: body.description,
       type: body.type || 'Ride',
@@ -98,7 +104,7 @@ export default defineEventHandler(async (event) => {
       data: {
         userId,
         externalId: String(intervalsWorkout.id),
-        date: new Date(body.date),
+        date: forcedDate,
         title: body.title,
         description: body.description || '',
         type: body.type || 'Ride',

@@ -424,15 +424,15 @@
     }
   }
 
+  const { formatDate, getUserLocalDate } = useFormat()
+
   // Computed properties
   const filteredWellness = computed(() => {
     let wellness = [...allWellness.value]
 
     // Filter out future dates - compare using UTC dates only
-    const now = new Date()
-    const todayUTC = new Date(
-      Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 23, 59, 59, 999)
-    )
+    // todayUTC from getUserLocalDate() is already UTC midnight of user's local day
+    const todayUTC = getUserLocalDate()
 
     wellness = wellness.filter((w) => {
       const wellnessDate = new Date(w.date)
@@ -555,7 +555,8 @@
   // Watch filters and reset to page 1
   // Chart data computations
   const recoveryTrendData = computed(() => {
-    const thirtyDaysAgo = new Date()
+    const today = getUserLocalDate()
+    const thirtyDaysAgo = new Date(today)
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
 
     const recentWellness = allWellness.value
@@ -585,7 +586,8 @@
   })
 
   const sleepTrendData = computed(() => {
-    const thirtyDaysAgo = new Date()
+    const today = getUserLocalDate()
+    const thirtyDaysAgo = new Date(today)
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
 
     const recentWellness = allWellness.value
@@ -611,7 +613,8 @@
   })
 
   const hrvTrendData = computed(() => {
-    const thirtyDaysAgo = new Date()
+    const today = getUserLocalDate()
+    const thirtyDaysAgo = new Date(today)
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
 
     const recentWellness = allWellness.value
@@ -641,7 +644,8 @@
   })
 
   const restingHrTrendData = computed(() => {
-    const thirtyDaysAgo = new Date()
+    const today = getUserLocalDate()
+    const thirtyDaysAgo = new Date(today)
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
 
     const recentWellness = allWellness.value

@@ -1,5 +1,6 @@
 import { getServerSession } from '../../utils/session'
 import { prisma } from '../../utils/db'
+import { getUserLocalDate } from '../../utils/date'
 
 defineRouteMeta({
   openAPI: {
@@ -76,6 +77,11 @@ export default defineEventHandler(async (event) => {
   }
 
   const userId = (session.user as any).id
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { timezone: true }
+  })
+  const today = getUserLocalDate(user?.timezone)
 
   // Fetch nutrition data for the date range
   const nutrition = await nutritionRepository.getForUser(userId, {
@@ -259,18 +265,13 @@ export default defineEventHandler(async (event) => {
     let status = 'planned'
     if (p.completed) status = 'completed_plan'
 
-    // Shift Planned Workout date to Noon UTC to avoid timezone shift issues on frontend
-    // Planned Workouts are "Date Only" (Midnight UTC), so converting to local time often shifts to previous day
-    // By setting to Noon UTC, it stays on the correct day for almost all timezones
-    const safeDate = new Date(p.date)
-    safeDate.setUTCHours(12)
+    // Use UTC midnight as the source of truth for planned workouts
+    const workoutDate = new Date(p.date)
+    workoutDate.setUTCHours(0, 0, 0, 0)
 
     // Check if missed (in past and not completed)
     const planDate = new Date(p.date)
-    // Reset times for comparison
-    planDate.setHours(0, 0, 0, 0)
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
+    planDate.setUTCHours(0, 0, 0, 0)
 
     if (!p.completed && planDate < today) {
       status = 'missed'
@@ -283,7 +284,7 @@ export default defineEventHandler(async (event) => {
     activitiesByDate.get(dateKey).push({
       id: p.id,
       title: p.title,
-      date: safeDate.toISOString(),
+      date: workoutDate.toISOString(),
       type: p.type || 'Workout',
       source: 'planned',
       status: status,

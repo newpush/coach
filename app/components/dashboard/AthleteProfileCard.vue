@@ -498,7 +498,7 @@
     // Attempt to fetch even if not connected, as some data might exist
     pmcLoading.value = true
     try {
-      const today = new Date()
+      const today = getUserLocalDate()
       const start = new Date(today)
       start.setDate(today.getDate() - 7)
 

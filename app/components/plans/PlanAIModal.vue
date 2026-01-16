@@ -53,7 +53,7 @@
               <div class="flex-1 text-xs">
                 <div class="flex justify-between">
                   <span class="font-medium">{{ workout.title }}</span>
-                  <span class="text-muted">{{ formatDate(workout.date) }}</span>
+                  <span class="text-muted">{{ formatDateUTC(workout.date) }}</span>
                 </div>
                 <div class="text-muted truncate">{{ workout.type }}</div>
               </div>
@@ -80,7 +80,7 @@
 </template>
 
 <script setup lang="ts">
-  const { formatDate } = useFormat()
+  const { formatDate, formatDateUTC } = useFormat()
 
   const props = defineProps<{
     modelValue: boolean

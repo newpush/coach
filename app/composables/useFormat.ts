@@ -35,6 +35,19 @@ export const useFormat = () => {
     }
   }
 
+  /**
+   * Format a date in UTC without timezone shifting.
+   * Useful for @db.Date columns which are stored as UTC midnight.
+   */
+  const formatDateUTC = (date: string | Date, formatStr: string = 'MMM d, yyyy') => {
+    if (!date) return ''
+    try {
+      return format(new Date(date), formatStr, { timeZone: 'UTC' })
+    } catch (e) {
+      return ''
+    }
+  }
+
   const formatShortDate = (date: string | Date) => {
     return formatDate(date, 'MMM d')
   }
@@ -92,6 +105,7 @@ export const useFormat = () => {
 
   return {
     formatDate,
+    formatDateUTC,
     formatShortDate,
     formatDateTime,
     formatRelativeTime,

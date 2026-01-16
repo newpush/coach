@@ -38,11 +38,12 @@ export const adaptTrainingPlanTask = task({
     if (!plan) throw new Error('Plan not found')
 
     // Find current active week
-    const now = new Date()
+    const userLocalToday = getUserLocalDate(timezone)
     const currentBlock = plan.blocks.find(
       (b) =>
-        new Date(b.startDate) <= now &&
-        new Date(b.startDate).getTime() + b.durationWeeks * 7 * 24 * 3600 * 1000 > now.getTime()
+        new Date(b.startDate) <= userLocalToday &&
+        new Date(b.startDate).getTime() + b.durationWeeks * 7 * 24 * 3600 * 1000 >
+          userLocalToday.getTime()
     )
 
     if (!currentBlock) {
@@ -53,11 +54,8 @@ export const adaptTrainingPlanTask = task({
     // 2. Logic based on type
     if (adaptationType === 'RECALCULATE_WEEK') {
       // Re-generate the remaining workouts for the current week
-      // We can reuse the generate-training-block logic but constrained to specific dates?
-      // Or just simple prompt: "Here is the week so far (missed X). Redesign the rest."
-
       const currentWeek = currentBlock.weeks.find(
-        (w) => new Date(w.startDate) <= now && new Date(w.endDate) >= now
+        (w) => new Date(w.startDate) <= userLocalToday && new Date(w.endDate) >= userLocalToday
       )
 
       if (currentWeek) {
@@ -65,7 +63,7 @@ export const adaptTrainingPlanTask = task({
         await prisma.plannedWorkout.deleteMany({
           where: {
             trainingWeekId: currentWeek.id,
-            date: { gt: now },
+            date: { gt: userLocalToday },
             completed: false,
             managedBy: 'COACH_WATTS'
           }

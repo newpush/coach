@@ -59,7 +59,12 @@ export default defineEventHandler(async (event) => {
   }
 
   // 2. Calculate Timeline
-  const start = new Date(startDate)
+  // Force start date to UTC midnight of the calendar day
+  const rawStart = new Date(startDate)
+  const start = new Date(
+    Date.UTC(rawStart.getUTCFullYear(), rawStart.getUTCMonth(), rawStart.getUTCDate())
+  )
+
   const end = new Date(targetDate)
   const totalWeeks = Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24 * 7))
 

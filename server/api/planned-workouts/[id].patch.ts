@@ -96,11 +96,20 @@ export default defineEventHandler(async (event) => {
       })
     }
 
+    // Force date to UTC midnight if provided
+    let forcedDate: Date | undefined
+    if (body.date) {
+      const rawDate = new Date(body.date)
+      forcedDate = new Date(
+        Date.UTC(rawDate.getUTCFullYear(), rawDate.getUTCMonth(), rawDate.getUTCDate())
+      )
+    }
+
     // Update workout locally first (optimistic update)
     const updated = await prisma.plannedWorkout.update({
       where: { id: workoutId },
       data: {
-        ...(body.date && { date: new Date(body.date) }),
+        ...(forcedDate && { date: forcedDate }),
         ...(body.title && { title: body.title }),
         ...(body.description !== undefined && { description: body.description }),
         ...(body.type && { type: body.type }),

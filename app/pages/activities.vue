@@ -433,7 +433,11 @@
 
               <template #date-cell="{ row }">
                 <div class="whitespace-nowrap">
-                  {{ formatDateForList(row.original.date) }}
+                  {{
+                    row.original.source === 'planned'
+                      ? formatDateUTC(row.original.date, 'MMM dd, yyyy')
+                      : formatDateForList(row.original.date)
+                  }}
                 </div>
               </template>
 
@@ -765,7 +769,7 @@
   })
 
   const integrationStore = useIntegrationStore()
-  const { formatDate, formatDateTime } = useFormat()
+  const { formatDate, formatDateUTC, formatDateTime } = useFormat()
 
   // Modal state
   const showPlannedWorkoutModal = ref(false)
@@ -902,8 +906,13 @@
     for (const day of days) {
       const dayStr = format(day, 'yyyy-MM-dd')
       const dayActivities = (activities.value || []).filter((a) => {
-        // Use user timezone date for comparison
-        return formatDate(a.date, 'yyyy-MM-dd') === dayStr
+        // IMPORTANT: Use UTC formatting for planned workouts (date-only)
+        // and local formatting for completed workouts (timestamps)
+        const dateStr =
+          a.source === 'planned'
+            ? formatDateUTC(a.date, 'yyyy-MM-dd')
+            : formatDate(a.date, 'yyyy-MM-dd')
+        return dateStr === dayStr
       })
 
       currentWeek.push({
