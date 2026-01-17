@@ -74,6 +74,10 @@
                 <div class="w-2 h-2 rounded-full bg-red-500" />
                 <span>Missed</span>
               </div>
+              <div class="flex items-center gap-1.5">
+                <div class="w-2 h-2 rounded-full bg-gray-400" />
+                <span>Notes</span>
+              </div>
               <div
                 class="flex items-center gap-1.5 border-l border-gray-300 dark:border-gray-700 pl-3"
               >
@@ -358,9 +362,11 @@
                           <UIcon
                             :name="getActivityIcon(activity.type || '')"
                             class="w-5 h-5 shrink-0"
-                            :class="
-                              activity.source === 'completed' ? 'text-green-500' : 'text-amber-500'
-                            "
+                            :class="{
+                              'text-green-500': activity.source === 'completed',
+                              'text-amber-500': activity.source === 'planned',
+                              'text-gray-400': activity.source === 'note'
+                            }"
                           />
                           <div class="truncate">
                             <div class="text-xs font-bold truncate">{{ activity.title }}</div>
@@ -664,6 +670,8 @@
     :user-zones="userZones"
     :streams="selectedWeekStreams"
   />
+
+  <CalendarNoteModal v-model:open="showCalendarNoteModal" :note="selectedCalendarNote" />
 
   <UModal
     v-model:open="showMergeModal"
@@ -1077,9 +1085,25 @@
     if (activity.source === 'completed') {
       // Open quick view modal for completed workouts
       await openWorkoutModal(activity.id)
-    } else {
+    } else if (activity.source === 'planned') {
       // Open planned workout modal
       await openPlannedWorkoutModal(activity.id)
+    } else if (activity.source === 'note') {
+      // Open note modal
+      await openCalendarNoteModal(activity.id)
+    }
+  }
+
+  const showCalendarNoteModal = ref(false)
+  const selectedCalendarNote = ref<any>(null)
+
+  async function openCalendarNoteModal(noteId: string) {
+    try {
+      const note = await $fetch(`/api/calendar/notes/${noteId}`)
+      selectedCalendarNote.value = note
+      showCalendarNoteModal.value = true
+    } catch (error) {
+      console.error('Error fetching calendar note:', error)
     }
   }
 
@@ -1382,6 +1406,8 @@
     if (t.includes('run')) return 'i-heroicons-fire'
     if (t.includes('swim')) return 'i-heroicons-beaker'
     if (t.includes('weight') || t.includes('strength')) return 'i-heroicons-trophy'
+    if (t.includes('note') || t.includes('target') || t.includes('holiday'))
+      return 'i-heroicons-document-text'
     return 'i-heroicons-check-circle'
   }
 

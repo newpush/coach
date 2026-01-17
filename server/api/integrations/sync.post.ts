@@ -135,9 +135,9 @@ export default defineEventHandler(async (event) => {
   }
 
   const endDate =
-    provider === 'intervals'
-      ? new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000) // +30 days for planned workouts (approx is fine here as it's just a limit)
-      : new Date(now) // Today for Whoop, Yazio, Strava, and batch "all"
+    provider === 'intervals' || provider === 'all'
+      ? new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000) // +30 days for planned workouts (Intervals & All)
+      : new Date(now) // Today for Whoop, Yazio, Strava individually
 
   // Check if integration exists (skip for 'all' since it syncs all available)
   if (provider !== 'all') {

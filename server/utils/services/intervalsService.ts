@@ -6,11 +6,13 @@ import {
   normalizeIntervalsWorkout,
   normalizeIntervalsWellness,
   normalizeIntervalsPlannedWorkout,
+  normalizeIntervalsCalendarNote,
   fetchIntervalsActivityStreams
 } from '../intervals'
 import { workoutRepository } from '../repositories/workoutRepository'
 import { wellnessRepository } from '../repositories/wellnessRepository'
 import { eventRepository } from '../repositories/eventRepository'
+import { calendarNoteRepository } from '../repositories/calendarNoteRepository'
 import { normalizeTSS } from '../normalize-tss'
 import { calculateWorkoutStress } from '../calculate-workout-stress'
 import { getUserTimezone, getEndOfDayUTC, getStartOfDayUTC } from '../date'
@@ -308,13 +310,44 @@ export const IntervalsService = {
 
     let plannedUpserted = 0
     let eventsUpserted = 0
+    let notesUpserted = 0
 
     for (const planned of plannedWorkouts) {
-      // Filter out Notes, Holidays, Sick, Injured, and Season Start events
+      const category = planned.category || ''
+      const type = planned.type || ''
+
+      // Handle Calendar Notes / Non-Activity Items (Notes, Targets, Holidays, etc.)
       if (
-        ['NOTE', 'HOLIDAY', 'SICK', 'INJURED', 'SEASON_START'].includes(planned.category || '') ||
-        ['Note', 'Holiday'].includes(planned.type || '')
+        [
+          'NOTE',
+          'TARGET',
+          'HOLIDAY',
+          'SICK',
+          'INJURED',
+          'SEASON_START',
+          'FITNESS_DAYS',
+          'SET_EFTP',
+          'SET_FITNESS'
+        ].includes(category) ||
+        ['Note', 'Holiday'].includes(type)
       ) {
+        const normalizedNote = normalizeIntervalsCalendarNote(planned, userId)
+
+        await calendarNoteRepository.upsert(
+          userId,
+          'intervals',
+          normalizedNote.externalId,
+          normalizedNote
+        )
+        notesUpserted++
+
+        // Ensure it doesn't exist as a PlannedWorkout or Event (if type changed)
+        await prisma.plannedWorkout.deleteMany({
+          where: { userId, externalId: normalizedNote.externalId }
+        })
+        await prisma.event.deleteMany({
+          where: { userId, source: 'intervals', externalId: normalizedNote.externalId }
+        })
         continue
       }
 
@@ -331,6 +364,11 @@ export const IntervalsService = {
         create: normalizedPlanned
       })
       plannedUpserted++
+
+      // Ensure it doesn't exist as a CalendarNote (if type changed)
+      await calendarNoteRepository.deleteExternal(userId, 'intervals', [
+        normalizedPlanned.externalId
+      ])
 
       if (planned.category === 'EVENT') {
         let startTime = null
@@ -363,7 +401,7 @@ export const IntervalsService = {
       }
     }
 
-    return { plannedWorkouts: plannedUpserted, events: eventsUpserted }
+    return { plannedWorkouts: plannedUpserted, events: eventsUpserted, notes: notesUpserted }
   },
 
   /**
@@ -389,6 +427,8 @@ export const IntervalsService = {
         externalId: { in: externalIds }
       }
     })
+
+    await calendarNoteRepository.deleteExternal(userId, 'intervals', externalIds)
 
     await prisma.event.deleteMany({
       where: {

@@ -7,6 +7,7 @@ import backfillFeelCommand from './feel'
 import backfillWellnessScoresCommand from './wellness-scores'
 import backfillManagedByCommand from './managed-by'
 import backfillKilojoulesCommand from './kilojoules'
+import backfillCalendarNotesCommand from './calendar-notes'
 
 const backfill = new Command('backfill')
 
@@ -20,5 +21,6 @@ backfill
   .addCommand(backfillWellnessScoresCommand)
   .addCommand(backfillManagedByCommand)
   .addCommand(backfillKilojoulesCommand)
+  .addCommand(backfillCalendarNotesCommand)
 
 export default backfill

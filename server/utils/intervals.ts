@@ -134,6 +134,7 @@ interface IntervalsAthlete {
 interface IntervalsPlannedWorkout {
   id: string
   start_date_local: string
+  end_date_local?: string
   name: string
   description?: string
   type?: string
@@ -143,7 +144,37 @@ interface IntervalsPlannedWorkout {
   tss?: number
   work?: number
   workout_doc?: any
+  for_week?: boolean
   [key: string]: any
+}
+
+// ... existing code ...
+
+export function normalizeIntervalsCalendarNote(event: IntervalsPlannedWorkout, userId: string) {
+  // Parse the local date string (YYYY-MM-DDTHH:mm:ss) and force to UTC midnight
+  // for day-granular notes to avoid timezone shifting in the UI.
+  const startDateStr = event.start_date_local.split('T')[0]
+  const startDate = new Date(`${startDateStr}T00:00:00Z`)
+
+  let endDate: Date | null = null
+  if (event.end_date_local) {
+    const endDateStr = event.end_date_local.split('T')[0]
+    endDate = new Date(`${endDateStr}T00:00:00Z`)
+  }
+
+  return {
+    userId,
+    externalId: String(event.id),
+    source: 'intervals',
+    startDate,
+    endDate,
+    isWeeklyNote: event.for_week || false,
+    title: event.name || 'Unnamed Note',
+    description: event.description || null,
+    category: event.category || 'NOTE',
+    type: event.type || null,
+    rawJson: event
+  }
 }
 
 async function fetchWithRetry(

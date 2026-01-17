@@ -67,6 +67,8 @@
           'bg-amber-50 dark:bg-amber-900/20':
             activity.source === 'planned' && activity.status === 'planned',
           'bg-red-50 dark:bg-red-900/20': activity.status === 'missed',
+          'bg-gray-50 dark:bg-gray-800/50 border-dashed border-gray-300 dark:border-gray-700':
+            activity.source === 'note',
           'ring-2 ring-primary-500 ring-offset-1': isDragOver === activity.id
         }"
         @click="$emit('activity-click', activity)"
@@ -96,18 +98,42 @@
               'bg-green-500': activity.source === 'completed' && !activity.plannedWorkoutId,
               'bg-blue-500': activity.source === 'completed' && activity.plannedWorkoutId,
               'bg-amber-500': activity.source === 'planned' && activity.status === 'planned',
-              'bg-red-500': activity.status === 'missed'
+              'bg-red-500': activity.status === 'missed',
+              'bg-gray-400 dark:bg-gray-600': activity.source === 'note'
             }"
           />
 
           <div class="flex-1 min-w-0">
             <!-- Title -->
-            <div class="font-medium truncate" :title="activity.title">
-              {{ activity.title }}
+            <div class="font-medium truncate flex items-center gap-1" :title="activity.title">
+              <span>{{ activity.title }}</span>
+              <UIcon
+                v-if="activity.isWeeklyNote"
+                name="i-heroicons-calendar-days"
+                class="w-3 h-3 text-primary-500"
+                title="Weekly Note"
+              />
+            </div>
+
+            <!-- Note Category -->
+            <div
+              v-if="activity.source === 'note' && activity.category"
+              class="text-[9px] uppercase tracking-wider text-gray-400 font-bold"
+            >
+              {{ activity.category }}
             </div>
 
             <!-- Metrics -->
             <div
+              v-if="
+                activity.duration ||
+                activity.plannedDuration ||
+                activity.distance ||
+                activity.plannedDistance ||
+                activity.averageHr ||
+                activity.tss ||
+                activity.plannedTss
+              "
               class="flex items-center gap-1.5 text-[10px] text-gray-500 dark:text-gray-400 mt-0.5"
             >
               <span class="inline-block w-10 text-left">

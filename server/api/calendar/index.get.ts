@@ -189,6 +189,13 @@ export default defineEventHandler(async (event) => {
     orderBy: { date: 'asc' }
   })
 
+  // Fetch calendar notes
+  const calendarNotes = await calendarNoteRepository.getForUser(userId, {
+    startDate: rangeStart,
+    endDate: rangeEnd,
+    orderBy: { startDate: 'asc' }
+  })
+
   // Create a set of plannedWorkoutIds that are already represented by completed workouts
   // We'll use this to mark them as linked or hide them if we only want them nested
   const completedPlannedIds = new Set(workouts.map((w) => w.plannedWorkoutId).filter(Boolean))
@@ -314,6 +321,32 @@ export default defineEventHandler(async (event) => {
       structuredWorkout: p.structuredWorkout,
 
       // Nutrition data for this date (will be same for all activities on the same day)
+      nutrition: nutritionByDate.get(dateKey) || null,
+
+      // Wellness data for this date
+      wellness: wellnessByDate.get(dateKey) || null
+    })
+  }
+
+  // Process Calendar Notes
+  for (const n of calendarNotes) {
+    const dateKey = n.startDate.toISOString().split('T')[0]
+    if (!activitiesByDate.has(dateKey)) {
+      activitiesByDate.set(dateKey, [])
+    }
+    activitiesByDate.get(dateKey).push({
+      id: n.id,
+      title: n.title,
+      date: n.startDate.toISOString(),
+      endDate: n.endDate?.toISOString(),
+      isWeeklyNote: n.isWeeklyNote,
+      type: n.type || 'Note',
+      category: n.category,
+      source: 'note',
+      status: 'note',
+      description: n.description,
+
+      // Nutrition data for this date
       nutrition: nutritionByDate.get(dateKey) || null,
 
       // Wellness data for this date
