@@ -6,7 +6,7 @@
         <h2 class="text-2xl font-bold">{{ plan.goal?.title || plan.name || 'Untitled Plan' }}</h2>
         <div class="flex items-center gap-2 text-muted mt-1">
           <UIcon name="i-heroicons-calendar" class="w-4 h-4" />
-          <span>Target: {{ formatDate(plan.targetDate) }}</span>
+          <span>Target: {{ formatDateUTC(plan.targetDate) }}</span>
           <span class="text-xs px-2 py-0.5 bg-primary/10 text-primary rounded-full">{{
             plan.strategy
           }}</span>
@@ -159,7 +159,7 @@
       :loading="generatingWorkouts"
       :week-label="
         selectedWeek
-          ? `Week ${selectedWeek.weekNumber}: ${formatDate(selectedWeek.startDate, 'MMM d')} - ${formatDate(selectedWeek.endDate, 'MMM d')}`
+          ? `Week ${selectedWeek.weekNumber}: ${formatDateUTC(selectedWeek.startDate, 'MMM d')} - ${formatDateUTC(selectedWeek.endDate, 'MMM d')}`
           : undefined
       "
       :start-date="selectedWeek?.startDate"
@@ -611,7 +611,7 @@
     getWorkoutBorderColorClass as getSportColorClass
   } from '~/utils/activity-types'
 
-  const { formatDate, getUserLocalDate, timezone } = useFormat()
+  const { formatDate, formatDateUTC, getUserLocalDate, timezone } = useFormat()
 
   const props = defineProps<{
     plan: any
@@ -765,7 +765,7 @@
 
   // Helpers
   function formatDay(d: string) {
-    return formatDate(d, 'EEE, MMM d')
+    return formatDateUTC(d, 'EEE, MMM d')
   }
 
   function getBlockStatusColor(block: any) {

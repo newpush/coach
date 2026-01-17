@@ -282,7 +282,7 @@
     getWorkoutBorderColorClass
   } from '~/utils/activity-types'
 
-  const { formatDate, getUserLocalDate } = useFormat()
+  const { formatDate, formatDateUTC, getUserLocalDate } = useFormat()
 
   definePageMeta({
     middleware: 'auth'
@@ -360,11 +360,11 @@
   }
 
   function formatDayShort(d: string) {
-    return formatDate(d, 'EEE')
+    return formatDateUTC(d, 'EEE')
   }
 
   function formatDateDay(d: string) {
-    return formatDate(d, 'd')
+    return formatDateUTC(d, 'd')
   }
 
   // Initial data fetch

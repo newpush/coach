@@ -1,9 +1,10 @@
 import { defineEventHandler, getQuery, createError } from 'h3'
 import { prisma } from '../../utils/db'
 import { userRepository } from '../../utils/repositories/userRepository'
+import { workoutRepository } from '../../utils/repositories/workoutRepository'
 import { calculatePowerZones, calculateHrZones } from '../../utils/zones'
 import { getServerSession } from '../../utils/session'
-import { getUserTimezone, getStartOfYearUTC } from '../../utils/date'
+import { getUserTimezone, getStartOfYearUTC, getUserLocalDate } from '../../utils/date'
 
 defineRouteMeta({
   openAPI: {
@@ -26,21 +27,21 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 401, message: 'Unauthorized' })
   }
   const userId = (session.user as any).id
+  const timezone = await getUserTimezone(userId)
 
   const query = getQuery(event)
-  const endDate = new Date()
-  let startDate = new Date()
+  const endDate = getUserLocalDate(timezone)
+  let startDate = getUserLocalDate(timezone)
   let numWeeks = 0
 
   if (query.weeks === 'YTD') {
-    const timezone = await getUserTimezone(userId)
     startDate = getStartOfYearUTC(timezone)
     // Calculate weeks since start of year
     const diffTime = Math.abs(endDate.getTime() - startDate.getTime())
     numWeeks = Math.ceil(diffTime / (1000 * 60 * 60 * 24 * 7))
   } else {
     numWeeks = parseInt(query.weeks as string) || 12
-    startDate.setDate(startDate.getDate() - numWeeks * 7)
+    startDate.setUTCDate(startDate.getUTCDate() - numWeeks * 7)
   }
 
   // 1. Get user for zone definitions
@@ -50,14 +51,9 @@ export default defineEventHandler(async (event) => {
   }
 
   // 2. Get workouts with streams
-  const workouts = await prisma.workout.findMany({
-    where: {
-      userId,
-      date: {
-        gte: startDate,
-        lte: endDate
-      }
-    },
+  const workouts = await workoutRepository.getForUser(userId, {
+    startDate,
+    endDate,
     select: {
       date: true,
       ftp: true,
@@ -85,7 +81,7 @@ export default defineEventHandler(async (event) => {
   // Pre-fill weeks to ensure gaps are shown
   for (let i = 0; i <= numWeeks; i++) {
     const d = new Date(startDate)
-    d.setDate(d.getDate() + i * 7)
+    d.setUTCDate(d.getUTCDate() + i * 7)
 
     const start = getWeekStart(d)
     const key = start.toISOString().split('T')[0]
@@ -163,7 +159,7 @@ export default defineEventHandler(async (event) => {
 
   // Use the same HR zone calculation logic for labels as used in aggregation
   // Get LTHR for today to generate current zone labels
-  const currentLthr = await userRepository.getLthrForDate(userId, new Date())
+  const currentLthr = await userRepository.getLthrForDate(userId, getUserLocalDate(timezone))
 
   return {
     weeks: result,
@@ -176,9 +172,10 @@ export default defineEventHandler(async (event) => {
 
 function getWeekStart(d: Date) {
   const date = new Date(d)
-  const day = date.getDay()
-  const diff = date.getDate() - day + (day === 0 ? -6 : 1) // adjust when day is sunday
-  date.setDate(diff)
-  date.setHours(0, 0, 0, 0)
+  const day = date.getUTCDay()
+  const diff = date.getUTCDate() - day + (day === 0 ? -6 : 1) // adjust when day is sunday
+  date.setUTCDate(diff)
+  // setHours(0,0,0,0) is redundant for getUserLocalDate() dates but harmless if already UTC midnight
+  date.setUTCHours(0, 0, 0, 0)
   return date
 }

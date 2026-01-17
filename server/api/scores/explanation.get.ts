@@ -122,18 +122,13 @@ export default defineEventHandler(async (event) => {
       }
     }
 
-    // If no valid explanation exists, trigger generation job with per-user concurrency
-    await tasks.trigger(
-      'generate-score-explanations',
-      { userId: user.id },
-      { concurrencyKey: user.id }
-    )
-
+    // If no valid explanation exists, return empty state
+    // We no longer auto-trigger here. The user must explicitly request generation.
     return {
       analysis: null,
       cached: false,
-      message: 'Explanation generation triggered. Please try again in a few moments.',
-      generating: true
+      message: 'No insights generated yet. Click "Generate Insights" to analyze.',
+      generating: false
     }
   } catch (error) {
     console.error('Error fetching explanation:', error)

@@ -3,7 +3,7 @@ import { prisma } from '../../utils/db'
 import { workoutRepository } from '../../utils/repositories/workoutRepository'
 import { defineEventHandler, createError, getQuery } from 'h3'
 import { eachDayOfInterval, format, isSameDay } from 'date-fns'
-import { getUserTimezone, getStartOfYearUTC } from '../../utils/date'
+import { getUserTimezone, getStartOfYearUTC, getUserLocalDate } from '../../utils/date'
 
 defineRouteMeta({
   openAPI: {
@@ -84,15 +84,15 @@ export default defineEventHandler(async (event) => {
     })
   }
 
-  const endDate = new Date()
-  let startDate = new Date()
+  const timezone = await getUserTimezone(user.id)
+  const endDate = getUserLocalDate(timezone)
+  let startDate = getUserLocalDate(timezone)
 
   if (query.days === 'YTD') {
-    const timezone = await getUserTimezone(user.id)
     startDate = getStartOfYearUTC(timezone)
   } else {
     const days = parseInt(query.days as string) || 30
-    startDate.setDate(startDate.getDate() - days)
+    startDate.setUTCDate(startDate.getUTCDate() - days)
   }
 
   const workouts = await workoutRepository.getForUser(user.id, {

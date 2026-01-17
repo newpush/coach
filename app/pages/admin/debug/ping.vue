@@ -88,7 +88,7 @@
           </form>
         </UCard>
 
-        <UCard v-if="result" :ui="{ body: { padding: 'p-0' } }">
+        <UCard v-if="result" :ui="{ body: 'p-0' }">
           <template #header>
             <div class="flex items-center justify-between">
               <h3 class="font-semibold text-gray-900 dark:text-white flex items-center gap-2">

@@ -1,6 +1,7 @@
 import { prisma } from '../../../utils/db'
 import { getServerSession } from '../../../utils/session'
 import { tasks } from '@trigger.dev/sdk/v3'
+import { getUserTimezone, getUserLocalDate, getStartOfDayUTC } from '../../../utils/date'
 
 export default defineEventHandler(async (event) => {
   const session = await getServerSession(event)
@@ -41,8 +42,25 @@ export default defineEventHandler(async (event) => {
   }
 
   const body = await readBody(event).catch(() => ({}))
-  const requestedStartDate = body?.startDate ? new Date(body.startDate) : null
-  const startDate = requestedStartDate || new Date()
+  const timezone = await getUserTimezone(userId)
+
+  let startDate: Date
+  if (body?.startDate) {
+    const raw = new Date(body.startDate)
+    // If string was just YYYY-MM-DD, raw is UTC midnight. If ISO with time, it's that time.
+    // We want the start of that day in user timezone, UTC normalized.
+    // Actually, plan start date is usually a calendar date.
+    // If we assume body.startDate is YYYY-MM-DD string:
+    // new Date('2026-01-01') -> 2026-01-01T00:00:00Z.
+    // getUserLocalDate(timezone) returns UTC-midnight date for today.
+    // We should ensure startDate is treated as UTC midnight.
+    // getStartOfDayUTC might shift it if we pass a random time.
+    // Let's assume it's valid UTC midnight date or convert.
+    startDate = new Date(Date.UTC(raw.getUTCFullYear(), raw.getUTCMonth(), raw.getUTCDate()))
+  } else {
+    startDate = getUserLocalDate(timezone)
+  }
+
   const anchorWorkoutIds = body?.anchorWorkoutIds || []
 
   // 1. Archive existing active plans
@@ -78,7 +96,7 @@ export default defineEventHandler(async (event) => {
             for (const b of plan.blocks) {
               if (b.order < block.order) weeksBefore += b.durationWeeks
             }
-            blockStartDate.setDate(blockStartDate.getDate() + weeksBefore * 7)
+            blockStartDate.setUTCDate(blockStartDate.getUTCDate() + weeksBefore * 7)
 
             return {
               order: block.order,
@@ -91,9 +109,9 @@ export default defineEventHandler(async (event) => {
               weeks: {
                 create: block.weeks.map((week: any) => {
                   const weekStartDate = new Date(blockStartDate)
-                  weekStartDate.setDate(weekStartDate.getDate() + (week.weekNumber - 1) * 7)
+                  weekStartDate.setUTCDate(weekStartDate.getUTCDate() + (week.weekNumber - 1) * 7)
                   const weekEndDate = new Date(weekStartDate)
-                  weekEndDate.setDate(weekEndDate.getDate() + 6)
+                  weekEndDate.setUTCDate(weekEndDate.getUTCDate() + 6)
 
                   return {
                     weekNumber: week.weekNumber,
@@ -108,7 +126,7 @@ export default defineEventHandler(async (event) => {
                         // date in template stores relative day of week as epoch offset
                         const dayOfWeek = new Date(workout.date).getTime() / (24 * 60 * 60 * 1000)
                         const workoutDate = new Date(weekStartDate)
-                        workoutDate.setDate(workoutDate.getDate() + Math.round(dayOfWeek))
+                        workoutDate.setUTCDate(workoutDate.getUTCDate() + Math.round(dayOfWeek))
 
                         return {
                           userId,
@@ -155,7 +173,7 @@ export default defineEventHandler(async (event) => {
     where: { id: planId },
     data: {
       status: 'ACTIVE',
-      ...(requestedStartDate ? { startDate: requestedStartDate } : {})
+      ...(body?.startDate ? { startDate: startDate } : {})
     }
   })
 

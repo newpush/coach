@@ -219,7 +219,7 @@ export async function calculatePMCForDateRange(
     })
 
     // Move to next day
-    currentDate.setDate(currentDate.getDate() + 1)
+    currentDate.setUTCDate(currentDate.getDate() + 1)
   }
 
   return results
@@ -448,7 +448,7 @@ export function calculateProjectedPMC(
     })
 
     // Move to next day
-    currentDate.setDate(currentDate.getDate() + 1)
+    currentDate.setUTCDate(currentDate.getDate() + 1)
   }
 
   return results

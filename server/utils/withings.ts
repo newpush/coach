@@ -1,5 +1,6 @@
 import type { Integration } from '@prisma/client'
 import { prisma } from './db'
+import { formatUserDate } from './date'
 
 interface WithingsTokenResponse {
   access_token: string
@@ -456,15 +457,16 @@ interface WithingsWorkoutResponse {
 export async function fetchWithingsWorkouts(
   integration: Integration,
   startDate: Date,
-  endDate: Date
+  endDate: Date,
+  timezone: string = 'UTC'
 ): Promise<WithingsWorkout[]> {
   const validIntegration = await ensureValidToken(integration)
 
   const url = new URL('https://wbsapi.withings.net/v2/measure')
   url.searchParams.set('action', 'getworkouts')
   url.searchParams.set('access_token', validIntegration.accessToken)
-  url.searchParams.set('startdateymd', startDate.toISOString().split('T')[0] ?? '')
-  url.searchParams.set('enddateymd', endDate.toISOString().split('T')[0] ?? '')
+  url.searchParams.set('startdateymd', formatUserDate(startDate, timezone, 'yyyy-MM-dd'))
+  url.searchParams.set('enddateymd', formatUserDate(endDate, timezone, 'yyyy-MM-dd'))
   url.searchParams.set(
     'data_fields',
     'steps,distance,elevation,calories,hr_average,hr_min,hr_max,hr_zone_0,hr_zone_1,hr_zone_2,hr_zone_3,manual_calories,algo_pause_duration'
@@ -664,15 +666,16 @@ interface WithingsSleepResponse {
 export async function fetchWithingsSleep(
   integration: Integration,
   startDate: Date,
-  endDate: Date
+  endDate: Date,
+  timezone: string = 'UTC'
 ): Promise<WithingsSleepSummary[]> {
   const validIntegration = await ensureValidToken(integration)
 
   const url = new URL('https://wbsapi.withings.net/v2/sleep')
   url.searchParams.set('action', 'getsummary')
   url.searchParams.set('access_token', validIntegration.accessToken)
-  url.searchParams.set('startdateymd', startDate.toISOString().split('T')[0] ?? '')
-  url.searchParams.set('enddateymd', endDate.toISOString().split('T')[0] ?? '')
+  url.searchParams.set('startdateymd', formatUserDate(startDate, timezone, 'yyyy-MM-dd'))
+  url.searchParams.set('enddateymd', formatUserDate(endDate, timezone, 'yyyy-MM-dd'))
   // Request all useful fields
   url.searchParams.set(
     'data_fields',

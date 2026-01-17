@@ -13,6 +13,7 @@ import analyzeStreamsCommand from './analyze-streams'
 import findAnyCommand from './find-any'
 import plannedCommand from './planned'
 import goalsCommand from './goals'
+import intervalsTypesCommand from './intervals-types'
 
 const debugCommand = new Command('debug')
 
@@ -32,5 +33,6 @@ debugCommand
   .addCommand(findAnyCommand)
   .addCommand(plannedCommand)
   .addCommand(goalsCommand)
+  .addCommand(intervalsTypesCommand)
 
 export default debugCommand

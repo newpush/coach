@@ -147,6 +147,8 @@ This file aggregates all critical development rules and guidelines for the Coach
 
 ## 9. Date & Timezone Handling
 
+Refer to the comprehensive [Timezone Handling Guide](docs/04-guides/timezone-handling.md) for detailed patterns and best practices.
+
 ### Core Principle
 
 - **Database**: Store all dates in **UTC** (`DateTime` columns) or **UTC Midnight** (`@db.Date` columns).

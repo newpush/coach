@@ -423,6 +423,10 @@
         })
         modalData.value.analysisData = retryResponse.analysis
         modalData.value.explanation = null
+      } else if (response.cached === false && !response.generating) {
+        // Not cached and not generating (manual trigger required)
+        modalData.value.explanation =
+          response.message || 'No insights available. Click "Insights" to create them.'
       } else {
         modalData.value.analysisData = response.analysis
         modalData.value.explanation = null

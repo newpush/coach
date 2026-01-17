@@ -156,16 +156,26 @@ export const generateWeeklyPlanTask = task({
     // Better approach: Use formatted string to get local day of week.
     const localDateStr = formatUserDate(weekStart, timezone, 'yyyy-MM-dd')
     const [y, m, d] = localDateStr.split('-').map(Number)
-    const localDateObj = new Date(y, m - 1, d) // Local Date object (system timezone assumed match or just abstract)
-    const day = localDateObj.getDay()
-    const diff = localDateObj.getDate() - day + (day === 0 ? -6 : 1)
-    localDateObj.setDate(diff)
+    const localDateObj = new Date(Date.UTC(y, m - 1, d)) // UTC midnight for calculation
+    const day = localDateObj.getUTCDay()
+    const diff = localDateObj.getUTCDate() - day + (day === 0 ? -6 : 1)
+    localDateObj.setUTCDate(diff)
 
     // Now convert that back to UTC start of day
+    // Since localDateObj is already UTC-aligned to the date we want, and getStartOfDayUTC expects a date object...
+    // Actually getStartOfDayUTC takes "any time in that day".
+    // localDateObj is UTC midnight. If we pass it to getStartOfDayUTC(timezone), it interprets 00:00 UTC as the time.
+    // This is WRONG if we just want "The Start of This Calendar Date".
+    // We already have the calendar date in `localDateStr` logic.
+    // `alignedWeekStart` should be the UTC timestamp for 00:00 User Time on that date.
     const alignedWeekStart = getStartOfDayUTC(timezone, localDateObj)
+    // Wait, getStartOfDayUTC(timezone, 2026-01-12T00:00:00Z)
+    // If user is UTC+9. 00:00 UTC is 09:00 User Time.
+    // Start of day is 00:00 User Time (15:00 prev day UTC).
+    // So getStartOfDayUTC is correct.
 
     const alignedWeekEnd = new Date(alignedWeekStart)
-    alignedWeekEnd.setDate(alignedWeekEnd.getDate() + (daysToPlann - 1))
+    alignedWeekEnd.setUTCDate(alignedWeekEnd.getUTCDate() + (daysToPlann - 1))
     // Set to end of day in local time -> UTC
     const alignedWeekEndUTC = getEndOfDayUTC(timezone, alignedWeekEnd)
 
@@ -439,7 +449,7 @@ CONTEXT FROM MASTER PLAN:
     if (athleteProfile?.analysisJson) {
       const profile = athleteProfile.analysisJson as any
       athleteContext = `
-ATHLETE PROFILE (Generated ${new Date(athleteProfile.createdAt).toLocaleDateString()}):
+ATHLETE PROFILE (Generated ${formatUserDate(athleteProfile.createdAt, timezone)}):
 ${profile.executive_summary ? `Summary: ${profile.executive_summary}` : ''}
 
 Current Fitness: ${profile.current_fitness?.status_label || 'Unknown'}
@@ -497,7 +507,7 @@ ${activeGoals
     }
     if (daysToTarget) goalInfo += `\n  Timeline: ${daysToTarget} days remaining`
     if (daysToEvent)
-      goalInfo += `\n  Event: ${g.eventType || 'race'} on ${new Date(g.eventDate!).toLocaleDateString()} (${daysToEvent} days)`
+      goalInfo += `\n  Event: ${g.eventType || 'race'} on ${formatUserDate(g.eventDate!, timezone)} (${daysToEvent} days)`
     if (g.aiContext) goalInfo += `\n  Context: ${g.aiContext}`
 
     return goalInfo
@@ -700,7 +710,7 @@ Maintain your **${aiSettings.aiPersona}** persona throughout the plan's reasonin
           const generatedDateStr = d.date
 
           const hasAnchor = anchoredWorkouts.some((anchor) => {
-            const anchorDateStr = formatUserDate(anchor.date, timezone, 'yyyy-MM-dd')
+            const anchorDateStr = formatDateUTC(anchor.date)
             return anchorDateStr === generatedDateStr
           })
 

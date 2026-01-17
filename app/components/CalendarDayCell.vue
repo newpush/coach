@@ -47,7 +47,7 @@
           </span>
           <span v-if="dayWellness.weight != null" class="flex items-center gap-0.5">
             <UIcon name="i-heroicons-scale" class="w-2.5 h-2.5" />
-            <span class="font-medium">{{ dayWellness.weight.toFixed(1) }}</span>
+            <span class="font-medium">{{ dayWellness.weight.toFixed(2) }}</span>
           </span>
         </button>
       </div>
@@ -67,6 +67,8 @@
           'bg-amber-50 dark:bg-amber-900/20':
             activity.source === 'planned' && activity.status === 'planned',
           'bg-red-50 dark:bg-red-900/20': activity.status === 'missed',
+          'bg-gray-50 dark:bg-gray-800/50 border-dashed border-gray-300 dark:border-gray-700':
+            activity.source === 'note',
           'ring-2 ring-primary-500 ring-offset-1': isDragOver === activity.id
         }"
         @click="$emit('activity-click', activity)"
@@ -96,18 +98,42 @@
               'bg-green-500': activity.source === 'completed' && !activity.plannedWorkoutId,
               'bg-blue-500': activity.source === 'completed' && activity.plannedWorkoutId,
               'bg-amber-500': activity.source === 'planned' && activity.status === 'planned',
-              'bg-red-500': activity.status === 'missed'
+              'bg-red-500': activity.status === 'missed',
+              'bg-gray-400 dark:bg-gray-600': activity.source === 'note'
             }"
           />
 
           <div class="flex-1 min-w-0">
             <!-- Title -->
-            <div class="font-medium truncate" :title="activity.title">
-              {{ activity.title }}
+            <div class="font-medium truncate flex items-center gap-1" :title="activity.title">
+              <span>{{ activity.title }}</span>
+              <UIcon
+                v-if="activity.isWeeklyNote"
+                name="i-heroicons-calendar-days"
+                class="w-3 h-3 text-primary-500"
+                title="Weekly Note"
+              />
+            </div>
+
+            <!-- Note Category -->
+            <div
+              v-if="activity.source === 'note' && activity.category"
+              class="text-[9px] uppercase tracking-wider text-gray-400 font-bold"
+            >
+              {{ activity.category }}
             </div>
 
             <!-- Metrics -->
             <div
+              v-if="
+                activity.duration ||
+                activity.plannedDuration ||
+                activity.distance ||
+                activity.plannedDistance ||
+                activity.averageHr ||
+                activity.tss ||
+                activity.plannedTss
+              "
               class="flex items-center gap-1.5 text-[10px] text-gray-500 dark:text-gray-400 mt-0.5"
             >
               <span class="inline-block w-10 text-left">
@@ -279,10 +305,12 @@
 </template>
 
 <script setup lang="ts">
-  import { format, isToday as isTodayFn, isSameMonth } from 'date-fns'
+  import { isSameMonth } from 'date-fns'
   import type { CalendarActivity } from '../../types/calendar'
   import MiniWorkoutChart from '~/components/workouts/MiniWorkoutChart.vue'
   import MiniZoneChart from '~/components/MiniZoneChart.vue'
+
+  const { formatDateUTC, getUserLocalDate } = useFormat()
 
   const props = defineProps<{
     date: Date
@@ -300,7 +328,7 @@
     'reschedule-activity': [data: { activity: { id: string; source: string }; date: Date }]
   }>()
 
-  const dayNumber = computed(() => format(props.date, 'd'))
+  const dayNumber = computed(() => formatDateUTC(props.date, 'd'))
   const isDragOver = ref<string | null>(null)
   const isDayDragOver = ref(false)
 
@@ -392,9 +420,9 @@
 
           // Only allow rescheduling planned workouts
           if (sourceActivity.source === 'planned') {
-            const targetDateStr = format(props.date, 'yyyy-MM-dd')
+            const targetDateStr = formatDateUTC(props.date, 'yyyy-MM-dd')
             const sourceDateStr = sourceActivity.date
-              ? format(new Date(sourceActivity.date), 'yyyy-MM-dd')
+              ? formatDateUTC(new Date(sourceActivity.date), 'yyyy-MM-dd')
               : ''
 
             // Only emit if the date has changed
@@ -412,7 +440,11 @@
     }
   }
 
-  const isToday = computed(() => isTodayFn(props.date))
+  const isToday = computed(() => {
+    return (
+      formatDateUTC(props.date, 'yyyy-MM-dd') === formatDateUTC(getUserLocalDate(), 'yyyy-MM-dd')
+    )
+  })
 
   // Get nutrition data from any activity on this day (they all have same nutrition data)
   const dayNutrition = computed(() => {

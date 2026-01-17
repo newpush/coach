@@ -1,7 +1,7 @@
 import { getServerSession } from '../../utils/session'
 import { prisma } from '../../utils/db'
 import { nutritionRepository } from '../../utils/repositories/nutritionRepository'
-import { getUserTimezone, getStartOfYearUTC } from '../../utils/date'
+import { getUserTimezone, getStartOfYearUTC, getUserLocalDate } from '../../utils/date'
 
 defineRouteMeta({
   openAPI: {
@@ -68,14 +68,14 @@ export default defineEventHandler(async (event) => {
     })
   }
 
-  let startDate = new Date()
+  const timezone = await getUserTimezone(user.id)
+  let startDate = getUserLocalDate(timezone)
 
   if (query.days === 'YTD') {
-    const timezone = await getUserTimezone(user.id)
     startDate = getStartOfYearUTC(timezone)
   } else {
     const days = parseInt(query.days as string) || 14
-    startDate.setDate(startDate.getDate() - days)
+    startDate.setUTCDate(startDate.getUTCDate() - days)
   }
 
   const nutrition = (await nutritionRepository.getForUser(user.id, {

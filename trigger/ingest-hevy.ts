@@ -6,6 +6,7 @@ import {
   fetchHevyExerciseTemplate,
   normalizeHevyWorkout
 } from '../server/utils/hevy'
+import { roundToTwoDecimals } from '../server/utils/number'
 
 export const ingestHevyTask = task({
   id: 'ingest-hevy',
@@ -165,7 +166,7 @@ export const ingestHevyTask = task({
                   workoutExerciseId: workoutExercise.id,
                   order: hevySet.index,
                   type: hevySet.indicator ? hevySet.indicator.toUpperCase() : 'NORMAL', // normal -> NORMAL
-                  weight: hevySet.weight_kg,
+                  weight: hevySet.weight_kg ? roundToTwoDecimals(hevySet.weight_kg) : null,
                   weightUnit: 'kg',
                   reps: hevySet.reps,
                   distanceMeters: hevySet.distance_meters,

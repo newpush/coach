@@ -182,6 +182,8 @@
   import WorkoutChart from '~/components/workouts/WorkoutChart.vue'
   import WorkoutMessagesTimeline from '~/components/workouts/WorkoutMessagesTimeline.vue'
 
+  const { formatDateUTC } = useFormat()
+
   definePageMeta({
     layout: 'share'
   })
@@ -225,12 +227,7 @@
 
   function formatDate(d: string | Date) {
     if (!d) return ''
-    return new Date(d).toLocaleDateString('en-US', {
-      weekday: 'long',
-      month: 'long',
-      day: 'numeric',
-      year: 'numeric'
-    })
+    return formatDateUTC(d, 'EEEE, MMMM d, yyyy')
   }
 
   function formatDuration(seconds: number) {

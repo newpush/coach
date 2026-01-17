@@ -1,5 +1,6 @@
 import { getServerSession } from '../../utils/session'
 import { tasks } from '@trigger.dev/sdk/v3'
+import { getUserTimezone, getUserLocalDate } from '../../utils/date'
 
 defineRouteMeta({
   openAPI: {
@@ -85,7 +86,8 @@ export default defineEventHandler(async (event) => {
 
   // Calculate date range based on the most comprehensive sync window
   // When syncing all, use the most comprehensive date range (Intervals.icu's range)
-  const now = new Date()
+  const timezone = await getUserTimezone(userId)
+  const now = getUserLocalDate(timezone) // UTC midnight of user's "today"
   const startDate = new Date(now)
 
   // Check if we need a full sync for this provider (if it's the first time)
@@ -108,11 +110,11 @@ export default defineEventHandler(async (event) => {
   }
 
   if (days) {
-    startDate.setDate(startDate.getDate() - days)
+    startDate.setUTCDate(startDate.getUTCDate() - days)
   } else if (provider === 'all') {
     // For batch sync, use a moderate 7-day window for recent data
     // This balances API rate limits across all services
-    startDate.setDate(startDate.getDate() - 7)
+    startDate.setUTCDate(startDate.getUTCDate() - 7)
   } else {
     // Individual provider sync windows
     // For Intervals: last 90 days + next 30 days (to capture future planned workouts)
@@ -129,13 +131,13 @@ export default defineEventHandler(async (event) => {
       daysBack = 7
     }
 
-    startDate.setDate(startDate.getDate() - daysBack)
+    startDate.setUTCDate(startDate.getUTCDate() - daysBack)
   }
 
   const endDate =
-    provider === 'intervals'
-      ? new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000) // +30 days for planned workouts
-      : new Date(now) // Today for Whoop, Yazio, Strava, and batch "all"
+    provider === 'intervals' || provider === 'all'
+      ? new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000) // +30 days for planned workouts (Intervals & All)
+      : new Date(now) // Today for Whoop, Yazio, Strava individually
 
   // Check if integration exists (skip for 'all' since it syncs all available)
   if (provider !== 'all') {

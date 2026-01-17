@@ -74,6 +74,10 @@
                 <div class="w-2 h-2 rounded-full bg-red-500" />
                 <span>Missed</span>
               </div>
+              <div class="flex items-center gap-1.5">
+                <div class="w-2 h-2 rounded-full bg-gray-400" />
+                <span>Notes</span>
+              </div>
               <div
                 class="flex items-center gap-1.5 border-l border-gray-300 dark:border-gray-700 pl-3"
               >
@@ -133,6 +137,15 @@
             <!-- Month Navigation -->
             <div class="flex items-center gap-1 bg-gray-100 dark:bg-gray-800 rounded-lg p-1">
               <UButton
+                v-if="!isCurrentMonth"
+                label="Today"
+                size="sm"
+                variant="ghost"
+                color="neutral"
+                class="font-bold hidden sm:flex"
+                @click="goToToday"
+              />
+              <UButton
                 icon="i-heroicons-chevron-left"
                 variant="ghost"
                 size="sm"
@@ -150,16 +163,6 @@
                 @click="nextMonth"
               />
             </div>
-
-            <UButton
-              v-if="!isCurrentMonth"
-              label="Today"
-              size="sm"
-              variant="outline"
-              color="neutral"
-              class="font-bold hidden sm:flex"
-              @click="goToToday"
-            />
           </div>
         </div>
 
@@ -308,7 +311,7 @@
                   >
                     <div class="w-12 text-center shrink-0 pt-1">
                       <div class="text-[10px] uppercase text-gray-500">
-                        {{ format(day.date, 'EEE') }}
+                        {{ formatDateUTC(day.date, 'EEE') }}
                       </div>
                       <div
                         class="w-8 h-8 mx-auto flex items-center justify-center rounded-full text-sm font-bold mt-0.5"
@@ -319,7 +322,7 @@
                           day.isOtherMonth ? 'opacity-30' : ''
                         ]"
                       >
-                        {{ format(day.date, 'd') }}
+                        {{ formatDateUTC(day.date, 'd') }}
                       </div>
                     </div>
 
@@ -359,9 +362,11 @@
                           <UIcon
                             :name="getActivityIcon(activity.type || '')"
                             class="w-5 h-5 shrink-0"
-                            :class="
-                              activity.source === 'completed' ? 'text-green-500' : 'text-amber-500'
-                            "
+                            :class="{
+                              'text-green-500': activity.source === 'completed',
+                              'text-amber-500': activity.source === 'planned',
+                              'text-gray-400': activity.source === 'note'
+                            }"
                           />
                           <div class="truncate">
                             <div class="text-xs font-bold truncate">{{ activity.title }}</div>
@@ -434,7 +439,11 @@
 
               <template #date-cell="{ row }">
                 <div class="whitespace-nowrap">
-                  {{ formatDateForList(row.original.date) }}
+                  {{
+                    row.original.source === 'planned'
+                      ? formatDateUTC(row.original.date, 'MMM dd, yyyy')
+                      : formatDateForList(row.original.date)
+                  }}
                 </div>
               </template>
 
@@ -662,6 +671,8 @@
     :streams="selectedWeekStreams"
   />
 
+  <CalendarNoteModal v-model:open="showCalendarNoteModal" :note="selectedCalendarNote" />
+
   <UModal
     v-model:open="showMergeModal"
     title="Merge Workouts?"
@@ -742,19 +753,7 @@
 </template>
 
 <script setup lang="ts">
-  import {
-    startOfMonth,
-    endOfMonth,
-    startOfWeek,
-    endOfWeek,
-    eachDayOfInterval,
-    format,
-    addMonths,
-    subMonths,
-    isSameMonth,
-    getISOWeek,
-    isToday as isTodayDate
-  } from 'date-fns'
+  import { format, isSameMonth, getISOWeek } from 'date-fns'
   import { useStorage } from '@vueuse/core'
   import type { CalendarActivity } from '../../types/calendar'
   import WorkoutMatcher from '~/components/workouts/WorkoutMatcher.vue'
@@ -766,7 +765,7 @@
   })
 
   const integrationStore = useIntegrationStore()
-  const { formatDate, formatDateTime } = useFormat()
+  const { formatDate, formatDateUTC, formatDateTime, getUserLocalDate } = useFormat()
 
   // Modal state
   const showPlannedWorkoutModal = ref(false)
@@ -789,7 +788,7 @@
   const linkCompleted = ref<CalendarActivity | null>(null)
   const isLinking = ref(false)
 
-  const currentDate = ref(new Date())
+  const currentDate = ref(getUserLocalDate())
   const viewMode = ref<'calendar' | 'list'>('calendar')
   const weekDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
@@ -800,17 +799,27 @@
     refresh
   } = await useFetch<CalendarActivity[]>('/api/calendar', {
     query: computed(() => {
-      const start = format(
-        startOfWeek(startOfMonth(currentDate.value), { weekStartsOn: 1 }),
-        'yyyy-MM-dd'
-      )
-      const end = format(
-        endOfWeek(endOfMonth(currentDate.value), { weekStartsOn: 1 }),
-        'yyyy-MM-dd'
-      )
+      // Manual UTC start/end calculation to match calendarWeeks
+      const year = currentDate.value.getUTCFullYear()
+      const month = currentDate.value.getUTCMonth()
+      const monthStart = new Date(Date.UTC(year, month, 1))
+
+      // Start of week (Monday)
+      const dayOfWeek = monthStart.getUTCDay()
+      const diffToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek
+      const start = new Date(monthStart)
+      start.setUTCDate(monthStart.getUTCDate() + diffToMonday)
+
+      // End of month -> End of week
+      const monthEnd = new Date(Date.UTC(year, month + 1, 0))
+      const endDayOfWeek = monthEnd.getUTCDay()
+      const diffToSunday = endDayOfWeek === 0 ? 0 : 7 - endDayOfWeek
+      const end = new Date(monthEnd)
+      end.setUTCDate(monthEnd.getUTCDate() + diffToSunday)
+
       return {
-        startDate: start,
-        endDate: end
+        startDate: formatDateUTC(start, 'yyyy-MM-dd'),
+        endDate: formatDateUTC(end, 'yyyy-MM-dd')
       }
     }),
     watch: [currentDate]
@@ -893,50 +902,91 @@
 
   // Calendar Logic
   const calendarWeeks = computed(() => {
-    const start = startOfWeek(startOfMonth(currentDate.value), { weekStartsOn: 1 })
-    const end = endOfWeek(endOfMonth(currentDate.value), { weekStartsOn: 1 })
+    // Generate dates based on UTC to avoid browser timezone shifts
+    // 1. Get start of month in UTC
+    const year = currentDate.value.getUTCFullYear()
+    const month = currentDate.value.getUTCMonth()
+    const monthStart = new Date(Date.UTC(year, month, 1))
 
-    const days = eachDayOfInterval({ start, end })
+    // 2. Find start of week (Monday)
+    // getUTCDay: 0=Sun, 1=Mon...
+    const dayOfWeek = monthStart.getUTCDay()
+    const diffToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek // Adjust to Monday
+    const start = new Date(monthStart)
+    start.setUTCDate(monthStart.getUTCDate() + diffToMonday)
+
+    // 3. Find end of month and end of week
+    const monthEnd = new Date(Date.UTC(year, month + 1, 0))
+    const endDayOfWeek = monthEnd.getUTCDay()
+    const diffToSunday = endDayOfWeek === 0 ? 0 : 7 - endDayOfWeek
+    const end = new Date(monthEnd)
+    end.setUTCDate(monthEnd.getUTCDate() + diffToSunday)
+
     const weeks = []
     let currentWeek = []
 
-    for (const day of days) {
-      const dayStr = format(day, 'yyyy-MM-dd')
+    // Iterate day by day in UTC
+    const dayIterator = new Date(start)
+    while (dayIterator <= end) {
+      // Create a stable copy for the cell
+      const day = new Date(dayIterator)
+
+      const dayStr = formatDateUTC(day, 'yyyy-MM-dd')
       const dayActivities = (activities.value || []).filter((a) => {
-        // Use user timezone date for comparison
-        return formatDate(a.date, 'yyyy-MM-dd') === dayStr
+        const dateStr =
+          a.source === 'planned'
+            ? formatDateUTC(a.date, 'yyyy-MM-dd')
+            : formatDate(a.date, 'yyyy-MM-dd')
+        return dateStr === dayStr
       })
+
+      // Check if other month based on UTC month index
+      // currentDate.value is already UTC midnight User Local Date
+      const isOtherMonth = day.getUTCMonth() !== currentDate.value.getUTCMonth()
 
       currentWeek.push({
         date: day,
         activities: dayActivities,
-        isOtherMonth: !isSameMonth(day, currentDate.value)
+        isOtherMonth
       })
 
       if (currentWeek.length === 7) {
         weeks.push(currentWeek)
         currentWeek = []
       }
+
+      // Next day
+      dayIterator.setUTCDate(dayIterator.getUTCDate() + 1)
     }
 
     return weeks
   })
 
-  const currentMonthLabel = computed(() => format(currentDate.value, 'MMMM yyyy'))
+  const currentMonthLabel = computed(() => formatDateUTC(currentDate.value, 'MMMM yyyy'))
 
-  const isCurrentMonth = computed(() => isSameMonth(currentDate.value, new Date()))
+  const isCurrentMonth = computed(() => isSameMonth(currentDate.value, getUserLocalDate()))
 
   // Navigation
   function nextMonth() {
-    currentDate.value = addMonths(currentDate.value, 1)
+    // Add 1 month in UTC
+    const next = new Date(currentDate.value)
+    next.setUTCMonth(next.getUTCMonth() + 1)
+    currentDate.value = next
   }
 
   function prevMonth() {
-    currentDate.value = subMonths(currentDate.value, 1)
+    // Sub 1 month in UTC
+    const prev = new Date(currentDate.value)
+    prev.setUTCMonth(prev.getUTCMonth() - 1)
+    currentDate.value = prev
   }
 
   function goToToday() {
-    currentDate.value = new Date()
+    currentDate.value = getUserLocalDate()
+  }
+
+  function isTodayDate(date: Date) {
+    return formatDateUTC(date, 'yyyy-MM-dd') === formatDateUTC(getUserLocalDate(), 'yyyy-MM-dd')
   }
 
   // Helpers
@@ -1035,9 +1085,25 @@
     if (activity.source === 'completed') {
       // Open quick view modal for completed workouts
       await openWorkoutModal(activity.id)
-    } else {
+    } else if (activity.source === 'planned') {
       // Open planned workout modal
       await openPlannedWorkoutModal(activity.id)
+    } else if (activity.source === 'note') {
+      // Open note modal
+      await openCalendarNoteModal(activity.id)
+    }
+  }
+
+  const showCalendarNoteModal = ref(false)
+  const selectedCalendarNote = ref<any>(null)
+
+  async function openCalendarNoteModal(noteId: string) {
+    try {
+      const note = await $fetch(`/api/calendar/notes/${noteId}`)
+      selectedCalendarNote.value = note
+      showCalendarNoteModal.value = true
+    } catch (error) {
+      console.error('Error fetching calendar note:', error)
     }
   }
 
@@ -1203,7 +1269,7 @@
       await $fetch(`/api/planned-workouts/${activity.id}`, {
         method: 'PATCH',
         body: {
-          date: format(date, 'yyyy-MM-dd')
+          date: formatDateUTC(date, 'yyyy-MM-dd')
         }
       })
 
@@ -1212,7 +1278,7 @@
 
       toast.add({
         title: 'Workout Rescheduled',
-        description: `Workout moved to ${format(date, 'MMM do')}.`,
+        description: `Workout moved to ${formatDateUTC(date, 'MMM do')}.`,
         color: 'success'
       })
     } catch (error: any) {
@@ -1340,6 +1406,8 @@
     if (t.includes('run')) return 'i-heroicons-fire'
     if (t.includes('swim')) return 'i-heroicons-beaker'
     if (t.includes('weight') || t.includes('strength')) return 'i-heroicons-trophy'
+    if (t.includes('note') || t.includes('target') || t.includes('holiday'))
+      return 'i-heroicons-document-text'
     return 'i-heroicons-check-circle'
   }
 

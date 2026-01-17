@@ -1,5 +1,6 @@
 import { prisma } from '../db'
 import { tasks } from '@trigger.dev/sdk/v3'
+import { getUserLocalDate, formatUserDate, getStartOfDayUTC, getEndOfDayUTC } from '../date'
 
 /**
  * Training Plan Management Tools
@@ -9,15 +10,24 @@ import { tasks } from '@trigger.dev/sdk/v3'
 /**
  * Get planned workouts
  */
-export async function getPlannedWorkouts(userId: string, args: any): Promise<any> {
-  const startDate = args.start_date ? new Date(args.start_date) : new Date()
-  startDate.setHours(0, 0, 0, 0)
+export async function getPlannedWorkouts(
+  userId: string,
+  timezone: string,
+  args: any
+): Promise<any> {
+  const startDate = args.start_date
+    ? getStartOfDayUTC(timezone, new Date(args.start_date))
+    : getUserLocalDate(timezone)
 
-  const endDate = args.end_date ? new Date(args.end_date) : new Date(startDate)
-  if (!args.end_date) {
-    endDate.setDate(endDate.getDate() + 14) // Default 14 days ahead
+  let endDate: Date
+  if (args.end_date) {
+    endDate = getEndOfDayUTC(timezone, new Date(args.end_date))
+  } else {
+    // Default 14 days ahead
+    endDate = new Date(startDate)
+    endDate.setUTCDate(endDate.getUTCDate() + 14)
+    endDate.setUTCHours(23, 59, 59, 999)
   }
-  endDate.setHours(23, 59, 59, 999)
 
   const where: any = {
     userId,
@@ -52,8 +62,8 @@ export async function getPlannedWorkouts(userId: string, args: any): Promise<any
     return {
       message: 'No planned workouts found for the specified date range',
       date_range: {
-        start: startDate.toISOString().split('T')[0],
-        end: endDate.toISOString().split('T')[0]
+        start: formatUserDate(startDate, timezone),
+        end: formatUserDate(endDate, timezone)
       }
     }
   }
@@ -61,12 +71,12 @@ export async function getPlannedWorkouts(userId: string, args: any): Promise<any
   return {
     count: workouts.length,
     date_range: {
-      start: startDate.toISOString().split('T')[0],
-      end: endDate.toISOString().split('T')[0]
+      start: formatUserDate(startDate, timezone),
+      end: formatUserDate(endDate, timezone)
     },
     workouts: workouts.map((w) => ({
       id: w.id,
-      date: w.date.toISOString().split('T')[0],
+      date: formatUserDate(w.date, timezone),
       title: w.title,
       description: w.description,
       type: w.type,
@@ -82,7 +92,11 @@ export async function getPlannedWorkouts(userId: string, args: any): Promise<any
 /**
  * Create a planned workout
  */
-export async function createPlannedWorkout(userId: string, args: any): Promise<any> {
+export async function createPlannedWorkout(
+  userId: string,
+  timezone: string,
+  args: any
+): Promise<any> {
   const { date, time_of_day, title, description, type, duration_minutes, tss, intensity } = args
 
   console.log('[createPlannedWorkout] 🚀 Starting with args:', {
@@ -103,9 +117,25 @@ export async function createPlannedWorkout(userId: string, args: any): Promise<a
     }
   }
 
-  // Parse time of day - default to 8am (morning) if not specified
-  const workoutDate = new Date(date)
+  // Parse date string (YYYY-MM-DD) into UTC midnight for the user's timezone
+  // This ensures the workout is stored on the correct calendar day
+  const dateParts = date.split('-')
+  const localDate = new Date(
+    parseInt(dateParts[0]),
+    parseInt(dateParts[1]) - 1,
+    parseInt(dateParts[2])
+  )
+  const workoutDate = getStartOfDayUTC(timezone, localDate)
+
+  // Handle time of day logic (set hour on the UTC-aligned date)
+  // Note: workoutDate is 00:00 Local (e.g. 05:00 UTC).
+  // If we want to set 8am Local, we need to add 8 hours.
+  // But wait, getStartOfDayUTC returns the exact timestamp.
+  // If user is NY (-5), 00:00 Local = 05:00 UTC.
+  // 08:00 Local = 13:00 UTC.
+  // So we add 8 hours to the timestamp.
   const timeOfDay = time_of_day || 'morning'
+  let hoursToAdd = 8 // Default to 8am
 
   // Handle different time formats
   if (typeof timeOfDay === 'string') {
@@ -119,36 +149,34 @@ export async function createPlannedWorkout(userId: string, args: any): Promise<a
 
       if (meridiem === 'pm' && hour < 12) hour += 12
       if (meridiem === 'am' && hour === 12) hour = 0
-
-      workoutDate.setHours(hour, 0, 0, 0)
+      hoursToAdd = hour
     } else {
       // Use preset times
       switch (timeStr) {
         case 'morning':
         case 'early':
-          workoutDate.setHours(8, 0, 0, 0)
+          hoursToAdd = 8
           break
         case 'afternoon':
         case 'midday':
         case 'lunch':
-          workoutDate.setHours(14, 0, 0, 0)
+          hoursToAdd = 14
           break
         case 'evening':
         case 'night':
-          workoutDate.setHours(18, 0, 0, 0)
+          hoursToAdd = 18
           break
-        default:
-          workoutDate.setHours(8, 0, 0, 0) // Default to morning
       }
     }
-  } else {
-    workoutDate.setHours(8, 0, 0, 0) // Default to morning
   }
+
+  // Apply time offset (in ms)
+  workoutDate.setTime(workoutDate.getTime() + hoursToAdd * 3600000)
 
   console.log('[createPlannedWorkout] ⏰ Scheduled time:', {
     time_of_day: timeOfDay,
     parsed_date: workoutDate.toISOString(),
-    hour: workoutDate.getHours()
+    hours_added: hoursToAdd
   })
 
   try {
@@ -233,7 +261,7 @@ export async function createPlannedWorkout(userId: string, args: any): Promise<a
       message: `Created workout: ${title} for ${date}`,
       workout: {
         id: workout.id,
-        date: workout.date.toISOString().split('T')[0],
+        date: formatUserDate(workout.date, timezone),
         title: workout.title,
         type: workout.type,
         duration_minutes: workout.durationSec ? Math.round(workout.durationSec / 60) : null,
@@ -264,7 +292,11 @@ export async function createPlannedWorkout(userId: string, args: any): Promise<a
 /**
  * Update a planned workout
  */
-export async function updatePlannedWorkout(userId: string, args: any): Promise<any> {
+export async function updatePlannedWorkout(
+  userId: string,
+  timezone: string,
+  args: any
+): Promise<any> {
   const { workout_id, date, title, description, type, duration_minutes, tss } = args
 
   if (!workout_id) {
@@ -287,7 +319,23 @@ export async function updatePlannedWorkout(userId: string, args: any): Promise<a
 
     // Build update data
     const updateData: any = {}
-    if (date !== undefined) updateData.date = new Date(date)
+    if (date !== undefined) {
+      const dateParts = date.split('-')
+      const localDate = new Date(
+        parseInt(dateParts[0]),
+        parseInt(dateParts[1]) - 1,
+        parseInt(dateParts[2])
+      )
+      // Keep existing time of day if possible, or default to morning (8am) relative to new date
+      // We need to know the offset of the existing date from its day-start?
+      // Too complex to recalculate offset accurately across timezones.
+      // Reset to 8am local time for simplicity, or just use start of day if time doesn't matter.
+      // Planned workouts *should* have a time, but date is more important.
+      // Let's set to 8am local.
+      const startOfDay = getStartOfDayUTC(timezone, localDate)
+      startOfDay.setTime(startOfDay.getTime() + 8 * 3600000)
+      updateData.date = startOfDay
+    }
     if (title !== undefined) updateData.title = title
     if (description !== undefined) updateData.description = description
     if (type !== undefined) updateData.type = type
@@ -338,7 +386,7 @@ export async function updatePlannedWorkout(userId: string, args: any): Promise<a
       message: `Updated workout: ${workout.title}`,
       workout: {
         id: workout.id,
-        date: workout.date.toISOString().split('T')[0],
+        date: formatUserDate(workout.date, timezone),
         title: workout.title,
         type: workout.type,
         sync_status: syncResult.synced ? 'SYNCED' : 'PENDING'
@@ -356,7 +404,11 @@ export async function updatePlannedWorkout(userId: string, args: any): Promise<a
 /**
  * Delete a planned workout
  */
-export async function deletePlannedWorkout(userId: string, args: any): Promise<any> {
+export async function deletePlannedWorkout(
+  userId: string,
+  timezone: string,
+  args: any
+): Promise<any> {
   const { workout_id } = args
 
   if (!workout_id) {
@@ -396,7 +448,7 @@ export async function deletePlannedWorkout(userId: string, args: any): Promise<a
 
     return {
       success: true,
-      message: `Deleted workout: ${workout.title} (${workout.date.toISOString().split('T')[0]})`
+      message: `Deleted workout: ${workout.title} (${formatUserDate(workout.date, timezone)})`
     }
   } catch (error: any) {
     console.error('Error deleting planned workout:', error)
@@ -516,7 +568,11 @@ export async function updateTrainingAvailability(userId: string, args: any): Pro
 /**
  * Generate training plan
  */
-export async function generateTrainingPlan(userId: string, args: any): Promise<any> {
+export async function generateTrainingPlan(
+  userId: string,
+  timezone: string,
+  args: any
+): Promise<any> {
   const { days, start_date, user_confirmed } = args
 
   if (!user_confirmed) {
@@ -531,7 +587,22 @@ export async function generateTrainingPlan(userId: string, args: any): Promise<a
 
   try {
     const daysToPlann = days || 7
-    const startDate = start_date ? new Date(start_date) : new Date()
+    let startDate: Date
+
+    if (start_date) {
+      // Parse YYYY-MM-DD to UTC midnight user time
+      const dateParts = start_date.split('-')
+      const localDate = new Date(
+        parseInt(dateParts[0]),
+        parseInt(dateParts[1]) - 1,
+        parseInt(dateParts[2])
+      )
+      startDate = getStartOfDayUTC(timezone, localDate)
+    } else {
+      // Default: Tomorrow
+      startDate = getUserLocalDate(timezone)
+      startDate.setUTCDate(startDate.getUTCDate() + 1)
+    }
 
     // Trigger the plan generation job with per-user concurrency
     const handle = await tasks.trigger(
@@ -552,7 +623,7 @@ export async function generateTrainingPlan(userId: string, args: any): Promise<a
       job_id: handle.id,
       details: {
         days: daysToPlann,
-        start_date: startDate.toISOString().split('T')[0]
+        start_date: formatUserDate(startDate, timezone)
       }
     }
   } catch (error: any) {
@@ -567,15 +638,15 @@ export async function generateTrainingPlan(userId: string, args: any): Promise<a
 /**
  * Get current training plan
  */
-export async function getCurrentPlan(userId: string): Promise<any> {
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-
-  // Get the start of the current week (Monday)
+export async function getCurrentPlan(userId: string, timezone: string): Promise<any> {
+  // Find start of current week relative to user
+  const today = getUserLocalDate(timezone)
   const currentWeekStart = new Date(today)
-  const day = currentWeekStart.getDay()
-  const diff = currentWeekStart.getDate() - day + (day === 0 ? -6 : 1)
-  currentWeekStart.setDate(diff)
+
+  // getUTCDay() since it's a UTC-aligned date
+  const day = currentWeekStart.getUTCDay()
+  const diff = day === 0 ? -6 : 1 - day // adjust to Monday
+  currentWeekStart.setUTCDate(currentWeekStart.getUTCDate() + diff)
 
   // Get active or most recent plan
   const plan = await prisma.weeklyTrainingPlan.findFirst({
@@ -600,15 +671,15 @@ export async function getCurrentPlan(userId: string): Promise<any> {
   return {
     plan: {
       id: plan.id,
-      week_start: plan.weekStartDate.toISOString().split('T')[0],
-      week_end: plan.weekEndDate.toISOString().split('T')[0],
+      week_start: formatUserDate(plan.weekStartDate, timezone),
+      week_end: formatUserDate(plan.weekEndDate, timezone),
       days_planned: plan.daysPlanned,
       status: plan.status,
       total_tss: plan.totalTSS,
       workout_count: plan.workoutCount,
       summary: planJson?.weekSummary,
       days: planJson?.days || [],
-      generated_at: plan.createdAt.toISOString(),
+      generated_at: formatUserDate(plan.createdAt, timezone),
       model_version: plan.modelVersion
     }
   }
@@ -617,7 +688,11 @@ export async function getCurrentPlan(userId: string): Promise<any> {
 /**
  * Get detailed information about a specific planned workout
  */
-export async function getPlannedWorkoutDetails(userId: string, args: any): Promise<any> {
+export async function getPlannedWorkoutDetails(
+  userId: string,
+  timezone: string,
+  args: any
+): Promise<any> {
   const { workout_id } = args
 
   if (!workout_id) {
@@ -649,7 +724,7 @@ export async function getPlannedWorkoutDetails(userId: string, args: any): Promi
 
   return {
     id: workout.id,
-    date: workout.date.toISOString().split('T')[0],
+    date: formatUserDate(workout.date, timezone),
     title: workout.title,
     description: workout.description,
     type: workout.type,

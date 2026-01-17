@@ -102,7 +102,7 @@
 <script setup lang="ts">
   const integrationStore = useIntegrationStore()
   const { getScoreColor: getScoreBadgeColor } = useScoreColor()
-  const { formatDate, getUserLocalDate } = useFormat()
+  const { formatDate, formatDateUTC, getUserLocalDate } = useFormat()
 
   const emit = defineEmits(['open-score-modal', 'open-training-load'])
 
@@ -131,8 +131,8 @@
     yesterday.setDate(yesterday.getDate() - 1)
 
     const dStr = formatDate(scoreDate, 'yyyy-MM-dd')
-    const tStr = formatDate(today, 'yyyy-MM-dd')
-    const yStr = formatDate(yesterday, 'yyyy-MM-dd')
+    const tStr = formatDateUTC(today, 'yyyy-MM-dd')
+    const yStr = formatDateUTC(yesterday, 'yyyy-MM-dd')
 
     if (dStr === tStr) return 'today'
     if (dStr === yStr) return 'yesterday'

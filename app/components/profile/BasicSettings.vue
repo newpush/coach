@@ -125,7 +125,11 @@
             @click="cancelEdit"
           />
         </div>
-        <p v-else class="font-medium text-lg">{{ modelValue.weight }}</p>
+        <p v-else class="font-medium text-lg">
+          {{
+            typeof modelValue.weight === 'number' ? modelValue.weight.toFixed(2) : modelValue.weight
+          }}
+        </p>
       </div>
 
       <!-- Weight Units -->

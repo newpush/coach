@@ -1,6 +1,7 @@
 import { defineEventHandler, createError } from 'h3'
 import { getServerSession } from '../../utils/session'
 import { prisma } from '../../utils/db'
+import { getUserLocalDate, getUserTimezone } from '../../utils/date'
 
 defineRouteMeta({
   openAPI: {
@@ -280,9 +281,9 @@ export default defineEventHandler(async (event) => {
     })
 
     // Plan is up to date if it covers today through at least 3 days from now
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-    const threeDaysFromNow = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000)
+    const timezone = await getUserTimezone(userId)
+    const today = getUserLocalDate(timezone)
+    const threeDaysFromNow = new Date(today.getTime() + 3 * 24 * 60 * 60 * 1000)
 
     const planUpToDate =
       lastPlan &&
@@ -297,15 +298,12 @@ export default defineEventHandler(async (event) => {
     }
 
     // Today's training metadata - should be for today
-    const today2 = new Date()
-    today2.setHours(0, 0, 0, 0)
-
     const lastRecommendation = await prisma.activityRecommendation.findFirst({
       where: {
         userId,
         status: 'COMPLETED',
         date: {
-          gte: today2
+          gte: today
         }
       },
       orderBy: { date: 'desc' },

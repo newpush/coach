@@ -166,7 +166,7 @@
                       />
                       <span v-else class="text-gray-400">-</span>
 
-                      <template #panel>
+                      <template #content>
                         <div class="p-4 max-w-sm overflow-auto max-h-64">
                           <pre class="text-xs">{{ JSON.stringify(row.metadata, null, 2) }}</pre>
                         </div>

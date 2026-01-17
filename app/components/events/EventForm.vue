@@ -145,11 +145,12 @@
 
   const loading = ref(false)
   const toast = useToast()
+  const { getUserLocalDate } = useFormat()
 
   const state = reactive({
     title: '',
     description: '',
-    date: new Date().toISOString().split('T')[0],
+    date: getUserLocalDate().toISOString().split('T')[0],
     startTime: '',
     type: 'Run',
     subType: '',
@@ -178,7 +179,7 @@
         state.description = newData.description || ''
         state.date = newData.date
           ? new Date(newData.date).toISOString().split('T')[0]
-          : new Date().toISOString().split('T')[0]
+          : getUserLocalDate().toISOString().split('T')[0]
         state.startTime = newData.startTime || ''
         state.type = newData.type || 'Run'
         state.subType = newData.subType || ''
@@ -199,7 +200,7 @@
         // Reset to defaults
         state.title = ''
         state.description = ''
-        state.date = new Date().toISOString().split('T')[0]
+        state.date = getUserLocalDate().toISOString().split('T')[0]
         state.startTime = ''
         state.type = 'Run'
         state.subType = ''

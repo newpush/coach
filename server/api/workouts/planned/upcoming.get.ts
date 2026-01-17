@@ -19,7 +19,7 @@ export default defineEventHandler(async (event) => {
 
   // Get user's local "today" to ensure we show everything from today onwards
   // We use the user's timezone to determine the start of the day
-  const today = getUserLocalDate(user.timezone)
+  const today = getUserLocalDate(user.timezone ?? 'UTC')
 
   const workouts = await prisma.plannedWorkout.findMany({
     where: {

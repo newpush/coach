@@ -94,7 +94,8 @@
                 Week {{ week.weekNumber }}
               </h3>
               <span class="text-xs text-gray-500 dark:text-gray-400">
-                {{ formatDateRange(week.startDate, week.endDate) }}
+                {{ formatDateUTC(week.startDate, 'MMM d') }} -
+                {{ formatDateUTC(week.endDate, 'MMM d') }}
               </span>
             </div>
 
@@ -177,7 +178,7 @@
 <script setup lang="ts">
   import MiniWorkoutChart from '~/components/workouts/MiniWorkoutChart.vue'
 
-  const { formatDate: baseFormatDate, formatShortDate } = useFormat()
+  const { formatDate: baseFormatDate, formatDateUTC, formatShortDate } = useFormat()
 
   definePageMeta({
     layout: 'share'
@@ -220,17 +221,17 @@
 
   function formatDate(d: string | Date) {
     if (!d) return ''
-    return baseFormatDate(d)
+    return formatDateUTC(d)
   }
 
   function formatDay(d: string | Date) {
     if (!d) return ''
-    return baseFormatDate(d, 'EEE')
+    return formatDateUTC(d, 'EEE')
   }
 
   function formatDateRange(start: string | Date, end: string | Date) {
     if (!start || !end) return ''
-    return `${baseFormatDate(start, 'MMM d')} - ${baseFormatDate(end, 'MMM d')}`
+    return `${formatDateUTC(start, 'MMM d')} - ${formatDateUTC(end, 'MMM d')}`
   }
 
   function formatDuration(seconds: number) {
