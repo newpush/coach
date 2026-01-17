@@ -87,6 +87,9 @@ interface IntervalsActivity {
   // Streams available
   stream_types?: string[]
 
+  // Linked Event
+  paired_event_id?: string | number
+
   [key: string]: any
 }
 
@@ -585,95 +588,76 @@ export async function fetchIntervalsAthleteProfile(integration: Integration) {
       ? athlete.sportSettings
       : athlete.icu_type_settings || []
 
-  if (settings.length > 0) {
-    // Look for cycling/ride FTP first
-    const cyclingSettings = settings.find(
+  const sportSettings = settings.map((s: any) => {
+    // Determine zones
+    const currentHrZones = null
+    const currentPowerZones = null
+    const currentPaceZones = null
+
+    const currentFtp = s.ftp || null
+    const currentLthr = s.lthr || null
+    const currentMaxHr = s.max_hr || null
+    const currentThresholdPace = s.threshold_pace || null
+
+    // Extended Settings
+    const warmupTime = s.warmup_time ? Math.round(s.warmup_time / 60) : null // convert seconds to minutes if needed, usually stored as seconds in Intervals? Docs say integer. Let's assume seconds if consistent with other duration fields, but user prompt said "Warmup / Cooldown time in minutes". Let's check typical usage. Intervals usually uses seconds for durations. If user sees "10" it might be minutes in UI but seconds in API? Let's check API docs or assume seconds and convert to minutes for our DB if our DB expects minutes.
+    // User prompt: "Warmup / Cooldown time in minutes".
+    // Intervals API: "warmup_time: integer". Usually seconds.
+    // Let's store as Minutes in our DB to match user request "Include fields for Warmup/Cooldown duration (minutes)".
+    // So if API returns seconds (e.g. 600 for 10 min), we divide by 60.
+
+    return {
+      externalId: s.id?.toString(),
+      types: s.types || [],
+      ftp: currentFtp,
+      indoorFtp: s.indoor_ftp || null,
+      wPrime: s.w_prime || null,
+      lthr: currentLthr,
+      maxHr: currentMaxHr,
+      hrZones: currentHrZones,
+      powerZones: currentPowerZones,
+      thresholdPace: currentThresholdPace,
+
+      // Extended Power
+      eFtp: s.e_ftp || null, // Check if this field exists, user mentioned "eFTP 225". It might be computed.
+      eWPrime: s.e_w_prime || null,
+      pMax: s.p_max || null,
+      ePMax: s.e_p_max || null,
+      powerSpikeThreshold: s.power_spike_threshold || null,
+      eftpMinDuration: s.ftp_est_min_secs || null,
+
+      // Extended HR
+      // restingHr: s.resting_hr || null, // If available per sport
+      hrLoadType: s.hr_load_type || null,
+
+      // General
+      warmupTime: s.warmup_time ? Math.round(s.warmup_time / 60) : null,
+      cooldownTime: s.cooldown_time ? Math.round(s.cooldown_time / 60) : null,
+      loadPreference: s.load_order || null
+    }
+  })
+
+  // Extract primary settings (Cycling/Ride preference)
+  if (sportSettings.length > 0) {
+    const cyclingSettings = sportSettings.find(
       (s: any) => s.types && (s.types.includes('Ride') || s.types.includes('VirtualRide'))
     )
 
     if (cyclingSettings) {
       ftp = cyclingSettings.ftp
       lthr = cyclingSettings.lthr
-      maxHR = cyclingSettings.max_hr
-
-      // Extract Zones (Handle both formats)
-
-      // 1. New Format (sportSettings has direct arrays)
-      if (cyclingSettings.hr_zones && cyclingSettings.hr_zone_names) {
-        // hr_zones are typically upper bounds? Or boundaries?
-        // Example: [135, 150, 156, 167, 172, 177, 185] (last one matches max_hr)
-        // We'll assume these are upper bounds for each zone 1..N
-        hrZones = cyclingSettings.hr_zones.map((max: number, index: number) => {
-          const prevMax = index === 0 ? 0 : cyclingSettings.hr_zones[index - 1]
-          // Prefix with Z{i} if needed
-          let name = cyclingSettings.hr_zone_names[index] || `Z${index + 1}`
-          if (!name.startsWith('Z')) {
-            name = `Z${index + 1} ${name}`
-          }
-
-          return {
-            name,
-            min: index === 0 ? 0 : prevMax + 1,
-            max: max
-          }
-        })
-      }
-
-      if (cyclingSettings.power_zones && cyclingSettings.power_zone_names) {
-        // power_zones are usually % of FTP in the new format
-        // Example: [55, 75, 90, 105, 120, 150, 999]
-        const threshold = ftp || 1
-        powerZones = cyclingSettings.power_zones.map((val: number, index: number) => {
-          const prevVal = index === 0 ? 0 : cyclingSettings.power_zones[index - 1]
-          const prevMaxAbs = Math.round((prevVal / 100) * threshold)
-
-          // Prefix with Z{i} if needed
-          let name = cyclingSettings.power_zone_names[index] || `Z${index + 1}`
-          if (!name.startsWith('Z') && !name.startsWith('SS')) {
-            name = `Z${index + 1} ${name}`
-          }
-
-          return {
-            name,
-            min: index === 0 ? 0 : prevMaxAbs + 1,
-            max: val >= 900 ? 2000 : Math.round((val / 100) * threshold) // Handle 999 as infinity/high
-          }
-        })
-      }
-
-      // 2. Legacy Format (icu_type_settings had training_zones array)
-      if (!hrZones && cyclingSettings.training_zones) {
-        // HR Zones
-        const hrZ = cyclingSettings.training_zones.find((z: any) => z.type === 'HEART_RATE')
-        if (hrZ && hrZ.zones) {
-          // Intervals zones are usually % of LTHR
-          // We need absolute values for our UI
-          const threshold = lthr || 1
-          hrZones = hrZ.zones.map((z: any) => ({
-            name: z.id || z.name, // e.g. "Z1"
-            min: Math.round((z.min / 100) * threshold),
-            max: z.max ? Math.round((z.max / 100) * threshold) : maxHR || 200
-          }))
-        }
-
-        // Power Zones
-        const powerZ = cyclingSettings.training_zones.find((z: any) => z.type === 'POWER')
-        if (powerZ && powerZ.zones) {
-          const threshold = ftp || 1
-          powerZones = powerZ.zones.map((z: any) => ({
-            name: z.id || z.name, // e.g. "Z1"
-            min: Math.round((z.min / 100) * threshold),
-            max: z.max ? Math.round((z.max / 100) * threshold) : 999
-          }))
-        }
-      }
+      maxHR = cyclingSettings.maxHr
+      hrZones = cyclingSettings.hrZones
+      powerZones = cyclingSettings.powerZones
     } else {
-      // Use first type setting with FTP
-      const firstWithFtp = settings.find((s: any) => s.ftp)
+      // Fallback to first setting with FTP
+      const firstWithFtp = sportSettings.find((s: any) => s.ftp)
       if (firstWithFtp) {
         ftp = firstWithFtp.ftp
         lthr = firstWithFtp.lthr
-        maxHR = firstWithFtp.max_hr
+        maxHR = firstWithFtp.maxHr
+        hrZones = firstWithFtp.hrZones
+        powerZones = firstWithFtp.powerZones
       }
     }
   }
@@ -731,7 +715,10 @@ export async function fetchIntervalsAthleteProfile(integration: Integration) {
     // Preferences
     timezone: athlete.timezone || null,
     locale: athlete.locale || null,
-    measurementPreference: athlete.measurement_preference || null
+    measurementPreference: athlete.measurement_preference || null,
+
+    // Sport specific settings
+    sportSettings
   }
 }
 

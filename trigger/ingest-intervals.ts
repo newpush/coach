@@ -45,16 +45,6 @@ export const ingestIntervalsTask = task({
 
       const historicalEnd = end > historicalEndLocal ? historicalEndLocal : end
 
-      // Fetch activities
-      logger.log('Syncing activities...')
-      const workoutsUpserted = await IntervalsService.syncActivities(userId, start, historicalEnd)
-      logger.log(`Upserted ${workoutsUpserted} workouts`)
-
-      // Fetch wellness data
-      logger.log('Syncing wellness data...')
-      const wellnessUpserted = await IntervalsService.syncWellness(userId, start, historicalEnd)
-      logger.log(`Upserted ${wellnessUpserted} wellness entries`)
-
       // Fetch planned workouts (import all categories)
       logger.log('Syncing planned workouts...')
       const {
@@ -65,6 +55,16 @@ export const ingestIntervalsTask = task({
       logger.log(
         `Upserted ${plannedWorkoutsUpserted} planned workouts, ${eventsUpserted} racing events, and ${notesUpserted} calendar notes`
       )
+
+      // Fetch activities
+      logger.log('Syncing activities...')
+      const workoutsUpserted = await IntervalsService.syncActivities(userId, start, historicalEnd)
+      logger.log(`Upserted ${workoutsUpserted} workouts`)
+
+      // Fetch wellness data
+      logger.log('Syncing wellness data...')
+      const wellnessUpserted = await IntervalsService.syncWellness(userId, start, historicalEnd)
+      logger.log(`Upserted ${wellnessUpserted} wellness entries`)
 
       // Update sync status
       await prisma.integration.update({

@@ -72,6 +72,24 @@ export const IntervalsService = {
     for (const activity of activities) {
       const workout = normalizeIntervalsWorkout(activity, userId)
 
+      // Link to Planned Workout if paired in Intervals.icu
+      if (activity.paired_event_id) {
+        const pairedExternalId = String(activity.paired_event_id)
+        const plannedWorkout = await prisma.plannedWorkout.findUnique({
+          where: {
+            userId_externalId: {
+              userId,
+              externalId: pairedExternalId
+            }
+          },
+          select: { id: true }
+        })
+
+        if (plannedWorkout) {
+          ;(workout as any).plannedWorkoutId = plannedWorkout.id
+        }
+      }
+
       const upsertedWorkout = await workoutRepository.upsert(
         userId,
         'intervals',
