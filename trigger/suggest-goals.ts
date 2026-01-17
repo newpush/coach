@@ -158,6 +158,7 @@ export const suggestGoalsTask = task({
       const aiSettings = await getUserAiSettings(userId)
       const now = new Date()
       const todayEnd = getEndOfDayUTC(timezone, now)
+      const sevenDaysAgo = getStartOfDaysAgoUTC(timezone, 7)
       const thirtyDaysAgo = getStartOfDaysAgoUTC(timezone, 30)
 
       logger.log('Fetching athlete data for goal suggestions', {
