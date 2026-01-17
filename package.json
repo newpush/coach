@@ -74,6 +74,7 @@
     "@types/node": "^24.10.4",
     "@types/pg": "^8.16.0",
     "@types/turndown": "^5.0.6",
+    "@vitest/coverage-v8": "4.0.17",
     "@vue/test-utils": "^2.4.6",
     "eslint": "^9.39.2",
     "eslint-config-prettier": "^10.1.8",
@@ -96,6 +97,7 @@
   "scripts": {
     "backfill-scores": "tsx scripts/backfill-scores.ts",
     "test": "vitest",
+    "test:coverage": "vitest run --coverage",
     "build": "prisma generate && nuxt build",
     "dev": "nuxt dev",
     "dev:trigger": "pnpm prisma:generate && npx trigger.dev@latest dev",
