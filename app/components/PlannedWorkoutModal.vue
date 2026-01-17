@@ -25,7 +25,7 @@
             <div class="flex justify-between">
               <span class="text-sm text-gray-600 dark:text-gray-400">Date:</span>
               <span class="text-sm font-medium">{{
-                formatDate(plannedWorkout.date, 'EEEE, MMMM d, yyyy')
+                formatDateUTC(plannedWorkout.date, 'EEEE, MMMM d, yyyy')
               }}</span>
             </div>
             <div v-if="plannedWorkout.durationSec" class="flex justify-between">
@@ -149,7 +149,7 @@
             </h4>
             <p class="text-xs text-gray-500 dark:text-gray-400 mb-3">
               Choose which workout on
-              {{ formatDate(plannedWorkout.date, 'EEEE, MMMM d, yyyy') }} completed this plan
+              {{ formatDateUTC(plannedWorkout.date, 'EEEE, MMMM d, yyyy') }} completed this plan
             </p>
           </div>
 
@@ -413,7 +413,7 @@
   import WorkoutChart from '~/components/workouts/WorkoutChart.vue'
   import WorkoutMessagesTimeline from '~/components/workouts/WorkoutMessagesTimeline.vue'
 
-  const { formatDate } = useFormat()
+  const { formatDate, formatDateUTC } = useFormat()
   const toast = useToast()
 
   const props = defineProps<{

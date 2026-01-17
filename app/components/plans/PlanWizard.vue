@@ -166,11 +166,11 @@
                   <div class="font-semibold text-lg">{{ goal.title }}</div>
                   <div class="text-sm text-muted mt-1">{{ goal.description }}</div>
                   <div
-                    v-if="goal.eventDate"
+                    v-if="goal.eventDate || goal.targetDate"
                     class="text-sm text-primary mt-2 flex items-center gap-1"
                   >
                     <UIcon name="i-heroicons-calendar" class="w-4 h-4" />
-                    Target: {{ formatDate(goal.eventDate) }}
+                    Target: {{ formatDate(goal.eventDate || goal.targetDate) }}
                   </div>
                 </div>
                 <UBadge :color="getPriorityColor(goal.priority)">{{ goal.priority }}</UBadge>
@@ -771,8 +771,9 @@
 
   function selectGoal(goal: any) {
     selectedGoal.value = goal
-    if (goal.eventDate) {
-      endDate.value = new Date(goal.eventDate).toISOString().split('T')[0] || ''
+    const targetDate = goal.eventDate || goal.targetDate
+    if (targetDate) {
+      endDate.value = formatDate(targetDate, 'yyyy-MM-dd')
       isEventBased.value = true
     } else {
       // Default to 12 weeks if no event date

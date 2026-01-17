@@ -2,6 +2,7 @@ import { getServerSession } from '../../utils/session'
 import { prisma } from '../../utils/db'
 import { athleteMetricsService } from '../../utils/athleteMetricsService'
 import { fetchIntervalsAthleteProfile } from '../../utils/intervals'
+import { roundToTwoDecimals } from '../../utils/number'
 
 export default defineEventHandler(async (event) => {
   const session = await getServerSession(event)
@@ -59,7 +60,7 @@ export default defineEventHandler(async (event) => {
       diff.lthr = intervalsProfile.lthr
     }
     if (intervalsProfile.weight && intervalsProfile.weight !== user.weight) {
-      diff.weight = intervalsProfile.weight
+      diff.weight = roundToTwoDecimals(intervalsProfile.weight)
     }
     // Map restingHR (Intervals) to restingHr (Prisma)
     if (intervalsProfile.restingHR && intervalsProfile.restingHR !== user.restingHr) {

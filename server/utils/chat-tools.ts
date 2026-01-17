@@ -15,7 +15,8 @@ import {
   getTrainingAvailability,
   updateTrainingAvailability,
   generateTrainingPlan,
-  getCurrentPlan
+  getCurrentPlan,
+  getPlannedWorkoutDetails
 } from './chat-tools/training-plan-tools'
 
 /**
@@ -214,6 +215,21 @@ export const chatToolDeclarations: FunctionDeclaration[] = [
           description: 'Include completed workouts (default: false)'
         }
       }
+    }
+  },
+  {
+    name: 'get_planned_workout_details',
+    description:
+      'Get comprehensive details for a specific planned workout. Use this when the user refers to a specific upcoming workout or when analyzing a planned session.',
+    parameters: {
+      type: SchemaType.OBJECT,
+      properties: {
+        workout_id: {
+          type: SchemaType.STRING,
+          description: 'The exact planned workout ID'
+        }
+      },
+      required: ['workout_id']
     }
   },
   {
@@ -554,16 +570,19 @@ export async function executeToolCall(toolName: string, args: any, userId: strin
         return await getPerformanceMetrics(userId, timezone, args)
 
       case 'get_planned_workouts':
-        return await getPlannedWorkouts(userId, args) // This one might need timezone too, let's check imports later
+        return await getPlannedWorkouts(userId, timezone, args) // This one might need timezone too, let's check imports later
+
+      case 'get_planned_workout_details':
+        return await getPlannedWorkoutDetails(userId, timezone, args)
 
       case 'create_planned_workout':
-        return await createPlannedWorkout(userId, args)
+        return await createPlannedWorkout(userId, timezone, args)
 
       case 'update_planned_workout':
-        return await updatePlannedWorkout(userId, args)
+        return await updatePlannedWorkout(userId, timezone, args)
 
       case 'delete_planned_workout':
-        return await deletePlannedWorkout(userId, args)
+        return await deletePlannedWorkout(userId, timezone, args)
 
       case 'get_training_availability':
         return await getTrainingAvailability(userId)
@@ -572,10 +591,10 @@ export async function executeToolCall(toolName: string, args: any, userId: strin
         return await updateTrainingAvailability(userId, args)
 
       case 'generate_training_plan':
-        return await generateTrainingPlan(userId, args)
+        return await generateTrainingPlan(userId, timezone, args)
 
       case 'get_current_plan':
-        return await getCurrentPlan(userId)
+        return await getCurrentPlan(userId, timezone)
 
       case 'get_workout_stream':
         return await getWorkoutStream(userId, args)
@@ -1309,10 +1328,12 @@ async function getPerformanceMetrics(userId: string, timezone: string, args: any
       // Assuming week starts on Monday
       const localDateStr = formatUserDate(w.date, timezone, 'yyyy-MM-dd')
       const parts = localDateStr.split('-')
-      const d = new Date(parseInt(parts[0]!), parseInt(parts[1]!) - 1, parseInt(parts[2]!))
-      const day = d.getDay()
-      const diff = d.getDate() - day + (day == 0 ? -6 : 1) // adjust when day is sunday
-      d.setDate(diff)
+      const d = new Date(
+        Date.UTC(parseInt(parts[0]!), parseInt(parts[1]!) - 1, parseInt(parts[2]!))
+      )
+      const day = d.getUTCDay()
+      const diff = d.getUTCDate() - day + (day == 0 ? -6 : 1) // adjust when day is sunday
+      d.setUTCDate(diff)
       const weekKey = d.toISOString().split('T')[0] // Use local date YYYY-MM-DD as key
 
       if (weekKey) {

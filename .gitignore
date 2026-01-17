@@ -41,8 +41,16 @@ backups/
 gha-creds-*.json
 application_default_credentials.json
 
+# AI Tool Skills & Configs
+.claude/
+.codex/
+.cursor/
+.goose/
+.nuxtrc
+
 # Public Content
 content/social/
 gcs-key.json
 nanobanana-output/
 
+coverage

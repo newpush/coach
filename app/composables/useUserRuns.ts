@@ -20,6 +20,16 @@ let activeSubscribers = 0
 let initPromise: Promise<void> | null = null
 let pollInterval: NodeJS.Timeout | null = null
 
+export const ACTIVE_STATUSES = [
+  'EXECUTING',
+  'QUEUED',
+  'WAITING_FOR_DEPLOY',
+  'REATTEMPTING',
+  'FROZEN',
+  'PENDING_VERSION',
+  'DELAYED'
+]
+
 export function useUserRuns() {
   const { data: session } = useAuth()
 
@@ -31,33 +41,39 @@ export function useUserRuns() {
     try {
       const data = await $fetch<TriggerRun[]>('/api/runs/active')
 
-      // Create a map from the new API data
-      const newRunsMap = new Map<string, TriggerRun>()
-      data.forEach((run) => newRunsMap.set(run.id, run))
+      // Start with a map of existing runs to facilitate merging
+      const mergedRunsMap = new Map<string, TriggerRun>()
+      runs.value.forEach((r) => mergedRunsMap.set(r.id, r))
 
-      // Check existing runs for any local final states we want to preserve
-      // (e.g. if API is slightly behind and says EXECUTING but we know it's COMPLETED via WS)
-      runs.value.forEach((existing) => {
-        if (newRunsMap.has(existing.id)) {
-          const apiRun = newRunsMap.get(existing.id)!
+      // Update/Add with new data from API
+      data.forEach((run) => {
+        const existing = mergedRunsMap.get(run.id)
+        if (existing) {
+          // Check existing runs for any local final states we want to preserve
+          // (e.g. if API is slightly behind and says EXECUTING but we know it's COMPLETED via WS)
           const isLocalFinal = ['COMPLETED', 'FAILED', 'CANCELED', 'TIMED_OUT'].includes(
             existing.status
           )
-          const isApiFinal = ['COMPLETED', 'FAILED', 'CANCELED', 'TIMED_OUT'].includes(
-            apiRun.status
-          )
+          const isApiFinal = ['COMPLETED', 'FAILED', 'CANCELED', 'TIMED_OUT'].includes(run.status)
 
           if (isLocalFinal && !isApiFinal) {
             // Overwrite API run status with local final status
-            Object.assign(apiRun, { ...existing, status: existing.status })
+            mergedRunsMap.set(run.id, { ...run, ...existing, status: existing.status })
+          } else {
+            // Regular update
+            mergedRunsMap.set(run.id, { ...existing, ...run })
           }
+        } else {
+          // New run found in API
+          mergedRunsMap.set(run.id, run)
         }
       })
 
-      const finalRuns = Array.from(newRunsMap.values())
+      const finalRuns = Array.from(mergedRunsMap.values())
       finalRuns.sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime())
 
-      runs.value = finalRuns
+      // Keep only the last 50 runs to avoid memory bloat
+      runs.value = finalRuns.slice(0, 50)
     } catch (e) {
       // Failed to fetch active runs
     } finally {
@@ -130,28 +146,35 @@ export function useUserRuns() {
 
   const handleRunUpdate = (update: any) => {
     const existingIndex = runs.value.findIndex((r) => r.id === update.runId)
+    const existing = existingIndex !== -1 ? runs.value[existingIndex] : null
+
+    // Don't update if we already have a final status and the update is non-final (out of order WS messages)
+    const isLocalFinal =
+      existing && ['COMPLETED', 'FAILED', 'CANCELED', 'TIMED_OUT'].includes(existing.status)
+    const isUpdateFinal = ['COMPLETED', 'FAILED', 'CANCELED', 'TIMED_OUT'].includes(update.status)
+    if (isLocalFinal && !isUpdateFinal) {
+      return
+    }
 
     const updatedRun: TriggerRun = {
       id: update.runId,
-      taskIdentifier:
-        update.taskIdentifier ||
-        (existingIndex !== -1 ? runs.value[existingIndex]?.taskIdentifier : 'Unknown Task'),
+      taskIdentifier: update.taskIdentifier || existing?.taskIdentifier || 'Unknown Task',
       status: update.status,
-      startedAt:
-        update.startedAt ||
-        (existingIndex !== -1 ? runs.value[existingIndex]?.startedAt : new Date().toISOString()),
-      finishedAt: update.finishedAt,
-      output: update.output,
-      error: update.error
+      startedAt: update.startedAt || existing?.startedAt || new Date().toISOString(),
+      finishedAt: update.finishedAt || existing?.finishedAt,
+      output: update.output !== undefined ? update.output : existing?.output,
+      error: update.error !== undefined ? update.error : existing?.error
     }
 
     const newRuns = [...runs.value]
     if (existingIndex !== -1) {
-      newRuns[existingIndex] = { ...newRuns[existingIndex], ...updatedRun }
+      newRuns[existingIndex] = updatedRun
     } else {
       newRuns.unshift(updatedRun)
+      // Re-sort if it's a new run to ensure correct order
+      newRuns.sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime())
     }
-    runs.value = newRuns
+    runs.value = newRuns.slice(0, 50)
   }
 
   const cancelRun = async (runId: string) => {
@@ -211,10 +234,7 @@ export function useUserRunsState() {
   const { runs, cancelRun } = useUserRuns()
 
   const activeRunCount = computed(
-    () =>
-      runs.value.filter((r) =>
-        ['EXECUTING', 'QUEUED', 'WAITING_FOR_DEPLOY', 'REATTEMPTING', 'FROZEN'].includes(r.status)
-      ).length
+    () => runs.value.filter((r) => ACTIVE_STATUSES.includes(r.status)).length
   )
 
   const onTaskCompleted = (

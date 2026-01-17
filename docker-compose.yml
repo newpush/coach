@@ -18,5 +18,17 @@ services:
       timeout: 5s
       retries: 5
 
+  dragonfly:
+    image: docker.dragonflydb.io/dragonflydb/dragonfly
+    container_name: watts-dragonfly
+    ulimits:
+      memlock: -1
+    command: ['--default_lua_flags=allow-undeclared-keys', '--requirepass=dragonfly']
+    ports:
+      - '6379:6379'
+    volumes:
+      - dragonfly_data:/data
+
 volumes:
   postgres_data:
+  dragonfly_data:

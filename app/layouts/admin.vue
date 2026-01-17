@@ -97,9 +97,56 @@
       ]
     },
     {
-      label: 'Database Health',
-      icon: 'i-lucide-database',
-      to: '/admin/database',
+      label: 'Debug',
+      icon: 'i-lucide-bug',
+      defaultOpen: route.path.includes('debug'),
+      children: [
+        {
+          label: 'Environment',
+          icon: 'i-lucide-terminal',
+          to: '/admin/debug/env',
+          onSelect: () => {
+            isOpen.value = false
+          }
+        },
+        {
+          label: 'Trigger.dev',
+          icon: 'i-lucide-zap',
+          to: '/admin/debug/trigger',
+          onSelect: () => {
+            isOpen.value = false
+          }
+        },
+        {
+          label: 'Network Ping',
+          icon: 'i-heroicons-globe-alt',
+          to: '/admin/debug/ping',
+          onSelect: () => {
+            isOpen.value = false
+          }
+        },
+        {
+          label: 'Database Health',
+          icon: 'i-lucide-database',
+          to: '/admin/debug/database',
+          onSelect: () => {
+            isOpen.value = false
+          }
+        },
+        {
+          label: 'Queues',
+          icon: 'i-heroicons-queue-list',
+          to: '/admin/queues',
+          onSelect: () => {
+            isOpen.value = false
+          }
+        }
+      ]
+    },
+    {
+      label: 'System Messages',
+      icon: 'i-heroicons-megaphone',
+      to: '/admin/system-messages',
       onSelect: () => {
         isOpen.value = false
       }

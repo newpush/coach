@@ -69,10 +69,10 @@
           </div>
 
           <div
-            class="flex items-center justify-between gap-3 group cursor-pointer"
+            class="flex items-center justify-between gap-3 group cursor-pointer relative"
             @click="navigateTo(`/workouts/planned/${recommendationStore.todayWorkout.id}`)"
           >
-            <div class="flex items-start gap-3 min-w-0">
+            <div class="flex items-start gap-3 min-w-0 z-10">
               <div
                 class="p-2 bg-primary-50 dark:bg-primary-900/20 rounded-lg text-primary-600 dark:text-primary-400 shrink-0"
               >
@@ -98,10 +98,19 @@
                 </div>
               </div>
             </div>
+
             <UIcon
               name="i-heroicons-chevron-right"
-              class="w-5 h-5 text-gray-400 group-hover:text-primary transition-colors shrink-0"
+              class="w-5 h-5 text-gray-400 group-hover:text-primary transition-colors shrink-0 z-10"
             />
+
+            <!-- Mini Workout Chart as background -->
+            <div
+              v-if="recommendationStore.todayWorkout.structuredWorkout"
+              class="absolute right-0 bottom-0 w-32 h-12 opacity-15 dark:opacity-25 pointer-events-none -mb-1 translate-y-1"
+            >
+              <MiniWorkoutChart :workout="recommendationStore.todayWorkout.structuredWorkout" />
+            </div>
           </div>
         </div>
 
@@ -176,7 +185,10 @@
           />
         </div>
       </div>
-      <div v-else-if="recommendationStore.todayWorkout" class="text-sm text-muted italic">
+      <div
+        v-else-if="recommendationStore.todayWorkout"
+        class="text-[10px] text-gray-500 text-center leading-tight"
+      >
         Get AI-powered guidance for this workout based on your recovery.
       </div>
     </div>
@@ -225,26 +237,34 @@
             Refine
           </UButton>
         </div>
-        <UButton
-          class="font-bold w-full"
-          :color="!recommendationStore.todayRecommendation ? 'primary' : 'neutral'"
-          :variant="!recommendationStore.todayRecommendation ? 'solid' : 'ghost'"
-          size="sm"
-          :loading="recommendationStore.generating || isSyncingForAnalysis"
-          :disabled="
-            recommendationStore.generating ||
-            recommendationStore.generatingAdHoc ||
-            isSyncingForAnalysis
-          "
-          :icon="
-            !recommendationStore.todayRecommendation
-              ? 'i-heroicons-sparkles'
-              : 'i-heroicons-arrow-path'
-          "
-          @click="handleAnalyzeClick"
-        >
-          {{ getButtonLabel() }}
-        </UButton>
+        <div class="space-y-2">
+          <UButton
+            class="font-bold w-full"
+            :color="!recommendationStore.todayRecommendation ? 'primary' : 'neutral'"
+            :variant="!recommendationStore.todayRecommendation ? 'solid' : 'ghost'"
+            size="sm"
+            :loading="recommendationStore.generating || isSyncingForAnalysis"
+            :disabled="
+              recommendationStore.generating ||
+              recommendationStore.generatingAdHoc ||
+              isSyncingForAnalysis
+            "
+            :icon="
+              !recommendationStore.todayRecommendation
+                ? 'i-heroicons-sparkles'
+                : 'i-heroicons-arrow-path'
+            "
+            @click="handleAnalyzeClick"
+          >
+            {{ getButtonLabel() }}
+          </UButton>
+          <p
+            v-if="!recommendationStore.todayRecommendation"
+            class="text-[10px] text-gray-500 text-center leading-tight"
+          >
+            The coach will analyze your recovery data and today's plan to provide guidance.
+          </p>
+        </div>
       </div>
     </template>
   </UCard>
@@ -265,6 +285,7 @@
 <script setup lang="ts">
   import DashboardCreateAdHocModal from '~/components/dashboard/DashboardCreateAdHocModal.vue'
   import DashboardRefineRecommendationModal from '~/components/dashboard/DashboardRefineRecommendationModal.vue'
+  import MiniWorkoutChart from '~/components/workouts/MiniWorkoutChart.vue'
 
   const integrationStore = useIntegrationStore()
   const recommendationStore = useRecommendationStore()

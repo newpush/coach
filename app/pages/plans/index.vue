@@ -353,7 +353,12 @@
 <script setup lang="ts">
   import MiniWorkoutChart from '~/components/workouts/MiniWorkoutChart.vue'
 
-  const { formatDate: baseFormatDate, formatShortDate, getUserLocalDate } = useFormat()
+  const {
+    formatDate: baseFormatDate,
+    formatDateUTC,
+    formatShortDate,
+    getUserLocalDate
+  } = useFormat()
 
   definePageMeta({
     middleware: 'auth'
@@ -546,12 +551,12 @@
 
   function formatDay(d: string | Date) {
     if (!d) return ''
-    return baseFormatDate(d, 'EEE')
+    return formatDateUTC(d, 'EEE')
   }
 
   function formatDateRange(start: string | Date, end: string | Date) {
     if (!start || !end) return ''
-    return `${baseFormatDate(start, 'MMM d')} - ${baseFormatDate(end, 'MMM d')}`
+    return `${formatDateUTC(start, 'MMM d')} - ${formatDateUTC(end, 'MMM d')}`
   }
 
   function formatDuration(seconds: number) {

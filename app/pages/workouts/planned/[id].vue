@@ -58,6 +58,18 @@
             <span class="hidden sm:inline">Share</span>
           </UButton>
           <UButton
+            v-if="workout"
+            icon="i-heroicons-chat-bubble-left-right"
+            color="primary"
+            variant="outline"
+            size="sm"
+            class="font-bold"
+            @click="chatAboutWorkout"
+          >
+            <span class="hidden sm:inline">Chat about this workout</span>
+            <span class="sm:hidden">Chat</span>
+          </UButton>
+          <UButton
             v-if="workout && !workout.completed"
             size="sm"
             color="primary"
@@ -1047,6 +1059,15 @@
 
   function goBack() {
     router.back()
+  }
+
+  // Chat about workout
+  function chatAboutWorkout() {
+    if (!workout.value) return
+    navigateTo({
+      path: '/chat',
+      query: { workoutId: workout.value.id, isPlanned: 'true' }
+    })
   }
 
   function formatDate(d: string | Date) {

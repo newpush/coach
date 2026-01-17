@@ -252,7 +252,7 @@
   }>()
 
   const emit = defineEmits(['close', 'created', 'updated'])
-  const { formatDate, getUserLocalDate, timezone } = useFormat()
+  const { formatDate, getUserLocalDate, getUserDateFromLocal, timezone } = useFormat()
 
   const isEditMode = computed(() => !!props.goal)
   const step = ref(1)
@@ -400,10 +400,10 @@
 
       // Convert local dates to absolute UTC ISO strings
       if (form.targetDate) {
-        payload.targetDate = new Date(form.targetDate + 'T23:59:59').toISOString()
+        payload.targetDate = getUserDateFromLocal(form.targetDate, '23:59:59').toISOString()
       }
       if (form.eventDate) {
-        payload.eventDate = new Date(form.eventDate + 'T00:00:00').toISOString()
+        payload.eventDate = getUserDateFromLocal(form.eventDate, '00:00:00').toISOString()
       }
 
       // Ensure numbers are numbers

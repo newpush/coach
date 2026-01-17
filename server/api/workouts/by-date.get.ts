@@ -1,5 +1,6 @@
 import { getServerSession } from '../../utils/session'
 import { prisma } from '../../utils/db'
+import { getUserTimezone, getStartOfDayUTC, getEndOfDayUTC } from '../../utils/date'
 
 defineRouteMeta({
   openAPI: {
@@ -64,14 +65,13 @@ export default defineEventHandler(async (event) => {
 
   try {
     const userId = (session.user as any).id
+    const timezone = await getUserTimezone(userId)
 
-    // Parse the date and get start/end of day
+    // Parse the date parameter (YYYY-MM-DD)
     const targetDate = new Date(date)
-    const startOfDay = new Date(targetDate)
-    startOfDay.setHours(0, 0, 0, 0)
-
-    const endOfDay = new Date(targetDate)
-    endOfDay.setHours(23, 59, 59, 999)
+    // Convert this "face value" date into the correct UTC range for the user's timezone
+    const startOfDay = getStartOfDayUTC(timezone, targetDate)
+    const endOfDay = getEndOfDayUTC(timezone, targetDate)
 
     // Fetch workouts for that day that are not duplicates
     const workouts = await workoutRepository.getForUser(userId, {

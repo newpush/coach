@@ -1,5 +1,5 @@
 import { getServerSession } from '../../utils/session'
-import { getUserTimezone, getStartOfYearUTC } from '../../utils/date'
+import { getUserTimezone, getStartOfYearUTC, getUserLocalDate } from '../../utils/date'
 import type { PMCMetrics } from '../../utils/training-stress'
 import {
   calculatePMCForDateRange,
@@ -76,35 +76,36 @@ export default defineEventHandler(async (event) => {
   const query = getQuery(event)
   const days = parseInt(query.days as string) || 90
   const userId = (session.user as any).id
+  const timezone = await getUserTimezone(userId)
 
   // Get current fitness summary first to determine the true end date
   const summary = await getCurrentFitnessSummary(userId)
 
-  let endDate = new Date()
+  // Default end date is today (User Local Time @ UTC Midnight)
+  let endDate = getUserLocalDate(timezone)
 
   // If we have data from "tomorrow" (timezone diff), extend the chart to include it
   // But cap it at 48 hours to prevent showing far future dates
   if (summary.lastUpdated && new Date(summary.lastUpdated) > endDate) {
     const lastUpdate = new Date(summary.lastUpdated)
-    const maxDate = new Date()
-    maxDate.setDate(maxDate.getDate() + 2) // Max 2 days ahead
+    const maxDate = getUserLocalDate(timezone)
+    maxDate.setUTCDate(maxDate.getUTCDate() + 2) // Max 2 days ahead
 
     if (lastUpdate < maxDate) {
       endDate = lastUpdate
     }
   }
 
-  // Ensure we include the full end date by setting to end of day
-  endDate.setHours(23, 59, 59, 999)
+  // Ensure we include the full end date by setting to end of day in UTC (since dates are UTC aligned)
+  endDate.setUTCHours(23, 59, 59, 999)
 
-  let startDate = new Date()
+  let startDate = getUserLocalDate(timezone)
 
   if (query.days === 'YTD') {
-    const timezone = await getUserTimezone(userId)
     startDate = getStartOfYearUTC(timezone)
   } else {
-    const days = parseInt(query.days as string) || 90
-    startDate.setDate(startDate.getDate() - days)
+    // Start date is relative to TODAY, regardless of extended end date (to keep window consistent)
+    startDate.setUTCDate(startDate.getUTCDate() - days)
   }
 
   startDate.setUTCHours(0, 0, 0, 0) // Start from beginning of the start day (UTC)

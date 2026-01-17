@@ -61,14 +61,19 @@ This file aggregates all critical development rules and guidelines for the Coach
 
 - **Buttons**: Use `UButton`. Follow standard patterns for navbar actions (`size="sm"`, `class="font-bold"`, with icon).
 - **Cards**: Use `UCard` for content containers.
-- **Tables**: Use plain HTML tables wrapped in a card-like div. **Do NOT use UCard for tables.**
+- **Tables**: Use plain HTML tables wrapped in a card-like div for maximum reliability and control. Avoid `UTable` inside complex `UDashboardPanel` structures if rendering issues occur. **Do NOT use UCard for tables.**
 - **Tooltips**: Maintain consistent design, content, and behavior. Use `UPopover` (mode="hover") or `UTooltip` for explanations. Ensure visibility and verify content on hover.
 
 ### Layouts
 
 - **Dashboard**: Use `UDashboardPanel`, `UDashboardNavbar`, `UDashboardSidebar`.
-- **Forms**: Wrap inputs in `UFormField`.
+- **Panel Content**: Ensure `UDashboardPanel` content is structured correctly. If rendering fails (blank page), try simplifying the structure or manually implementing the layout containers.
+- **Forms**: Wrap inputs in `UFormField` and ensure they are full-width (`w-full`) for responsiveness.
 - **Modals**: Use `:ui="{ content: 'sm:max-w-lg' }"` for width control. Ensure inputs are full width (`w-full`).
+
+### Troubleshooting
+
+- **Console Errors**: Ignore `p1 is not defined` errors in the browser console; they are often unrelated Nuxt UI/Vue internal warnings and do not necessarily indicate a breaking issue if the page renders correctly.
 
 ### Responsive Design
 
@@ -141,6 +146,8 @@ This file aggregates all critical development rules and guidelines for the Coach
 ---
 
 ## 9. Date & Timezone Handling
+
+Refer to the comprehensive [Timezone Handling Guide](docs/04-guides/timezone-handling.md) for detailed patterns and best practices.
 
 ### Core Principle
 

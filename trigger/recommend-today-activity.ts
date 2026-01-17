@@ -10,6 +10,7 @@ import { calculateProjectedPMC, getCurrentFitnessSummary } from '../server/utils
 import { analyzeWellness } from '../server/utils/services/wellness-analysis'
 import { getCheckinHistoryContext } from '../server/utils/services/checkin-service'
 import { getUserAiSettings } from '../server/utils/ai-settings'
+import { generateAthleteProfileTask } from './generate-athlete-profile'
 
 const recommendationSchema = {
   type: 'object',
@@ -87,7 +88,61 @@ export const recommendTodayActivityTask = task({
 
     const userTimezone = user?.timezone || 'UTC'
 
-    // 2. Calculate Effective Today based on User's Timezone
+    // 2. CHECK PROFILE FRESHNESS
+    const latestProfile = await prisma.report.findFirst({
+      where: { userId, type: 'ATHLETE_PROFILE', status: 'COMPLETED' },
+      orderBy: { createdAt: 'desc' },
+      select: { createdAt: true }
+    })
+
+    const twelveHoursAgo = new Date(Date.now() - 12 * 60 * 60 * 1000)
+    const isProfileFresh = latestProfile && latestProfile.createdAt > twelveHoursAgo
+
+    if (!isProfileFresh) {
+      logger.log('Stale or missing athlete profile. Triggering refresh before recommendation.', {
+        userId,
+        lastProfileDate: latestProfile?.createdAt
+      })
+
+      // Create a new report placeholder for the profile generation
+      const report = await prisma.report.create({
+        data: {
+          userId,
+          type: 'ATHLETE_PROFILE',
+          status: 'QUEUED',
+          dateRangeStart: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000), // 30 days back
+          dateRangeEnd: new Date()
+        }
+      })
+
+      // Trigger the profile generation, which will then chain the recommendation
+      await generateAthleteProfileTask.trigger(
+        {
+          userId,
+          reportId: report.id,
+          triggerRecommendation: true
+        },
+        { concurrencyKey: userId }
+      )
+
+      // Update the current recommendation status to show it's waiting for the profile
+      if (recommendationId) {
+        await activityRecommendationRepository.update(recommendationId, userId, {
+          status: 'PENDING',
+          reasoning: 'Waiting for athlete profile to update...'
+        })
+      }
+
+      // Stop this run; the chained run will take over
+      return {
+        success: true,
+        message: 'Profile stale, regeneration triggered.'
+      }
+    }
+
+    logger.log('Athlete profile is fresh, proceeding with recommendation.')
+
+    // 3. Calculate Effective Today based on User's Timezone
     // This fixes issues where server time (UTC) might be ahead/behind user's local "Today"
     const effectiveDate = getUserLocalDate(userTimezone)
     const payloadDateObj = new Date(payloadDate)
@@ -292,12 +347,7 @@ export const recommendTodayActivityTask = task({
     // Format for display (Friday, January 10, 2026)
     // We construct it based on the effective today
     const targetDateObj = new Date(targetDateStr + 'T12:00:00') // Noon Local
-    const localDate = targetDateObj.toLocaleDateString('en-US', {
-      weekday: 'long',
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
-    })
+    const localDate = formatUserDate(targetDateObj, userTimezone, 'EEEE, MMMM d, yyyy')
 
     // Split workouts into "Today's" and "Past"
     const todaysWorkouts = recentWorkouts.filter(
@@ -312,7 +362,7 @@ export const recommendTodayActivityTask = task({
     if (athleteProfile?.analysisJson) {
       const profile = athleteProfile.analysisJson as any
       athleteContext = `
-ATHLETE PROFILE (Generated ${new Date(athleteProfile.createdAt).toLocaleDateString()}):
+ATHLETE PROFILE (Generated ${formatUserDate(athleteProfile.createdAt, userTimezone)}):
 ${profile.executive_summary ? `Summary: ${profile.executive_summary}` : ''}
 
 Current Fitness: ${profile.current_fitness?.status_label || 'Unknown'}
@@ -530,10 +580,10 @@ ${wellnessAnalysisContext}
 ${checkinsSummary}
 
 TODAY'S COMPLETED TRAINING:
-${todaysWorkouts.length > 0 ? buildWorkoutSummary(todaysWorkouts) : 'None so far'}
+${todaysWorkouts.length > 0 ? buildWorkoutSummary(todaysWorkouts, userTimezone) : 'None so far'}
 
 RECENT TRAINING (Last 7 days):
-${pastWorkouts.length > 0 ? buildWorkoutSummary(pastWorkouts) : 'No recent workouts'}
+${pastWorkouts.length > 0 ? buildWorkoutSummary(pastWorkouts, userTimezone) : 'No recent workouts'}
 
 ${
   userFeedback

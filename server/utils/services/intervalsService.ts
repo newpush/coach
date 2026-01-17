@@ -6,14 +6,16 @@ import {
   normalizeIntervalsWorkout,
   normalizeIntervalsWellness,
   normalizeIntervalsPlannedWorkout,
+  normalizeIntervalsCalendarNote,
   fetchIntervalsActivityStreams
 } from '../intervals'
 import { workoutRepository } from '../repositories/workoutRepository'
 import { wellnessRepository } from '../repositories/wellnessRepository'
 import { eventRepository } from '../repositories/eventRepository'
+import { calendarNoteRepository } from '../repositories/calendarNoteRepository'
 import { normalizeTSS } from '../normalize-tss'
 import { calculateWorkoutStress } from '../calculate-workout-stress'
-import { getUserTimezone, getEndOfDayUTC } from '../date'
+import { getUserTimezone, getEndOfDayUTC, getStartOfDayUTC } from '../date'
 import { tasks } from '@trigger.dev/sdk/v3'
 import { userIngestionQueue } from '../../../trigger/queues'
 import {
@@ -50,8 +52,13 @@ export const IntervalsService = {
 
     const allActivities = await fetchIntervalsWorkouts(integration, startDate, historicalEnd)
 
-    // Filter out incomplete Strava activities
+    // Filter out incomplete Strava activities and Notes/Holidays
     const activities = allActivities.filter((activity) => {
+      // Filter out Notes and Holidays
+      if (['Note', 'Holiday'].includes(activity.type)) {
+        return false
+      }
+
       const isIncompleteStrava =
         activity.source === 'STRAVA' && activity._note?.includes('not available via the API')
       if (isIncompleteStrava) {
@@ -266,7 +273,13 @@ export const IntervalsService = {
 
     let upsertedCount = 0
     for (const wellness of wellnessData) {
-      const wellnessDate = new Date(wellness.id)
+      // Force wellness date to UTC midnight (Intervals.icu returns 'YYYY-MM-DD' as id)
+      // This prevents timezone-based shifting when converting to Date object
+      const rawDate = new Date(wellness.id)
+      const wellnessDate = new Date(
+        Date.UTC(rawDate.getUTCFullYear(), rawDate.getUTCMonth(), rawDate.getUTCDate())
+      )
+
       const normalizedWellness = normalizeIntervalsWellness(wellness, userId, wellnessDate)
 
       await wellnessRepository.upsert(userId, wellnessDate, normalizedWellness, normalizedWellness)
@@ -297,8 +310,47 @@ export const IntervalsService = {
 
     let plannedUpserted = 0
     let eventsUpserted = 0
+    let notesUpserted = 0
 
     for (const planned of plannedWorkouts) {
+      const category = planned.category || ''
+      const type = planned.type || ''
+
+      // Handle Calendar Notes / Non-Activity Items (Notes, Targets, Holidays, etc.)
+      if (
+        [
+          'NOTE',
+          'TARGET',
+          'HOLIDAY',
+          'SICK',
+          'INJURED',
+          'SEASON_START',
+          'FITNESS_DAYS',
+          'SET_EFTP',
+          'SET_FITNESS'
+        ].includes(category) ||
+        ['Note', 'Holiday'].includes(type)
+      ) {
+        const normalizedNote = normalizeIntervalsCalendarNote(planned, userId)
+
+        await calendarNoteRepository.upsert(
+          userId,
+          'intervals',
+          normalizedNote.externalId,
+          normalizedNote
+        )
+        notesUpserted++
+
+        // Ensure it doesn't exist as a PlannedWorkout or Event (if type changed)
+        await prisma.plannedWorkout.deleteMany({
+          where: { userId, externalId: normalizedNote.externalId }
+        })
+        await prisma.event.deleteMany({
+          where: { userId, source: 'intervals', externalId: normalizedNote.externalId }
+        })
+        continue
+      }
+
       const normalizedPlanned = normalizeIntervalsPlannedWorkout(planned, userId)
 
       await prisma.plannedWorkout.upsert({
@@ -312,6 +364,11 @@ export const IntervalsService = {
         create: normalizedPlanned
       })
       plannedUpserted++
+
+      // Ensure it doesn't exist as a CalendarNote (if type changed)
+      await calendarNoteRepository.deleteExternal(userId, 'intervals', [
+        normalizedPlanned.externalId
+      ])
 
       if (planned.category === 'EVENT') {
         let startTime = null
@@ -344,7 +401,7 @@ export const IntervalsService = {
       }
     }
 
-    return { plannedWorkouts: plannedUpserted, events: eventsUpserted }
+    return { plannedWorkouts: plannedUpserted, events: eventsUpserted, notes: notesUpserted }
   },
 
   /**
@@ -371,6 +428,8 @@ export const IntervalsService = {
       }
     })
 
+    await calendarNoteRepository.deleteExternal(userId, 'intervals', externalIds)
+
     await prisma.event.deleteMany({
       where: {
         userId,
@@ -378,5 +437,101 @@ export const IntervalsService = {
         externalId: { in: externalIds }
       }
     })
+  },
+
+  /**
+   * Process a single webhook event.
+   */
+  async processWebhookEvent(userId: string, type: string, intervalEvent: any) {
+    // Determine sync range
+    let startDate: Date
+    let endDate: Date = new Date()
+    // Cap endDate at end of today (service will handle historical cap logic too)
+    endDate.setHours(23, 59, 59, 999)
+
+    switch (type) {
+      case 'ACTIVITY_UPLOADED':
+      case 'ACTIVITY_ANALYZED':
+        // Sync last 2 days
+        startDate = new Date()
+        startDate.setDate(startDate.getDate() - 2)
+        await IntervalsService.syncActivities(userId, startDate, endDate)
+        break
+
+      case 'ACTIVITY_UPDATED': {
+        const activityDateStr =
+          intervalEvent.activity?.start_date_local || intervalEvent.activity?.start_date
+        if (activityDateStr) {
+          const actDate = new Date(activityDateStr)
+          // Fetch user's timezone to calculate correct day range
+          const timezone = await getUserTimezone(userId)
+          // Sync wider range (previous day to next day in local time)
+          const localActDate = getStartOfDayUTC(timezone, actDate)
+
+          startDate = new Date(localActDate)
+          startDate.setDate(startDate.getDate() - 1)
+          endDate = new Date(localActDate)
+          endDate.setDate(endDate.getDate() + 1)
+        } else {
+          startDate = new Date()
+          startDate.setDate(startDate.getDate() - 2)
+        }
+        await IntervalsService.syncActivities(userId, startDate, endDate)
+        break
+      }
+
+      case 'WELLNESS_UPDATED':
+        startDate = new Date()
+        startDate.setDate(startDate.getDate() - 2)
+        await IntervalsService.syncWellness(userId, startDate, endDate)
+        break
+
+      case 'FITNESS_UPDATED': {
+        const records = intervalEvent.records || []
+        if (records.length > 0) {
+          const dates = records.map((r: any) => new Date(r.id).getTime())
+          startDate = new Date(Math.min(...dates))
+          endDate = new Date(Math.max(...dates))
+        } else {
+          startDate = new Date()
+          startDate.setDate(startDate.getDate() - 2)
+        }
+        await IntervalsService.syncWellness(userId, startDate, endDate)
+        break
+      }
+
+      case 'ACTIVITY_DELETED': {
+        const deletedActivityId = intervalEvent.activity?.id || intervalEvent.id
+        if (deletedActivityId) {
+          await IntervalsService.deleteActivity(userId, deletedActivityId.toString())
+        }
+        // Sync a brief range to ensure metrics (CTL/ATL) are updated
+        startDate = new Date()
+        startDate.setDate(startDate.getDate() - 1)
+        await IntervalsService.syncActivities(userId, startDate, endDate)
+        break
+      }
+
+      case 'CALENDAR_UPDATED': {
+        const deletedEvents = intervalEvent.deleted_events || []
+        if (deletedEvents.length > 0) {
+          const deletedIds = deletedEvents.map((id: any) => id.toString())
+          await IntervalsService.deletePlannedWorkouts(userId, deletedIds)
+        }
+
+        // Sync wider range for calendar
+        startDate = new Date()
+        startDate.setDate(startDate.getDate() - 3)
+        endDate = new Date()
+        endDate.setDate(endDate.getDate() + 28)
+        await IntervalsService.syncPlannedWorkouts(userId, startDate, endDate)
+        break
+      }
+
+      default:
+        console.log(`[IntervalsService] Unhandled webhook event type: ${type}`)
+        return { handled: false, message: `Unhandled event type: ${type}` }
+    }
+    return { handled: true, message: `Processed ${type}` }
   }
 }

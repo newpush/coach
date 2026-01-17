@@ -94,6 +94,7 @@ model User {
   workouts        Workout[]
   fitFiles        FitFile[]
   plannedWorkouts PlannedWorkout[]
+  calendarNotes CalendarNote[]
   dailyMetrics    DailyMetric[]
   wellness        Wellness[]
   nutrition       Nutrition[]
@@ -127,7 +128,43 @@ model User {
   athletes   CoachingRelationship[] @relation("CoachRelation")
   invites    CoachingInvite[]
 
+  // System Message Dismissals
+  systemMessageDismissals UserSystemMessageDismissal[]
+
   @@index([createdAt])
+}
+
+// --------------------------------------
+// System Announcements
+// --------------------------------------
+
+model SystemMessage {
+  id          String   @id @default(uuid())
+  title       String
+  content     String   @db.Text
+  type        String   @default("INFO") // INFO, WARNING, ERROR, SUCCESS
+  isActive    Boolean  @default(true)
+  expiresAt   DateTime?
+
+  // Tracking user dismissals
+  dismissals  UserSystemMessageDismissal[]
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model UserSystemMessageDismissal {
+  id              String        @id @default(uuid())
+  userId          String
+  systemMessageId String
+
+  dismissedAt     DateTime      @default(now())
+
+  user            User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  systemMessage   SystemMessage @relation(fields: [systemMessageId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, systemMessageId])
+  @@index([userId])
 }
 
 // --------------------------------------
@@ -846,6 +883,39 @@ model PlannedWorkout {
   @@index([userId, date])
   @@index([userId, syncStatus])
   @@unique([userId, externalId]) // Prevent duplicates
+}
+
+// Generic Calendar Entries (Notes, Holidays, Weekly Targets, Sick Days)
+// Distinct from 'PlannedWorkout' which are actual training sessions
+model CalendarNote {
+  id           String   @id @default(uuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Timing (Timezone Aware)
+  startDate    DateTime // Mapped from start_date_local
+  endDate      DateTime? // Mapped from end_date_local
+  isWeeklyNote Boolean  @default(false) // Mapped from 'for_week' - indicates a whole-week note
+
+  // Content
+  title        String   // Mapped from 'name'
+  description  String?  @db.Text
+  category     String   // "NOTE", "TARGET", "HOLIDAY", "SICK", "INJURED", "SEASON_START", "FITNESS_DAYS"
+  type         String?  // The specific type string from source
+
+  // External Sync
+  externalId   String   // ID from Intervals.icu
+  source       String   @default("intervals") // "intervals", "manual"
+
+  // Raw Data
+  rawJson      Json?    // Store full original payload
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([userId, source, externalId])
+  @@index([userId, startDate])
+  @@index([userId, isWeeklyNote])
 }
 
 // Normalized Daily Health Data (Recovery, Sleep)

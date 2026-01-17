@@ -3,7 +3,11 @@ export default defineAppConfig({
     colors: {
       primary: 'green',
       gray: 'neutral',
-      neutral: 'zinc'
+      neutral: 'zinc',
+      success: 'green',
+      warning: 'amber',
+      error: 'red',
+      info: 'blue'
     },
     // Custom design tokens overrides
     card: {

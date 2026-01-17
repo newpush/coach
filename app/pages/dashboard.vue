@@ -65,6 +65,8 @@
 
         <!-- Dashboard Grid (Connected User) -->
         <div v-else class="p-3 sm:p-6 space-y-4 sm:space-y-8">
+          <DashboardSystemMessageCard />
+
           <DashboardMissingDataBanner
             v-if="missingFields.length > 0"
             :missing-fields="missingFields"
@@ -163,30 +165,60 @@
                   <div
                     v-for="workout in upcomingWorkouts"
                     :key="workout.id"
-                    class="py-3 flex items-center gap-3 hover:bg-gray-50 dark:hover:bg-gray-800/50 cursor-pointer -mx-4 px-4 rounded-lg transition-colors"
+                    class="py-3 flex items-center gap-3 hover:bg-gray-50 dark:hover:bg-gray-800/50 cursor-pointer -mx-4 px-4 rounded-lg transition-colors group relative"
                     @click="navigateTo(`/workouts/planned/${workout.id}`)"
                   >
+                    <!-- Date Box (Standardized) -->
                     <div
-                      class="flex flex-col items-center justify-center w-10 h-10 rounded-lg bg-primary-50 dark:bg-primary-900/20 text-primary shrink-0"
+                      class="flex flex-col items-center justify-center w-10 h-10 rounded-lg bg-gray-50 dark:bg-gray-900 border border-gray-100 dark:border-gray-700 text-gray-600 dark:text-gray-400 shrink-0 shadow-sm"
                     >
                       <span class="text-[10px] font-bold uppercase leading-none">{{
                         formatDayShort(workout.date)
                       }}</span>
                       <span class="text-sm font-bold">{{ formatDateDay(workout.date) }}</span>
                     </div>
+
+                    <!-- Workout Icon -->
+                    <UTooltip :text="workout.type" class="shrink-0">
+                      <div class="flex items-center justify-center w-8 h-8">
+                        <UIcon
+                          :name="getWorkoutIcon(workout.type)"
+                          class="w-5 h-5"
+                          :class="getWorkoutColorClass(workout.type)"
+                        />
+                      </div>
+                    </UTooltip>
+
+                    <!-- Workout Details -->
                     <div class="flex-1 min-w-0">
-                      <div class="text-sm font-bold text-gray-900 dark:text-white truncate">
-                        {{ workout.title }}
+                      <div class="flex items-center gap-2">
+                        <div class="text-sm font-bold text-gray-900 dark:text-white truncate">
+                          {{ workout.title }}
+                        </div>
+                        <UTooltip
+                          v-if="workout.planName"
+                          :text="`Part of plan: ${workout.planName}`"
+                        >
+                          <UIcon
+                            name="i-heroicons-trophy"
+                            class="w-3.5 h-3.5 text-primary shrink-0"
+                          />
+                        </UTooltip>
                       </div>
                       <div class="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-2">
-                        <span>{{ workout.type }}</span>
                         <span v-if="workout.durationSec"
-                          >• {{ Math.round(workout.durationSec / 60) }}m</span
+                          >{{ Math.round(workout.durationSec / 60) }}m</span
                         >
-                        <span v-if="workout.tss">• {{ Math.round(workout.tss) }} TSS</span>
+                        <span v-if="workout.tss"
+                          ><span v-if="workout.durationSec">•</span>
+                          {{ Math.round(workout.tss) }} TSS</span
+                        >
                       </div>
                     </div>
-                    <UIcon name="i-heroicons-chevron-right" class="w-4 h-4 text-gray-300" />
+                    <UIcon
+                      name="i-heroicons-chevron-right"
+                      class="w-4 h-4 text-gray-300 group-hover:text-primary transition-colors"
+                    />
                   </div>
                 </div>
               </div>
@@ -244,8 +276,13 @@
 
 <script setup lang="ts">
   import { useLocalStorage } from '@vueuse/core'
+  import {
+    getWorkoutIcon,
+    getWorkoutColorClass,
+    getWorkoutBorderColorClass
+  } from '~/utils/activity-types'
 
-  const { formatDate, getUserLocalDate } = useFormat()
+  const { formatDate, formatDateUTC, getUserLocalDate } = useFormat()
 
   definePageMeta({
     middleware: 'auth'
@@ -300,17 +337,6 @@
     })
   })
 
-  // Listen for recommendation generation completion
-  onTaskCompleted('generate-recommendations', async (run) => {
-    await recommendationStore.fetchTodayRecommendation()
-    toast.add({
-      title: 'Recommendations Updated',
-      description: 'Your daily advice has been refreshed.',
-      color: 'success',
-      icon: 'i-heroicons-light-bulb'
-    })
-  })
-
   const showWelcome = useLocalStorage('dashboard-welcome-banner', true)
 
   const upcomingWorkouts = ref<any[]>([])
@@ -322,19 +348,9 @@
   async function fetchUpcomingWorkouts() {
     loadingUpcoming.value = true
     try {
-      const { plan } = await $fetch<{ plan: any }>('/api/plans/active')
-      if (plan) {
-        const today = getUserLocalDate()
-        const todayTime = today.getTime()
-
-        // Flatten all workouts from all blocks and weeks
-        const allWorkouts = plan.blocks.flatMap((b: any) => b.weeks.flatMap((w: any) => w.workouts))
-
-        // Filter for future workouts, sort by date, and take the next 5
-        upcomingWorkouts.value = allWorkouts
-          .filter((w: any) => new Date(w.date).getTime() >= todayTime && !w.completed)
-          .sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime())
-          .slice(0, 5)
+      const { workouts } = await $fetch<{ workouts: any[] }>('/api/workouts/planned/upcoming')
+      if (workouts) {
+        upcomingWorkouts.value = workouts
       }
     } catch (error) {
       console.error('Failed to fetch upcoming workouts:', error)
@@ -344,11 +360,11 @@
   }
 
   function formatDayShort(d: string) {
-    return formatDate(d, 'EEE')
+    return formatDateUTC(d, 'EEE')
   }
 
   function formatDateDay(d: string) {
-    return formatDate(d, 'd')
+    return formatDateUTC(d, 'd')
   }
 
   // Initial data fetch

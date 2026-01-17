@@ -1,5 +1,6 @@
 import { getServerSession } from '../../../utils/session'
 import { prisma } from '../../../utils/db'
+import { getUserLocalDate, getUserTimezone } from '../../../utils/date'
 
 export default defineEventHandler(async (event) => {
   const session = await getServerSession(event)
@@ -45,9 +46,9 @@ export default defineEventHandler(async (event) => {
   })
 
   // 3. Handle future planned workouts
-  // We identify "future" by date > now
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
+  // We identify "future" by date > today in the user's local calendar context
+  const timezone = await getUserTimezone(userId)
+  const today = getUserLocalDate(timezone)
 
   // Scope: Future workouts belonging to this plan
   const planScope = {

@@ -2,6 +2,8 @@ import { defineEventHandler, getQuery, createError } from 'h3'
 import { getServerSession } from '../../utils/session'
 import { prisma } from '../../utils/db'
 import { userRepository } from '../../utils/repositories/userRepository'
+import { wellnessRepository } from '../../utils/repositories/wellnessRepository'
+import { getUserTimezone, getUserLocalDate, formatDateUTC } from '../../utils/date'
 
 defineRouteMeta({
   openAPI: {
@@ -72,18 +74,16 @@ export default defineEventHandler(async (event) => {
 
   if (!user) throw createError({ statusCode: 404, message: 'User not found' })
 
-  const endDate = new Date()
-  const startDate = new Date()
-  startDate.setMonth(startDate.getMonth() - months)
+  const timezone = await getUserTimezone(user.id)
+  const endDate = getUserLocalDate(timezone)
+  const startDate = getUserLocalDate(timezone)
+  startDate.setUTCMonth(startDate.getUTCMonth() - months)
 
   // Fetch weight history from Wellness table
-  const weightHistory = await prisma.wellness.findMany({
+  const weightHistory = await wellnessRepository.getForUser(user.id, {
+    startDate,
+    endDate,
     where: {
-      userId: user.id,
-      date: {
-        gte: startDate,
-        lte: endDate
-      },
       weight: {
         not: null
       }
@@ -107,13 +107,15 @@ export default defineEventHandler(async (event) => {
   // Only if current profile weight is set
   if (user.weight) {
     const lastEntry = data[data.length - 1]
-    const today = new Date()
-    // If no history, or last entry is old/different, append current state
-    if (
-      !lastEntry ||
-      (lastEntry.weight !== user.weight &&
-        today.getTime() - new Date(lastEntry.date).getTime() > 86400000)
-    ) {
+    const today = getUserLocalDate(timezone)
+
+    // Check if we already have an entry for today
+    const hasEntryForToday = lastEntry
+      ? formatDateUTC(new Date(lastEntry.date)) === formatDateUTC(today)
+      : false
+
+    // If no history, or last entry is old/different (and not today), append current state
+    if (!lastEntry || (lastEntry.weight !== user.weight && !hasEntryForToday)) {
       data.push({
         date: today,
         weight: user.weight

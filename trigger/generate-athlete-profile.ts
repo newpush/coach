@@ -13,10 +13,12 @@ import {
   getUserTimezone,
   getStartOfDaysAgoUTC,
   getEndOfDayUTC,
-  formatUserDate
+  formatUserDate,
+  getUserLocalDate
 } from '../server/utils/date'
 import { getCheckinHistoryContext } from '../server/utils/services/checkin-service'
 import { getUserAiSettings } from '../server/utils/ai-settings'
+import { recommendTodayActivityTask } from './recommend-today-activity'
 
 // Athlete Profile schema for structured JSON output
 const athleteProfileSchema = {
@@ -358,10 +360,10 @@ export const generateAthleteProfileTask = task({
   id: 'generate-athlete-profile',
   maxDuration: 300, // 5 minutes for AI processing
   queue: userReportsQueue,
-  run: async (payload: { userId: string; reportId: string }) => {
-    const { userId, reportId } = payload
+  run: async (payload: { userId: string; reportId: string; triggerRecommendation?: boolean }) => {
+    const { userId, reportId, triggerRecommendation } = payload
 
-    logger.log('Starting athlete profile generation', { userId, reportId })
+    logger.log('Starting athlete profile generation', { userId, reportId, triggerRecommendation })
 
     // Update report status
     await prisma.report.update({
@@ -621,7 +623,7 @@ Recent sleep: ${recentWellness
                 }
                 if (daysToTarget) goalInfo += `\n  Timeline: ${daysToTarget} days remaining`
                 if (g.eventDate)
-                  goalInfo += `\n  Event: ${g.eventType || 'race'} on ${new Date(g.eventDate).toLocaleDateString()} (${daysToEvent} days)`
+                  goalInfo += `\n  Event: ${g.eventType || 'race'} on ${formatUserDate(g.eventDate, timezone)} (${daysToEvent} days)`
                 if (g.aiContext) goalInfo += `\n  Context: ${g.aiContext}`
 
                 return goalInfo
@@ -699,7 +701,7 @@ WORKOUT INSIGHTS (from AI analysis):
 ${workoutInsights || 'No detailed workout analysis available'}
 
 RECENT TRAINING DETAILS (Last 20 sessions):
-${buildWorkoutSummary(recentWorkouts)}
+${buildWorkoutSummary(recentWorkouts, timezone)}
 
 RECOVERY METRICS:
 ${wellnessSummary}${wellnessAnalysisSummary}
@@ -822,6 +824,43 @@ Maintain your **${aiSettings.aiPersona}** persona throughout.`
       })
 
       logger.log('Athlete profile and user scores saved to database')
+
+      // CHAIN: Trigger Today's Recommendation (Only if requested)
+      if (triggerRecommendation) {
+        logger.log("🔄 Chaining: Triggering Today's Activity Recommendation...")
+        try {
+          const timezone = await getUserTimezone(userId)
+          const today = getUserLocalDate(timezone)
+
+          // Create pending recommendation
+          const recommendation = await prisma.activityRecommendation.create({
+            data: {
+              userId,
+              date: today,
+              recommendation: 'proceed', // placeholder
+              confidence: 0,
+              reasoning: 'Analysis queued after profile update...',
+              status: 'PROCESSING'
+            }
+          })
+
+          await recommendTodayActivityTask.trigger(
+            {
+              userId,
+              date: today,
+              recommendationId: recommendation.id
+            },
+            {
+              concurrencyKey: userId
+            }
+          )
+          logger.log('✅ Triggered recommend-today-activity')
+        } catch (err) {
+          logger.error('❌ Failed to chain recommend-today-activity', { err })
+        }
+      } else {
+        logger.log('⏹️ Chaining skipped: triggerRecommendation not set')
+      }
 
       return {
         success: true,

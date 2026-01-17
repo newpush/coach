@@ -184,7 +184,7 @@
                     <div class="flex justify-between">
                       <dt class="text-gray-500">Weight</dt>
                       <dd class="font-medium">
-                        {{ data.profile.weight ? `${data.profile.weight} kg` : '--' }}
+                        {{ data.profile.weight ? `${data.profile.weight.toFixed(2)} kg` : '--' }}
                       </dd>
                     </div>
                     <div class="flex justify-between">

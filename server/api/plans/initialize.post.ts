@@ -2,6 +2,7 @@ import { prisma } from '../../utils/db'
 import { z } from 'zod'
 import { tasks } from '@trigger.dev/sdk/v3'
 import { getServerSession } from '../../utils/session'
+import { getUserTimezone, getUserLocalDate, getStartOfDayUTC } from '../../utils/date'
 
 const initializePlanSchema = z.object({
   goalId: z.string(),
@@ -59,7 +60,10 @@ export default defineEventHandler(async (event) => {
   }
 
   // 2. Calculate Timeline
-  const start = new Date(startDate)
+  // Force start date to UTC midnight of the calendar day
+  const timezone = await getUserTimezone(userId)
+  const start = getUserLocalDate(timezone, new Date(startDate))
+
   const end = new Date(targetDate)
   const totalWeeks = Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24 * 7))
 
@@ -93,9 +97,9 @@ export default defineEventHandler(async (event) => {
           weeks: {
             create: Array.from({ length: block.durationWeeks }).map((_, i) => {
               const weekStart = new Date(block.startDate)
-              weekStart.setDate(weekStart.getDate() + i * 7)
+              weekStart.setUTCDate(weekStart.getUTCDate() + i * 7)
               const weekEnd = new Date(weekStart)
-              weekEnd.setDate(weekEnd.getDate() + 6)
+              weekEnd.setUTCDate(weekEnd.getUTCDate() + 6)
 
               const isRecovery = (i + 1) % (block.recoveryWeekIndex || 4) === 0
 
@@ -196,7 +200,7 @@ function calculateBlocks(startDate: Date, totalWeeks: number, strategy: string, 
           durationWeeks: weeks,
           recoveryWeekIndex: 3 // Recovery every 3rd week in Block usually means 2 ON / 1 OFF or 3 ON / 1 OFF. Let's do 3 week blocks where last week is lighter? No, Block is usually continuous. Let's stick to 3:1 rhythm for simplicity or 2:1.
         })
-        currentDate.setDate(currentDate.getDate() + weeks * 7)
+        currentDate.setUTCDate(currentDate.getUTCDate() + weeks * 7)
         remainingWeeks -= weeks
       }
     }
@@ -213,7 +217,7 @@ function calculateBlocks(startDate: Date, totalWeeks: number, strategy: string, 
         durationWeeks: weeks,
         recoveryWeekIndex: 3
       })
-      currentDate.setDate(currentDate.getDate() + weeks * 7)
+      currentDate.setUTCDate(currentDate.getUTCDate() + weeks * 7)
       remainingWeeks -= weeks
     }
 
@@ -250,7 +254,7 @@ function calculateBlocks(startDate: Date, totalWeeks: number, strategy: string, 
       durationWeeks: phase1,
       recoveryWeekIndex: 4
     })
-    currentDate.setDate(currentDate.getDate() + phase1 * 7)
+    currentDate.setUTCDate(currentDate.getUTCDate() + phase1 * 7)
 
     blocks.push({
       order: order++,
@@ -261,7 +265,7 @@ function calculateBlocks(startDate: Date, totalWeeks: number, strategy: string, 
       durationWeeks: phase2,
       recoveryWeekIndex: 4
     })
-    currentDate.setDate(currentDate.getDate() + phase2 * 7)
+    currentDate.setUTCDate(currentDate.getUTCDate() + phase2 * 7)
 
     blocks.push({
       order: order++,
@@ -298,7 +302,7 @@ function calculateBlocks(startDate: Date, totalWeeks: number, strategy: string, 
         recoveryWeekIndex: 4
       })
       baseWeeks -= duration
-      currentDate.setDate(currentDate.getDate() + duration * 7)
+      currentDate.setUTCDate(currentDate.getUTCDate() + duration * 7)
     }
 
     // Build Phase
@@ -314,7 +318,7 @@ function calculateBlocks(startDate: Date, totalWeeks: number, strategy: string, 
         recoveryWeekIndex: 4
       })
       buildWeeks -= duration
-      currentDate.setDate(currentDate.getDate() + duration * 7)
+      currentDate.setUTCDate(currentDate.getUTCDate() + duration * 7)
     }
 
     // Peak/Taper

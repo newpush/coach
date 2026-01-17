@@ -5,6 +5,7 @@ import { userReportsQueue } from './queues'
 import { syncPlannedWorkoutToIntervals } from '../server/utils/intervals-sync'
 import { WorkoutConverter } from '../server/utils/workout-converter'
 import { workoutRepository } from '../server/utils/repositories/workoutRepository'
+import { getUserTimezone } from '../server/utils/date'
 
 const workoutStructureSchema = {
   type: 'object',
@@ -133,6 +134,9 @@ export const generateStructuredWorkoutTask = task({
     const phase = workout.trainingWeek?.block.type || 'General'
     const focus = workout.trainingWeek?.block.primaryFocus || 'Fitness'
 
+    // Fetch user timezone
+    const timezone = await getUserTimezone(workout.userId)
+
     // Fetch recent workouts for context
     const recentWorkouts = await workoutRepository.getForUser(workout.userId, {
       limit: 5,
@@ -170,7 +174,7 @@ export const generateStructuredWorkoutTask = task({
     - Coach Persona: ${persona}
 
     RECENT WORKOUTS:
-    ${buildWorkoutSummary(recentWorkouts)}
+    ${buildWorkoutSummary(recentWorkouts, timezone)}
 
     CRITICAL: ALWAYS use the user's custom zones defined below.
 

@@ -3,14 +3,19 @@ export interface CalendarActivity {
   title: string
   date: string // ISO date string
   type?: string
-  source: 'completed' | 'planned'
-  status: 'completed' | 'planned' | 'missed' | 'completed_plan'
+  source: 'completed' | 'planned' | 'note'
+  status: 'completed' | 'planned' | 'missed' | 'completed_plan' | 'note'
 
   // Normalized metrics
   duration?: number // seconds
   distance?: number // meters
   tss?: number
   intensity?: number // 0-1+
+
+  // Note specific
+  category?: string
+  isWeeklyNote?: boolean
+  endDate?: string // ISO date string for range end
 
   // Completed specific
   rpe?: number
@@ -43,6 +48,7 @@ export interface CalendarActivity {
     tss?: number
     type?: string
   } | null
+  structuredWorkout?: any | null
 
   // Training Load
   ctl?: number | null // Chronic Training Load (Fitness)

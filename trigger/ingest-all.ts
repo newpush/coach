@@ -6,6 +6,7 @@ import { ingestWithingsTask } from './ingest-withings'
 import { ingestIntervalsTask } from './ingest-intervals'
 import { ingestYazioTask } from './ingest-yazio'
 import { ingestHevyTask } from './ingest-hevy'
+import { generateAthleteProfileTask } from './generate-athlete-profile'
 
 export const ingestAllTask = task({
   id: 'ingest-all',
@@ -170,6 +171,37 @@ export const ingestAllTask = task({
     logger.log(`  ❌ Failed: ${failedCount}`)
     logger.log(`  📊 Total: ${results.length}`)
     logger.log('='.repeat(60))
+
+    // CHAIN: Trigger Athlete Profile Generation
+    if (results.length > 0) {
+      logger.log('🔄 Chaining: Triggering Athlete Profile Generation...')
+      try {
+        // Create a placeholder report
+        const report = await prisma.report.create({
+          data: {
+            userId,
+            type: 'ATHLETE_PROFILE',
+            status: 'QUEUED',
+            dateRangeStart: new Date(startDate),
+            dateRangeEnd: new Date(endDate)
+          }
+        })
+
+        await generateAthleteProfileTask.trigger(
+          {
+            userId,
+            reportId: report.id,
+            triggerRecommendation: true
+          },
+          {
+            concurrencyKey: userId
+          }
+        )
+        logger.log('✅ Triggered generate-athlete-profile')
+      } catch (err) {
+        logger.error('❌ Failed to chain generate-athlete-profile', { err })
+      }
+    }
 
     return {
       success: failedCount === 0,

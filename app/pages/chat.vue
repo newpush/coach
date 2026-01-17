@@ -137,12 +137,17 @@
     // Check for workout context
     if (route.query.workoutId) {
       const workoutId = route.query.workoutId as string
+      const isPlanned = route.query.isPlanned === 'true'
 
       // Create new chat
       await createNewChat()
 
       // Send initial message
-      input.value = `Please analyze my workout with ID ${workoutId}. How did I perform?`
+      if (isPlanned) {
+        input.value = `I'd like to discuss my upcoming planned workout (ID: ${workoutId}). What should I focus on?`
+      } else {
+        input.value = `Please analyze my completed workout with ID ${workoutId}. How did I perform?`
+      }
       await onSubmit()
 
       // Clear query param

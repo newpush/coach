@@ -1,5 +1,11 @@
 import { getServerSession } from '../../utils/session'
 import { prisma } from '../../utils/db'
+import {
+  getUserLocalDate,
+  getUserTimezone,
+  getStartOfDayUTC,
+  getEndOfDayUTC
+} from '../../utils/date'
 
 defineRouteMeta({
   openAPI: {
@@ -76,11 +82,23 @@ export default defineEventHandler(async (event) => {
   }
 
   const userId = (session.user as any).id
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { timezone: true }
+  })
+  const timezone = user?.timezone ?? 'UTC'
+  const today = getUserLocalDate(timezone)
+
+  // Adjust dates to cover the full local days in UTC
+  // We assume the input dates (YYYY-MM-DD) represent local calendar days
+  // So we convert them to the corresponding UTC range
+  const rangeStart = getStartOfDayUTC(timezone, startDate)
+  const rangeEnd = getEndOfDayUTC(timezone, endDate)
 
   // Fetch nutrition data for the date range
   const nutrition = await nutritionRepository.getForUser(userId, {
-    startDate,
-    endDate,
+    startDate: rangeStart,
+    endDate: rangeEnd,
     orderBy: { date: 'asc' }
   })
 
@@ -102,8 +120,8 @@ export default defineEventHandler(async (event) => {
 
   // Fetch wellness data for the date range
   const wellness = await wellnessRepository.getForUser(userId, {
-    startDate,
-    endDate,
+    startDate: rangeStart,
+    endDate: rangeEnd,
     orderBy: { date: 'asc' }
   })
 
@@ -112,8 +130,8 @@ export default defineEventHandler(async (event) => {
     where: {
       userId,
       date: {
-        gte: startDate,
-        lte: endDate
+        gte: rangeStart,
+        lte: rangeEnd
       }
     },
     orderBy: { date: 'asc' }
@@ -148,8 +166,8 @@ export default defineEventHandler(async (event) => {
 
   // Fetch completed workouts
   const workouts = await workoutRepository.getForUser(userId, {
-    startDate,
-    endDate,
+    startDate: rangeStart,
+    endDate: rangeEnd,
     orderBy: { date: 'asc' },
     include: {
       plannedWorkout: true,
@@ -164,11 +182,18 @@ export default defineEventHandler(async (event) => {
     where: {
       userId,
       date: {
-        gte: startDate,
-        lte: endDate
+        gte: rangeStart,
+        lte: rangeEnd
       }
     },
     orderBy: { date: 'asc' }
+  })
+
+  // Fetch calendar notes
+  const calendarNotes = await calendarNoteRepository.getForUser(userId, {
+    startDate: rangeStart,
+    endDate: rangeEnd,
+    orderBy: { startDate: 'asc' }
   })
 
   // Create a set of plannedWorkoutIds that are already represented by completed workouts
@@ -259,18 +284,13 @@ export default defineEventHandler(async (event) => {
     let status = 'planned'
     if (p.completed) status = 'completed_plan'
 
-    // Shift Planned Workout date to Noon UTC to avoid timezone shift issues on frontend
-    // Planned Workouts are "Date Only" (Midnight UTC), so converting to local time often shifts to previous day
-    // By setting to Noon UTC, it stays on the correct day for almost all timezones
-    const safeDate = new Date(p.date)
-    safeDate.setUTCHours(12)
+    // Use UTC midnight as the source of truth for planned workouts
+    const workoutDate = new Date(p.date)
+    workoutDate.setUTCHours(0, 0, 0, 0)
 
     // Check if missed (in past and not completed)
     const planDate = new Date(p.date)
-    // Reset times for comparison
-    planDate.setHours(0, 0, 0, 0)
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
+    planDate.setUTCHours(0, 0, 0, 0)
 
     if (!p.completed && planDate < today) {
       status = 'missed'
@@ -283,7 +303,7 @@ export default defineEventHandler(async (event) => {
     activitiesByDate.get(dateKey).push({
       id: p.id,
       title: p.title,
-      date: safeDate.toISOString(),
+      date: workoutDate.toISOString(),
       type: p.type || 'Workout',
       source: 'planned',
       status: status,
@@ -298,8 +318,35 @@ export default defineEventHandler(async (event) => {
       plannedDuration: p.durationSec,
       plannedDistance: p.distanceMeters,
       plannedTss: p.tss,
+      structuredWorkout: p.structuredWorkout,
 
       // Nutrition data for this date (will be same for all activities on the same day)
+      nutrition: nutritionByDate.get(dateKey) || null,
+
+      // Wellness data for this date
+      wellness: wellnessByDate.get(dateKey) || null
+    })
+  }
+
+  // Process Calendar Notes
+  for (const n of calendarNotes) {
+    const dateKey = n.startDate.toISOString().split('T')[0]
+    if (!activitiesByDate.has(dateKey)) {
+      activitiesByDate.set(dateKey, [])
+    }
+    activitiesByDate.get(dateKey).push({
+      id: n.id,
+      title: n.title,
+      date: n.startDate.toISOString(),
+      endDate: n.endDate?.toISOString(),
+      isWeeklyNote: n.isWeeklyNote,
+      type: n.type || 'Note',
+      category: n.category,
+      source: 'note',
+      status: 'note',
+      description: n.description,
+
+      // Nutrition data for this date
       nutrition: nutritionByDate.get(dateKey) || null,
 
       // Wellness data for this date

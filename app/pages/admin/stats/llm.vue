@@ -60,7 +60,7 @@
     plugins: {
       legend: {
         display: true,
-        position: 'bottom',
+        position: 'bottom' as const,
         labels: {
           boxWidth: 12,
           padding: 15
@@ -103,6 +103,16 @@
     return colors[model]
   }
 
+  // Helper to generate consistent colors for tools
+  const getToolColor = (tool: string) => {
+    let hash = 0
+    for (let i = 0; i < tool.length; i++) {
+      hash = tool.charCodeAt(i) + ((hash << 5) - hash)
+    }
+    const c = (hash & 0x00ffffff).toString(16).toUpperCase()
+    return '#' + '00000'.substring(0, 6 - c.length) + c
+  }
+
   const dailyCostsChartData = computed(() => {
     if (!stats.value?.dailyCostsByModel) return { labels: [], datasets: [] }
 
@@ -114,7 +124,7 @@
 
     return {
       labels: dates.map((d) =>
-        new Date(d).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+        new Date(d!).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
       ),
       datasets: models.map((model) => {
         return {
@@ -140,7 +150,7 @@
 
     return {
       labels: dates.map((d) =>
-        new Date(d).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+        new Date(d!).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
       ),
       datasets: models.map((model) => {
         return {
@@ -148,6 +158,32 @@
           backgroundColor: getModelColor(model),
           data: dates.map((date) => {
             const entry = data.find((d) => d.date === date && d.model === model)
+            return entry ? entry.count : 0
+          })
+        }
+      })
+    }
+  })
+
+  const dailyToolCallsChartData = computed(() => {
+    if (!stats.value?.dailyToolUsage) return { labels: [], datasets: [] }
+
+    const data = stats.value.dailyToolUsage
+    // Get unique dates sorted
+    const dates = [...new Set(data.map((d) => d.date))].sort()
+    // Get unique tools
+    const tools = [...new Set(data.map((d) => d.name))]
+
+    return {
+      labels: dates.map((d) =>
+        new Date(d!).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+      ),
+      datasets: tools.map((tool) => {
+        return {
+          label: tool,
+          backgroundColor: getToolColor(tool),
+          data: dates.map((date) => {
+            const entry = data.find((d) => d.date === date && d.name === tool)
             return entry ? entry.count : 0
           })
         }
@@ -297,7 +333,7 @@
           </UCard>
         </div>
 
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <!-- Usage by Model -->
           <UCard>
             <template #header>
@@ -337,7 +373,9 @@
               </div>
             </div>
           </UCard>
+        </div>
 
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <!-- Usage by Tool -->
           <UCard>
             <template #header>
@@ -355,6 +393,16 @@
                 <span class="font-medium font-mono text-xs">{{ item.name }}</span>
                 <span class="text-gray-500">{{ item.count }} calls</span>
               </div>
+            </div>
+          </UCard>
+
+          <!-- NEW: Daily Tool Calls -->
+          <UCard>
+            <template #header>
+              <h3 class="font-semibold">Daily Tool Calls per Tool</h3>
+            </template>
+            <div class="h-64 relative">
+              <Bar :data="dailyToolCallsChartData" :options="stackedBarOptions" />
             </div>
           </UCard>
         </div>

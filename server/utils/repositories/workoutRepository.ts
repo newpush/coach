@@ -17,6 +17,7 @@ export const workoutRepository = {
       orderBy?: Prisma.WorkoutOrderByWithRelationInput
       include?: Prisma.WorkoutInclude
       select?: Prisma.WorkoutSelect
+      where?: Prisma.WorkoutWhereInput
     } = {}
   ) {
     const where: Prisma.WorkoutWhereInput = {
@@ -30,7 +31,8 @@ export const workoutRepository = {
       date: {
         gte: options.startDate,
         lte: options.endDate
-      }
+      },
+      ...options.where
     }
 
     // Prisma doesn't allow both include and select

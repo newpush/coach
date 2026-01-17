@@ -4,7 +4,7 @@ import { prisma } from '../server/utils/db'
 import { workoutRepository } from '../server/utils/repositories/workoutRepository'
 import { wellnessRepository } from '../server/utils/repositories/wellnessRepository'
 import { dailyCheckinRepository } from '../server/utils/repositories/dailyCheckinRepository'
-import { formatUserDate, formatDateUTC } from '../server/utils/date'
+import { formatUserDate, formatDateUTC, getUserLocalDate } from '../server/utils/date'
 import { calculateProjectedPMC, getCurrentFitnessSummary } from '../server/utils/training-stress'
 import { getUserAiSettings } from '../server/utils/ai-settings'
 
@@ -181,10 +181,14 @@ export const generateDailyCheckinTask = task({
 
     const userTimezone = user?.timezone || 'UTC'
 
+    // Normalize today to represent the user's local calendar day at UTC midnight
+    // This ensures PMC calculation aligns with database dates
+    const todayNormalized = getUserLocalDate(userTimezone, today)
+
     // Calculate Projected PMC Trends
     const projectedMetrics = calculateProjectedPMC(
-      today,
-      new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000),
+      todayNormalized,
+      new Date(todayNormalized.getTime() + 7 * 24 * 60 * 60 * 1000),
       currentFitness.ctl,
       currentFitness.atl,
       futureWorkouts
@@ -195,7 +199,7 @@ export const generateDailyCheckinTask = task({
     if (athleteProfile?.analysisJson) {
       const profile = athleteProfile.analysisJson as any
       athleteContext = `
-ATHLETE PROFILE (Generated ${new Date(athleteProfile.createdAt).toLocaleDateString()}):
+ATHLETE PROFILE (Generated ${formatUserDate(athleteProfile.createdAt, userTimezone)}):
 ${profile.executive_summary ? `Summary: ${profile.executive_summary}` : ''}
 Current Fitness: ${profile.current_fitness?.status_label || 'Unknown'}
 Training Style: ${profile.training_characteristics?.training_style || 'Unknown'}
@@ -306,7 +310,7 @@ TODAY'S RECOVERY:
 ${todayMetric ? `Recovery: ${todayMetric.recoveryScore ?? 'N/A'}%, HRV: ${todayMetric.hrv ?? 'N/A'}ms, Sleep: ${todayMetric.sleepHours?.toFixed(1) ?? 'N/A'}h` : 'No recovery data'}
 
 RECENT TRAINING (Last 14 Days):
-${recentWorkouts.length > 0 ? buildWorkoutSummary(recentWorkouts.slice(0, 5)) : 'None'}
+${recentWorkouts.length > 0 ? buildWorkoutSummary(recentWorkouts.slice(0, 5), userTimezone) : 'None'}
 
 ${upcomingWorkoutsContext}
 ${eventsContext}

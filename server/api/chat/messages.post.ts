@@ -2,6 +2,7 @@ import { getServerSession } from '../../utils/session'
 import { GoogleGenerativeAI } from '@google/generative-ai'
 import { chatToolDeclarations, executeToolCall } from '../../utils/chat-tools'
 import { generateCoachAnalysis } from '../../utils/gemini'
+import { getUserLocalDate, formatUserDate } from '../../utils/date'
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!)
 
@@ -163,9 +164,13 @@ export default defineEventHandler(async (event) => {
 
   const chronologicalHistory = history.reverse()
 
+  // Get user timezone
+  const userTimezone = userProfile?.timezone || 'UTC'
+  const todayDate = getUserLocalDate(userTimezone)
+
   // 4. Fetch Recent Activity Data (Last 7 Days)
-  const sevenDaysAgo = new Date()
-  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
+  const sevenDaysAgo = new Date(todayDate)
+  sevenDaysAgo.setUTCDate(sevenDaysAgo.getUTCDate() - 7)
 
   // Fetch recent workouts
   const recentWorkouts = await workoutRepository.getForUser(userId, {
@@ -230,14 +235,14 @@ export default defineEventHandler(async (event) => {
   })
 
   // Fetch planned workouts (next 14 days)
-  const fourteenDaysAhead = new Date()
-  fourteenDaysAhead.setDate(fourteenDaysAhead.getDate() + 14)
+  const fourteenDaysAhead = new Date(todayDate)
+  fourteenDaysAhead.setUTCDate(fourteenDaysAhead.getUTCDate() + 14)
 
   const plannedWorkouts = await prisma.plannedWorkout.findMany({
     where: {
       userId,
       date: {
-        gte: new Date(),
+        gte: todayDate,
         lte: fourteenDaysAhead
       },
       completed: false
@@ -263,12 +268,11 @@ export default defineEventHandler(async (event) => {
   })
 
   // Fetch current training plan
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  const currentWeekStart = new Date(today)
-  const day = currentWeekStart.getDay()
-  const diff = currentWeekStart.getDate() - day + (day === 0 ? -6 : 1)
-  currentWeekStart.setDate(diff)
+  const currentWeekStart = new Date(todayDate)
+  // Calculate start of week (Monday) using UTC dates
+  const dayOfWeek = currentWeekStart.getUTCDay()
+  const diffToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek
+  currentWeekStart.setUTCDate(currentWeekStart.getUTCDate() + diffToMonday)
 
   const currentPlan = await prisma.weeklyTrainingPlan.findFirst({
     where: {
@@ -290,7 +294,7 @@ export default defineEventHandler(async (event) => {
     if (userProfile.restingHr) metrics.push(`Resting HR: ${userProfile.restingHr} bpm`)
     if (userProfile.weight) {
       const weightUnit = userProfile.weightUnits === 'Pounds' ? 'lbs' : 'kg'
-      metrics.push(`Weight: ${userProfile.weight}${weightUnit}`)
+      metrics.push(`Weight: ${userProfile.weight.toFixed(2)}${weightUnit}`)
       if (userProfile.ftp && userProfile.weightUnits !== 'Pounds') {
         metrics.push(`W/kg: ${(userProfile.ftp / userProfile.weight).toFixed(2)}`)
       }
@@ -406,7 +410,7 @@ export default defineEventHandler(async (event) => {
     }
 
     if (userProfile.profileLastUpdated) {
-      athleteContext += `\n*Profile last updated: ${new Date(userProfile.profileLastUpdated).toLocaleDateString()}*\n`
+      athleteContext += `\n*Profile last updated: ${formatUserDate(userProfile.profileLastUpdated, userTimezone)}*\n`
     }
   }
 
@@ -434,19 +438,19 @@ export default defineEventHandler(async (event) => {
       if (daysToTarget) {
         athleteContext += `- **Timeline**: ${daysToTarget} days remaining`
         if (goal.targetDate)
-          athleteContext += ` (Target: ${new Date(goal.targetDate).toLocaleDateString()})`
+          athleteContext += ` (Target: ${formatUserDate(goal.targetDate, userTimezone)})`
         athleteContext += '\n'
       }
 
       if (goal.eventDate) {
-        athleteContext += `- **Event**: ${goal.eventType || 'race'} on ${new Date(goal.eventDate).toLocaleDateString()} (${daysToEvent} days away)\n`
+        athleteContext += `- **Event**: ${goal.eventType || 'race'} on ${formatUserDate(goal.eventDate, userTimezone)} (${daysToEvent} days away)\n`
       }
 
       if (goal.aiContext) {
         athleteContext += `- **Context**: ${goal.aiContext}\n`
       }
 
-      athleteContext += `- **Created**: ${new Date(goal.createdAt).toLocaleDateString()}\n`
+      athleteContext += `- **Created**: ${formatUserDate(goal.createdAt, userTimezone)}\n`
     }
   } else {
     athleteContext +=
@@ -454,12 +458,13 @@ export default defineEventHandler(async (event) => {
   }
 
   // Generate comprehensive training context for last 14 days
-  const fourteenDaysAgo = new Date()
-  fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 14)
+  const fourteenDaysAgo = new Date(todayDate)
+  fourteenDaysAgo.setUTCDate(todayDate.getUTCDate() - 14)
 
-  const trainingContext = await generateTrainingContext(userId, fourteenDaysAgo, new Date(), {
+  const trainingContext = await generateTrainingContext(userId, fourteenDaysAgo, todayDate, {
     includeZones: false, // Skip expensive zone calculation for chat context
-    period: 'Last 14 Days'
+    period: 'Last 14 Days',
+    timezone: userProfile?.timezone || 'UTC'
   })
 
   const formattedTrainingContext = formatTrainingContextForPrompt(trainingContext)
@@ -474,7 +479,7 @@ export default defineEventHandler(async (event) => {
     athleteContext += `\n### Recent Workouts (${recentWorkouts.length} activities)\n`
     athleteContext += `*Each workout includes its ID for reference in tool calls*\n\n`
     for (const workout of recentWorkouts) {
-      athleteContext += `- **${workout.date.toLocaleDateString()}**: ${workout.title || workout.type}\n`
+      athleteContext += `- **${formatUserDate(workout.date, userTimezone)}**: ${workout.title || workout.type}\n`
       athleteContext += `  - **ID**: \`${workout.id}\` (use this ID to get detailed analysis)\n`
       athleteContext += `  - Duration: ${Math.round(workout.durationSec / 60)} min`
       if (workout.distanceMeters)
@@ -497,7 +502,7 @@ export default defineEventHandler(async (event) => {
   if (recentNutrition.length > 0) {
     athleteContext += `\n### Nutrition (${recentNutrition.length} days logged)\n`
     for (const nutrition of recentNutrition) {
-      athleteContext += `- **${nutrition.date.toLocaleDateString()}**: `
+      athleteContext += `- **${formatUserDate(nutrition.date, userTimezone)}**: `
       athleteContext += `${nutrition.calories || 0} kcal`
       if (nutrition.protein) athleteContext += ` | Protein: ${Math.round(nutrition.protein)}g`
       if (nutrition.carbs) athleteContext += ` | Carbs: ${Math.round(nutrition.carbs)}g`
@@ -526,7 +531,9 @@ export default defineEventHandler(async (event) => {
 
       // Only include dates that have actual data
       if (metrics.length > 0) {
-        entriesWithData.push(`- **${wellness.date.toLocaleDateString()}**: ${metrics.join(' | ')}`)
+        entriesWithData.push(
+          `- **${formatUserDate(wellness.date, userTimezone)}**: ${metrics.join(' | ')}`
+        )
       }
     }
 
@@ -547,7 +554,7 @@ export default defineEventHandler(async (event) => {
   // Current Training Plan
   if (currentPlan) {
     athleteContext += `\n### Current Training Plan\n`
-    athleteContext += `- **Week**: ${currentPlan.weekStartDate.toLocaleDateString()} - ${currentPlan.weekEndDate.toLocaleDateString()}\n`
+    athleteContext += `- **Week**: ${formatUserDate(currentPlan.weekStartDate, userTimezone)} - ${formatUserDate(currentPlan.weekEndDate, userTimezone)}\n`
     athleteContext += `- **Status**: ${currentPlan.status}\n`
     if (currentPlan.totalTSS)
       athleteContext += `- **Weekly TSS Target**: ${Math.round(currentPlan.totalTSS)}\n`
@@ -557,7 +564,7 @@ export default defineEventHandler(async (event) => {
       athleteContext += `- **Total Duration**: ${Math.round(currentPlan.totalDuration / 60)} minutes\n`
     if (currentPlan.notes) athleteContext += `- **Notes**: ${currentPlan.notes}\n`
     if (currentPlan.createdAt) {
-      athleteContext += `\n*Plan generated: ${new Date(currentPlan.createdAt).toLocaleDateString()}*\n`
+      athleteContext += `\n*Plan generated: ${formatUserDate(currentPlan.createdAt, userTimezone)}*\n`
     }
   } else {
     athleteContext += '\n### Current Training Plan\nNo active training plan\n'
@@ -607,7 +614,7 @@ export default defineEventHandler(async (event) => {
             : workout.syncStatus === 'FAILED'
               ? '⚠'
               : '○'
-      athleteContext += `- ${syncIcon} **${workout.date.toLocaleDateString()}**: ${workout.title || workout.type || 'Workout'}\n`
+      athleteContext += `- ${syncIcon} **${formatUserDate(workout.date, userTimezone)}**: ${workout.title || workout.type || 'Workout'}\n`
       if (workout.description) athleteContext += `  - ${workout.description}\n`
       const details: string[] = []
       if (workout.type) details.push(`Type: ${workout.type}`)
@@ -626,17 +633,8 @@ export default defineEventHandler(async (event) => {
 
   // 5. Build System Instruction with Current Time Context
   const now = new Date()
-  const userTimeZone = 'America/New_York' // TODO: Get from user preferences
-  const userTime = now.toLocaleString('en-US', {
-    timeZone: userTimeZone,
-    weekday: 'long',
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-    hour12: true
-  })
+  const userTimeZone = userProfile?.timezone || 'UTC'
+  const userTime = formatUserDate(now, userTimeZone, 'EEEE, MMMM d, yyyy h:mm a')
   const hourOfDay = parseInt(
     now.toLocaleString('en-US', { timeZone: userTimeZone, hour: 'numeric', hour12: false })
   )
@@ -649,23 +647,14 @@ export default defineEventHandler(async (event) => {
   // Calculate upcoming days for relative date understanding
   const getNextDays = (count: number) => {
     const days = []
-    const today = new Date(now)
-    today.setHours(0, 0, 0, 0)
+    const today = getUserLocalDate(userTimezone)
 
     for (let i = 0; i < count; i++) {
       const date = new Date(today)
-      date.setDate(today.getDate() + i)
-      const dayName = date.toLocaleDateString('en-US', {
-        timeZone: userTimeZone,
-        weekday: 'long'
-      })
-      const dateStr = date.toLocaleDateString('en-US', {
-        timeZone: userTimeZone,
-        month: 'short',
-        day: 'numeric',
-        year: 'numeric'
-      })
-      days.push({ dayName, dateStr, date: date.toISOString().split('T')[0] })
+      date.setUTCDate(today.getUTCDate() + i)
+      const dayName = formatUserDate(date, userTimezone, 'EEEE')
+      const dateStr = formatUserDate(date, userTimezone, 'MMM d, yyyy')
+      days.push({ dayName, dateStr, date: formatUserDate(date, userTimezone, 'yyyy-MM-dd') })
     }
     return days
   }
@@ -689,13 +678,7 @@ Adopt this persona fully in your interactions.
 ### Date & Time Reference
 **Current Time**: ${userTime} (${timeOfDay})
 
-**Today's Date**: ${now.toLocaleDateString('en-US', {
-    timeZone: userTimeZone,
-    weekday: 'long',
-    month: 'long',
-    day: 'numeric',
-    year: 'numeric'
-  })}
+**Today's Date**: ${formatUserDate(now, userTimeZone, 'EEEE, MMMM d, yyyy')}
 
 **Upcoming Days**:
 ${dateReference}

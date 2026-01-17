@@ -186,6 +186,27 @@ export default defineEventHandler(async (event) => {
     count: Number(row.count)
   }))
 
+  // 12. Daily Tool Calls per Tool
+  const dailyToolUsageRaw = await prisma.$queryRaw<
+    { date: string; name: string; count: bigint }[]
+  >`
+    SELECT
+      DATE("createdAt") as date,
+      tool as name,
+      COUNT(*) as count
+    FROM "ChatMessage",
+         jsonb_array_elements_text(metadata->'toolsUsed') as tool
+    WHERE "createdAt" >= ${thirtyDaysAgo}
+    GROUP BY DATE("createdAt"), tool
+    ORDER BY date ASC
+  `
+
+  const dailyToolUsage = dailyToolUsageRaw.map((row) => ({
+    date: new Date(row.date).toISOString().split('T')[0],
+    name: row.name,
+    count: Number(row.count)
+  }))
+
   return {
     usageByModel: usageByModel
       .map((m) => ({
@@ -205,6 +226,7 @@ export default defineEventHandler(async (event) => {
     usageByTool,
     dailyCostsByModel,
     dailyUsersByModel,
+    dailyToolUsage,
     topSpenders: topSpendersDetails,
     recentFailures,
     tokens: {

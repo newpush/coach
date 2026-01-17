@@ -139,6 +139,9 @@ export default defineNuxtConfig({
     authBypassEnabled: !!process.env.AUTH_BYPASS_USER,
     authBypassUser: process.env.AUTH_BYPASS_USER || '',
     authBypassName: process.env.AUTH_BYPASS_NAME || '',
+
+    // Redis / DragonflyDB
+    redisUrl: process.env.REDIS_URL || 'redis://localhost:6379',
     public: {
       siteUrl: process.env.NUXT_PUBLIC_SITE_URL || 'http://localhost:3099',
       version: pkg.version,

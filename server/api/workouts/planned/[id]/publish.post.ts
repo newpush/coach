@@ -1,7 +1,8 @@
 import { prisma } from '../../../../utils/db'
 import {
   createIntervalsPlannedWorkout,
-  updateIntervalsPlannedWorkout
+  updateIntervalsPlannedWorkout,
+  cleanIntervalsDescription
 } from '../../../../utils/intervals'
 import { WorkoutConverter } from '../../../../utils/workout-converter'
 import { getServerSession } from '../../../../utils/session'
@@ -61,6 +62,9 @@ export default defineEventHandler(async (event) => {
     workoutDoc = WorkoutConverter.toIntervalsICU(workoutData)
   }
 
+  // Clean the description to ensure we don't append workout doc to an already dirty description
+  const cleanDescription = cleanIntervalsDescription(workout.description || '')
+
   try {
     let resultWorkout
     let message = ''
@@ -71,7 +75,7 @@ export default defineEventHandler(async (event) => {
       const intervalsWorkout = await createIntervalsPlannedWorkout(integration, {
         date: workout.date,
         title: workout.title,
-        description: workout.description || '',
+        description: cleanDescription,
         type: workout.type || 'Ride',
         durationSec: workout.durationSec || 3600,
         tss: workout.tss ?? undefined,
@@ -104,7 +108,7 @@ export default defineEventHandler(async (event) => {
           {
             date: workout.date,
             title: workout.title,
-            description: workout.description || '',
+            description: cleanDescription,
             type: workout.type || 'Ride',
             durationSec: workout.durationSec || 3600,
             tss: workout.tss ?? undefined,
@@ -137,7 +141,7 @@ export default defineEventHandler(async (event) => {
           const intervalsWorkout = await createIntervalsPlannedWorkout(integration, {
             date: workout.date,
             title: workout.title,
-            description: workout.description || '',
+            description: cleanDescription,
             type: workout.type || 'Ride',
             durationSec: workout.durationSec || 3600,
             tss: workout.tss ?? undefined,
