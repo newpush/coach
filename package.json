@@ -74,7 +74,7 @@
     "@types/node": "^24.10.4",
     "@types/pg": "^8.16.0",
     "@types/turndown": "^5.0.6",
-    "@vitest/coverage-v8": "4.0.17",
+    "@vitest/coverage-v8": "^3.0.0",
     "@vue/test-utils": "^2.4.6",
     "eslint": "^9.39.2",
     "eslint-config-prettier": "^10.1.8",
@@ -90,7 +90,7 @@
     "release-it-pnpm": "^4.6.6",
     "tailwindcss": "^4.1.18",
     "typescript": "^5.9.3",
-    "vitest": "^4.0.17"
+    "vitest": "^3.0.0"
   },
   "name": "coach-wattz",
   "private": true,
