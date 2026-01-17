@@ -70,6 +70,7 @@
             size="sm"
             class="flex-1"
             :search-input="false"
+            :ui="{ content: 'w-full min-w-[var(--reka-popper-anchor-width)]' }"
           />
           <UButton
             size="xs"
@@ -150,6 +151,7 @@
             size="sm"
             class="flex-1"
             :search-input="false"
+            :ui="{ content: 'w-full min-w-[var(--reka-popper-anchor-width)]' }"
           />
           <UButton
             size="xs"
@@ -226,6 +228,7 @@
             size="sm"
             class="flex-1"
             :search-input="false"
+            :ui="{ content: 'w-full min-w-[var(--reka-popper-anchor-width)]' }"
           />
           <UButton
             size="xs"
@@ -263,6 +266,7 @@
             size="sm"
             class="flex-1"
             :search-input="false"
+            :ui="{ content: 'w-full min-w-[var(--reka-popper-anchor-width)]' }"
           />
           <UButton
             size="xs"
@@ -300,6 +304,7 @@
             size="sm"
             class="flex-1"
             :search-input="false"
+            :ui="{ content: 'w-full min-w-[var(--reka-popper-anchor-width)]' }"
           />
           <UButton
             size="xs"
@@ -490,6 +495,7 @@
             size="sm"
             class="flex-1"
             :search-input="false"
+            :ui="{ content: 'w-full min-w-[var(--reka-popper-anchor-width)]' }"
           />
           <UButton
             size="xs"
@@ -538,6 +544,7 @@
             size="sm"
             class="flex-1"
             :search-input="false"
+            :ui="{ content: 'w-full min-w-[var(--reka-popper-anchor-width)]' }"
           />
           <UButton
             size="xs"
@@ -575,6 +582,7 @@
             size="sm"
             class="flex-1"
             :search-input="false"
+            :ui="{ content: 'w-full min-w-[var(--reka-popper-anchor-width)]' }"
           />
           <UButton
             size="xs"
@@ -734,6 +742,7 @@
             searchable
             searchable-placeholder="Search country..."
             autofocus
+            :ui="{ content: 'w-full min-w-[var(--reka-popper-anchor-width)]' }"
           />
           <UButton
             size="xs"
@@ -778,6 +787,7 @@
             class="flex-1"
             searchable
             placeholder="Select timezone"
+            :ui="{ content: 'w-full min-w-[var(--reka-popper-anchor-width)]' }"
           />
           <UButton
             size="xs"
@@ -808,22 +818,41 @@
         <ul
           class="divide-y divide-gray-200 dark:divide-gray-700 border border-gray-200 dark:border-gray-700 rounded-md"
         >
-          <li
-            v-for="(value, key) in pendingDiffs"
-            :key="key"
-            class="p-3 text-sm flex items-center justify-between"
-          >
-            <span class="font-medium text-gray-700 dark:text-gray-200 capitalize">
-              {{ formatFieldName(key) }}
-            </span>
-            <div class="flex items-center gap-3">
-              <div class="text-right">
-                <span class="block text-xs text-gray-500 line-through mr-2">
-                  {{ formatValue(key, modelValue[key]) }}
-                </span>
+          <li v-for="(value, key) in pendingDiffs" :key="key" class="p-3 text-sm">
+            <div
+              class="flex items-center justify-between"
+              :class="{ 'mb-2': key === 'sportSettings' }"
+            >
+              <span class="font-medium text-gray-700 dark:text-gray-200 capitalize">
+                {{ formatFieldName(key) }}
+              </span>
+              <div v-if="key !== 'sportSettings'" class="flex items-center gap-3">
+                <div class="text-right">
+                  <span class="block text-xs text-gray-500 line-through mr-2">
+                    {{ formatValue(key, modelValue[key]) }}
+                  </span>
+                </div>
+                <div class="text-right font-semibold text-primary">
+                  {{ formatValue(key, value) }}
+                </div>
               </div>
-              <div class="text-right font-semibold text-primary">
-                {{ formatValue(key, value) }}
+            </div>
+
+            <!-- Detailed Sport Settings List -->
+            <div v-if="key === 'sportSettings' && Array.isArray(value)" class="pl-4 space-y-2">
+              <div
+                v-for="sport in value"
+                :key="sport.externalId"
+                class="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400"
+              >
+                <UIcon :name="getSportIcon(sport.types)" class="w-3 h-3" />
+                <span class="font-medium text-gray-700 dark:text-gray-300">{{
+                  sport.types.join(', ')
+                }}</span>
+                <span v-if="sport.ftp" class="ml-auto">{{ sport.ftp }}W</span>
+                <span v-if="sport.lthr" :class="{ 'ml-auto': !sport.ftp }"
+                  >{{ sport.lthr }}bpm</span
+                >
               </div>
             </div>
           </li>
@@ -877,6 +906,13 @@
   const showConfirmModal = ref(false)
   const pendingDiffs = ref<any>({})
   const pendingDetectedProfile = ref<any>({})
+
+  function getSportIcon(types: string[]) {
+    if (types.includes('Run') || types.includes('VirtualRun')) return 'i-lucide-footprints'
+    if (types.includes('Ride') || types.includes('VirtualRide')) return 'i-lucide-bike'
+    if (types.includes('Swim')) return 'i-lucide-waves'
+    return 'i-lucide-award'
+  }
 
   async function autodetectProfile() {
     autodetecting.value = true
@@ -934,6 +970,7 @@
     if (k === 'restingHr') return 'Resting HR'
     if (k === 'hrZones') return 'Heart Rate Zones'
     if (k === 'powerZones') return 'Power Zones'
+    if (k === 'sportSettings') return 'Sport Specific Settings'
     return k.charAt(0).toUpperCase() + k.slice(1).replace(/([A-Z])/g, ' $1')
   }
 
@@ -941,6 +978,16 @@
     if (value === null || value === undefined) return 'Not set'
     if (key === 'hrZones' || key === 'powerZones') {
       return `${(value as any[]).length} zones`
+    }
+    if (key === 'sportSettings') {
+      const types = (value as any[]).flatMap((s) => s.types).filter(Boolean)
+      const uniqueTypes = [...new Set(types)].slice(0, 3)
+      const remainder = types.length - uniqueTypes.length
+
+      let label = uniqueTypes.join(', ')
+      if (remainder > 0) label += ` +${remainder} more`
+
+      return `${(value as any[]).length} sports (${label})`
     }
     return value
   }

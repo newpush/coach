@@ -240,9 +240,12 @@
       }
 
       // Set user zones or use defaults
+      const settings = profile?.profile?.sportSettings || []
+      const defaultProfile = settings.find((s: any) => s.isDefault)
+
       zonesData.value = props.userZones || {
-        hrZones: profile?.profile?.hrZones || getDefaultHrZones(),
-        powerZones: profile?.profile?.powerZones || getDefaultPowerZones()
+        hrZones: defaultProfile?.hrZones || getDefaultHrZones(),
+        powerZones: defaultProfile?.powerZones || getDefaultPowerZones()
       }
 
       // Auto-select zone type: prefer power if available, otherwise use HR

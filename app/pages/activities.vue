@@ -874,9 +874,12 @@
   const { data: profile } = await useFetch<any>('/api/profile')
 
   const userZones = computed(() => {
+    const settings = profile.value?.profile?.sportSettings || []
+    const defaultProfile = settings.find((s: any) => s.isDefault)
+
     return {
-      hrZones: profile.value?.profile?.hrZones || getDefaultHrZones(),
-      powerZones: profile.value?.profile?.powerZones || getDefaultPowerZones()
+      hrZones: defaultProfile?.hrZones || getDefaultHrZones(),
+      powerZones: defaultProfile?.powerZones || getDefaultPowerZones()
     }
   })
 

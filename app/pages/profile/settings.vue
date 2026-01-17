@@ -47,12 +47,11 @@
               @autodetect="handleAutodetect"
             />
 
-            <ProfileCustomZones
-              v-if="activeTab === 'zones'"
-              :hr-zones="hrZones"
-              :power-zones="powerZones"
-              @update:hr-zones="(z) => updateZones('hr', z)"
-              @update:power-zones="(z) => updateZones('power', z)"
+            <ProfileSportSettings
+              v-if="activeTab === 'sports'"
+              :settings="sportSettings"
+              :profile="profile"
+              @update:settings="updateSportSettings"
             />
           </div>
         </div>
@@ -63,7 +62,7 @@
 
 <script setup lang="ts">
   import ProfileBasicSettings from '~/components/profile/BasicSettings.vue'
-  import ProfileCustomZones from '~/components/profile/CustomZones.vue'
+  import ProfileSportSettings from '~/components/profile/SportSettings.vue'
 
   const { data } = useAuth()
   const user = computed(() => data.value?.user)
@@ -75,7 +74,7 @@
 
   const tabs = [
     { id: 'basic', label: 'Basic Settings', icon: 'i-heroicons-user-circle' },
-    { id: 'zones', label: 'Custom Zones', icon: 'i-heroicons-chart-bar' }
+    { id: 'sports', label: 'Sport Settings', icon: 'i-heroicons-trophy' }
   ]
 
   const activeTab = ref('basic')
@@ -104,6 +103,8 @@
     timezone: ''
   })
 
+  const sportSettings = ref<any[]>([])
+
   // Fetch profile data
   const { data: profileData, refresh: refreshProfile } = await useFetch('/api/profile', {
     key: 'user-profile'
@@ -114,18 +115,10 @@
     Object.assign(profile.value, newProfile)
 
     try {
-      const response = (await $fetch('/api/profile', {
+      await $fetch('/api/profile', {
         method: 'PATCH',
         body: newProfile
-      })) as any
-
-      // Check if zones were updated via autodetect logic (which might merge into profile)
-      if (response.profile && response.profile.hrZones) {
-        hrZones.value = response.profile.hrZones as any[]
-      }
-      if (response.profile && response.profile.powerZones) {
-        powerZones.value = response.profile.powerZones as any[]
-      }
+      })
 
       toast.add({
         title: 'Profile Updated',
@@ -144,88 +137,70 @@
 
   async function handleAutodetect(updatedProfile: any) {
     if (updatedProfile) {
-      // Handle Zones
-      if (updatedProfile.hrZones) {
-        // Update local state and save
-        await updateZones('hr', updatedProfile.hrZones)
-      }
-      if (updatedProfile.powerZones) {
-        await updateZones('power', updatedProfile.powerZones)
+      // 1. Update local reactive state
+      if (updatedProfile.sportSettings) {
+        sportSettings.value = updatedProfile.sportSettings
       }
 
-      // Handle Basic Settings
-      // Remove zones from profile object to avoid double saving/conflicts if passing to handleProfileUpdate
-      const basicUpdates = { ...updatedProfile }
-      delete basicUpdates.hrZones
-      delete basicUpdates.powerZones
+      // 2. Prepare payload for backend update
+      const updatePayload = { ...updatedProfile }
 
-      if (Object.keys(basicUpdates).length > 0) {
-        await handleProfileUpdate(basicUpdates)
+      // Merge into local profile ref
+      Object.assign(profile.value, updatePayload)
+
+      try {
+        await $fetch('/api/profile', {
+          method: 'PATCH',
+          body: updatePayload
+        })
+
+        toast.add({
+          title: 'Profile Updated',
+          description: 'Your settings and sport-specific zones have been synced.',
+          color: 'success'
+        })
+      } catch (error) {
+        console.error('Autodetect sync failed:', error)
+        toast.add({
+          title: 'Update Failed',
+          description: 'Failed to save synced settings.',
+          color: 'error'
+        })
       }
+
+      // Refresh full profile to ensure all derived state is correct
+      await refreshProfile()
     }
   }
-
-  const hrZones = ref<any[]>([
-    { name: 'Z1 Recovery', min: 0, max: 0 },
-    { name: 'Z2 Aerobic', min: 0, max: 0 },
-    { name: 'Z3 Tempo', min: 0, max: 0 },
-    { name: 'Z4 SubThreshold', min: 0, max: 0 },
-    { name: 'Z5 SuperThreshold', min: 0, max: 0 },
-    { name: 'Z6 Aerobic Capacity', min: 0, max: 0 },
-    { name: 'Z7 Anaerobic', min: 0, max: 0 }
-  ])
-
-  const powerZones = ref<any[]>([
-    { name: 'Z1 Active Recovery', min: 0, max: 0 },
-    { name: 'Z2 Endurance', min: 0, max: 0 },
-    { name: 'Z3 Tempo', min: 0, max: 0 },
-    { name: 'SS Sweet Spot', min: 0, max: 0 },
-    { name: 'Z4 Threshold', min: 0, max: 0 },
-    { name: 'Z5 VO2 Max', min: 0, max: 0 },
-    { name: 'Z6 Anaerobic', min: 0, max: 0 },
-    { name: 'Z7 Neuromuscular', min: 0, max: 0 }
-  ])
 
   watchEffect(() => {
     const pData = profileData.value as any
     if (pData?.profile) {
       profile.value = { ...profile.value, ...pData.profile }
 
-      if (pData.profile.hrZones) {
-        hrZones.value = pData.profile.hrZones as any[]
-      }
-      if (pData.profile.powerZones) {
-        powerZones.value = pData.profile.powerZones as any[]
+      if (pData.profile.sportSettings) {
+        sportSettings.value = pData.profile.sportSettings as any[]
       }
     }
   })
 
-  // Save zones to API when updated
-  async function updateZones(type: 'hr' | 'power', zones: any[]) {
+  // Save updated sport settings manually
+  async function updateSportSettings(updatedSettings: any[]) {
+    sportSettings.value = updatedSettings
     try {
-      const body: any = {}
-      if (type === 'hr') {
-        hrZones.value = zones
-        body.hrZones = zones
-      } else {
-        powerZones.value = zones
-        body.powerZones = zones
-      }
-
       await $fetch('/api/profile', {
         method: 'PATCH',
-        body
+        body: { sportSettings: updatedSettings }
       })
-
       toast.add({
-        title: 'Zones Updated',
-        description: `${type === 'hr' ? 'Heart Rate' : 'Power'} zones saved successfully.`,
+        title: 'Settings Saved',
+        description: 'Sport settings updated successfully.',
         color: 'success'
       })
     } catch (error) {
       toast.add({
         title: 'Update Failed',
-        description: 'Failed to save zones.',
+        description: 'Failed to save sport settings.',
         color: 'error'
       })
     }

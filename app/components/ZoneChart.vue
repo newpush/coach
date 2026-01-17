@@ -519,29 +519,30 @@
     error.value = null
 
     try {
-      if (props.publicToken) {
-        // Public mode: Fetch everything from share endpoint
-        const workout = (await $fetch(`/api/share/workouts/${props.publicToken}`)) as any
-        // We need streams separately as the main endpoint returns summarized workout data
-        const streams = await $fetch(`/api/share/workouts/${props.publicToken}/streams`)
+      if (props.workoutId && !userZones.value) {
+        // Try to get from workout if provided (it usually includes user)
+        const workout = (props as any).workout
+        if (workout?.user) {
+          const settings = workout.user.sportSettings || []
+          const defaultProfile = settings.find((s: any) => s.isDefault)
 
-        streamData.value = streams
-        // Extract zones from the user object nested in the workout
-        userZones.value = {
-          hrZones: workout.user?.hrZones || getDefaultHrZones(),
-          powerZones: workout.user?.powerZones || getDefaultPowerZones()
-        }
-      } else {
-        // Private/Auth mode
-        const [streams, profile] = await Promise.all([
-          $fetch(`/api/workouts/${props.workoutId}/streams`),
-          $fetch('/api/profile')
-        ])
+          userZones.value = {
+            hrZones: defaultProfile?.hrZones || workout.user.hrZones || getDefaultHrZones(),
+            powerZones:
+              defaultProfile?.powerZones || workout.user.powerZones || getDefaultPowerZones()
+          }
+        } else {
+          // Fetch full profile
+          const profile = await $fetch<any>('/api/profile').catch(() => null)
+          if (profile?.profile) {
+            const settings = profile.profile.sportSettings || []
+            const defaultProfile = settings.find((s: any) => s.isDefault)
 
-        streamData.value = streams
-        userZones.value = {
-          hrZones: profile.profile?.hrZones || getDefaultHrZones(),
-          powerZones: profile.profile?.powerZones || getDefaultPowerZones()
+            userZones.value = {
+              hrZones: defaultProfile?.hrZones || getDefaultHrZones(),
+              powerZones: defaultProfile?.powerZones || getDefaultPowerZones()
+            }
+          }
         }
       }
 
