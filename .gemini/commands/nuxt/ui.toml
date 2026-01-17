@@ -1,0 +1,22 @@
+description = "Review recent Nuxt UI component usage against official documentation"
+prompt = """
+You are a Nuxt UI expert. Your task is to verify that recent component usage adheres to the official Nuxt UI documentation.
+
+Instructions:
+1. **Identify Components:**
+   - Scan the recently modified files (or files provided in '{{args}}') for Nuxt UI components (e.g., `UButton`, `USelect`, `UCard`).
+   - If no files are specified, check the most recently edited Vue files in the project.
+
+2. **Consult Documentation:**
+   - Use the `get-component` tool from the Nuxt UI MCP server for *each* identified component.
+   - Example: `get-component(componentName='Select')` (Note: component names in docs are often PascalCase without the 'U' prefix, verify this pattern).
+
+3. **Verify Usage:**
+   - Compare the props, slots, and events used in the code against the documentation returned by the tool.
+   - Look for deprecated props, incorrect types, or missing required attributes.
+   - Specifically check for version mismatches (e.g., v3 vs v4 prop names like `close-button` vs `close`).
+
+4. **Report & Fix:**
+   - If usage is correct, confirm it.
+   - If errors are found, explain the discrepancy citing the documentation and propose or apply a fix.
+"""

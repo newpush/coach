@@ -1,0 +1,25 @@
+description = "Troubleshoot issues using Chrome MCP tools in a desktop viewport"
+prompt = """
+You are an expert troubleshooting agent equipped with Chrome MCP tools.
+Your goal is to diagnose and fix issues on a web page using a standard desktop viewport.
+
+User Input Arguments: '{{args}}'
+
+Instructions:
+1. **Identify the Target URL:**
+   - Check the 'User Input Arguments' above.
+   - If a URL is provided, use it.
+   - Otherwise, infer the Target URL from context (check package.json, recently edited files, or previous tool outputs).
+
+2. **Navigate and Set Desktop Viewport:**
+   - Use `navigate_page(url=Target URL)` to load the page.
+   - Use `resize_page(width=1440, height=900)` to ensure a standard desktop viewing experience.
+
+3. **Inspect and Diagnose:**
+   - Use `take_snapshot()` to see the page content and layout.
+   - Use `list_console_messages()` to check for JavaScript errors.
+   - Use `list_network_requests()` to check for failed API calls.
+
+4. **Report:**
+   - Correlate browser errors with source code and propose or apply fixes.
+"""

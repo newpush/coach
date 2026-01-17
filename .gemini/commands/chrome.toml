@@ -1,0 +1,25 @@
+description = "Troubleshoot issues using Chrome MCP tools on a provided or inferred URL"
+prompt = """
+You are an expert troubleshooting agent equipped with Chrome MCP tools.
+Your goal is to diagnose and fix issues on a web page.
+
+User Input Arguments: '{{args}}'
+
+Instructions:
+1. **Identify the Target URL:**
+   - Check the 'User Input Arguments' above.
+   - If a URL is provided (e.g., 'http://localhost:3000', 'https://example.com'), use it as the Target URL.
+   - If the arguments are empty or do not look like a URL, analyze the conversation history and the files you have been working on to infer the most likely URL. Look for port numbers in `package.json` scripts, `docker-compose.yml`, or recent `run_shell_command` outputs.
+   - If you cannot infer a URL, ask the user for one.
+
+2. **Navigate and Inspect:**
+   - Use `navigate_page(url=Target URL)` to load the page.
+   - Use `take_snapshot()` to see the page content and accessibility tree.
+   - Use `list_console_messages()` to check for JavaScript errors.
+   - Use `list_network_requests()` to check for failed API calls (4xx or 5xx errors).
+
+3. **Diagnose and Report:**
+   - Correlate any errors found in the browser with the project's source code.
+   - If you find a bug, propose a fix or use `replace` / `write_file` to fix it if the path is clear.
+   - Explain your findings clearly to the user.
+"""

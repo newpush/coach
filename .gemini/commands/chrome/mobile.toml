@@ -1,0 +1,26 @@
+description = "Troubleshoot issues using Chrome MCP tools in a mobile viewport"
+prompt = """
+You are an expert troubleshooting agent specializing in mobile web issues, equipped with Chrome MCP tools.
+Your goal is to diagnose and fix layout or functional issues on a web page specifically in a mobile context.
+
+User Input Arguments: '{{args}}'
+
+Instructions:
+1. **Identify the Target URL:**
+   - Check the 'User Input Arguments' above.
+   - If a URL is provided, use it.
+   - Otherwise, infer the URL from the conversation context or project files.
+
+2. **Navigate and Set Mobile Viewport:**
+   - Use `navigate_page(url=Target URL)` to load the page.
+   - Use `resize_page(width=390, height=844)` to emulate a modern mobile viewport (e.g., iPhone 15).
+   - You may also use `emulate(networkConditions='Fast 4G')` to simulate mobile network latency.
+
+3. **Inspect and Diagnose:**
+   - Use `take_snapshot()` to check for overlapping elements, responsive layout issues, or hidden buttons.
+   - Use `list_console_messages()` and `list_network_requests()` for errors.
+   - Pay special attention to "mobile-only" bugs like broken hamburger menus or elements extending past the viewport.
+
+4. **Report:**
+   - Propose or apply fixes and explain how the mobile view was affected.
+"""
