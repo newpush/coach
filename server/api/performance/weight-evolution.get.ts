@@ -2,6 +2,7 @@ import { defineEventHandler, getQuery, createError } from 'h3'
 import { getServerSession } from '../../utils/session'
 import { prisma } from '../../utils/db'
 import { userRepository } from '../../utils/repositories/userRepository'
+import { wellnessRepository } from '../../utils/repositories/wellnessRepository'
 import { getUserTimezone, getUserLocalDate, formatDateUTC } from '../../utils/date'
 
 defineRouteMeta({
@@ -79,13 +80,10 @@ export default defineEventHandler(async (event) => {
   startDate.setUTCMonth(startDate.getUTCMonth() - months)
 
   // Fetch weight history from Wellness table
-  const weightHistory = await prisma.wellness.findMany({
+  const weightHistory = await wellnessRepository.getForUser(user.id, {
+    startDate,
+    endDate,
     where: {
-      userId: user.id,
-      date: {
-        gte: startDate,
-        lte: endDate
-      },
       weight: {
         not: null
       }

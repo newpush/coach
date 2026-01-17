@@ -1,6 +1,7 @@
 import { defineEventHandler, getQuery, createError } from 'h3'
 import { prisma } from '../../utils/db'
 import { userRepository } from '../../utils/repositories/userRepository'
+import { workoutRepository } from '../../utils/repositories/workoutRepository'
 import { calculatePowerZones, calculateHrZones } from '../../utils/zones'
 import { getServerSession } from '../../utils/session'
 import { getUserTimezone, getStartOfYearUTC, getUserLocalDate } from '../../utils/date'
@@ -50,14 +51,9 @@ export default defineEventHandler(async (event) => {
   }
 
   // 2. Get workouts with streams
-  const workouts = await prisma.workout.findMany({
-    where: {
-      userId,
-      date: {
-        gte: startDate,
-        lte: endDate
-      }
-    },
+  const workouts = await workoutRepository.getForUser(userId, {
+    startDate,
+    endDate,
     select: {
       date: true,
       ftp: true,
