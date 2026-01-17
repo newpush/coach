@@ -182,7 +182,7 @@
                   />
                 </NuxtLink>
                 <div class="flex gap-2 text-[10px] text-gray-500">
-                  <span>{{ formatDateTime(workout.plannedWorkout.date) }}</span>
+                  <span>{{ formatDateUTC(workout.plannedWorkout.date) }}</span>
                   <span>•</span>
                   <span>{{ workout.plannedWorkout.type || 'Workout' }}</span>
                 </div>
@@ -328,7 +328,7 @@
 </template>
 
 <script setup lang="ts">
-  const { formatDateTime } = useFormat()
+  const { formatDateTime, formatDateUTC } = useFormat()
 
   const props = defineProps<{
     workout: any | null

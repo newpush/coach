@@ -110,7 +110,6 @@ export const recommendTodayActivityTask = task({
           userId,
           type: 'ATHLETE_PROFILE',
           status: 'QUEUED',
-          title: 'Athlete Profile (Auto-refresh for Recommendation)',
           dateRangeStart: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000), // 30 days back
           dateRangeEnd: new Date()
         }
@@ -348,12 +347,7 @@ export const recommendTodayActivityTask = task({
     // Format for display (Friday, January 10, 2026)
     // We construct it based on the effective today
     const targetDateObj = new Date(targetDateStr + 'T12:00:00') // Noon Local
-    const localDate = targetDateObj.toLocaleDateString('en-US', {
-      weekday: 'long',
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
-    })
+    const localDate = formatUserDate(targetDateObj, userTimezone, 'EEEE, MMMM d, yyyy')
 
     // Split workouts into "Today's" and "Past"
     const todaysWorkouts = recentWorkouts.filter(
@@ -368,7 +362,7 @@ export const recommendTodayActivityTask = task({
     if (athleteProfile?.analysisJson) {
       const profile = athleteProfile.analysisJson as any
       athleteContext = `
-ATHLETE PROFILE (Generated ${new Date(athleteProfile.createdAt).toLocaleDateString()}):
+ATHLETE PROFILE (Generated ${formatUserDate(athleteProfile.createdAt, userTimezone)}):
 ${profile.executive_summary ? `Summary: ${profile.executive_summary}` : ''}
 
 Current Fitness: ${profile.current_fitness?.status_label || 'Unknown'}
@@ -586,10 +580,10 @@ ${wellnessAnalysisContext}
 ${checkinsSummary}
 
 TODAY'S COMPLETED TRAINING:
-${todaysWorkouts.length > 0 ? buildWorkoutSummary(todaysWorkouts) : 'None so far'}
+${todaysWorkouts.length > 0 ? buildWorkoutSummary(todaysWorkouts, userTimezone) : 'None so far'}
 
 RECENT TRAINING (Last 7 days):
-${pastWorkouts.length > 0 ? buildWorkoutSummary(pastWorkouts) : 'No recent workouts'}
+${pastWorkouts.length > 0 ? buildWorkoutSummary(pastWorkouts, userTimezone) : 'No recent workouts'}
 
 ${
   userFeedback

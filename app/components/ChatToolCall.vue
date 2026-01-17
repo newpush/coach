@@ -10,6 +10,7 @@
     toolCall: ToolCall
   }>()
 
+  const { formatDate } = useFormat()
   const isExpanded = ref(false)
 
   // Format tool name for display
@@ -22,11 +23,7 @@
 
   // Format timestamp
   const formatTime = (timestamp: string) => {
-    return new Date(timestamp).toLocaleTimeString([], {
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit'
-    })
+    return formatDate(timestamp, 'HH:mm:ss')
   }
 
   // Check if response has error

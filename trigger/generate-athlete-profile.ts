@@ -623,7 +623,7 @@ Recent sleep: ${recentWellness
                 }
                 if (daysToTarget) goalInfo += `\n  Timeline: ${daysToTarget} days remaining`
                 if (g.eventDate)
-                  goalInfo += `\n  Event: ${g.eventType || 'race'} on ${new Date(g.eventDate).toLocaleDateString()} (${daysToEvent} days)`
+                  goalInfo += `\n  Event: ${g.eventType || 'race'} on ${formatUserDate(g.eventDate, timezone)} (${daysToEvent} days)`
                 if (g.aiContext) goalInfo += `\n  Context: ${g.aiContext}`
 
                 return goalInfo
@@ -701,7 +701,7 @@ WORKOUT INSIGHTS (from AI analysis):
 ${workoutInsights || 'No detailed workout analysis available'}
 
 RECENT TRAINING DETAILS (Last 20 sessions):
-${buildWorkoutSummary(recentWorkouts)}
+${buildWorkoutSummary(recentWorkouts, timezone)}
 
 RECOVERY METRICS:
 ${wellnessSummary}${wellnessAnalysisSummary}

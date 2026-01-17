@@ -309,7 +309,7 @@
             <div class="flex items-center gap-2">
               <div class="text-sm font-bold text-gray-900 dark:text-white">
                 <template v-if="userStore.profile.weight"
-                  >{{ userStore.profile.weight }}kg</template
+                  >{{ userStore.profile.weight.toFixed(2) }}kg</template
                 >
                 <UButton
                   v-else
@@ -477,7 +477,7 @@
 
   const userStore = useUserStore()
   const integrationStore = useIntegrationStore()
-  const { formatDate, getUserLocalDate } = useFormat()
+  const { formatDate, formatDateUTC, getUserLocalDate } = useFormat()
   const { checkProfileStale, checkWellnessStale } = useDataStatus()
 
   defineEmits(['open-wellness', 'open-training-load'])
@@ -498,7 +498,7 @@
     // Attempt to fetch even if not connected, as some data might exist
     pmcLoading.value = true
     try {
-      const today = new Date()
+      const today = getUserLocalDate()
       const start = new Date(today)
       start.setDate(today.getDate() - 7)
 
@@ -561,8 +561,8 @@
     yesterday.setDate(yesterday.getDate() - 1)
 
     const dStr = formatDate(date, 'yyyy-MM-dd')
-    const tStr = formatDate(today, 'yyyy-MM-dd')
-    const yStr = formatDate(yesterday, 'yyyy-MM-dd')
+    const tStr = formatDateUTC(today, 'yyyy-MM-dd')
+    const yStr = formatDateUTC(yesterday, 'yyyy-MM-dd')
 
     if (dStr === tStr) return 'today'
     if (dStr === yStr) return 'yesterday'

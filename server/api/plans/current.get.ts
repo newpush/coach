@@ -1,5 +1,6 @@
 import { getServerSession } from '../../utils/session'
 import { prisma } from '../../utils/db'
+import { getUserLocalDate, getUserTimezone } from '../../utils/date'
 
 defineRouteMeta({
   openAPI: {
@@ -48,14 +49,17 @@ export default defineEventHandler(async (event) => {
   }
 
   const userId = (session.user as any).id
-  const today = new Date()
+  const timezone = await getUserTimezone(userId)
+  const today = getUserLocalDate(timezone)
 
-  // Get the start of the current week (Monday)
+  // Get the start of the current week (Monday) based on user's local date
+  // Since 'today' is already UTC midnight representation of user's local date,
+  // we can use standard Date methods to shift it.
   const currentWeekStart = new Date(today)
-  const day = currentWeekStart.getDay()
-  const diff = currentWeekStart.getDate() - day + (day === 0 ? -6 : 1) // Adjust for Sunday
-  currentWeekStart.setDate(diff)
-  currentWeekStart.setHours(0, 0, 0, 0)
+  const day = currentWeekStart.getUTCDay()
+  const diff = currentWeekStart.getUTCDate() - day + (day === 0 ? -6 : 1) // Adjust for Sunday (0) -> prev Monday (-6)
+  currentWeekStart.setUTCDate(diff)
+  // No need to setHours, already UTC midnight from getUserLocalDate logic
 
   // Get active or most recent plan
   const plan = await prisma.weeklyTrainingPlan.findFirst({

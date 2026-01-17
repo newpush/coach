@@ -1,4 +1,5 @@
 import { getServerSession } from '../../../utils/session'
+import { getUserTimezone, formatUserDate } from '../../../utils/date'
 
 defineRouteMeta({
   openAPI: {
@@ -68,7 +69,9 @@ export default defineEventHandler(async (event) => {
     })
 
     // Test API call to verify credentials
-    const today = new Date().toISOString().split('T')[0]
+    const timezone = await getUserTimezone((session.user as any).id)
+    const today = formatUserDate(new Date(), timezone, 'yyyy-MM-dd')
+
     await yazio.user.getDailySummary({ date: today })
 
     // Store integration

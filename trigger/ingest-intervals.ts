@@ -57,10 +57,13 @@ export const ingestIntervalsTask = task({
 
       // Fetch planned workouts (import all categories)
       logger.log('Syncing planned workouts...')
-      const { plannedWorkouts: plannedWorkoutsUpserted, events: eventsUpserted } =
-        await IntervalsService.syncPlannedWorkouts(userId, start, end)
+      const {
+        plannedWorkouts: plannedWorkoutsUpserted,
+        events: eventsUpserted,
+        notes: notesUpserted
+      } = await IntervalsService.syncPlannedWorkouts(userId, start, end)
       logger.log(
-        `Upserted ${plannedWorkoutsUpserted} planned workouts and ${eventsUpserted} racing events`
+        `Upserted ${plannedWorkoutsUpserted} planned workouts, ${eventsUpserted} racing events, and ${notesUpserted} calendar notes`
       )
 
       // Update sync status

@@ -12,7 +12,8 @@ import {
   getUserLocalDate,
   getUserTimezone,
   getStartOfDaysAgoUTC,
-  getEndOfDayUTC
+  getEndOfDayUTC,
+  formatUserDate
 } from '../server/utils/date'
 import { getUserAiSettings } from '../server/utils/ai-settings'
 
@@ -122,7 +123,7 @@ export const dailyCoachTask = task({
     if (athleteProfile?.analysisJson) {
       const profile = athleteProfile.analysisJson as any
       athleteContext = `
-ATHLETE PROFILE (Generated ${new Date(athleteProfile.createdAt).toLocaleDateString()}):
+ATHLETE PROFILE (Generated ${formatUserDate(athleteProfile.createdAt, timezone)}):
 ${profile.executive_summary ? `Summary: ${profile.executive_summary}` : ''}
 
 Current Fitness: ${profile.current_fitness?.status_label || 'Unknown'}
@@ -250,8 +251,8 @@ CRITICAL INSTRUCTIONS:
         userId,
         type: 'DAILY_SUGGESTION',
         status: 'COMPLETED',
-        dateRangeStart: today,
-        dateRangeEnd: today,
+        dateRangeStart: todayDateOnly,
+        dateRangeEnd: todayDateOnly,
         modelVersion: aiSettings.aiModelPreference,
         suggestions: suggestion as any
       }

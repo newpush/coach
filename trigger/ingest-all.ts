@@ -182,7 +182,6 @@ export const ingestAllTask = task({
             userId,
             type: 'ATHLETE_PROFILE',
             status: 'QUEUED',
-            title: 'Athlete Profile (Auto-generated)',
             dateRangeStart: new Date(startDate),
             dateRangeEnd: new Date(endDate)
           }

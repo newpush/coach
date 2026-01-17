@@ -274,7 +274,7 @@
           >
             <span class="text-sm text-gray-600 dark:text-gray-400">Weight</span>
             <span class="text-sm font-medium text-gray-900 dark:text-white"
-              >{{ wellness.weight.toFixed(1) }} kg</span
+              >{{ wellness.weight.toFixed(2) }} kg</span
             >
           </div>
           <div

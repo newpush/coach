@@ -4,8 +4,11 @@ import 'dotenv/config'
 import { PrismaClient } from '@prisma/client'
 import { PrismaPg } from '@prisma/adapter-pg'
 import pg from 'pg'
+import statsCommand from './stats'
 
 const usersCommand = new Command('users').description('User management commands')
+
+usersCommand.addCommand(statsCommand)
 
 usersCommand
   .command('set-admin')

@@ -753,6 +753,10 @@
         // But for now assuming the batch task or a generic refresh handles it.
         // Actually, we should trigger a refreshRuns() here just in case the backend triggered a job we don't know about yet
         refreshRuns()
+      } else {
+        // Not cached and not generating (manual trigger required)
+        modalData.value.explanation =
+          response.message || 'No insights available. Click "Generate Insights" to create them.'
       }
     } catch (error) {
       console.error('Error fetching workout explanation:', error)
@@ -820,6 +824,10 @@
         // Explanation is being generated - show message
         modalData.value.explanation = 'Generating insights... This may take a moment.'
         refreshRuns()
+      } else {
+        // Not cached and not generating (manual trigger required)
+        modalData.value.explanation =
+          response.message || 'No insights available. Click "Generate Insights" to create them.'
       }
     } catch (error) {
       console.error('Error fetching nutrition explanation:', error)

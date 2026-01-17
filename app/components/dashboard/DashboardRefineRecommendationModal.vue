@@ -57,7 +57,6 @@
   const feedback = ref('')
 
   function submit() {
-    if (!feedback.value.trim()) return
     emit('submit', feedback.value)
   }
 </script>

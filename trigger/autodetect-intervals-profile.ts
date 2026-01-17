@@ -2,6 +2,7 @@ import { logger, task } from '@trigger.dev/sdk/v3'
 import { prisma } from '../server/utils/db'
 import { fetchIntervalsAthleteProfile } from '../server/utils/intervals'
 import { userIngestionQueue } from './queues'
+import { roundToTwoDecimals } from '../server/utils/number'
 
 export const autodetectIntervalsProfileTask = task({
   id: 'autodetect-intervals-profile',
@@ -49,7 +50,7 @@ export const autodetectIntervalsProfileTask = task({
       if (intervalsProfile.ftp) updateData.ftp = intervalsProfile.ftp
       if (intervalsProfile.maxHR) updateData.maxHr = intervalsProfile.maxHR
       if (intervalsProfile.lthr) updateData.lthr = intervalsProfile.lthr
-      if (intervalsProfile.weight) updateData.weight = intervalsProfile.weight
+      if (intervalsProfile.weight) updateData.weight = roundToTwoDecimals(intervalsProfile.weight)
       if (intervalsProfile.restingHR) updateData.restingHr = intervalsProfile.restingHR
 
       // Update zones if they exist in Intervals.icu

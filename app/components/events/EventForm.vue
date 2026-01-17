@@ -56,8 +56,16 @@
 
       <!-- Options -->
       <div class="flex items-center gap-6 pt-4">
-        <UCheckbox v-model="state.isVirtual" label="Virtual Event" />
-        <UCheckbox v-model="state.isPublic" label="Public Event" />
+        <UCheckbox
+          v-model="state.isVirtual"
+          label="Virtual Event"
+          :ui="{ label: 'whitespace-nowrap' }"
+        />
+        <UCheckbox
+          v-model="state.isPublic"
+          label="Public Event"
+          :ui="{ label: 'whitespace-nowrap' }"
+        />
       </div>
     </div>
 
@@ -137,11 +145,12 @@
 
   const loading = ref(false)
   const toast = useToast()
+  const { getUserLocalDate } = useFormat()
 
   const state = reactive({
     title: '',
     description: '',
-    date: new Date().toISOString().split('T')[0],
+    date: getUserLocalDate().toISOString().split('T')[0],
     startTime: '',
     type: 'Run',
     subType: '',
@@ -170,11 +179,11 @@
         state.description = newData.description || ''
         state.date = newData.date
           ? new Date(newData.date).toISOString().split('T')[0]
-          : new Date().toISOString().split('T')[0]
+          : getUserLocalDate().toISOString().split('T')[0]
         state.startTime = newData.startTime || ''
         state.type = newData.type || 'Run'
         state.subType = newData.subType || ''
-        state.priority = newData.priority || 'B'
+        state.priority = newData.priority || 'NONE'
         state.city = newData.city || ''
         state.country = newData.country || ''
         state.location = newData.location || ''
@@ -191,7 +200,7 @@
         // Reset to defaults
         state.title = ''
         state.description = ''
-        state.date = new Date().toISOString().split('T')[0]
+        state.date = getUserLocalDate().toISOString().split('T')[0]
         state.startTime = ''
         state.type = 'Run'
         state.subType = ''
@@ -261,6 +270,7 @@
   }
 
   const subTypeOptions = computed(() => {
+    if (!state.type) return subTypesByMainType['Other']
     return subTypesByMainType[state.type] || subTypesByMainType['Other']
   })
 
@@ -268,6 +278,7 @@
   watch(
     () => state.type,
     (newType) => {
+      if (!newType) return
       // Only reset if not editing or if type actually changed by user interaction
       // We check if current subType is valid for new type
       const options = subTypesByMainType[newType] || []
@@ -278,6 +289,7 @@
   )
 
   const priorityOptions = [
+    { label: 'None', value: 'NONE' },
     { label: 'A Race (Main Goal)', value: 'A' },
     { label: 'B Race (Preparation)', value: 'B' },
     { label: 'C Race (Training)', value: 'C' }
@@ -287,8 +299,10 @@
 
   async function fetchGoals() {
     try {
-      const goals = await $fetch<any[]>('/api/profile/goals')
-      goalOptions.value = goals.map((g) => ({
+      const response = await $fetch<any>('/api/goals')
+      const goals = Array.isArray(response) ? response : response.goals || []
+
+      goalOptions.value = goals.map((g: any) => ({
         label: g.title,
         value: g.id
       }))

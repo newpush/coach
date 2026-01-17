@@ -307,7 +307,7 @@
   }>()
 
   const emit = defineEmits(['close', 'created', 'updated'])
-  const { formatDate, getUserLocalDate, timezone } = useFormat()
+  const { formatDate, getUserLocalDate, getUserDateFromLocal, timezone } = useFormat()
 
   const isEditMode = computed(() => !!props.goal)
   const step = ref(1)
@@ -552,7 +552,7 @@
     // Handle Event Specifics
     if (selectedType.value === 'EVENT') {
       const isoDate = form.eventDate
-        ? new Date(form.eventDate + 'T00:00:00').toISOString()
+        ? getUserDateFromLocal(form.eventDate, '00:00:00').toISOString()
         : undefined
       payload.eventDate = isoDate
       payload.eventType = form.eventType
@@ -578,7 +578,7 @@
       }
     } else {
       payload.targetDate = form.targetDate
-        ? new Date(form.targetDate + 'T23:59:59').toISOString()
+        ? getUserDateFromLocal(form.targetDate, '23:59:59').toISOString()
         : undefined
     }
 

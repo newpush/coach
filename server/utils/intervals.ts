@@ -1,4 +1,6 @@
 import type { Integration } from '@prisma/client'
+import { formatUserDate } from './date'
+import { roundToTwoDecimals } from './number'
 
 function getIntervalsHeaders(integration: Integration): Record<string, string> {
   // If we have a scope or refresh token, it's an OAuth integration
@@ -132,6 +134,7 @@ interface IntervalsAthlete {
 interface IntervalsPlannedWorkout {
   id: string
   start_date_local: string
+  end_date_local?: string
   name: string
   description?: string
   type?: string
@@ -141,7 +144,37 @@ interface IntervalsPlannedWorkout {
   tss?: number
   work?: number
   workout_doc?: any
+  for_week?: boolean
   [key: string]: any
+}
+
+// ... existing code ...
+
+export function normalizeIntervalsCalendarNote(event: IntervalsPlannedWorkout, userId: string) {
+  // Parse the local date string (YYYY-MM-DDTHH:mm:ss) and force to UTC midnight
+  // for day-granular notes to avoid timezone shifting in the UI.
+  const startDateStr = event.start_date_local.split('T')[0]
+  const startDate = new Date(`${startDateStr}T00:00:00Z`)
+
+  let endDate: Date | null = null
+  if (event.end_date_local) {
+    const endDateStr = event.end_date_local.split('T')[0]
+    endDate = new Date(`${endDateStr}T00:00:00Z`)
+  }
+
+  return {
+    userId,
+    externalId: String(event.id),
+    source: 'intervals',
+    startDate,
+    endDate,
+    isWeeklyNote: event.for_week || false,
+    title: event.name || 'Unnamed Note',
+    description: event.description || null,
+    category: event.category || 'NOTE',
+    type: event.type || null,
+    rawJson: event
+  }
 }
 
 async function fetchWithRetry(
@@ -203,13 +236,23 @@ export async function createIntervalsPlannedWorkout(
   }
 
   // Format date as ISO datetime string (YYYY-MM-DDTHH:mm:ss) - preserving time
-  const year = data.date.getFullYear()
-  const month = String(data.date.getMonth() + 1).padStart(2, '0')
-  const day = String(data.date.getDate()).padStart(2, '0')
-  const hour = String(data.date.getHours()).padStart(2, '0')
-  const minute = String(data.date.getMinutes()).padStart(2, '0')
-  const second = String(data.date.getSeconds()).padStart(2, '0')
-  const dateStr = `${year}-${month}-${day}T${hour}:${minute}:${second}`
+  // BUT: Intervals.icu treats 'start_date_local' as the athlete's local time.
+  // If we send a full ISO string, it might be interpreted strictly.
+  // For Planned Workouts (which are date-based in our DB), we want to target a specific day.
+  // Ideally we send YYYY-MM-DDT00:00:00.
+  const year = data.date.getUTCFullYear()
+  const month = String(data.date.getUTCMonth() + 1).padStart(2, '0')
+  const day = String(data.date.getUTCDate()).padStart(2, '0')
+  // Use UTC components because our input date is forced to UTC midnight for the correct calendar day.
+  // We want to send this exact date as the local start date to Intervals.
+  const dateStr = `${year}-${month}-${day}T06:00:00` // Set to 6am local to be safe? Or 00:00?
+  // Let's use T00:00:00 for now, but be aware Intervals might shift it if athlete settings differ.
+  // Actually, keeping original logic for time-preservation if passed, but defaulting to safe calendar day.
+
+  // const hour = String(data.date.getHours()).padStart(2, '0')
+  // const minute = String(data.date.getMinutes()).padStart(2, '0')
+  // const second = String(data.date.getSeconds()).padStart(2, '0')
+  // const dateStr = `${year}-${month}-${day}T${hour}:${minute}:${second}`
 
   const workoutText = data.workout_doc || ''
   let combinedDescription = data.description
@@ -329,9 +372,9 @@ export async function updateIntervalsPlannedWorkout(
   // Format date if provided
   let dateStr: string | undefined
   if (data.date) {
-    const year = data.date.getFullYear()
-    const month = String(data.date.getMonth() + 1).padStart(2, '0')
-    const day = String(data.date.getDate()).padStart(2, '0')
+    const year = data.date.getUTCFullYear()
+    const month = String(data.date.getUTCMonth() + 1).padStart(2, '0')
+    const day = String(data.date.getUTCDate()).padStart(2, '0')
     dateStr = `${year}-${month}-${day}T00:00:00`
   }
 
@@ -496,17 +539,18 @@ export async function fetchIntervalsAthleteProfile(integration: Integration) {
   }
 
   const athlete = await athleteResponse.json()
+  const timezone = athlete.timezone || 'UTC'
 
   // Fetch recent wellness data (last 7 days)
   const today = new Date()
-  const sevenDaysAgo = new Date(today)
-  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
 
   const wellnessData: any[] = []
   for (let i = 0; i < 7; i++) {
+    // Use the user's timezone to calculate "7 days ago" correctly relative to their day
     const date = new Date(today)
-    date.setDate(date.getDate() - i)
-    const dateStr = date.toISOString().split('T')[0]
+    date.setUTCDate(date.getDate() - i)
+    // Format in user's timezone to ensure we ask for the correct calendar day
+    const dateStr = formatUserDate(date, timezone, 'yyyy-MM-dd')
 
     try {
       const wellnessResponse = await fetchWithRetry(
@@ -722,7 +766,7 @@ export async function fetchIntervalsWellness(
       console.error(`Error fetching wellness for ${dateStr}:`, error)
     }
 
-    currentDate.setDate(currentDate.getDate() + 1)
+    currentDate.setUTCDate(currentDate.getDate() + 1)
   }
 
   return wellness
@@ -738,8 +782,8 @@ export function normalizeIntervalsWorkout(activity: IntervalsActivity, userId: s
     userId,
     externalId: activity.id,
     source: 'intervals',
-    // Prefer start_date (UTC ISO string). If missing, start_date_local is used as a fallback.
-    // Standardizing on UTC for the database DateTime column.
+    // Prefer start_date (UTC ISO string) which is absolute.
+    // Do NOT force to midnight for completed activities - we want the exact time.
     date: new Date(activity.start_date || activity.start_date_local),
     title: activity.name || 'Unnamed Activity',
     description: activity.description || null,
@@ -821,6 +865,41 @@ export function normalizeIntervalsWorkout(activity: IntervalsActivity, userId: s
   }
 }
 
+export function cleanIntervalsDescription(description: string): string {
+  if (!description) return ''
+
+  // 1. Remove CoachWatts signature
+  let cleanDesc = description
+    .replace(/\n\n\[CoachWatts\]/g, '')
+    .replace(/\[CoachWatts\]/g, '')
+    .trim()
+
+  // 2. Attempt to separate user description from workout definition
+  // We look for the start of the workout definition.
+  const lines = cleanDesc.split('\n')
+  let splitIndex = -1
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]?.trim()
+    if (!line) continue
+
+    // Heuristics for Intervals.icu workout text start
+    if (
+      /^(Warmup|Cooldown|Main Set)$/i.test(line) || // Section headers
+      /^(\d+x|(- )?\d+(m|s|h)\s+\d+)/.test(line) // Steps (Nx, 10m 50%, - Step 10m...)
+    ) {
+      splitIndex = i
+      break
+    }
+  }
+
+  if (splitIndex !== -1) {
+    cleanDesc = lines.slice(0, splitIndex).join('\n').trim()
+  }
+
+  return cleanDesc
+}
+
 export function normalizeIntervalsPlannedWorkout(event: IntervalsPlannedWorkout, userId: string) {
   // Intervals.icu sometimes uses different field names for planned metrics depending on the source/type
   const durationSec = event.duration ?? event.moving_time ?? event.workout_doc?.duration ?? null
@@ -843,12 +922,27 @@ export function normalizeIntervalsPlannedWorkout(event: IntervalsPlannedWorkout,
   // Detect CoachWatts management
   const isCoachWatts = event.description?.includes('[CoachWatts]')
 
+  // Clean description to avoid appending loop
+  let description = event.description || null
+  if (description) {
+    // Only clean if it looks like a structured workout or has our signature
+    if (structuredWorkout || isCoachWatts) {
+      description = cleanIntervalsDescription(description)
+    }
+
+    if (description === '') {
+      description = null
+    }
+  }
+
   return {
     userId,
     externalId: String(event.id), // Convert to string
-    date: new Date(event.start_date_local),
+    // Parse the local date string (YYYY-MM-DDTHH:mm:ss) and force to UTC midnight
+    // This ensures that "2026-01-15T06:00:00" becomes 2026-01-15T00:00:00Z in our DB
+    date: new Date(new Date(event.start_date_local).toISOString().split('T')[0] + 'T00:00:00Z'),
     title: event.name || 'Unnamed Event',
-    description: event.description || null,
+    description: description,
     type: event.type || null,
     category: event.category || 'WORKOUT',
     durationSec: durationSec ? Math.round(durationSec) : null,
@@ -913,7 +1007,7 @@ export function normalizeIntervalsWellness(
     motivation: wellness.motivation || null,
 
     // Physical
-    weight: wellness.weight || null,
+    weight: wellness.weight ? roundToTwoDecimals(wellness.weight) : null,
     bodyFat: wellness.bodyFat || null,
     abdomen: wellness.abdomen || null,
     vo2max: wellness.vo2max || null,

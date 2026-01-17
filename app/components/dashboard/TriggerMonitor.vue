@@ -143,6 +143,7 @@
 
 <script setup lang="ts">
   import { useNow } from '@vueuse/core'
+  import { ACTIVE_STATUSES } from '~/composables/useUserRuns'
 
   const props = defineProps<{
     modelValue: boolean
@@ -154,14 +155,13 @@
   const { formatDate } = useFormat()
   const now = useNow({ interval: 1000 })
   const cancellingId = ref<string | null>(null)
-  const historyLimit = ref(5)
 
   const activeCount = computed(
-    () =>
-      runs.value.filter((r) =>
-        ['EXECUTING', 'QUEUED', 'WAITING_FOR_DEPLOY', 'REATTEMPTING'].includes(r.status)
-      ).length
+    () => runs.value.filter((r) => ACTIVE_STATUSES.includes(r.status)).length
   )
+
+  // Initialize based on current state to prevent flash
+  const historyLimit = ref(activeCount.value > 0 ? 0 : 5)
 
   const displayedRuns = computed(() => {
     const active: any[] = []
@@ -188,9 +188,30 @@
     historyLimit.value += 10
   }
 
-  onMounted(() => {
-    // Component mounted
-  })
+  // Handle open/close and refresh logic
+  watch(
+    () => props.modelValue,
+    async (isOpen) => {
+      if (isOpen) {
+        // Set initial state immediately based on current store data
+        // This prevents the "flash" of history while the refresh happens
+        if (activeCount.value > 0) {
+          historyLimit.value = 0
+        } else {
+          historyLimit.value = 5
+        }
+
+        // Force refresh from API to ensure we have latest state
+        await refresh()
+
+        // Re-evaluate after refresh in case status changed
+        if (activeCount.value > 0) {
+          historyLimit.value = 0
+        }
+      }
+    },
+    { immediate: true }
+  )
 
   const close = () => {
     emit('update:modelValue', false)
@@ -208,7 +229,7 @@
   }
 
   const isRunning = (status: string) => {
-    return ['EXECUTING', 'QUEUED', 'WAITING_FOR_DEPLOY', 'REATTEMPTING'].includes(status)
+    return ACTIVE_STATUSES.includes(status)
   }
 
   const getStatusColor = (status: string) => {
@@ -217,8 +238,16 @@
         return 'primary'
       case 'QUEUED':
         return 'warning'
+      case 'REATTEMPTING':
+        return 'warning'
       case 'WAITING_FOR_DEPLOY':
         return 'warning'
+      case 'PENDING_VERSION':
+        return 'warning'
+      case 'FROZEN':
+        return 'neutral'
+      case 'DELAYED':
+        return 'neutral'
       case 'COMPLETED':
         return 'success'
       case 'FAILED':
@@ -226,6 +255,10 @@
       case 'CANCELED':
         return 'neutral'
       case 'TIMED_OUT':
+        return 'error'
+      case 'CRASHED':
+        return 'error'
+      case 'SYSTEM_FAILURE':
         return 'error'
       default:
         return 'neutral'

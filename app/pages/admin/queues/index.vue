@@ -5,10 +5,10 @@
         <template #right>
           <UButton
             icon="i-heroicons-arrow-path"
-            color="gray"
+            color="neutral"
             variant="ghost"
             :loading="pending"
-            @click="refresh"
+            @click="() => refresh()"
           >
             Refresh
           </UButton>
@@ -24,14 +24,14 @@
         </div>
 
         <div v-else class="grid gap-6 md:grid-cols-2 lg:grid-cols-2">
-          <UCard v-for="queue in data?.queues" :key="queue.name">
+          <UCard v-for="queue in data?.queues as any[]" :key="queue.name">
             <template #header>
               <div class="flex items-center justify-between">
                 <div class="flex items-center gap-2">
                   <UIcon name="i-heroicons-queue-list" class="w-5 h-5 text-gray-500" />
                   <h3 class="font-semibold text-gray-900 dark:text-white">{{ queue.name }}</h3>
                 </div>
-                <UBadge :color="queue.isPaused ? 'red' : 'green'" variant="subtle">
+                <UBadge :color="queue.isPaused ? 'error' : 'success'" variant="subtle">
                   {{ queue.isPaused ? 'Paused' : 'Running' }}
                 </UBadge>
               </div>

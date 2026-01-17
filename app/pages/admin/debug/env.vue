@@ -101,7 +101,7 @@
 
     <template #body>
       <div class="p-4 sm:p-6">
-        <UCard :ui="{ body: { padding: 'p-0 sm:p-0' } }">
+        <UCard :ui="{ body: 'p-0 sm:p-0' }">
           <template #header>
             <div class="px-4 py-3">
               <UInput

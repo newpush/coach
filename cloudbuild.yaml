@@ -52,12 +52,18 @@ steps:
       - update
       - $_SERVICE_NAME
       - '--platform=managed'
-      - >-
-        --image=$_AR_HOSTNAME/$_AR_PROJECT_ID/$_AR_REPOSITORY/$REPO_NAME/$_SERVICE_NAME:$COMMIT_SHA
+      - '--region=$_DEPLOY_REGION'
       - >-
         --labels=managed-by=gcp-cloud-build-deploy-cloud-run,commit-sha=$COMMIT_SHA,gcb-build-id=$BUILD_ID,gcb-trigger-id=$_TRIGGER_ID
-      - '--region=$_DEPLOY_REGION'
       - '--quiet'
+      - '--container=coach-app'
+      - >-
+        --image=$_AR_HOSTNAME/$_AR_PROJECT_ID/$_AR_REPOSITORY/$REPO_NAME/$_SERVICE_NAME:$COMMIT_SHA
+      - '--container=coach-worker'
+      - >-
+        --image=$_AR_HOSTNAME/$_AR_PROJECT_ID/$_AR_REPOSITORY/$REPO_NAME/$_SERVICE_NAME:$COMMIT_SHA
+      - '--command=/cnb/lifecycle/launcher'
+      - '--args=./node_modules/.bin/tsx,cli/worker/index.ts,start'
     id: Deploy
     entrypoint: gcloud
 options:

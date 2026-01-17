@@ -185,7 +185,10 @@
           />
         </div>
       </div>
-      <div v-else-if="recommendationStore.todayWorkout" class="text-sm text-muted italic">
+      <div
+        v-else-if="recommendationStore.todayWorkout"
+        class="text-[10px] text-gray-500 text-center leading-tight"
+      >
         Get AI-powered guidance for this workout based on your recovery.
       </div>
     </div>
@@ -234,26 +237,34 @@
             Refine
           </UButton>
         </div>
-        <UButton
-          class="font-bold w-full"
-          :color="!recommendationStore.todayRecommendation ? 'primary' : 'neutral'"
-          :variant="!recommendationStore.todayRecommendation ? 'solid' : 'ghost'"
-          size="sm"
-          :loading="recommendationStore.generating || isSyncingForAnalysis"
-          :disabled="
-            recommendationStore.generating ||
-            recommendationStore.generatingAdHoc ||
-            isSyncingForAnalysis
-          "
-          :icon="
-            !recommendationStore.todayRecommendation
-              ? 'i-heroicons-sparkles'
-              : 'i-heroicons-arrow-path'
-          "
-          @click="handleAnalyzeClick"
-        >
-          {{ getButtonLabel() }}
-        </UButton>
+        <div class="space-y-2">
+          <UButton
+            class="font-bold w-full"
+            :color="!recommendationStore.todayRecommendation ? 'primary' : 'neutral'"
+            :variant="!recommendationStore.todayRecommendation ? 'solid' : 'ghost'"
+            size="sm"
+            :loading="recommendationStore.generating || isSyncingForAnalysis"
+            :disabled="
+              recommendationStore.generating ||
+              recommendationStore.generatingAdHoc ||
+              isSyncingForAnalysis
+            "
+            :icon="
+              !recommendationStore.todayRecommendation
+                ? 'i-heroicons-sparkles'
+                : 'i-heroicons-arrow-path'
+            "
+            @click="handleAnalyzeClick"
+          >
+            {{ getButtonLabel() }}
+          </UButton>
+          <p
+            v-if="!recommendationStore.todayRecommendation"
+            class="text-[10px] text-gray-500 text-center leading-tight"
+          >
+            The coach will analyze your recovery data and today's plan to provide guidance.
+          </p>
+        </div>
       </div>
     </template>
   </UCard>

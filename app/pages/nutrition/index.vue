@@ -977,6 +977,10 @@
             console.error('Retry failed:', retryError)
           }
         }, 3000)
+      } else {
+        // Not cached and not generating (manual trigger required)
+        modalData.value.explanation =
+          response.message || 'No insights available. Click "Insights" to create them.'
       }
     } catch (error) {
       console.error('Error fetching nutrition explanation:', error)

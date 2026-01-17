@@ -3,7 +3,7 @@ import { Worker } from 'bullmq'
 import IORedis from 'ioredis'
 import chalk from 'chalk'
 import { IntervalsService } from '../../server/utils/services/intervalsService'
-import { updateWebhookStatus } from '../../server/utils/webhook-logger'
+import { logWebhookRequest, updateWebhookStatus } from '../../server/utils/webhook-logger'
 import { prisma } from '../../server/utils/db'
 import { webhookQueue, pingQueue } from '../../server/utils/queue'
 import { Command } from 'commander'
@@ -50,6 +50,58 @@ export const startCommand = new Command('start')
       'webhookQueue',
       async (job: Job) => {
         const { provider, type, userId, event, logId } = job.data
+
+        // Handle bulk ingest jobs from the async API endpoint
+        if (provider === 'intervals-bulk') {
+          const { payload, headers } = job.data
+          const events = payload.events || []
+
+          console.log(
+            chalk.cyan(`[BulkJob ${job.id}]`) +
+              ` Processing bulk webhook payload with ${chalk.yellow(events.length)} events`
+          )
+
+          // Log raw request receipt in worker instead of API
+          const log = await logWebhookRequest({
+            provider: 'intervals',
+            eventType: events[0]?.type || 'UNKNOWN',
+            payload,
+            headers,
+            status: 'PENDING'
+          })
+
+          let queuedCount = 0
+          for (const intervalEvent of events) {
+            const { athlete_id, type: eventType } = intervalEvent
+            if (!athlete_id) continue
+
+            // Verify integration exists in worker instead of API
+            const integration = await prisma.integration.findFirst({
+              where: {
+                provider: 'intervals',
+                externalUserId: athlete_id.toString()
+              }
+            })
+
+            if (!integration) {
+              console.warn(`[BulkJob ${job.id}] No integration found for athlete_id: ${athlete_id}`)
+              continue
+            }
+
+            // Enqueue individual event for standard processing
+            await webhookQueue.add('intervals-webhook', {
+              provider: 'intervals',
+              type: eventType,
+              userId: integration.userId,
+              event: intervalEvent,
+              logId: log?.id
+            })
+            queuedCount++
+          }
+
+          if (log) await updateWebhookStatus(log.id, 'QUEUED', `Queued ${queuedCount} events`)
+          return { queuedCount }
+        }
 
         console.log(
           chalk.cyan(`[WebhookJob ${job.id}]`) +

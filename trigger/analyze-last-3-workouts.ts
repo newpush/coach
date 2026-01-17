@@ -110,7 +110,7 @@ USER PROFILE:
 - W/kg: ${user?.ftp && user?.weight ? (user.ftp / user.weight).toFixed(2) : 'Unknown'}
 
 RECENT WORKOUTS (Last 3 Cycling Sessions):
-${buildWorkoutSummary(workouts)}
+${buildWorkoutSummary(workouts, timezone)}
 
 ANALYSIS FOCUS:
 1. **Training Progression**: Are they building fitness effectively? Getting stronger or showing fatigue?

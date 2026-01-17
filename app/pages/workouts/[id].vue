@@ -1136,7 +1136,7 @@
                       {{ workout.plannedWorkout.title }}
                     </div>
                     <div class="text-xs text-gray-500 mt-1 flex items-center gap-2">
-                      {{ formatDate(workout.plannedWorkout.date) }}
+                      {{ formatDateUTC(workout.plannedWorkout.date) }}
                       <span
                         v-if="workout.plannedWorkout.type"
                         class="px-1.5 py-0 rounded bg-gray-100 dark:bg-gray-700 text-[10px]"
@@ -1263,7 +1263,7 @@
   import StreamChartModal from '~/components/charts/streams/StreamChartModal.vue'
   import { metricTooltips } from '~/utils/tooltips'
 
-  const { formatDate: baseFormatDate, formatDateTime } = useFormat()
+  const { formatDate: baseFormatDate, formatDateTime, formatDateUTC } = useFormat()
 
   definePageMeta({
     middleware: 'auth'

@@ -1,6 +1,7 @@
 import { prisma } from './db'
 import { userRepository } from './repositories/userRepository'
 import { calculatePowerZones, calculateHrZones } from './zones'
+import { roundToTwoDecimals } from './number'
 
 export const athleteMetricsService = {
   /**
@@ -24,7 +25,9 @@ export const athleteMetricsService = {
 
     // Process Fields
     if (metrics.ftp !== undefined) updateData.ftp = metrics.ftp
-    if (metrics.weight !== undefined) updateData.weight = metrics.weight
+    if (metrics.weight !== undefined && metrics.weight !== null)
+      updateData.weight = roundToTwoDecimals(metrics.weight)
+    else if (metrics.weight !== undefined) updateData.weight = metrics.weight // Handle explicit null
     if (metrics.maxHr !== undefined) updateData.maxHr = metrics.maxHr
 
     // 1. Recalculate Power Zones if FTP changed
@@ -71,6 +74,8 @@ export const athleteMetricsService = {
       const dateOnly = new Date(effectiveDate)
       dateOnly.setUTCHours(0, 0, 0, 0)
 
+      const roundedWeight = roundToTwoDecimals(metrics.weight)
+
       try {
         await prisma.wellness.upsert({
           where: {
@@ -82,14 +87,14 @@ export const athleteMetricsService = {
           create: {
             userId,
             date: dateOnly,
-            weight: metrics.weight
+            weight: roundedWeight
           },
           update: {
-            weight: metrics.weight
+            weight: roundedWeight
           }
         })
         console.log(
-          `[MetricsService] Logged weight ${metrics.weight}kg to Wellness history for ${dateOnly.toISOString()}`
+          `[MetricsService] Logged weight ${roundedWeight}kg to Wellness history for ${dateOnly.toISOString()}`
         )
       } catch (e) {
         console.error(`[MetricsService] Failed to log weight history:`, e)

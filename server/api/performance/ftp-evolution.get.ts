@@ -2,6 +2,7 @@ import { defineEventHandler, getQuery, createError } from 'h3'
 import { getServerSession } from '../../utils/session'
 import { prisma } from '../../utils/db'
 import { userRepository } from '../../utils/repositories/userRepository'
+import { workoutRepository } from '../../utils/repositories/workoutRepository'
 import { getUserTimezone, getStartOfYearUTC } from '../../utils/date'
 
 defineRouteMeta({
@@ -94,14 +95,10 @@ export default defineEventHandler(async (event) => {
 
   // Get workouts with FTP data, ordered by date
   // This gives us "snapshots" of FTP changes over time
-  const workouts = await prisma.workout.findMany({
+  const workouts = await workoutRepository.getForUser(user.id, {
+    startDate,
+    endDate,
     where: {
-      userId: user.id,
-      date: {
-        gte: startDate,
-        lte: endDate
-      },
-      isDuplicate: false,
       ftp: {
         not: null
       }

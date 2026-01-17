@@ -14,6 +14,7 @@ export const wellnessRepository = {
       offset?: number
       orderBy?: Prisma.WellnessOrderByWithRelationInput
       select?: Prisma.WellnessSelect
+      where?: Prisma.WellnessWhereInput
     } = {}
   ) {
     const where: Prisma.WellnessWhereInput = {
@@ -21,7 +22,8 @@ export const wellnessRepository = {
       date: {
         gte: options.startDate,
         lte: options.endDate
-      }
+      },
+      ...options.where
     }
 
     return prisma.wellness.findMany({

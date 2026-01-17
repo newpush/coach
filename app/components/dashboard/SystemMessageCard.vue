@@ -8,9 +8,8 @@
     :icon="icon"
     :close="{
       icon: 'i-heroicons-x-mark-20-solid',
-      color: 'gray',
-      variant: 'link',
-      padded: false
+      color: 'neutral',
+      variant: 'link'
     }"
     class="mb-6 w-full shadow-sm"
     @update:open="dismiss"
