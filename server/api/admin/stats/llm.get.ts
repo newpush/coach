@@ -187,9 +187,7 @@ export default defineEventHandler(async (event) => {
   }))
 
   // 12. Daily Tool Calls per Tool
-  const dailyToolUsageRaw = await prisma.$queryRaw<
-    { date: string; name: string; count: bigint }[]
-  >`
+  const dailyToolUsageRaw = await prisma.$queryRaw<{ date: string; name: string; count: bigint }[]>`
     SELECT
       DATE("createdAt") as date,
       tool as name,

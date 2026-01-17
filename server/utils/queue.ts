@@ -20,15 +20,17 @@ const connection = new IORedis(connectionString, {
 
 // Only log connection details in development or if explicitly debugged
 if (process.env.NODE_ENV === 'development' || process.env.DEBUG_REDIS) {
-    connection.on('connect', () => {
-      const options = connection.options
-      const hasPassword = !!options.password
-      console.log(`[Queue] Redis connected to ${options.host}:${options.port} (Password: ${hasPassword ? 'Yes' : 'No'})`)
-    })
-    
-    connection.on('error', (err) => {
-      console.error('[Queue] Redis connection error:', err.message)
-    })
+  connection.on('connect', () => {
+    const options = connection.options
+    const hasPassword = !!options.password
+    console.log(
+      `[Queue] Redis connected to ${options.host}:${options.port} (Password: ${hasPassword ? 'Yes' : 'No'})`
+    )
+  })
+
+  connection.on('error', (err) => {
+    console.error('[Queue] Redis connection error:', err.message)
+  })
 }
 
 export const webhookQueue = new Queue('webhookQueue', { connection })
