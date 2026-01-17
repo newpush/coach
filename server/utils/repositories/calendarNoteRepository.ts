@@ -1,4 +1,4 @@
-import { prisma } from '../utils/db'
+import { prisma } from '../db'
 import type { Prisma } from '@prisma/client'
 
 export const calendarNoteRepository = {
@@ -6,7 +6,7 @@ export const calendarNoteRepository = {
     userId: string,
     source: string,
     externalId: string,
-    data: Prisma.CalendarNoteCreateInput
+    data: Prisma.CalendarNoteUncheckedCreateInput
   ) {
     return prisma.calendarNote.upsert({
       where: {
@@ -17,7 +17,7 @@ export const calendarNoteRepository = {
         }
       },
       create: data,
-      update: data
+      update: data as Prisma.CalendarNoteUncheckedUpdateInput
     })
   },
 
