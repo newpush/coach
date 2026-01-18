@@ -1,5 +1,6 @@
 import type { Integration } from '@prisma/client'
 import { prisma } from './db'
+import { normalizeWhoopSport } from './activity-mapping'
 
 interface WhoopTokenResponse {
   access_token: string
@@ -401,27 +402,7 @@ export function normalizeWhoopWorkout(workout: WhoopWorkout, userId: string) {
     return null
   }
 
-  // Map Whoop Sport IDs to our workout types
-  // -1: Activity, 0: Running, 1: Cycling, 29: Skiing, 44: Yoga, 45: Weightlifting, etc.
-  const sportMap: Record<number, string> = {
-    0: 'Run',
-    1: 'Ride',
-    18: 'Rowing',
-    29: 'Ski',
-    33: 'Swim',
-    44: 'Yoga',
-    45: 'WeightTraining',
-    47: 'Ski', // Cross Country Skiing
-    48: 'Crossfit', // Functional Fitness
-    52: 'Hike',
-    53: 'Ride', // Mountain Biking mapped to Ride (or could be custom type)
-    57: 'Ride', // Mountain Biking
-    63: 'Walk',
-    71: 'Other',
-    91: 'Snowboard' // Mapped to Ski or Other? Let's use Ski for snow sports broadly or custom
-  }
-
-  const type = sportMap[workout.sport_id] || 'Other'
+  const type = normalizeWhoopSport(workout.sport_id)
 
   // Parse dates
   const startDate = new Date(workout.start)

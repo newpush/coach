@@ -13,7 +13,43 @@ export const WORKOUT_ICONS: Record<string, string> = {
   'Active Recovery': 'i-tabler-recharging',
   Walk: 'i-tabler-walk',
   Hike: 'i-tabler-mountain',
-  Yoga: 'i-tabler-yoga'
+  Yoga: 'i-tabler-yoga',
+  Rowing: 'i-tabler-rowing',
+  AlpineSki: 'i-tabler-skiing',
+  NordicSki: 'i-tabler-skiing',
+  Snowboard: 'i-tabler-snowboarding',
+  Elliptical: 'i-tabler-activity',
+  StairStepper: 'i-tabler-stairs',
+  RockClimbing: 'i-tabler-mountain',
+  StandUpPaddling: 'i-tabler-sailboat', // Closest?
+  Kayaking: 'i-tabler-sailboat',
+  Surfing: 'i-tabler-wave-surfing', // Check if exists, else generic
+  Crossfit: 'i-tabler-barbell',
+  HIIT: 'i-tabler-flame',
+  BoxFitness: 'i-tabler-boxing', // Or generic
+  Kickboxing: 'i-tabler-boxing', // Or generic
+  MartialArts: 'i-tabler-karate', // Or generic
+  Golf: 'i-tabler-golf',
+  Tennis: 'i-tabler-ball-tennis',
+  Squash: 'i-tabler-ball-tennis',
+  Badminton: 'i-tabler-ball-tennis',
+  TableTennis: 'i-tabler-ping-pong',
+  Soccer: 'i-tabler-ball-football',
+  Football: 'i-tabler-ball-american-football',
+  Basketball: 'i-tabler-ball-basketball',
+  Baseball: 'i-tabler-ball-baseball',
+  Volleyball: 'i-tabler-ball-volleyball',
+  IceSkate: 'i-tabler-ice-skating',
+  InlineSkate: 'i-tabler-skateboarding', // Close enough?
+  Skateboarding: 'i-tabler-skateboarding',
+  Commute: 'i-tabler-bus', // Or bike/walk icon
+  Gardening: 'i-tabler-seeding',
+  Sauna: 'i-tabler-bath',
+  IceBath: 'i-tabler-snowflake',
+  Massage: 'i-tabler-massage',
+  Recovery: 'i-tabler-heartbeat',
+  Meditation: 'i-tabler-meditation', // If using separate type
+  Pilates: 'i-tabler-stretching'
 }
 
 export const WORKOUT_COLORS: Record<string, string> = {
@@ -31,7 +67,25 @@ export const WORKOUT_COLORS: Record<string, string> = {
   'Active Recovery': 'text-blue-400',
   Walk: 'text-teal-500',
   Hike: 'text-emerald-600',
-  Yoga: 'text-rose-500'
+  Yoga: 'text-rose-500',
+  Rowing: 'text-cyan-600',
+  AlpineSki: 'text-blue-500',
+  NordicSki: 'text-blue-600',
+  Snowboard: 'text-blue-500',
+  Elliptical: 'text-teal-600',
+  StairStepper: 'text-orange-400',
+  RockClimbing: 'text-stone-500',
+  Crossfit: 'text-red-600',
+  HIIT: 'text-red-500',
+  Soccer: 'text-green-600',
+  Basketball: 'text-orange-600',
+  Tennis: 'text-yellow-500',
+  Golf: 'text-green-700',
+  IceBath: 'text-cyan-300',
+  Sauna: 'text-red-400',
+  Massage: 'text-purple-400',
+  Recovery: 'text-blue-300',
+  Commute: 'text-gray-500'
 }
 
 export const WORKOUT_BORDER_COLORS: Record<string, string> = {
