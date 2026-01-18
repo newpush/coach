@@ -1232,7 +1232,7 @@
           actions: [
             {
               label: 'Switch Tab',
-              click: () => emit('autodetect', null) // Signal parent to maybe switch tab? Or just let user do it
+              onClick: () => emit('autodetect', null) // Signal parent to maybe switch tab? Or just let user do it
             }
           ]
         })

@@ -172,7 +172,14 @@
       description: 'Your workout file has been analyzed and added to your history.',
       color: 'success',
       icon: 'i-heroicons-check-circle',
-      actions: [{ label: 'View Workouts', click: () => navigateTo('/workouts') } as any]
+      actions: [
+        {
+          label: 'View Workouts',
+          onClick: () => {
+            navigateTo('/workouts')
+          }
+        }
+      ]
     })
   })
 
