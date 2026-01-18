@@ -888,14 +888,17 @@
             <WorkoutTimeline :workout-id="workout.id" />
           </div>
 
-          <!-- Zone Distribution Visualization -->
           <div id="zones" class="scroll-mt-20" />
           <div
             v-if="shouldShowPacing(workout)"
             class="bg-white dark:bg-gray-800 rounded-lg shadow p-6"
           >
             <h2 class="text-xl font-bold text-gray-900 dark:text-white mb-4">Training Zones</h2>
-            <ZoneChart :workout-id="workout.id" />
+            <ZoneChart
+              :workout-id="workout.id"
+              :activity-type="workout.type"
+              :stream-data="workout.streams"
+            />
           </div>
 
           <!-- Efficiency Metrics Section -->
