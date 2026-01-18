@@ -38,14 +38,16 @@ node scripts/test-intervals-profile.js
 
 ### 3. Performance Metrics
 
-**From `icu_type_settings` array (per activity type):**
+**From `sportSettings` array (per activity type):**
 
 - `ftp` - Functional Threshold Power (watts) for cycling
 - `lthr` - Lactate Threshold Heart Rate (bpm)
 - `max_hr` - Maximum heart rate (bpm)
+- `hr_zones` - Heart rate zone upper bounds (BPM)
+- `power_zones` - Power zone upper bounds (% of FTP)
 - `threshold_pace` - Threshold pace for running/swimming
 
-**Note:** These are configured per activity type (Ride, Run, Swim, etc.)
+**Note:** These are configured per activity type (Ride, Run, Swim, etc.) and zones are normalized to standard ranges.
 
 ### 4. Recent Wellness Data
 

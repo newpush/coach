@@ -590,14 +590,21 @@ export async function fetchIntervalsAthleteProfile(integration: Integration) {
 
   const sportSettings = settings.map((s: any) => {
     // Determine zones
-    const currentHrZones = null
-    const currentPowerZones = null
-    const currentPaceZones = null
-
     const currentFtp = s.ftp || null
     const currentLthr = s.lthr || null
     const currentMaxHr = s.max_hr || null
     const currentThresholdPace = s.threshold_pace || null
+
+    const currentHrZones = convertIntervalsZones(s.hr_zones, s.hr_zone_names, 'hr')
+    const currentPowerZones = convertIntervalsZones(
+      s.power_zones,
+      s.power_zone_names,
+      'power',
+      currentFtp
+    )
+    // Pace zones might be complex (units vary), but if provided we try to map them
+    // Assuming pace zones are also "max" values if in array
+    const currentPaceZones = convertIntervalsZones(s.pace_zones, s.pace_zone_names, 'pace')
 
     // Extended Settings
     const warmupTime = s.warmup_time ? Math.round(s.warmup_time / 60) : null // convert seconds to minutes if needed, usually stored as seconds in Intervals? Docs say integer. Let's assume seconds if consistent with other duration fields, but user prompt said "Warmup / Cooldown time in minutes". Let's check typical usage. Intervals usually uses seconds for durations. If user sees "10" it might be minutes in UI but seconds in API? Let's check API docs or assume seconds and convert to minutes for our DB if our DB expects minutes.
@@ -1125,4 +1132,52 @@ export async function fetchIntervalsActivityStreams(
   }
 
   return streams
+}
+
+function convertIntervalsZones(
+  zones: number[] | null,
+  names: string[] | null,
+  type: 'hr' | 'power' | 'pace',
+  ftp?: number | null
+): Array<{ min: number; max: number; name: string }> | null {
+  if (!zones || zones.length === 0) return null
+
+  const result = []
+  let prevMax = 0
+
+  for (let i = 0; i < zones.length; i++) {
+    const rawValue = zones[i]
+    if (typeof rawValue !== 'number') continue
+
+    let max: number = rawValue
+    const min: number = prevMax
+
+    // Handle Power Percentages
+    if (type === 'power') {
+      if (!ftp) return null // Cannot calculate power zones without FTP
+
+      // Calculate absolute watts from percentage
+      // Intervals uses integer percentages (e.g. 55 for 55%)
+      max = Math.round((rawValue / 100) * ftp)
+
+      // If it's the last zone (often 999 or similar high number for "Max")
+      // The calculation above will result in a very high watt number (e.g. 2000W+), which is fine.
+    }
+
+    // Handle Pace (placeholder logic as units vary significantly - min/km vs m/s)
+    // If we receive raw values, we map them as is for now.
+    // Ideally we'd normalize to m/s if they are in seconds/100m or similar.
+
+    const name: string = (names && names[i]) || `Zone ${i + 1}`
+
+    result.push({
+      min,
+      max,
+      name
+    })
+
+    prevMax = max
+  }
+
+  return result
 }
