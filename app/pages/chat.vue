@@ -319,14 +319,14 @@
           <UButton
             color="primary"
             variant="solid"
-            icon="i-heroicons-plus"
+            icon="i-heroicons-chat-bubble-left-right"
             aria-label="New Chat"
             size="sm"
             class="font-bold"
             @click="createNewChat"
           >
             <span class="hidden sm:inline">New Chat</span>
-            <span class="sm:hidden">New</span>
+            <span class="sm:hidden">Chat</span>
           </UButton>
         </template>
       </UDashboardNavbar>
