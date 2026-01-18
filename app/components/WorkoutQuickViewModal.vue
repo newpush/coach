@@ -5,14 +5,24 @@
     description="View detailed statistics for this workout"
   >
     <template #actions>
-      <UButton
-        color="error"
-        variant="ghost"
-        icon="i-heroicons-trash"
-        size="sm"
-        aria-label="Delete workout"
-        @click="showDeleteConfirm = true"
-      />
+      <div class="flex items-center gap-1">
+        <UButton
+          color="neutral"
+          variant="ghost"
+          icon="i-heroicons-clipboard"
+          size="sm"
+          aria-label="Copy workout ID"
+          @click="copyWorkoutId"
+        />
+        <UButton
+          color="error"
+          variant="ghost"
+          icon="i-heroicons-trash"
+          size="sm"
+          aria-label="Delete workout"
+          @click="showDeleteConfirm = true"
+        />
+      </div>
     </template>
 
     <!-- Hidden trigger - modal is controlled programmatically -->
@@ -362,6 +372,17 @@
 
   function closeModal() {
     isOpen.value = false
+  }
+
+  function copyWorkoutId() {
+    if (!props.workout?.id) return
+    navigator.clipboard.writeText(props.workout.id)
+    toast.add({
+      title: 'Copied',
+      description: 'Workout ID copied to clipboard',
+      color: 'success',
+      icon: 'i-heroicons-check-circle'
+    })
   }
 
   function unlinkWorkout() {
