@@ -418,7 +418,13 @@ export const generateAthleteProfileTask = task({
             durationSec: true,
             tss: true,
             averageWatts: true,
-            aiAnalysisJson: true
+            aiAnalysisJson: true,
+            streams: {
+              select: {
+                hrZoneTimes: true,
+                powerZoneTimes: true
+              }
+            }
           }
         }),
         wellnessRepository.getForUser(userId, {

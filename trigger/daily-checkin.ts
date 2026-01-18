@@ -77,7 +77,15 @@ export const generateDailyCheckinTask = task({
       workoutRepository.getForUser(userId, {
         startDate: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000),
         orderBy: { date: 'desc' },
-        includeDuplicates: false
+        includeDuplicates: false,
+        include: {
+          streams: {
+            select: {
+              hrZoneTimes: true,
+              powerZoneTimes: true
+            }
+          }
+        }
       }),
 
       // User profile

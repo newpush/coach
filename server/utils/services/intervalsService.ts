@@ -28,6 +28,7 @@ import {
   analyzePacingStrategy,
   detectSurges
 } from '../pacing'
+import { getZoneIndex, DEFAULT_HR_ZONES, DEFAULT_POWER_ZONES } from '../training-metrics'
 
 export const IntervalsService = {
   /**
@@ -231,6 +232,51 @@ export const IntervalsService = {
     const hrvData = (streams.hrv?.data as number[]) || null
     const leftRightBalanceData = (streams.left_right_balance?.data as number[]) || null
 
+    // Calculate Zones
+    const defaultProfile = await sportSettingsRepository.getDefault(userId)
+    let hrZones: any[] = []
+    let powerZones: any[] = []
+
+    if (defaultProfile) {
+      hrZones = (defaultProfile.hrZones as any[]) || []
+      powerZones = (defaultProfile.powerZones as any[]) || []
+    }
+
+    if (hrZones.length === 0 || powerZones.length === 0) {
+      const user = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { hrZones: true, powerZones: true }
+      })
+      if (hrZones.length === 0) hrZones = (user?.hrZones as any[]) || DEFAULT_HR_ZONES
+      if (powerZones.length === 0) powerZones = (user?.powerZones as any[]) || DEFAULT_POWER_ZONES
+    }
+
+    let hrZoneTimes: number[] | null = null
+    if (heartrateData && hrZones.length > 0) {
+      hrZoneTimes = new Array(hrZones.length).fill(0)
+      for (const hr of heartrateData) {
+        if (hr !== null && hr !== undefined) {
+          const zoneIndex = getZoneIndex(hr, hrZones)
+          if (zoneIndex >= 0) {
+            hrZoneTimes![zoneIndex]++
+          }
+        }
+      }
+    }
+
+    let powerZoneTimes: number[] | null = null
+    if (wattsData && powerZones.length > 0) {
+      powerZoneTimes = new Array(powerZones.length).fill(0)
+      for (const w of wattsData) {
+        if (w !== null && w !== undefined) {
+          const zoneIndex = getZoneIndex(w, powerZones)
+          if (zoneIndex >= 0) {
+            powerZoneTimes![zoneIndex]++
+          }
+        }
+      }
+    }
+
     // Calculate pacing metrics
     let lapSplits = null
     let paceVariability = null
@@ -285,6 +331,8 @@ export const IntervalsService = {
         respiration: respirationData as any,
         hrv: hrvData as any,
         leftRightBalance: leftRightBalanceData as any,
+        hrZoneTimes: hrZoneTimes as any,
+        powerZoneTimes: powerZoneTimes as any,
         lapSplits: lapSplits as any,
         paceVariability,
         avgPacePerKm,
@@ -307,6 +355,8 @@ export const IntervalsService = {
         respiration: respirationData as any,
         hrv: hrvData as any,
         leftRightBalance: leftRightBalanceData as any,
+        hrZoneTimes: hrZoneTimes as any,
+        powerZoneTimes: powerZoneTimes as any,
         lapSplits: lapSplits as any,
         paceVariability,
         avgPacePerKm,

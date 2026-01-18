@@ -233,7 +233,15 @@ export const analyzeLast3WorkoutsTask = task({
 
       const recentWorkouts = await workoutRepository.getForUser(userId, {
         limit: 20,
-        orderBy: { date: 'desc' }
+        orderBy: { date: 'desc' },
+        include: {
+          streams: {
+            select: {
+              hrZoneTimes: true,
+              powerZoneTimes: true
+            }
+          }
+        }
       })
 
       const workouts = recentWorkouts

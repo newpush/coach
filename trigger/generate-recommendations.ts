@@ -120,7 +120,13 @@ export const generateRecommendationsTask = task({
         description: true,
         aiAnalysis: true,
         aiAnalysisJson: true,
-        overallScore: true
+        overallScore: true,
+        streams: {
+          select: {
+            hrZoneTimes: true,
+            powerZoneTimes: true
+          }
+        }
       },
       take: 5,
       orderBy: { date: 'desc' }

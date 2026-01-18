@@ -146,7 +146,15 @@ export const generateStructuredWorkoutTask = task({
     // Fetch recent workouts for context
     const recentWorkouts = await workoutRepository.getForUser(workout.userId, {
       limit: 5,
-      orderBy: { date: 'desc' }
+      orderBy: { date: 'desc' },
+      include: {
+        streams: {
+          select: {
+            hrZoneTimes: true,
+            powerZoneTimes: true
+          }
+        }
+      }
     })
 
     // Resolve Metrics
