@@ -478,6 +478,37 @@ export function buildWorkoutSummary(workouts: any[], timezone?: string): string 
       // Balance
       if (w.lrBalance) lines.push(`- **L/R Balance**: ${w.lrBalance.toFixed(1)}%`)
 
+      // Zone Data (from Streams)
+      if (w.streams) {
+        if (w.streams.hrZoneTimes && Array.isArray(w.streams.hrZoneTimes)) {
+          const times = w.streams.hrZoneTimes as number[]
+          const totalTime = times.reduce((a, b) => a + b, 0)
+          if (totalTime > 0) {
+            lines.push(`\n**Heart Rate Zones**:`)
+            times.forEach((time, i) => {
+              if (time > 0) {
+                const pct = ((time / totalTime) * 100).toFixed(1)
+                lines.push(`- Z${i + 1}: ${pct}%`)
+              }
+            })
+          }
+        }
+
+        if (w.streams.powerZoneTimes && Array.isArray(w.streams.powerZoneTimes)) {
+          const times = w.streams.powerZoneTimes as number[]
+          const totalTime = times.reduce((a, b) => a + b, 0)
+          if (totalTime > 0) {
+            lines.push(`\n**Power Zones**:`)
+            times.forEach((time, i) => {
+              if (time > 0) {
+                const pct = ((time / totalTime) * 100).toFixed(1)
+                lines.push(`- Z${i + 1}: ${pct}%`)
+              }
+            })
+          }
+        }
+      }
+
       // Description
       if (w.description) lines.push(`\n**Description**: ${w.description}`)
 

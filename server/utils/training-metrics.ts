@@ -23,7 +23,7 @@ function calculateTSB(ctl: number | null, atl: number | null): number | null {
 }
 
 // Default zone definitions matching frontend
-const DEFAULT_HR_ZONES = [
+export const DEFAULT_HR_ZONES = [
   { name: 'Z1', min: 60, max: 120 },
   { name: 'Z2', min: 121, max: 145 },
   { name: 'Z3', min: 146, max: 160 },
@@ -31,7 +31,7 @@ const DEFAULT_HR_ZONES = [
   { name: 'Z5', min: 176, max: 220 }
 ]
 
-const DEFAULT_POWER_ZONES = [
+export const DEFAULT_POWER_ZONES = [
   { name: 'Z1', min: 0, max: 137 },
   { name: 'Z2', min: 138, max: 187 },
   { name: 'Z3', min: 188, max: 225 },
@@ -109,7 +109,7 @@ export function calculateTSS(workout: any): number {
 /**
  * Get zone index for a value given zone definitions
  */
-function getZoneIndex(value: number, zones: Zone[]): number {
+export function getZoneIndex(value: number, zones: Zone[]): number {
   for (let i = 0; i < zones.length; i++) {
     if (value >= zones[i]!.min && value <= zones[i]!.max) {
       return i
