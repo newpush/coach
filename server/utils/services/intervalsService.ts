@@ -251,27 +251,33 @@ export const IntervalsService = {
       if (powerZones.length === 0) powerZones = (user?.powerZones as any[]) || DEFAULT_POWER_ZONES
     }
 
-    let hrZoneTimes: number[] | null = null
-    if (heartrateData && hrZones.length > 0) {
-      hrZoneTimes = new Array(hrZones.length).fill(0)
+    const hrZoneTimes: number[] | null =
+      heartrateData && hrZones.length > 0 ? new Array(hrZones.length).fill(0) : null
+    if (hrZoneTimes && heartrateData) {
       for (const hr of heartrateData) {
         if (hr !== null && hr !== undefined) {
           const zoneIndex = getZoneIndex(hr, hrZones)
           if (zoneIndex >= 0) {
-            hrZoneTimes![zoneIndex]++
+            const current = hrZoneTimes[zoneIndex]
+            if (current !== undefined) {
+              hrZoneTimes[zoneIndex] = current + 1
+            }
           }
         }
       }
     }
 
-    let powerZoneTimes: number[] | null = null
-    if (wattsData && powerZones.length > 0) {
-      powerZoneTimes = new Array(powerZones.length).fill(0)
-      for (const w of wattsData) {
-        if (w !== null && w !== undefined) {
-          const zoneIndex = getZoneIndex(w, powerZones)
+    const powerZoneTimes: number[] | null =
+      wattsData && powerZones.length > 0 ? new Array(powerZones.length).fill(0) : null
+    if (powerZoneTimes && wattsData) {
+      for (const watts of wattsData) {
+        if (watts !== null && watts !== undefined) {
+          const zoneIndex = getZoneIndex(watts, powerZones)
           if (zoneIndex >= 0) {
-            powerZoneTimes![zoneIndex]++
+            const current = powerZoneTimes[zoneIndex]
+            if (current !== undefined) {
+              powerZoneTimes[zoneIndex] = current + 1
+            }
           }
         }
       }

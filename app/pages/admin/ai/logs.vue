@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { z } from 'zod'
+  import { refDebounced } from '@vueuse/core'
 
   definePageMeta({
     layout: 'admin',
@@ -8,34 +8,6 @@
 
   useHead({
     title: 'AI Logs'
-  })
-
-  // Query Params State
-  const page = ref(1)
-  const limit = ref(20)
-  const search = ref('')
-  const feedback = ref('ANY') // ANY, THUMBS_UP, THUMBS_DOWN, COMMENT
-  const operation = ref('')
-  const model = ref('')
-  const status = ref('') // '', success, failure
-  const userId = ref('')
-
-  // Debounce search
-  const searchDebounced = refDebounced(search, 500)
-
-  // Fetch Data
-  const { data, pending, refresh } = await useFetch('/api/admin/ai/logs', {
-    query: computed(() => ({
-      page: page.value,
-      limit: limit.value,
-      search: searchDebounced.value,
-      feedback: feedback.value === 'ANY' ? undefined : feedback.value,
-      operation: operation.value || undefined,
-      model: model.value || undefined,
-      status: status.value || undefined,
-      userId: userId.value || undefined
-    })),
-    watch: [page, limit, searchDebounced, feedback, operation, model, status, userId]
   })
 
   // Options for filters
@@ -51,6 +23,34 @@
     { label: 'Success', value: 'success' },
     { label: 'Failure', value: 'failure' }
   ]
+
+  // Query Params State
+  const page = ref(1)
+  const limit = ref(20)
+  const search = ref('')
+  const feedback = ref(feedbackOptions[0])
+  const operation = ref({ label: 'All Operations', value: '' })
+  const model = ref({ label: 'All Models', value: '' })
+  const status = ref(statusOptions[0])
+  const userId = ref('')
+
+  // Debounce search
+  const searchDebounced = refDebounced(search, 500)
+
+  // Fetch Data
+  const { data, pending, refresh } = await useFetch('/api/admin/ai/logs', {
+    query: computed(() => ({
+      page: page.value,
+      limit: limit.value,
+      search: searchDebounced.value,
+      feedback: feedback.value?.value === 'ANY' ? undefined : feedback.value?.value,
+      operation: operation.value?.value || undefined,
+      model: model.value?.value || undefined,
+      status: status.value?.value || undefined,
+      userId: userId.value || undefined
+    })),
+    watch: [page, limit, searchDebounced, feedback, operation, model, status, userId]
+  })
 
   const operationOptions = computed(() => {
     const ops = data.value?.filters?.operations || []
@@ -90,10 +90,10 @@
   // Reset Filters
   const resetFilters = () => {
     search.value = ''
-    feedback.value = 'ANY'
-    operation.value = ''
-    model.value = ''
-    status.value = ''
+    feedback.value = feedbackOptions[0]!
+    operation.value = { label: 'All Operations', value: '' }
+    model.value = { label: 'All Models', value: '' }
+    status.value = statusOptions[0]!
     userId.value = ''
     page.value = 1
   }
@@ -120,7 +120,7 @@
           color="neutral"
           variant="ghost"
           :loading="pending"
-          @click="refresh"
+          @click="() => refresh()"
         />
       </div>
     </div>
@@ -135,23 +135,14 @@
         <USelectMenu
           v-model="feedback"
           :items="feedbackOptions"
-          value-attribute="value"
           option-attribute="label"
           placeholder="Filter Feedback"
           class="w-40"
-        >
-          <template #label>
-            <span v-if="feedback === 'ANY'">All Feedback</span>
-            <span v-else-if="feedback === 'THUMBS_UP'">Thumbs Up</span>
-            <span v-else-if="feedback === 'THUMBS_DOWN'">Thumbs Down</span>
-            <span v-else-if="feedback === 'COMMENT'">With Comment</span>
-          </template>
-        </USelectMenu>
+        />
 
         <USelectMenu
           v-model="operation"
           :items="operationOptions"
-          value-attribute="value"
           option-attribute="label"
           placeholder="Operation"
           class="w-48"
@@ -160,7 +151,6 @@
         <USelectMenu
           v-model="model"
           :items="modelOptions"
-          value-attribute="value"
           option-attribute="label"
           placeholder="Model"
           class="w-48"
@@ -169,14 +159,15 @@
         <USelectMenu
           v-model="status"
           :items="statusOptions"
-          value-attribute="value"
           option-attribute="label"
           placeholder="Status"
           class="w-32"
         />
 
         <UButton
-          v-if="search || feedback !== 'ANY' || operation || model || status"
+          v-if="
+            search || feedback?.value !== 'ANY' || operation?.value || model?.value || status?.value
+          "
           icon="i-lucide-x"
           color="neutral"
           variant="ghost"
@@ -190,7 +181,7 @@
 
     <!-- Table Content -->
     <div class="flex-1 overflow-auto bg-gray-50 dark:bg-gray-950 p-4">
-      <UCard :ui="{ body: 'p-0', header: 'p-0' }" class="min-h-full">
+      <UCard :ui="{ body: 'p-0' }" class="min-h-full">
         <div class="overflow-x-auto">
           <table class="w-full text-sm text-left">
             <thead
@@ -224,7 +215,7 @@
                   <td class="px-4 py-3">
                     <div class="flex items-center gap-2">
                       <UAvatar
-                        :src="log.user?.image"
+                        :src="log.user?.image || undefined"
                         :alt="log.user?.name || log.user?.email"
                         size="xs"
                       />
