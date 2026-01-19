@@ -512,6 +512,9 @@ export function buildWorkoutSummary(workouts: any[], timezone?: string): string 
       // Description
       if (w.description) lines.push(`\n**Description**: ${w.description}`)
 
+      // Athlete Notes
+      if (w.notes) lines.push(`\n**Athlete Notes**: ${w.notes}`)
+
       // Plan Adherence (if linked)
       if (w.plannedWorkout) {
         lines.push(`\n**Plan Adherence**:`)

@@ -378,6 +378,7 @@ function buildWorkoutAnalysisData(workout: any) {
     date: workout.date,
     title: workout.title,
     description: workout.description,
+    notes: workout.notes,
     type: workout.type,
     duration_m: Math.round(workout.durationSec / 60),
     duration_s: workout.durationSec,
@@ -1019,6 +1020,10 @@ When analyzing "Execution" and "Effort", specifically reference how well the ath
 
   if (workoutData.description) {
     prompt += `\n## Workout Description\n${workoutData.description}\n`
+  }
+
+  if (workoutData.notes) {
+    prompt += `\n## Athlete Notes\n${workoutData.notes}\n`
   }
 
   // Add zone distribution if available
