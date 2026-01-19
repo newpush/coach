@@ -278,10 +278,30 @@
                   <div class="flex items-center justify-between gap-4">
                     <div class="flex-1 min-w-0">
                       <div class="flex justify-between items-start mb-1">
-                        <span
-                          class="text-sm font-medium text-gray-900 dark:text-white line-clamp-1"
-                          >{{ workout.title }}</span
-                        >
+                        <div class="flex items-center gap-2 min-w-0">
+                          <span
+                            class="text-sm font-medium text-gray-900 dark:text-white line-clamp-1"
+                            >{{ workout.title }}</span
+                          >
+                          <UTooltip
+                            v-if="
+                              workout.completionStatus === 'COMPLETED' ||
+                              (workout.completedWorkouts && workout.completedWorkouts.length > 0)
+                            "
+                            text="Completed"
+                          >
+                            <UIcon
+                              name="i-heroicons-check-circle"
+                              class="w-4 h-4 text-success shrink-0"
+                            />
+                          </UTooltip>
+                          <UTooltip v-else-if="workout.completionStatus === 'MISSED'" text="Missed">
+                            <UIcon
+                              name="i-heroicons-x-circle"
+                              class="w-4 h-4 text-error shrink-0"
+                            />
+                          </UTooltip>
+                        </div>
                       </div>
                       <div class="flex items-center gap-3 text-xs text-gray-500 dark:text-gray-400">
                         <span class="flex items-center gap-1">
