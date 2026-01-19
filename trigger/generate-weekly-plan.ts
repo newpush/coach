@@ -13,7 +13,8 @@ import {
   formatUserDate,
   getStartOfDayUTC,
   getEndOfDayUTC,
-  formatDateUTC
+  formatDateUTC,
+  calculateAge
 } from '../server/utils/date'
 
 const weeklyPlanSchema = {
@@ -204,7 +205,7 @@ export const generateWeeklyPlanTask = task({
     ] = await Promise.all([
       prisma.user.findUnique({
         where: { id: userId },
-        select: { ftp: true, weight: true, maxHr: true, lthr: true }
+        select: { ftp: true, weight: true, maxHr: true, lthr: true, dob: true, sex: true }
       }),
       prisma.trainingAvailability.findMany({
         where: { userId },
@@ -290,6 +291,9 @@ export const generateWeeklyPlanTask = task({
       // Sport Specific Settings
       sportSettingsRepository.getByUserId(userId)
     ])
+
+    // Calculate Age
+    const userAge = calculateAge(user?.dob)
 
     // Split into Anchors and Context
     const anchoredWorkouts = existingPlannedWorkouts.filter((w) => anchorWorkoutIds?.includes(w.id))
@@ -486,6 +490,8 @@ ${profile.recommendations_summary?.action_items?.length ? `Priority Actions:\n${
     } else {
       athleteContext = `
 USER BASIC INFO:
+- Age: ${userAge || 'Unknown'}
+- Sex: ${user?.sex || 'Unknown'}
 - Global FTP: ${user?.ftp || 'Unknown'} watts
 - Weight: ${user?.weight || 'Unknown'} kg
 - Global Max HR: ${user?.maxHr || 'Unknown'} bpm

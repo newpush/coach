@@ -4,7 +4,7 @@ import { prisma } from '../server/utils/db'
 import { workoutRepository } from '../server/utils/repositories/workoutRepository'
 import { wellnessRepository } from '../server/utils/repositories/wellnessRepository'
 import { dailyCheckinRepository } from '../server/utils/repositories/dailyCheckinRepository'
-import { formatUserDate, formatDateUTC, getUserLocalDate } from '../server/utils/date'
+import { formatUserDate, formatDateUTC, getUserLocalDate, calculateAge } from '../server/utils/date'
 import { calculateProjectedPMC, getCurrentFitnessSummary } from '../server/utils/training-stress'
 import { getUserAiSettings } from '../server/utils/ai-settings'
 
@@ -96,7 +96,9 @@ export const generateDailyCheckinTask = task({
           weight: true,
           timezone: true,
           maxHr: true,
-          lthr: true
+          lthr: true,
+          dob: true,
+          sex: true
         }
       }),
 
@@ -188,6 +190,7 @@ export const generateDailyCheckinTask = task({
     ])
 
     const userTimezone = user?.timezone || 'UTC'
+    const userAge = calculateAge(user?.dob)
 
     // Normalize today to represent the user's local calendar day at UTC midnight
     // This ensures PMC calculation aligns with database dates
@@ -215,6 +218,8 @@ Training Style: ${profile.training_characteristics?.training_style || 'Unknown'}
     } else {
       athleteContext = `
 ATHLETE BASIC INFO:
+- Age: ${userAge || 'Unknown'}
+- Sex: ${user?.sex || 'Unknown'}
 - FTP: ${user?.ftp || 'Unknown'} watts
 - Weight: ${user?.weight || 'Unknown'} kg
 - Max HR: ${user?.maxHr || 'Unknown'} bpm

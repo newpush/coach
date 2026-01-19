@@ -2,6 +2,7 @@ import { logger, task } from '@trigger.dev/sdk/v3'
 import { generateStructuredAnalysis } from '../server/utils/gemini'
 import { prisma } from '../server/utils/db'
 import { userReportsQueue } from './queues'
+import { calculateAge } from '../server/utils/date'
 
 const workoutStructureSchema = {
   type: 'object',
@@ -50,7 +51,7 @@ export const adjustStructuredWorkoutTask = task({
     const workout = await prisma.plannedWorkout.findUnique({
       where: { id: plannedWorkoutId },
       include: {
-        user: { select: { ftp: true, aiPersona: true, name: true } },
+        user: { select: { ftp: true, aiPersona: true, name: true, dob: true, sex: true } },
         trainingWeek: {
           include: {
             block: {
@@ -90,6 +91,8 @@ export const adjustStructuredWorkoutTask = task({
         : workout.workIntensity
     }
 
+    const userAge = calculateAge(workout.user.dob)
+
     const prompt = `Adjust this structured cycling workout based on user feedback.
     
     ORIGINAL WORKOUT:
@@ -102,6 +105,8 @@ export const adjustStructuredWorkoutTask = task({
     "${adjustments.feedback || 'Please regenerate with the new duration/intensity parameters.'}"
     
     USER PROFILE:
+    - Age: ${userAge || 'Unknown'}
+    - Sex: ${workout.user.sex || 'Unknown'}
     - FTP: ${workout.user.ftp || 250}W
     
     INSTRUCTIONS:

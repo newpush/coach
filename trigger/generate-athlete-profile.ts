@@ -15,7 +15,8 @@ import {
   getStartOfDaysAgoUTC,
   getEndOfDayUTC,
   formatUserDate,
-  getUserLocalDate
+  getUserLocalDate,
+  calculateAge
 } from '../server/utils/date'
 import { getCheckinHistoryContext } from '../server/utils/services/checkin-service'
 import { getUserAiSettings } from '../server/utils/ai-settings'
@@ -401,7 +402,8 @@ export const generateAthleteProfileTask = task({
             weight: true,
             maxHr: true,
             dob: true,
-            lthr: true
+            lthr: true,
+            sex: true
           }
         }),
         workoutRepository.getForUser(userId, {
@@ -511,6 +513,8 @@ export const generateAthleteProfileTask = task({
         // Fetch Sport Settings
         sportSettingsRepository.getByUserId(userId)
       ])
+
+      const userAge = calculateAge(user?.dob)
 
       logger.log('Data fetched', {
         workoutsWithAI: recentWorkouts.length,
@@ -695,6 +699,8 @@ Analyze all available data to create a complete picture of this athlete.
 Adapt your analysis tone and insights to match your **${aiSettings.aiPersona}** persona.
 
 USER PROFILE:
+- Age: ${userAge || 'Unknown'}
+- Sex: ${user?.sex || 'Unknown'}
 - FTP: ${user?.ftp || 'Unknown'} watts
 - Weight: ${user?.weight || 'Unknown'} kg
 - W/kg: ${user?.ftp && user?.weight ? (user.ftp / user.weight).toFixed(2) : 'Unknown'}

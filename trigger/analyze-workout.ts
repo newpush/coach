@@ -4,7 +4,7 @@ import { prisma } from '../server/utils/db'
 import { workoutRepository } from '../server/utils/repositories/workoutRepository'
 import { sportSettingsRepository } from '../server/utils/repositories/sportSettingsRepository'
 import { userAnalysisQueue } from './queues'
-import { getUserTimezone, formatUserDate } from '../server/utils/date'
+import { getUserTimezone, formatUserDate, calculateAge } from '../server/utils/date'
 import { getUserAiSettings } from '../server/utils/ai-settings'
 
 // TypeScript interface for the structured analysis
@@ -261,7 +261,8 @@ export const analyzeWorkoutTask = task({
             orderBy: {
               order: 'asc'
             }
-          }
+          },
+          plannedWorkout: true
         }
       })
 
@@ -272,11 +273,18 @@ export const analyzeWorkoutTask = task({
       logger.log('Workout data fetched', {
         workoutId,
         title: workout.title,
-        date: workout.date
+        date: workout.date,
+        plannedWorkoutId: workout.plannedWorkoutId
       })
 
       const timezone = await getUserTimezone(workout.userId)
       const aiSettings = await getUserAiSettings(workout.userId)
+
+      const user = await prisma.user.findUnique({
+        where: { id: workout.userId },
+        select: { dob: true, sex: true, weight: true }
+      })
+      const userAge = calculateAge(user?.dob)
 
       // Fetch Sport Specific Settings
       const sportSettings = await sportSettingsRepository.getForActivityType(
@@ -297,7 +305,9 @@ export const analyzeWorkoutTask = task({
         workoutData,
         timezone,
         aiSettings.aiPersona,
-        sportSettings
+        sportSettings,
+        { age: userAge, sex: user?.sex || null, weight: user?.weight || null },
+        workout.plannedWorkout
       )
 
       logger.log(`Generating structured analysis with Gemini (${aiSettings.aiModelPreference})`)
@@ -646,9 +656,16 @@ function getAnalysisSectionsGuidance(
 
 function buildWorkoutAnalysisPrompt(
   workoutData: any,
+
   timezone: string,
+
   persona: string = 'Supportive',
-  sportSettings?: any
+
+  sportSettings?: any,
+
+  userProfile?: { age: number | null; sex: string | null; weight: number | null },
+
+  plannedWorkout?: any
 ): string {
   const formatMetric = (value: any, decimals = 1) => {
     return value !== undefined && value !== null ? Number(value).toFixed(decimals) : 'N/A'
@@ -657,16 +674,21 @@ function buildWorkoutAnalysisPrompt(
   const dateStr = formatUserDate(workoutData.date, timezone, 'yyyy-MM-dd')
 
   // Determine the workout type for context-aware analysis
+
   const workoutType = workoutData.type || 'Unknown'
+
   const isCardio = ['Ride', 'Run', 'Swim', 'VirtualRide', 'VirtualRun'].some((t) =>
     workoutType.toLowerCase().includes(t.toLowerCase())
   )
+
   const isStrength = ['Gym', 'WeightTraining', 'Strength', 'CrossFit'].some((t) =>
     workoutType.toLowerCase().includes(t.toLowerCase())
   )
 
   // Set appropriate coach persona and focus based on workout type
+
   let coachType = 'fitness coach'
+
   if (isCardio && workoutType.toLowerCase().includes('ride')) {
     coachType = 'cycling coach'
   } else if (isCardio && workoutType.toLowerCase().includes('run')) {
@@ -676,13 +698,17 @@ function buildWorkoutAnalysisPrompt(
   }
 
   let zoneDefinitions = ''
+
   if (sportSettings) {
     zoneDefinitions += `\n## Defined Training Zones (Reference)\n`
+
     if (sportSettings.ftp) zoneDefinitions += `- **FTP**: ${sportSettings.ftp} W\n`
+
     if (sportSettings.lthr) zoneDefinitions += `- **LTHR**: ${sportSettings.lthr} bpm\n`
 
     if (sportSettings.hrZones && Array.isArray(sportSettings.hrZones)) {
       zoneDefinitions += '- **Heart Rate Zones**:\n'
+
       sportSettings.hrZones.forEach((z: any) => {
         zoneDefinitions += `  - ${z.name}: ${z.min}-${z.max} bpm\n`
       })
@@ -690,6 +716,7 @@ function buildWorkoutAnalysisPrompt(
 
     if (sportSettings.powerZones && Array.isArray(sportSettings.powerZones)) {
       zoneDefinitions += '- **Power Zones**:\n'
+
       sportSettings.powerZones.forEach((z: any) => {
         zoneDefinitions += `  - ${z.name}: ${z.min}-${z.max} W\n`
       })
@@ -697,17 +724,65 @@ function buildWorkoutAnalysisPrompt(
   }
 
   let prompt = `You are an expert ${coachType} analyzing a workout.
+
 Your persona is: **${persona}**. Adapt your tone and feedback style accordingly.
+
+
+
+ATHLETE CONTEXT:
+
+- Age: ${userProfile?.age || 'Unknown'}
+
+- Sex: ${userProfile?.sex || 'Unknown'}
+
+${userProfile?.weight ? `- Weight: ${userProfile.weight} kg` : ''}
+
+
 
 **IMPORTANT - Workout Type Context**: This is a **${workoutType}** workout. ${getWorkoutTypeGuidance(workoutType, isCardio, isStrength)}
 
+
+
 ## Workout Details
+
 - **Date**: ${dateStr}
+
 - **Title**: ${workoutData.title}
+
 - **Type**: ${workoutType}
+
 - **Duration**: ${workoutData.duration_m} minutes (${workoutData.duration_s}s)
+
 `
+
+  // Add Planned Workout Context
+
+  if (plannedWorkout) {
+    prompt += `
+
+## Planned Workout Context (Adherence Check)
+
+This workout was linked to a planned training session. Compare the actual execution against these targets:
+
+- **Planned Title**: ${plannedWorkout.title}
+
+- **Planned Description**: ${plannedWorkout.description || 'N/A'}
+
+- **Planned Duration**: ${plannedWorkout.durationSec ? Math.round(plannedWorkout.durationSec / 60) + ' min' : 'N/A'}
+
+- **Planned TSS**: ${plannedWorkout.tss || 'N/A'}
+
+- **Planned Intensity**: ${plannedWorkout.workIntensity ? (plannedWorkout.workIntensity * 100).toFixed(0) + '%' : 'N/A'}
+
+
+
+When analyzing "Execution" and "Effort", specifically reference how well the athlete stuck to this plan. Did they go too hard? Too easy? Did they match the duration?
+
+`
+  }
+
   // Add zone definitions to context
+
   prompt += zoneDefinitions
 
   if (workoutData.distance_m) {

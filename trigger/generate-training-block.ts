@@ -8,7 +8,8 @@ import {
   getStartOfDayUTC,
   formatUserDate,
   getUserLocalDate,
-  formatDateUTC
+  formatDateUTC,
+  calculateAge
 } from '../server/utils/date'
 import { getCurrentFitnessSummary } from '../server/utils/training-stress'
 import { getUserAiSettings } from '../server/utils/ai-settings'
@@ -122,8 +123,10 @@ export const generateTrainingBlockTask = task({
 
     const user = await prisma.user.findUnique({
       where: { id: userId },
-      select: { ftp: true, weight: true, maxHr: true, aiPersona: true }
+      select: { ftp: true, weight: true, maxHr: true, aiPersona: true, dob: true, sex: true }
     })
+
+    const userAge = calculateAge(user?.dob)
 
     // Fetch Anchored Workouts
     const anchoredWorkouts = anchorWorkoutIds?.length
@@ -292,6 +295,8 @@ CURRENT CONTEXT:
 - Timezone: ${timezone}
 
 ATHLETE PROFILE:
+- Age: ${userAge || 'Unknown'}
+- Sex: ${user?.sex || 'Unknown'}
 - FTP: ${user?.ftp || 'Unknown'} W
 - Weight: ${user?.weight || 'Unknown'} kg
 - Coach Persona: ${aiSettings.aiPersona}

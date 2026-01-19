@@ -289,6 +289,7 @@ export const reviewGoalsTask = task({
             endDate: todayEnd,
             limit: 20,
             orderBy: { date: 'desc' },
+            includeDuplicates: false,
             select: {
               date: true,
               type: true,

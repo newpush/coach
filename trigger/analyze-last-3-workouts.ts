@@ -4,7 +4,12 @@ import { prisma } from '../server/utils/db'
 import { workoutRepository } from '../server/utils/repositories/workoutRepository'
 import { sportSettingsRepository } from '../server/utils/repositories/sportSettingsRepository'
 import { userReportsQueue } from './queues'
-import { getUserTimezone, formatUserDate, getStartOfDaysAgoUTC } from '../server/utils/date'
+import {
+  getUserTimezone,
+  formatUserDate,
+  getStartOfDaysAgoUTC,
+  calculateAge
+} from '../server/utils/date'
 
 // Reuse the flexible analysis schema (same as workout analysis)
 const analysisSchema = {
@@ -102,9 +107,13 @@ function buildAnalysisPrompt(workouts: any[], user: any, timezone: string, sport
       ? `${formatUserDate(workouts[workouts.length - 1].date, timezone)} - ${formatUserDate(workouts[0].date, timezone)}`
       : 'Unknown'
 
+  const userAge = calculateAge(user?.dob)
+
   let prompt = `You are a friendly, supportive cycling coach analyzing your athlete's recent training progression.
 
 USER PROFILE:
+- Age: ${userAge || 'Unknown'}
+- Sex: ${user?.sex || 'Unknown'}
 - FTP: ${user?.ftp || 'Unknown'} watts
 - Weight: ${user?.weight || 'Unknown'} kg
 - Max HR: ${user?.maxHr || 'Unknown'} bpm
@@ -234,13 +243,15 @@ export const analyzeLast3WorkoutsTask = task({
       const recentWorkouts = await workoutRepository.getForUser(userId, {
         limit: 20,
         orderBy: { date: 'desc' },
+        includeDuplicates: false,
         include: {
           streams: {
             select: {
               hrZoneTimes: true,
               powerZoneTimes: true
             }
-          }
+          },
+          plannedWorkout: true
         }
       })
 
@@ -272,7 +283,7 @@ export const analyzeLast3WorkoutsTask = task({
       // Fetch user profile for context
       const user = await prisma.user.findUnique({
         where: { id: userId },
-        select: { ftp: true, weight: true, maxHr: true }
+        select: { ftp: true, weight: true, maxHr: true, dob: true, sex: true }
       })
 
       // Fetch Sport Specific Settings (Cycling)

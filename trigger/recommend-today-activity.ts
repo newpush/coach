@@ -6,12 +6,38 @@ import { wellnessRepository } from '../server/utils/repositories/wellnessReposit
 import { activityRecommendationRepository } from '../server/utils/repositories/activityRecommendationRepository'
 import { recommendationRepository } from '../server/utils/repositories/recommendationRepository'
 import { sportSettingsRepository } from '../server/utils/repositories/sportSettingsRepository'
-import { formatUserDate, getUserLocalDate, formatDateUTC } from '../server/utils/date'
+import { formatUserDate, getUserLocalDate, formatDateUTC, calculateAge } from '../server/utils/date'
 import { calculateProjectedPMC, getCurrentFitnessSummary } from '../server/utils/training-stress'
 import { analyzeWellness } from '../server/utils/services/wellness-analysis'
 import { getCheckinHistoryContext } from '../server/utils/services/checkin-service'
 import { getUserAiSettings } from '../server/utils/ai-settings'
 import { generateAthleteProfileTask } from './generate-athlete-profile'
+
+interface RecommendationAnalysis {
+  recommendation: 'proceed' | 'modify' | 'reduce_intensity' | 'rest'
+  confidence: number
+  reasoning: string
+  planned_workout?: {
+    original_title: string
+    original_tss: number
+    original_duration_min: number
+  }
+  suggested_modifications?: {
+    action: string
+    new_title: string
+    new_tss: number
+    new_duration_min: number
+    zone_adjustments: string
+    description: string
+  }
+  recovery_analysis?: {
+    hrv_status: string
+    sleep_quality: string
+    fatigue_level: string
+    readiness_score: number
+  }
+  key_factors?: string[]
+}
 
 const recommendationSchema = {
   type: 'object',
@@ -81,11 +107,14 @@ export const recommendTodayActivityTask = task({
         weight: true,
         maxHr: true,
         timezone: true,
-        lthr: true
+        lthr: true,
+        dob: true,
+        sex: true
       }
     })
 
     const userTimezone = user?.timezone || 'UTC'
+    const userAge = calculateAge(user?.dob)
 
     // 2. CHECK PROFILE FRESHNESS
     const latestProfile = await prisma.report.findFirst({
@@ -170,7 +199,7 @@ export const recommendTodayActivityTask = task({
 
     // Fetch remaining data
     const [
-      plannedWorkout,
+      plannedWorkouts,
       todayMetric,
       recentWorkouts,
       athleteProfile,
@@ -182,10 +211,10 @@ export const recommendTodayActivityTask = task({
       focusedRecommendations,
       sportSettings
     ] = await Promise.all([
-      // Today's planned workout
-      prisma.plannedWorkout.findFirst({
+      // Today's planned workouts (Fetch ALL to handle multi-session days)
+      prisma.plannedWorkout.findMany({
         where: { userId, date: today },
-        orderBy: { createdAt: 'desc' }
+        orderBy: { tss: 'desc' } // Prioritize hardest workout
       }),
 
       // Today's recovery metrics from Wellness table (WHOOP, Intervals.icu, etc.)
@@ -202,7 +231,8 @@ export const recommendTodayActivityTask = task({
               hrZoneTimes: true,
               powerZoneTimes: true
             }
-          }
+          },
+          plannedWorkout: true
         }
       }),
 
@@ -292,6 +322,9 @@ export const recommendTodayActivityTask = task({
       sportSettingsRepository.getByUserId(userId)
     ])
 
+    // Identify primary workout for linking (DB only allows 1:1) and logic fallback
+    const primaryPlannedWorkout = plannedWorkouts[0] || null
+
     // --- CHECK FOR AND RUN WELLNESS ANALYSIS IF MISSING ---
     // If we have a wellness record (todayMetric) but no AI analysis, run it now.
     // This ensures we always have the AI context for the recommendation.
@@ -310,7 +343,7 @@ export const recommendTodayActivityTask = task({
           // Update our local object so the prompt gets the new data
           enrichedTodayMetric = {
             ...todayMetric,
-            aiAnalysisJson: result.analysis,
+            aiAnalysisJson: result.analysis as any,
             aiAnalysisStatus: 'COMPLETED'
           }
           logger.log('Inline wellness analysis completed successfully')
@@ -322,7 +355,7 @@ export const recommendTodayActivityTask = task({
     }
 
     logger.log('Data fetched', {
-      hasPlannedWorkout: !!plannedWorkout,
+      plannedWorkoutsCount: plannedWorkouts.length,
       hasTodayMetric: !!enrichedTodayMetric,
       recentWorkoutsCount: recentWorkouts.length,
       hasAthleteProfile: !!athleteProfile,
@@ -397,6 +430,8 @@ ${profile.planning_context?.opportunities?.length ? `Opportunities: ${profile.pl
     } else {
       athleteContext = `
 ATHLETE BASIC INFO:
+- Age: ${userAge || 'Unknown'}
+- Sex: ${user?.sex || 'Unknown'}
 - FTP: ${user?.ftp || 'Unknown'} watts
 - Weight: ${user?.weight || 'Unknown'} kg
 - Max HR: ${user?.maxHr || 'Unknown'} bpm
@@ -491,13 +526,15 @@ ${projectedMetrics
     // Build zone definitions based on today's activity type
     let zoneDefinitions = ''
     let activeProfile = sportSettings.find((s) => s.isDefault)
-    if (plannedWorkout?.type) {
-      const match = sportSettings.find((s) => !s.isDefault && s.types.includes(plannedWorkout.type))
+    if (primaryPlannedWorkout?.type) {
+      const match = sportSettings.find(
+        (s) => !s.isDefault && s.types.includes(primaryPlannedWorkout.type!)
+      )
       if (match) activeProfile = match
     }
 
     if (activeProfile) {
-      zoneDefinitions += `**Applicable Zones for ${plannedWorkout?.type || 'Today'} (Profile: ${activeProfile.name}):**\n`
+      zoneDefinitions += `**Applicable Zones for ${primaryPlannedWorkout?.type || 'Today'} (Profile: ${activeProfile.name}):**\n`
 
       if (activeProfile.hrZones && Array.isArray(activeProfile.hrZones)) {
         zoneDefinitions += '*Heart Rate Zones:*\n'
@@ -583,16 +620,21 @@ ${athleteContext}
 ${planContext}
 ${focusedRecsContext}
 
-TODAY'S PLANNED WORKOUT:
+TODAY'S PLANNED WORKOUT(S):
 ${
-  plannedWorkout
-    ? `
-- Title: ${plannedWorkout.title}
-- Duration: ${plannedWorkout.durationSec ? Math.round(plannedWorkout.durationSec / 60) : 'Unknown'} minutes
-- TSS: ${plannedWorkout.tss || 'Unknown'}
-- Type: ${plannedWorkout.type || 'Unknown'}
-- Description: ${plannedWorkout.description || 'None'}
+  plannedWorkouts.length > 0
+    ? plannedWorkouts
+        .map(
+          (pw, i) => `
+WORKOUT ${i + 1}${i === 0 ? ' (Primary)' : ''}:
+- Title: ${pw.title}
+- Duration: ${pw.durationSec ? Math.round(pw.durationSec / 60) : 'Unknown'} minutes
+- TSS: ${pw.tss || 'Unknown'}
+- Type: ${pw.type || 'Unknown'}
+- Description: ${pw.description || 'None'}
 `
+        )
+        .join('\n')
     : 'No workout planned for today'
 }
 
@@ -671,7 +713,7 @@ Maintain your **${aiSettings.aiPersona}** persona throughout.`
     logger.log(`Generating recommendation with Gemini (${aiSettings.aiModelPreference})`)
 
     // Generate recommendation
-    const analysis = await generateStructuredAnalysis(
+    const analysis = await generateStructuredAnalysis<RecommendationAnalysis>(
       prompt,
       recommendationSchema,
       aiSettings.aiModelPreference, // Use user preference
@@ -694,7 +736,9 @@ Maintain your **${aiSettings.aiPersona}** persona throughout.`
         confidence: analysis.confidence,
         reasoning: analysis.reasoning,
         analysisJson: analysis as any,
-        plannedWorkout: plannedWorkout?.id ? { connect: { id: plannedWorkout.id } } : undefined,
+        plannedWorkout: primaryPlannedWorkout?.id
+          ? { connect: { id: primaryPlannedWorkout.id } }
+          : undefined,
         status: 'COMPLETED',
         modelVersion: 'gemini-2.0-flash-exp'
       })
@@ -707,7 +751,9 @@ Maintain your **${aiSettings.aiPersona}** persona throughout.`
         confidence: analysis.confidence,
         reasoning: analysis.reasoning,
         analysisJson: analysis as any,
-        plannedWorkout: plannedWorkout?.id ? { connect: { id: plannedWorkout.id } } : undefined,
+        plannedWorkout: primaryPlannedWorkout?.id
+          ? { connect: { id: primaryPlannedWorkout.id } }
+          : undefined,
         status: 'COMPLETED',
         modelVersion: 'gemini-2.0-flash-exp'
       })
