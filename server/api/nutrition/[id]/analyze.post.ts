@@ -93,7 +93,10 @@ export default defineEventHandler(async (event) => {
         nutritionId: id
       },
       {
-        concurrencyKey: (session.user as any).id
+        concurrencyKey: (session.user as any).id,
+        tags: [`user:${(session.user as any).id}`],
+        idempotencyKey: id,
+        idempotencyKeyTTL: '5m'
       }
     )
 

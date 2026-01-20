@@ -44,7 +44,9 @@ export default defineEventHandler(async (event) => {
       },
       {
         concurrencyKey: userId,
-        tags: [`user:${userId}`]
+        tags: [`user:${userId}`],
+        idempotencyKey: wellnessId,
+        idempotencyKeyTTL: '5m'
       }
     )
 
