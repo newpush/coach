@@ -41,35 +41,27 @@ const checkStatus = () => {
   try {
     console.log(chalk.yellow('Checking GitHub Actions status...'))
     const ghOutput = execSync(
-      'gh run list --limit=5 --json status,conclusion,workflowName,createdAt,url,displayTitle',
+      'gh run list --limit=10 --json status,conclusion,workflowName,createdAt,url,displayTitle',
       { encoding: 'utf-8', stdio: ['ignore', 'pipe', 'ignore'] }
     )
     const runs = JSON.parse(ghOutput)
     const filteredRuns = runs.filter((run: any) => !run.workflowName.includes('Gemini'))
-    const filteredCount = runs.length - filteredRuns.length
 
     if (filteredRuns.length > 0) {
-      console.log(`Latest GitHub Actions: `)
-      filteredRuns.forEach((run: any) => {
-        const icon = run.conclusion === 'success' ? '✓' : run.conclusion === 'failure' ? '✗' : '•'
-        const color =
-          run.conclusion === 'success'
-            ? chalk.green
-            : run.conclusion === 'failure'
-              ? chalk.red
-              : chalk.yellow
-        console.log(color(`  ${icon} ${run.workflowName}: ${run.conclusion || run.status}`))
-        console.log(`    Title: ${run.displayTitle}`)
-        console.log(`    Time:  ${run.createdAt}`)
-        console.log(`    Url:   ${run.url}`)
-        console.log('')
-      })
-
-      if (filteredCount > 0) {
-        console.log(
-          chalk.gray(`Note: ${filteredCount} Gemini workflow runs were filtered from this view.`)
-        )
-      }
+      console.log(`Latest GitHub Action: `)
+      const run = filteredRuns[0]
+      const icon = run.conclusion === 'success' ? '✓' : run.conclusion === 'failure' ? '✗' : '•'
+      const color =
+        run.conclusion === 'success'
+          ? chalk.green
+          : run.conclusion === 'failure'
+            ? chalk.red
+            : chalk.yellow
+      console.log(color(`  ${icon} ${run.workflowName}: ${run.conclusion || run.status}`))
+      console.log(`    Title: ${run.displayTitle}`)
+      console.log(`    Time:  ${run.createdAt}`)
+      console.log(`    Url:   ${run.url}`)
+      console.log('')
     } else {
       console.log(chalk.gray('No GitHub Action runs found.'))
     }

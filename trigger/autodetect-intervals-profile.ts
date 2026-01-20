@@ -1,9 +1,7 @@
 import { logger, task } from '@trigger.dev/sdk/v3'
 import { prisma } from '../server/utils/db'
-import { fetchIntervalsAthleteProfile } from '../server/utils/intervals'
-import { sportSettingsRepository } from '../server/utils/repositories/sportSettingsRepository'
+import { IntervalsService } from '../server/utils/services/intervalsService'
 import { userIngestionQueue } from './queues'
-import { roundToTwoDecimals } from '../server/utils/number'
 
 export const autodetectIntervalsProfileTask = task({
   id: 'autodetect-intervals-profile',
@@ -14,88 +12,36 @@ export const autodetectIntervalsProfileTask = task({
 
     logger.log('Starting Intervals.icu profile auto-detection', { userId, forceUpdate })
 
-    // Fetch user and integration
-    const [user, integration] = await Promise.all([
-      prisma.user.findUnique({ where: { id: userId } }),
-      prisma.integration.findUnique({
-        where: {
-          userId_provider: {
-            userId,
-            provider: 'intervals'
-          }
-        }
-      })
-    ])
+    // Fetch user
+    const user = await prisma.user.findUnique({ where: { id: userId } })
 
     if (!user) throw new Error('User not found')
-    if (!integration) throw new Error('Intervals integration not found')
 
-    // Check if profile is complete (now looking at sport settings)
-    const settings = await sportSettingsRepository.getByUserId(userId)
-    const hasDefaultZones = settings.some((s) => s.isDefault && (s.hrZones as any[])?.length > 0)
-    const hasFtp = user.ftp && user.ftp > 0
+    // Check if profile is incomplete
+    // Criteria: FTP is missing/0, Max HR is missing/0, OR HR zones are missing/empty
+    const hrZones = (user.hrZones as any[]) || []
+    const isIncomplete =
+      !user.ftp || user.ftp === 0 || !user.maxHr || user.maxHr === 0 || hrZones.length === 0
 
-    if (hasFtp && hasDefaultZones && !forceUpdate) {
+    if (!isIncomplete && !forceUpdate) {
       logger.log('Profile is already configured and forceUpdate is false. Skipping auto-detection.')
       return { success: true, message: 'Profile already configured' }
     }
 
     try {
-      // Fetch comprehensive profile from Intervals.icu
-      const intervalsProfile = await fetchIntervalsAthleteProfile(integration)
-
-      const userUpdateData: any = {}
-
-      // 1. Update Global User Metrics
-      if (intervalsProfile.ftp) userUpdateData.ftp = intervalsProfile.ftp
-      if (intervalsProfile.maxHR) userUpdateData.maxHr = intervalsProfile.maxHR
-      if (intervalsProfile.lthr) userUpdateData.lthr = intervalsProfile.lthr
-      if (intervalsProfile.weight)
-        userUpdateData.weight = roundToTwoDecimals(intervalsProfile.weight)
-      if (intervalsProfile.restingHR) userUpdateData.restingHr = intervalsProfile.restingHR
-      if (intervalsProfile.timezone && !user.timezone)
-        userUpdateData.timezone = intervalsProfile.timezone
-
-      if (Object.keys(userUpdateData).length > 0) {
-        await prisma.user.update({
-          where: { id: userId },
-          data: userUpdateData
-        })
-      }
-
-      // 2. Sync All Sport Specific Settings
-      if (intervalsProfile.sportSettings && intervalsProfile.sportSettings.length > 0) {
-        logger.log(
-          `Syncing ${intervalsProfile.sportSettings.length} sport profiles from Intervals.icu`
-        )
-
-        const settingsPayload = intervalsProfile.sportSettings.map((s: any) => ({
-          name: s.types.join('/'),
-          types: s.types,
-          ftp: s.ftp,
-          lthr: s.lthr,
-          maxHr: s.maxHr,
-          hrZones: s.hrZones,
-          powerZones: s.powerZones,
-          externalId: s.externalId,
-          source: 'intervals'
-        }))
-
-        await sportSettingsRepository.upsertSettings(userId, settingsPayload)
-      } else {
-        // If no specific settings, ensure we at least have a Default profile from the main metrics
-        await sportSettingsRepository.getDefault(userId)
-      }
+      // Sync profile from Intervals.icu (includes Sport Settings)
+      const profile = await IntervalsService.syncProfile(userId)
 
       logger.log('Profile updated automatically from Intervals.icu', {
         userId,
-        updatedUserFields: Object.keys(userUpdateData)
+        ftp: profile.ftp,
+        sportSettingsCount: profile.sportSettings?.length || 0
       })
 
       return {
         success: true,
         message: 'Profile updated successfully',
-        updatedFields: Object.keys(userUpdateData)
+        updatedFields: ['ftp', 'lthr', 'maxHr', 'weight', 'sportSettings']
       }
     } catch (error) {
       logger.error('Error auto-detecting profile from Intervals.icu', { error })

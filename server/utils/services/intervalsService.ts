@@ -1,5 +1,6 @@
 import { prisma } from '../db'
 import {
+  fetchIntervalsAthleteProfile,
   fetchIntervalsWorkouts,
   fetchIntervalsWellness,
   fetchIntervalsPlannedWorkouts,
@@ -9,7 +10,7 @@ import {
   normalizeIntervalsCalendarNote,
   fetchIntervalsActivityStreams,
   fetchIntervalsAthlete,
-  fetchIntervalsAthleteProfile
+  fetchIntervalsAthleteProfile as fetchProfile // Alias to avoid naming conflict if needed, but import is fine
 } from '../intervals'
 import { workoutRepository } from '../repositories/workoutRepository'
 import { wellnessRepository } from '../repositories/wellnessRepository'
@@ -49,37 +50,40 @@ export const IntervalsService = {
    * Sync athlete profile settings (Basic + Sports)
    */
   async syncProfile(userId: string) {
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      include: { integrations: true }
+    const integration = await prisma.integration.findUnique({
+      where: {
+        userId_provider: {
+          userId,
+          provider: 'intervals'
+        }
+      }
     })
 
-    if (!user) return
+    if (!integration) {
+      throw new Error(`Intervals integration not found for user ${userId}`)
+    }
 
-    const integration = user.integrations.find((i) => i.provider === 'intervals')
-    if (!integration || !integration.externalUserId) return
-
-    const profile = (await fetchIntervalsAthlete(
-      integration.accessToken,
-      integration.externalUserId
-    )) as any
+    // Use normalized fetcher (camelCase fields)
+    const profile = await fetchIntervalsAthleteProfile(integration)
 
     // Update Basic Settings
     await prisma.user.update({
       where: { id: userId },
       data: {
         weight: profile.weight,
-        restingHr: profile.restingHr,
-        maxHr: profile.maxHr,
+        restingHr: profile.restingHR, // Note: normalized profile uses restingHR (uppercase HR)
+        maxHr: profile.maxHR,
         lthr: profile.lthr,
         ftp: profile.ftp
       }
     })
 
-    // Update Sport Settings
+    // Update Sport Settings using Repository
     if (profile.sportSettings && profile.sportSettings.length > 0) {
       await sportSettingsRepository.upsertSettings(userId, profile.sportSettings)
     }
+
+    return profile
   },
 
   /**
