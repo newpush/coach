@@ -74,8 +74,8 @@ importers:
         specifier: ^3.15.1
         version: 3.15.1(@floating-ui/dom@1.7.4)(@tiptap/core@3.15.1(@tiptap/pm@3.15.1))(@tiptap/pm@3.15.1)(vue@3.5.26(typescript@5.9.3))
       '@trigger.dev/sdk':
-        specifier: 4.3.2
-        version: 4.3.2(ai@5.0.107(zod@4.3.5))(typescript@5.9.3)(zod@4.3.5)
+        specifier: 4.3.1
+        version: 4.3.1(ai@5.0.107(zod@4.3.5))(typescript@5.9.3)(zod@4.3.5)
       '@types/uuid':
         specifier: ^11.0.0
         version: 11.0.0
@@ -213,8 +213,8 @@ importers:
         specifier: ^3.15.1
         version: 3.15.1
       '@trigger.dev/build':
-        specifier: 4.3.2
-        version: 4.3.2(magicast@0.3.5)(typescript@5.9.3)
+        specifier: 4.3.1
+        version: 4.3.1(magicast@0.3.5)(typescript@5.9.3)
       '@types/bcrypt':
         specifier: ^6.0.0
         version: 6.0.0
@@ -5218,24 +5218,24 @@ packages:
         integrity: sha512-C5Mc6rdnsaJDjO3UpGW/CQTHtCKaYlScZTly4JIu97Jxo/odCiH0ITnDXSJPTOrEKk/ycSZ0AOgTmkDtkOsvIA==
       }
 
-  '@trigger.dev/build@4.3.2':
+  '@trigger.dev/build@4.3.1':
     resolution:
       {
-        integrity: sha512-MYr2+Sphd9Zeu44q5eLRp+jXj0Km5r9QGjtnmRKFDxK79MbGoL65M8yFXNmMkJmzsBQHcA5USSIJR3QJJnV7kQ==
+        integrity: sha512-jmfKbvXnaN2RMd1PwywrRHPy1oYwMNKr/H3yNQZtd/4N/Lk9235lWmugg8WgOHtaAr8NcYqwo9OucYXqJBQsrA==
       }
     engines: { node: '>=18.20.0' }
 
-  '@trigger.dev/core@4.3.2':
+  '@trigger.dev/core@4.3.1':
     resolution:
       {
-        integrity: sha512-CToEt1w1jOmpvwOh/gqgC3UKHw36nrHSxaMYRnv5csXFOMgH2BksD/fZ2M/R2Q8kNehlQGagFWoussGmItxZqw==
+        integrity: sha512-qsFlEJtW1dBjiokUr/3/toghRe48orBK9voPjJAPLPKe0yA7HykqZuUWYGOIbrLUHrjxEPRWfegOCwdmPvxEfQ==
       }
     engines: { node: '>=18.20.0' }
 
-  '@trigger.dev/sdk@4.3.2':
+  '@trigger.dev/sdk@4.3.1':
     resolution:
       {
-        integrity: sha512-XbzWBHoVFwvW1uyEbiEmztF86gvLgt0OO/aUqgeOixBAsTXRFxI/zd/scBMHK8vE9jB1D2biI8x5of6gRPEK4g==
+        integrity: sha512-q/gah1kpz5MgFk4KfBkysbmTXkbYcyDR9LelWZdkM9TD7q3C7DnVYTiplv3lka1jiWxyVdRmRv8jDEFTCEEHZg==
       }
     engines: { node: '>=18.20.0' }
     peerDependencies:
@@ -18467,10 +18467,10 @@ snapshots:
 
   '@tootallnate/quickjs-emscripten@0.23.0': {}
 
-  '@trigger.dev/build@4.3.2(magicast@0.3.5)(typescript@5.9.3)':
+  '@trigger.dev/build@4.3.1(magicast@0.3.5)(typescript@5.9.3)':
     dependencies:
       '@prisma/config': 6.19.1(magicast@0.3.5)
-      '@trigger.dev/core': 4.3.2(typescript@5.9.3)
+      '@trigger.dev/core': 4.3.1(typescript@5.9.3)
       mlly: 1.8.0
       pkg-types: 1.3.1
       resolve: 1.22.11
@@ -18483,7 +18483,7 @@ snapshots:
       - typescript
       - utf-8-validate
 
-  '@trigger.dev/core@4.3.2(typescript@5.9.3)':
+  '@trigger.dev/core@4.3.1(typescript@5.9.3)':
     dependencies:
       '@bugsnag/cuid': 3.2.1
       '@electric-sql/client': 1.0.14
@@ -18524,11 +18524,11 @@ snapshots:
       - typescript
       - utf-8-validate
 
-  '@trigger.dev/sdk@4.3.2(ai@5.0.107(zod@4.3.5))(typescript@5.9.3)(zod@4.3.5)':
+  '@trigger.dev/sdk@4.3.1(ai@5.0.107(zod@4.3.5))(typescript@5.9.3)(zod@4.3.5)':
     dependencies:
       '@opentelemetry/api': 1.9.0
       '@opentelemetry/semantic-conventions': 1.36.0
-      '@trigger.dev/core': 4.3.2(typescript@5.9.3)
+      '@trigger.dev/core': 4.3.1(typescript@5.9.3)
       chalk: 5.6.2
       cronstrue: 2.59.0
       debug: 4.4.3
