@@ -71,18 +71,28 @@ compareIntervalsCommand
 
       console.log(chalk.bold('\n--- COMPARISON ---\n'))
 
+      // Compare Description
+      console.log(chalk.bold('Description:'))
+      console.log(chalk.dim('Local:'))
+      console.log(workout.description || chalk.gray('(empty)'))
+      console.log(chalk.dim('\nRemote:'))
+      console.log(remote.description || chalk.gray('(empty)'))
+
       // Compare Duration
-      console.log(chalk.bold('Duration:'))
+      console.log(chalk.bold('\nDuration:'))
       console.log(`Local (durationSec): ${workout.durationSec}`)
       console.log(`Remote (duration):   ${remote.duration}`)
-
-      // Note: Intervals duration might be different if it includes warmups/cooldowns that we parse differently,
-      // but usually they match for structured workouts.
       if (workout.durationSec !== remote.duration) {
         console.log(chalk.yellow('⚠ Duration mismatch!'))
       } else {
         console.log(chalk.green('✓ Duration matches'))
       }
+
+      console.log(chalk.bold('\nRaw Structured Data:'))
+      console.log(chalk.dim('Local (structuredWorkout):'))
+      console.log(JSON.stringify(workout.structuredWorkout, null, 2))
+      console.log(chalk.dim('\nRemote (workout_doc):'))
+      console.log(JSON.stringify(remote.workout_doc, null, 2))
 
       // Compare Structured Steps
       console.log(chalk.bold('\nSteps:'))
