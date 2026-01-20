@@ -137,7 +137,7 @@
                   </div>
 
                   <!-- Intensity % -->
-                  <div class="w-14 font-bold flex-shrink-0">
+                  <div class="w-18 font-bold flex-shrink-0">
                     <span v-if="step.heartRate?.range">
                       {{ Math.round(step.heartRate.range.start * 100) }}-{{
                         Math.round(step.heartRate.range.end * 100)

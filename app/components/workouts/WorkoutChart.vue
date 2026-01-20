@@ -180,7 +180,7 @@
                   </div>
 
                   <!-- Power % -->
-                  <div class="w-12 font-bold flex-shrink-0">
+                  <div class="w-18 font-bold flex-shrink-0">
                     <span v-if="step.power?.range">
                       {{ Math.round(step.power.range.start * 100) }}-{{
                         Math.round(step.power.range.end * 100)
