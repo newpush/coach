@@ -155,6 +155,38 @@
       </UCard>
     </div>
 
+    <!-- Workout Date Debugging -->
+    <UCard v-if="workouts">
+      <template #header>
+        <h3 class="font-bold flex items-center gap-2">
+          <UIcon name="i-heroicons-bolt" />
+          Workout Date Verification
+        </h3>
+      </template>
+      <div class="space-y-6">
+        <div>
+          <h4 class="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">
+            Recent Completed Workouts
+          </h4>
+          <UTable
+            :columns="workoutColumns"
+            :rows="workouts.recentWorkouts.map((w) => enrichWorkoutDate(w))"
+            :ui="{ td: { padding: 'px-2 py-1', size: 'text-xs' } }"
+          />
+        </div>
+        <div>
+          <h4 class="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">
+            Upcoming Planned Workouts
+          </h4>
+          <UTable
+            :columns="workoutColumns"
+            :rows="workouts.plannedWorkouts.map((w) => enrichWorkoutDate(w))"
+            :ui="{ td: { padding: 'px-2 py-1', size: 'text-xs' } }"
+          />
+        </div>
+      </div>
+    </UCard>
+
     <!-- System Info (New) -->
     <div v-if="data" class="space-y-4">
       <h2 class="text-xl font-semibold flex items-center gap-2">
@@ -187,7 +219,7 @@
   import { format, getISOWeek } from 'date-fns'
 
   const { data: session } = useAuth()
-  const { getUserLocalDate, formatDateUTC } = useFormat()
+  const { getUserLocalDate, formatDateUTC, formatUserDate, formatDate } = useFormat()
 
   // Client Info
   const clientInfo = ref({
@@ -199,11 +231,32 @@
 
   // Server Info
   const { data } = await useFetch('/api/debug/system')
+  const { data: workouts } = await useFetch('/api/debug/workouts')
 
   // Calendar Logic Replication
   const userLocalDate = ref('')
   const monthStartStr = ref('')
   const previewWeeks = ref<any[]>([])
+
+  // Workout Table Columns
+  const workoutColumns = [
+    { key: 'title', label: 'Title' },
+    { key: 'dbDate', label: 'DB Date (ISO)' },
+    { key: 'utcFormat', label: 'formatDateUTC' },
+    { key: 'userFormat', label: 'formatUserDate' },
+    { key: 'stdFormat', label: 'formatDate' }
+  ]
+
+  function enrichWorkoutDate(w: any) {
+    const timezone = (session.value?.user as any)?.timezone || 'UTC'
+    return {
+      ...w,
+      dbDate: w.date,
+      utcFormat: formatDateUTC(w.date, 'yyyy-MM-dd HH:mm'),
+      userFormat: formatUserDate(w.date, timezone, 'yyyy-MM-dd HH:mm'),
+      stdFormat: formatDate(w.date, 'yyyy-MM-dd HH:mm')
+    }
+  }
 
   onMounted(() => {
     // Capture Client Info
@@ -272,7 +325,13 @@
         userLocalDate: userLocalDate.value,
         monthStart: monthStartStr.value,
         previewWeeks: previewWeeks.value
-      }
+      },
+      workouts: workouts.value
+        ? {
+            recent: workouts.value.recentWorkouts.map((w) => enrichWorkoutDate(w)),
+            planned: workouts.value.plannedWorkouts.map((w) => enrichWorkoutDate(w))
+          }
+        : null
     }
 
     navigator.clipboard.writeText(JSON.stringify(report, null, 2))
