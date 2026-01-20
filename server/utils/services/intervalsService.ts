@@ -9,8 +9,7 @@ import {
   normalizeIntervalsPlannedWorkout,
   normalizeIntervalsCalendarNote,
   fetchIntervalsActivityStreams,
-  fetchIntervalsAthlete,
-  fetchIntervalsAthleteProfile as fetchProfile // Alias to avoid naming conflict if needed, but import is fine
+  fetchIntervalsAthlete
 } from '../intervals'
 import { workoutRepository } from '../repositories/workoutRepository'
 import { wellnessRepository } from '../repositories/wellnessRepository'
@@ -63,7 +62,6 @@ export const IntervalsService = {
       throw new Error(`Intervals integration not found for user ${userId}`)
     }
 
-    // Use normalized fetcher (camelCase fields)
     const profile = await fetchIntervalsAthleteProfile(integration)
 
     // Update Basic Settings

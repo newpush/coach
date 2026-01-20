@@ -72,6 +72,7 @@ export default defineEventHandler(async (event) => {
         userFeedback
       },
       {
+        concurrencyKey: userId,
         tags: [`user:${userId}`]
       }
     )

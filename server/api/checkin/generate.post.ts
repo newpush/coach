@@ -50,6 +50,7 @@ export default defineEventHandler(async (event) => {
       checkinId: checkin.id
     },
     {
+      concurrencyKey: userId,
       tags: [`user:${userId}`]
     }
   )

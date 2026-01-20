@@ -12,6 +12,7 @@ import { analyzeWellness } from '../server/utils/services/wellness-analysis'
 import { getCheckinHistoryContext } from '../server/utils/services/checkin-service'
 import { getUserAiSettings } from '../server/utils/ai-settings'
 import { generateAthleteProfileTask } from './generate-athlete-profile'
+import { userReportsQueue } from './queues'
 
 interface RecommendationAnalysis {
   recommendation: 'proceed' | 'modify' | 'reduce_intensity' | 'rest'
@@ -87,6 +88,7 @@ const recommendationSchema = {
 export const recommendTodayActivityTask = task({
   id: 'recommend-today-activity',
   maxDuration: 300,
+  queue: userReportsQueue,
   run: async (payload: {
     userId: string
     date: Date

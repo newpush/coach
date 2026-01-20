@@ -7,6 +7,7 @@ import { dailyCheckinRepository } from '../server/utils/repositories/dailyChecki
 import { formatUserDate, formatDateUTC, getUserLocalDate, calculateAge } from '../server/utils/date'
 import { calculateProjectedPMC, getCurrentFitnessSummary } from '../server/utils/training-stress'
 import { getUserAiSettings } from '../server/utils/ai-settings'
+import { userReportsQueue } from './queues'
 
 const checkinSchema = {
   type: 'object',
@@ -38,6 +39,7 @@ interface CheckinAnalysis {
 export const generateDailyCheckinTask = task({
   id: 'generate-daily-checkin',
   maxDuration: 300,
+  queue: userReportsQueue,
   run: async (payload: { userId: string; date: Date; checkinId: string }) => {
     const { userId, date, checkinId } = payload
     const today = new Date(date)
