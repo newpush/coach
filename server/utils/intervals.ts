@@ -918,6 +918,19 @@ export function normalizeIntervalsPlannedWorkout(event: IntervalsPlannedWorkout,
   // Structured workout data
   const structuredWorkout = event.workout_doc ?? (event.steps ? { steps: event.steps } : null)
 
+  // Normalize steps to ensure durationSeconds is present (Intervals.icu uses 'duration')
+  if (structuredWorkout && Array.isArray(structuredWorkout.steps)) {
+    structuredWorkout.steps = structuredWorkout.steps.map((step: any) => {
+      if (step.duration !== undefined && step.durationSeconds === undefined) {
+        step.durationSeconds = step.duration
+      }
+      if (step.durationSeconds !== undefined && step.duration === undefined) {
+        step.duration = step.durationSeconds
+      }
+      return step
+    })
+  }
+
   // Detect CoachWatts management
   const isCoachWatts = event.description?.includes('[CoachWatts]')
 

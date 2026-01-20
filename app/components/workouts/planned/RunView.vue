@@ -75,7 +75,7 @@
     let totalDuration = 0
 
     steps.forEach((step: any) => {
-      const duration = step.durationSeconds || 60
+      const duration = step.durationSeconds || step.duration || 60
       const intensity =
         step.heartRate?.value || step.power?.value || (step.type === 'Rest' ? 0.5 : 0.75)
       totalWeighted += intensity * duration

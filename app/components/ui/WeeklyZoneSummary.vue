@@ -109,7 +109,7 @@
 
           // Intensity 0 means rest or undefined, often Z1
 
-          const duration = step.durationSeconds || 0
+          const duration = step.durationSeconds || step.duration || 0
 
           // Find matching zone based on intensity
           // Z1: 0 - 0.55

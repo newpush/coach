@@ -58,7 +58,7 @@
                 >
                   <div class="font-semibold">{{ step.name }}</div>
                   <div class="text-[10px] opacity-80 mt-1">
-                    {{ formatDuration(step.durationSeconds) }} @
+                    {{ formatDuration(step.durationSeconds || step.duration || 0) }} @
                     <span v-if="step.heartRate?.range">
                       {{ Math.round(step.heartRate.range.start * 100) }}-{{
                         Math.round(step.heartRate.range.end * 100)
@@ -140,7 +140,9 @@
                 </span>
                 <span v-else> {{ getInferredIntensity(step) * 100 }}% (Est) </span>
               </div>
-              <div class="text-[10px] text-muted">{{ formatDuration(step.durationSeconds) }}</div>
+              <div class="text-[10px] text-muted">
+                {{ formatDuration(step.durationSeconds || step.duration || 0) }}
+              </div>
             </div>
           </div>
         </div>
@@ -202,7 +204,7 @@
   const totalDuration = computed(() => {
     if (!props.workout?.steps) return 0
     return props.workout.steps.reduce(
-      (sum: number, step: any) => sum + (step.durationSeconds || 0),
+      (sum: number, step: any) => sum + (step.durationSeconds || step.duration || 0),
       0
     )
   })
@@ -220,7 +222,7 @@
 
     props.workout.steps.forEach((step: any) => {
       const intensity = getStepIntensity(step)
-      const duration = step.durationSeconds || 0
+      const duration = step.durationSeconds || step.duration || 0
 
       // Find zone
       const zone =
@@ -252,7 +254,7 @@
   }
 
   function getStepStyle(step: any) {
-    const width = (step.durationSeconds / totalDuration.value) * 100
+    const width = ((step.durationSeconds || step.duration || 0) / totalDuration.value) * 100
     const intensity = getStepIntensity(step)
     const color = getStepColor(intensity)
     const maxScale = 1.2 // 120% is top of chart

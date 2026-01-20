@@ -5,7 +5,7 @@
       :key="index"
       class="rounded-xs"
       :style="getStepStyle(step)"
-      :title="`${step.name}: ${formatDuration(step.durationSeconds)}`"
+      :title="`${step.name}: ${formatDuration(step.durationSeconds || step.duration || 0)}`"
     />
   </div>
 </template>
@@ -21,11 +21,14 @@
   })
 
   const totalDuration = computed(() => {
-    return steps.value.reduce((sum: number, step: any) => sum + (step.durationSeconds || 0), 0)
+    return steps.value.reduce(
+      (sum: number, step: any) => sum + (step.durationSeconds || step.duration || 0),
+      0
+    )
   })
 
   function getStepStyle(step: any) {
-    const widthPercent = (step.durationSeconds / totalDuration.value) * 100
+    const widthPercent = ((step.durationSeconds || step.duration || 0) / totalDuration.value) * 100
     const color = getStepColor(step.type)
     const maxScale = 1.2 // 120% is top of chart
 

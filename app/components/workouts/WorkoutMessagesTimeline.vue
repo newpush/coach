@@ -70,7 +70,7 @@
     if (!props.workout?.messages || !props.workout?.steps) return []
 
     const totalDuration = props.workout.steps.reduce(
-      (acc: number, s: any) => acc + s.durationSeconds,
+      (acc: number, s: any) => acc + (s.durationSeconds || s.duration || 0),
       0
     )
 
@@ -101,10 +101,11 @@
   function getStepInfoForTimestamp(timestamp: number) {
     let elapsed = 0
     for (const step of props.workout.steps) {
-      if (timestamp >= elapsed && timestamp < elapsed + step.durationSeconds) {
+      const duration = step.durationSeconds || step.duration || 0
+      if (timestamp >= elapsed && timestamp < elapsed + duration) {
         return { step, elapsed }
       }
-      elapsed += step.durationSeconds
+      elapsed += duration
     }
     return null
   }
