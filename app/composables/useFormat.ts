@@ -42,7 +42,10 @@ export const useFormat = () => {
   const formatDateUTC = (date: string | Date, formatStr: string = 'MMM d, yyyy') => {
     if (!date) return ''
     try {
-      return format(new Date(date), formatStr, { timeZone: 'UTC' })
+      // Explicitly convert to UTC zone first to ensure format respects it
+      // regardless of environment fallback behavior
+      const utcDate = toZonedTime(new Date(date), 'UTC')
+      return format(utcDate, formatStr, { timeZone: 'UTC' })
     } catch (e) {
       return ''
     }
