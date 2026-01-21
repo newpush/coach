@@ -112,6 +112,13 @@ export default defineEventHandler(async (event) => {
       })
     }
 
+    // Add tool response from metadata (for tool-approval-response or tool results)
+    if (metadata.toolResponse && Array.isArray(metadata.toolResponse)) {
+      metadata.toolResponse.forEach((part: any) => {
+        parts.push(part)
+      })
+    }
+
     if (metadata.toolCalls && Array.isArray(metadata.toolCalls)) {
       metadata.toolCalls.forEach((tc: any) => {
         parts.push({
@@ -127,7 +134,12 @@ export default defineEventHandler(async (event) => {
 
     return {
       id: msg.id,
-      role: msg.senderId === 'ai_agent' ? ('assistant' as const) : ('user' as const),
+      role:
+        msg.senderId === 'ai_agent'
+          ? 'assistant'
+          : msg.senderId === 'system_tool'
+            ? 'tool'
+            : 'user',
       parts,
       content: msg.content || '', // Ensure top-level content is also set for compatibility
       metadata: {

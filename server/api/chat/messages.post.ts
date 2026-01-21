@@ -36,11 +36,12 @@ export default defineEventHandler(async (event) => {
 
   const historyMessages = messages
 
-  if (!roomId || !content) {
+  // Allow empty content for tool messages (approvals/results)
+  if (!roomId || (!content && lastMessage?.role !== 'tool')) {
     throw createError({ statusCode: 400, message: 'Room ID and content required' })
   }
 
-  // 1. Save User Message to DB if it's not already persisted
+  // 1. Save User/Tool Message to DB if it's not already persisted
   // The AI SDK sends a unique ID for each message. We can use this to prevent duplicates.
   const userMessageId = lastMessage.id
 
@@ -52,15 +53,24 @@ export default defineEventHandler(async (event) => {
 
   if (!existingMessage) {
     try {
+      const metadata: any = {}
+
+      // If it's a tool message, save the parts/result to metadata
+      if (lastMessage.role === 'tool' && Array.isArray(lastMessage.content)) {
+        // It comes as content array in the body for tool messages in Vercel AI SDK
+        metadata.toolResponse = lastMessage.content
+      }
+
       await prisma.chatMessage.create({
         data: {
           id: userMessageId || undefined,
-          content,
+          content: content || '', // Allow empty string for tool messages
           roomId,
-          senderId: userId,
+          senderId: lastMessage.role === 'tool' ? 'system_tool' : userId, // Distinguish tool responses
           files: files || undefined,
           replyToId: replyMessage?._id || undefined,
-          seen: { [userId]: new Date() }
+          seen: { [userId]: new Date() },
+          metadata
         }
       })
     } catch (err) {
