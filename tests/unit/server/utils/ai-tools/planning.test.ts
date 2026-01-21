@@ -102,4 +102,20 @@ describe('planningTools', () => {
       expect(result.success).toBe(true)
     })
   })
+
+  describe('delete_planned_workout', () => {
+    it('should delete planned workout', async () => {
+      vi.mocked(prisma.plannedWorkout.delete).mockResolvedValue({} as any)
+
+      const result = await tools.delete_planned_workout.execute(
+        { workout_id: 'pw1' },
+        { toolCallId: '1', messages: [] }
+      )
+
+      expect(prisma.plannedWorkout.delete).toHaveBeenCalledWith({
+        where: { id: 'pw1', userId }
+      })
+      expect(result.success).toBe(true)
+    })
+  })
 })

@@ -267,6 +267,23 @@ export const planningTools = (userId: string, timezone: string) => ({
     }
   }),
 
+  delete_planned_workout: tool({
+    description: 'Delete a planned workout from the calendar.',
+    inputSchema: z.object({
+      workout_id: z.string(),
+      reason: z.string().optional()
+    }),
+    needsApproval: true,
+    execute: async ({ workout_id }) => {
+      try {
+        await prisma.plannedWorkout.delete({ where: { id: workout_id, userId } })
+        return { success: true, message: 'Planned workout deleted.' }
+      } catch (e: any) {
+        return { success: false, error: e.message || 'Failed to delete planned workout.' }
+      }
+    }
+  }),
+
   delete_workout: tool({
     description: 'Delete a workout (planned or completed).',
     inputSchema: z.object({
@@ -279,11 +296,16 @@ export const planningTools = (userId: string, timezone: string) => ({
       // For simplicity, try PlannedWorkout first
       try {
         await prisma.plannedWorkout.delete({ where: { id: args.workout_id, userId } })
+        return { success: true, message: 'Planned workout deleted.' }
       } catch (e) {
         // If failed, try Workout
-        await prisma.workout.delete({ where: { id: args.workout_id, userId } })
+        try {
+          await prisma.workout.delete({ where: { id: args.workout_id, userId } })
+          return { success: true, message: 'Completed workout deleted.' }
+        } catch (e2: any) {
+          return { success: false, error: e2.message || 'Failed to delete workout.' }
+        }
       }
-      return { success: true, message: 'Workout deleted.' }
     }
   }),
 
