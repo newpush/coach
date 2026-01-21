@@ -165,13 +165,25 @@ export default defineEventHandler(async (event) => {
             if (lastResponseMessage && Array.isArray(lastResponseMessage.content)) {
               lastResponseMessage.content.forEach((part: any) => {
                 if (part.type === 'tool-approval-request') {
-                  console.log('[Chat API] Found approval request:', part.toolCallId)
-                  toolApprovals.push({
-                    toolCallId: part.toolCallId || part.approvalId,
-                    name: part.toolCall.toolName,
-                    args: part.toolCall.args,
-                    timestamp: new Date().toISOString()
-                  })
+                  console.log(
+                    '[Chat API] Found approval request:',
+                    part.toolCallId || part.approvalId
+                  )
+
+                  // Handle various shapes of approval request parts
+                  const toolName = part.toolCall?.toolName || part.toolName
+                  const args = part.toolCall?.args || part.args
+
+                  if (toolName) {
+                    toolApprovals.push({
+                      toolCallId: part.toolCallId || part.approvalId,
+                      name: toolName,
+                      args: args,
+                      timestamp: new Date().toISOString()
+                    })
+                  } else {
+                    console.warn('[Chat API] Approval request missing toolName:', part)
+                  }
                 }
               })
             }
