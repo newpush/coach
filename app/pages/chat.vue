@@ -112,10 +112,10 @@
   const onToolApproval = (approval: { approvalId: string; approved: boolean; result?: string }) => {
     console.log('[Chat] Tool Approval:', approval)
 
-    // Construct the correct tool approval response part
+    // Fallback: Append message manually via sendMessage or append if available
     const responsePart = {
       type: 'tool-approval-response',
-      toolCallId: approval.approvalId,
+      approvalId: approval.approvalId, // MUST use approvalId for SDK validation
       approved: approval.approved,
       result: approval.result
     }
