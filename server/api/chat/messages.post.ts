@@ -127,52 +127,61 @@ export default defineEventHandler(async (event) => {
           allToolResults.push(...detailedResults)
         }
       },
-      onFinish: async ({ text, toolResults: finalStepResults, usage, finishReason }) => {
+      onFinish: async (event) => {
+        const { text, toolResults: finalStepResults, usage, finishReason } = event
+
         console.log(
           `[Chat API] Stream finished for room ${roomId}. Reason: ${finishReason}. Content length: ${text?.length || 0}`
         )
+        console.log('[Chat API] onFinish event keys:', Object.keys(event))
 
-        // Capture tool approval requests from the final message content
-        // result.response is available here via closure
+        // 1. Save AI Response to DB immediately to ensure persistence
+        let aiMessage: any
         try {
-          const response = await result.response
-          const responseMessages = response.messages
-          console.log('[Chat API] Response messages count:', responseMessages?.length)
-          const lastResponseMessage = responseMessages[responseMessages.length - 1]
-
-          const toolApprovals = []
-          if (lastResponseMessage && Array.isArray(lastResponseMessage.content)) {
-            lastResponseMessage.content.forEach((part: any) => {
-              if (part.type === 'tool-approval-request') {
-                console.log('[Chat API] Found approval request:', part.toolCallId)
-                toolApprovals.push({
-                  toolCallId: part.toolCallId || part.approvalId,
-                  name: part.toolCall.toolName,
-                  args: part.toolCall.args,
-                  timestamp: new Date().toISOString()
-                })
-              }
-            })
-          }
-
-          // Ensure we capture results if they only appear in onFinish
-          const resultsToSave = allToolResults.length > 0 ? allToolResults : finalStepResults || []
-
-          // 1. Save AI Response to DB
-          const aiMessage = await prisma.chatMessage.create({
+          aiMessage = await prisma.chatMessage.create({
             data: {
               content: text || '',
               roomId,
               senderId: 'ai_agent',
-              seen: {},
-              metadata: {
-                // Save directly here to ensure it's not missed
-                toolApprovals: toolApprovals.length > 0 ? toolApprovals : undefined
-              }
+              seen: {}
             }
           })
+        } catch (dbErr) {
+          console.error('[Chat API] Failed to save AI message:', dbErr)
+          return
+        }
 
-          // ... rest of logic (LLM usage, update metadata again if needed) ...
+        // 2. Capture metadata (Approvals, Tools, Charts)
+        try {
+          // Capture tool approval requests from the final message content
+          // We use the 'result' object from the outer scope
+          const toolApprovals: any[] = []
+
+          try {
+            const response = await result.response
+            const responseMessages = response.messages
+            const lastResponseMessage = responseMessages[responseMessages.length - 1]
+
+            if (lastResponseMessage && Array.isArray(lastResponseMessage.content)) {
+              lastResponseMessage.content.forEach((part: any) => {
+                if (part.type === 'tool-approval-request') {
+                  console.log('[Chat API] Found approval request:', part.toolCallId)
+                  toolApprovals.push({
+                    toolCallId: part.toolCallId || part.approvalId,
+                    name: part.toolCall.toolName,
+                    args: part.toolCall.args,
+                    timestamp: new Date().toISOString()
+                  })
+                }
+              })
+            }
+          } catch (resErr) {
+            console.warn('[Chat API] Failed to read result.response:', resErr)
+            // Fallback: If we can't read response, we might miss approvals.
+          }
+
+          // Ensure we capture results if they only appear in onFinish
+          const resultsToSave = allToolResults.length > 0 ? allToolResults : finalStepResults || []
 
           // 4. Handle tool calls and charts in metadata
           const toolCallsUsed = resultsToSave.map((tr: any) => ({
@@ -193,22 +202,86 @@ export default defineEventHandler(async (event) => {
               ...tr.args
             }))
 
-          if (charts.length > 0 || toolCallsUsed.length > 0) {
+          if (charts.length > 0 || toolCallsUsed.length > 0 || toolApprovals.length > 0) {
             await prisma.chatMessage.update({
               where: { id: aiMessage.id },
               data: {
                 metadata: {
                   charts,
                   toolCalls: toolCallsUsed,
-                  toolApprovals: toolApprovals.length > 0 ? toolApprovals : undefined, // Merge
+                  toolApprovals: toolApprovals.length > 0 ? toolApprovals : undefined,
                   toolsUsed: toolCallsUsed.map((t) => t.name),
                   toolCallCount: toolCallsUsed.length
                 } as any
               }
             })
           }
+
+          // Track LLM Usage (moved after save)
+          // ... (LLM tracking logic remains same, just ensure it uses aiMessage.id)
+          try {
+            const promptTokens = usage.inputTokens || 0
+            const completionTokens = usage.outputTokens || 0
+            const totalTokens = promptTokens + completionTokens
+
+            const PRICING = {
+              input: 0.075,
+              output: 0.3
+            }
+            const estimatedCost =
+              (promptTokens / 1_000_000) * PRICING.input +
+              (completionTokens / 1_000_000) * PRICING.output
+
+            await prisma.llmUsage.create({
+              data: {
+                userId,
+                provider: 'google',
+                model: modelName,
+                modelType: userProfile?.aiModelPreference === 'flash' ? 'flash' : 'pro',
+                operation: 'chat',
+                entityType: 'ChatMessage',
+                entityId: aiMessage.id,
+                promptTokens,
+                completionTokens,
+                totalTokens,
+                estimatedCost,
+                durationMs: 0,
+                retryCount: 0,
+                success: true,
+                promptPreview: content.substring(0, 500),
+                responsePreview: (text || '').substring(0, 500)
+              }
+            })
+          } catch (error) {
+            console.error('[Chat] Failed to log LLM usage:', error)
+          }
+
+          // Auto-rename logic ...
+          const messageCount = await prisma.chatMessage.count({ where: { roomId } })
+          if (messageCount === 2) {
+            // ... (existing auto-rename logic)
+            try {
+              const titlePrompt = `Based on this conversation, generate a very concise, descriptive title (max 6 words). Just return the title, nothing else.\n\nUser: ${content}\nAI: ${(text || '').substring(0, 500)}\n\nTitle:`
+              let roomTitle = await generateCoachAnalysis(titlePrompt, 'flash', {
+                userId,
+                operation: 'chat_title_generation',
+                entityType: 'ChatRoom',
+                entityId: roomId
+              })
+              roomTitle = roomTitle
+                .trim()
+                .replace(/^["']|["']$/g, '')
+                .substring(0, 60)
+              await prisma.chatRoom.update({
+                where: { id: roomId },
+                data: { name: roomTitle }
+              })
+            } catch (error) {
+              console.error(`[Chat] Failed to auto-rename room ${roomId}:`, error)
+            }
+          }
         } catch (err) {
-          console.error('[Chat API] Error in onFinish:', err)
+          console.error('[Chat API] Error in onFinish metadata processing:', err)
         }
       }
     })
