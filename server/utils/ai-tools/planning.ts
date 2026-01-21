@@ -136,21 +136,6 @@ export const planningTools = (userId: string, timezone: string) => ({
     }
   }),
 
-  get_available_slots: tool({
-    description: 'Find available time slots for training in the upcoming week.',
-    inputSchema: z.object({}),
-    execute: async () => {
-      // Mock implementation - would actually check calendar events + existing workouts
-      return {
-        slots: [
-          { day: 'Monday', time: 'Morning', available_minutes: 60 },
-          { day: 'Wednesday', time: 'Evening', available_minutes: 90 },
-          { day: 'Saturday', time: 'Morning', available_minutes: 180 }
-        ]
-      }
-    }
-  }),
-
   plan_week: tool({
     description: 'Generate a full training plan for the upcoming week.',
     inputSchema: z.object({

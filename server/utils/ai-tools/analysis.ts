@@ -1,6 +1,6 @@
 import { tool } from 'ai'
 import { z } from 'zod'
-import { prisma } from '../../utils/db'
+import { workoutRepository } from '../repositories/workoutRepository'
 
 export const analysisTools = (userId: string, timezone: string) => ({
   analyze_training_load: tool({
@@ -14,21 +14,19 @@ export const analysisTools = (userId: string, timezone: string) => ({
       const start = new Date(start_date)
       const end = end_date ? new Date(end_date) : new Date()
 
-      const workouts = await prisma.workout.findMany({
-        where: {
-          userId,
-          date: { gte: start, lte: end }
-        },
+      const workouts = await workoutRepository.getForUser(userId, {
+        startDate: start,
+        endDate: end,
+        orderBy: { date: 'asc' },
         select: {
           date: true,
           tss: true,
           durationSec: true
-        },
-        orderBy: { date: 'asc' }
+        } as any // Cast because repo types might be slightly strict on select vs include
       })
 
       // Simple aggregation (in reality would fetch pre-calculated metrics)
-      const totalTSS = workouts.reduce((sum, w) => sum + (w.tss || 0), 0)
+      const totalTSS = workouts.reduce((sum: number, w: any) => sum + (w.tss || 0), 0)
       const avgTSS = totalTSS / (workouts.length || 1)
 
       return {

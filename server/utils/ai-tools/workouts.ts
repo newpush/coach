@@ -1,6 +1,6 @@
 import { tool } from 'ai'
 import { z } from 'zod'
-import { prisma } from '../../utils/db'
+import { workoutRepository } from '../repositories/workoutRepository'
 import { getStartOfDaysAgoUTC, formatUserDate } from '../../utils/date'
 
 export const workoutTools = (userId: string, timezone: string) => ({
@@ -16,7 +16,7 @@ export const workoutTools = (userId: string, timezone: string) => ({
       days: z.number().optional().describe('Number of days to look back')
     }),
     execute: async ({ limit = 5, type, days }) => {
-      const where: any = { userId }
+      const where: any = {}
 
       if (type) {
         where.type = { contains: type, mode: 'insensitive' }
@@ -26,10 +26,10 @@ export const workoutTools = (userId: string, timezone: string) => ({
         where.date = { gte: getStartOfDaysAgoUTC(timezone, days) }
       }
 
-      const workouts = await prisma.workout.findMany({
-        where,
+      const workouts = await workoutRepository.getForUser(userId, {
+        limit,
         orderBy: { date: 'desc' },
-        take: limit
+        where
       })
 
       return {
@@ -60,7 +60,7 @@ export const workoutTools = (userId: string, timezone: string) => ({
       relative_position: z.enum(['last', 'prev', 'next']).optional()
     }),
     execute: async ({ workout_id, title_search, type, date }) => {
-      const where: any = { userId }
+      const where: any = {}
 
       if (workout_id) where.id = workout_id
       if (title_search) where.title = { contains: title_search, mode: 'insensitive' }
@@ -72,10 +72,10 @@ export const workoutTools = (userId: string, timezone: string) => ({
         where.date = { gte: start, lt: end }
       }
 
-      const workouts = await prisma.workout.findMany({
-        where,
+      const workouts = await workoutRepository.getForUser(userId, {
+        limit: 5,
         orderBy: { date: 'desc' },
-        take: 5
+        where
       })
 
       return workouts.map((w) => ({
@@ -96,9 +96,7 @@ export const workoutTools = (userId: string, timezone: string) => ({
       workout_id: z.string().describe('The ID of the workout to analyze')
     }),
     execute: async ({ workout_id }) => {
-      const workout = await prisma.workout.findFirst({
-        where: { id: workout_id, userId }
-      })
+      const workout = await workoutRepository.getById(workout_id, userId)
 
       if (!workout) return { error: 'Workout not found' }
 

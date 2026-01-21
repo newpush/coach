@@ -100,9 +100,13 @@ export default defineEventHandler(async (event) => {
             const call = toolCalls?.find((tc) => tc.toolCallId === tr.toolCallId)
             return {
               ...tr,
-              args: tr.args || (tr as any).input || call?.args || (call as any)?.input,
+              args:
+                (tr as any).args ||
+                (tr as any).input ||
+                (call as any)?.args ||
+                (call as any)?.input,
               toolName: tr.toolName || call?.toolName,
-              result: tr.result || (tr as any).output // Handle 'output' property from Google provider
+              result: (tr as any).result || (tr as any).output // Handle 'output' property from Google provider
             }
           })
 

@@ -1,6 +1,6 @@
 import { tool } from 'ai'
 import { z } from 'zod'
-import { prisma } from '../../utils/db'
+import { recommendationRepository } from '../repositories/recommendationRepository'
 
 export const recommendationTools = (userId: string, timezone: string) => ({
   recommend_workout: tool({
@@ -34,9 +34,7 @@ export const recommendationTools = (userId: string, timezone: string) => ({
       recommendation_id: z.string()
     }),
     execute: async ({ recommendation_id }) => {
-      const rec = await prisma.recommendation.findUnique({
-        where: { id: recommendation_id }
-      })
+      const rec = await recommendationRepository.findById(recommendation_id, userId)
       return rec || { error: 'Recommendation not found' }
     }
   }),
@@ -49,15 +47,23 @@ export const recommendationTools = (userId: string, timezone: string) => ({
       limit: z.number().optional().default(5)
     }),
     execute: async ({ status = 'ACTIVE', priority, limit = 5 }) => {
-      const recs = await prisma.recommendation.findMany({
-        where: {
-          userId,
-          status,
-          priority
-        },
-        take: limit
+      const recs = await recommendationRepository.list(userId, {
+        status,
+        limit
+        // Priority filtering logic is custom in the old code, repo supports some filters but maybe not priority directly?
+        // Repo code: if (filters.metric) where.metric = ...
+        // Repo code does NOT have priority filter.
+        // But we can filter in memory or update repo.
+        // Let's check repo again.
       })
-      return { count: recs.length, recommendations: recs }
+
+      // If priority was requested, filter manually since repo doesn't support it yet
+      let filteredRecs = recs
+      if (priority) {
+        filteredRecs = recs.filter((r) => r.priority === priority)
+      }
+
+      return { count: filteredRecs.length, recommendations: filteredRecs }
     }
   })
 })
