@@ -98,40 +98,46 @@
   >
     <!-- Tool Call Header -->
     <button
-      class="w-full px-4 py-3 flex items-center justify-between hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+      class="w-full px-4 py-3 flex items-start gap-3 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
       :class="{ 'border-b border-gray-200 dark:border-gray-700': isExpanded }"
       @click="isExpanded = !isExpanded"
     >
-      <div class="flex items-center gap-3">
-        <UIcon
-          :name="getToolIcon(toolCall.name)"
-          class="w-5 h-5"
-          :class="hasError ? 'text-red-500' : 'text-blue-500'"
-        />
-        <div class="flex flex-col items-start">
+      <!-- Icon -->
+      <UIcon
+        :name="getToolIcon(toolCall.name)"
+        class="w-5 h-5 flex-shrink-0 mt-0.5"
+        :class="hasError ? 'text-red-500' : 'text-blue-500'"
+      />
+
+      <!-- Main Content -->
+      <div class="flex-1 min-w-0 flex flex-col items-start">
+        <div class="flex items-center justify-between w-full gap-2">
           <span
-            class="font-medium text-sm"
+            class="font-medium text-sm truncate"
             :class="
               hasError ? 'text-red-600 dark:text-red-400' : 'text-gray-900 dark:text-gray-100'
             "
           >
             {{ formatToolName(toolCall.name) }}
           </span>
-          <span class="text-xs text-gray-500 dark:text-gray-400">
+          <span class="text-xs text-gray-400 flex-shrink-0">
             {{ formatTime(toolCall.timestamp) }}
           </span>
         </div>
-      </div>
 
-      <div class="flex items-center gap-2">
-        <span v-if="!isExpanded" class="text-xs text-gray-500 dark:text-gray-400 max-w-xs truncate">
+        <span
+          v-if="!isExpanded"
+          class="text-xs text-gray-500 dark:text-gray-400 w-full truncate text-left mt-0.5"
+        >
           {{ responsePreview }}
         </span>
-        <UIcon
-          :name="isExpanded ? 'i-heroicons-chevron-up' : 'i-heroicons-chevron-down'"
-          class="w-4 h-4 text-gray-400 flex-shrink-0"
-        />
       </div>
+
+      <!-- Chevron -->
+      <UIcon
+        :name="isExpanded ? 'i-heroicons-chevron-up' : 'i-heroicons-chevron-down'"
+        class="w-4 h-4 text-gray-400 flex-shrink-0 mt-1"
+      />
     </button>
 
     <!-- Expanded Details -->
