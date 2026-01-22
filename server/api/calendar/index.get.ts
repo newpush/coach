@@ -354,6 +354,26 @@ export default defineEventHandler(async (event) => {
     })
   }
 
+  // Ensure days with only wellness or nutrition data are included
+  const allDates = new Set([...wellnessByDate.keys(), ...nutritionByDate.keys()])
+  for (const dateKey of allDates) {
+    if (!activitiesByDate.has(dateKey)) {
+      const date = new Date(dateKey)
+      activitiesByDate.set(dateKey, [
+        {
+          id: dateKey,
+          title: 'Wellness',
+          date: date.toISOString(),
+          type: 'wellness',
+          source: 'wellness',
+          status: 'completed',
+          nutrition: nutritionByDate.get(dateKey) || null,
+          wellness: wellnessByDate.get(dateKey) || null
+        }
+      ])
+    }
+  }
+
   // Flatten activities array and ensure nutrition and wellness are attached to all activities
   const activities = []
   for (const [dateKey, dateActivities] of activitiesByDate.entries()) {
