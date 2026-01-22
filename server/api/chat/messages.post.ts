@@ -96,23 +96,135 @@ export default defineEventHandler(async (event) => {
     const allToolResults: any[] = []
 
     // Workaround for 'Unsupported role: tool' in convertToModelMessages
+
     // We filter out tool messages, convert the rest, then append tool messages manually
+
+    console.log(
+      '[Chat API] History messages roles:',
+      historyMessages.map((m: any) => m.role)
+    )
+
     const uiMessages = historyMessages.filter((m: any) => m.role !== 'tool')
+
+    console.log(
+      '[Chat API] UI messages roles (filtered):',
+      uiMessages.map((m: any) => m.role)
+    )
+
     const toolMessages = historyMessages.filter((m: any) => m.role === 'tool')
 
     const coreMessages = [
       ...(await convertToModelMessages(uiMessages)),
+
       ...toolMessages.map((m: any) => ({
         role: 'tool',
+
         content: m.content
       }))
     ] as any
 
+    // Manual Tool Execution for Approvals
+
+    // If the last message is a tool result saying "User confirmed", we must execute the tool!
+
+    const lastCoreMsg = coreMessages[coreMessages.length - 1]
+
+    if (lastCoreMsg?.role === 'tool' && Array.isArray(lastCoreMsg.content)) {
+      const approvalPart = lastCoreMsg.content.find(
+        (p: any) => p.result === 'User confirmed action.' || p.approved === true
+      )
+
+      if (approvalPart) {
+        const toolCallId = approvalPart.toolCallId || approvalPart.approvalId
+
+        console.log('[Chat API] Intercepted approval for:', toolCallId)
+
+        // Find the tool call in the previous assistant message
+
+        const assistantMsg = coreMessages[coreMessages.length - 2]
+
+        if (assistantMsg?.role === 'assistant' && Array.isArray(assistantMsg.content)) {
+          const toolCallPart = assistantMsg.content.find(
+            (p: any) => p.type === 'tool-call' && p.toolCallId === toolCallId
+          )
+
+          if (toolCallPart) {
+            const toolName = toolCallPart.toolName
+
+            const args = toolCallPart.args
+
+            console.log(`[Chat API] Executing approved tool: ${toolName}`)
+
+            if (tools[toolName]) {
+              try {
+                const executionResult = await tools[toolName].execute(args, {
+                  toolCallId,
+
+                  messages: coreMessages
+                })
+
+                console.log(
+                  '[Chat API] Execution result:',
+                  JSON.stringify(executionResult).substring(0, 100)
+                )
+
+                // REPLACE the approval content with the actual result
+
+                lastCoreMsg.content = [
+                  {
+                    type: 'tool-result',
+
+                    toolCallId,
+
+                    toolName,
+
+                    result: executionResult
+                  }
+                ]
+
+                // Track execution for metadata
+
+                allToolResults.push({
+                  toolCallId,
+
+                  toolName,
+
+                  args,
+
+                  result: executionResult
+                })
+              } catch (execErr: any) {
+                console.error('[Chat API] Tool execution failed:', execErr)
+
+                lastCoreMsg.content = [
+                  {
+                    type: 'tool-result',
+
+                    toolCallId,
+
+                    toolName,
+
+                    result: `Error executing tool: ${execErr.message}`,
+
+                    isError: true
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    }
+
     const result = await streamText({
       model: google(modelName),
+
       system: systemInstruction,
+
       messages: coreMessages,
+
       tools,
+
       stopWhen: stepCountIs(5), // Allow multi-step interactions (Agency)
       onStepFinish: async ({ text, toolCalls, toolResults, finishReason, usage }) => {
         console.log(`[Chat API] Step finished. Reason: ${finishReason}`)
@@ -280,7 +392,10 @@ export default defineEventHandler(async (event) => {
                 durationMs: 0,
                 retryCount: 0,
                 success: true,
-                promptPreview: content.substring(0, 500),
+                promptPreview:
+                  typeof content === 'string'
+                    ? content.substring(0, 500)
+                    : JSON.stringify(content).substring(0, 500),
                 responsePreview: (text || '').substring(0, 500)
               }
             })
