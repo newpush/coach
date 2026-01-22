@@ -49,7 +49,9 @@ const checkStatus = () => {
       { encoding: 'utf-8', stdio: ['ignore', 'pipe', 'ignore'] }
     )
     const runs = JSON.parse(ghOutput)
-    const filteredRuns = runs.filter((run: any) => !run.workflowName.includes('Gemini'))
+    const filteredRuns = runs.filter(
+      (run: any) => !run.workflowName.includes('Gemini') && !run.workflowName.includes('Jules')
+    )
 
     if (filteredRuns.length > 0) {
       console.log(`Latest GitHub Action: `)
