@@ -1520,10 +1520,25 @@
       return
     }
 
-    // For desktop
+    // For desktop, scroll with offset to keep headers visible
     const todayCell = document.querySelector('.today-cell')
     if (todayCell) {
-      todayCell.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      const container = todayCell.closest('.overflow-y-auto')
+      if (container) {
+        const cellRect = todayCell.getBoundingClientRect()
+        const containerRect = container.getBoundingClientRect()
+        const scrollTop = container.scrollTop
+
+        // Calculate position relative to container
+        const relativeTop = cellRect.top - containerRect.top + scrollTop
+
+        // Scroll to the cell minus a buffer (approx header height + padding)
+        // Header row is ~40px, adding extra context
+        container.scrollTo({
+          top: Math.max(0, relativeTop - 100),
+          behavior: 'smooth'
+        })
+      }
     }
   }
 
