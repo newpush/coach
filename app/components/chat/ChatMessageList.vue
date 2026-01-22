@@ -26,23 +26,33 @@
     // Iterate through all messages (including hidden tool messages)
     for (const msg of props.messages) {
       if (msg.role === 'tool') {
-        // Check parts (standard SDK/hydration) or content (if array)
-        const parts = msg.parts || (Array.isArray(msg.content) ? msg.content : [])
+        // Check content (if array)
+        if (msg.content && Array.isArray(msg.content)) {
+          const part = msg.content.find(
+            (p: any) =>
+              (p.type === 'tool-result' || p.type === 'tool-approval-response') &&
+              (p.toolCallId === approvalId || p.approvalId === approvalId)
+          )
+          if (part) {
+            return part.result || (part.approved ? 'Approved' : 'Denied')
+          }
+        }
 
-        const part = parts.find(
-          (p: any) =>
-            (p.type === 'tool-result' || p.type === 'tool-approval-response') &&
-            (p.toolCallId === approvalId || p.approvalId === approvalId)
-        )
-
-        if (part) {
-          return part.result || (part.approved ? 'Approved' : 'Denied')
+        // Check parts (populated during hydration)
+        if (msg.parts && Array.isArray(msg.parts)) {
+          const part = msg.parts.find(
+            (p: any) =>
+              (p.type === 'tool-result' || p.type === 'tool-approval-response') &&
+              (p.toolCallId === approvalId || p.approvalId === approvalId)
+          )
+          if (part) {
+            return part.result || (part.approved ? 'Approved' : 'Denied')
+          }
         }
       }
     }
     return null
   }
-
   // Extract charts from both metadata (persisted) and tool parts (immediate)
   const getCharts = (message: any) => {
     const charts = []
@@ -180,14 +190,6 @@
                 >
                   <div>Unknown part type: {{ part.type }}</div>
                   <pre>{{ JSON.stringify(part, null, 2) }}</pre>
-                </div>
-
-                <!-- TEMP DEBUG: Inspect all parts -->
-                <div
-                  class="text-[10px] bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200 p-1 mt-1 border border-yellow-300 dark:border-yellow-700 rounded"
-                >
-                  <strong>DEBUG Part:</strong> Type={{ part.type }}
-                  <pre class="text-[9px] mt-1">{{ JSON.stringify(part, null, 2) }}</pre>
                 </div>
               </template>
             </div>
