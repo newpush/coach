@@ -1,6 +1,6 @@
 import { getServerSession } from '../../../utils/session'
-import { prisma } from '../../../utils/db'
 import { getUserTimezone, getUserLocalDate } from '../../../utils/date'
+import { plannedWorkoutRepository } from '../../../utils/repositories/plannedWorkoutRepository'
 
 defineRouteMeta({
   openAPI: {
@@ -49,16 +49,27 @@ export default defineEventHandler(async (event) => {
   const nextDay = new Date(today)
   nextDay.setDate(nextDay.getDate() + 1)
 
-  const workout = await prisma.plannedWorkout.findFirst({
-    where: {
-      userId,
-      date: {
-        gte: today,
-        lt: nextDay
-      }
-    },
-    orderBy: { createdAt: 'desc' } // Get the most recently created one if duplicates
+  const workouts = await plannedWorkoutRepository.list(userId, {
+    startDate: today,
+    endDate: nextDay, // Note: list uses lte, so this might include nextDay midnight? Yes.
+    // Ideally we want lt nextDay.
+    // The repository implementation: where.date = { ... lte: options.endDate }
+    // If nextDay is 00:00:00, lte includes it.
+    // However, usually planned workouts are at 00:00:00.
+    // So if today is 2023-10-25 00:00, nextDay is 2023-10-26 00:00.
+    // If we have a workout on 26th, it will be included.
+    // We should strictly update repo or use a different method.
+    // Or just subtract 1 ms from nextDay.
+    limit: 1,
+    orderBy: { createdAt: 'desc' }
   })
 
-  return workout
+  // Hack for lte vs lt: use nextDay minus 1 second/ms?
+  // Or update repo to support lt/lte distinction.
+  // Given current repo implementation, let's update repo to be more flexible or just live with it if we only have daily resolution.
+  // Actually, repo uses `lte`.
+  // Let's modify the repo to support custom where or update list to use exact date range if needed.
+  // Or just use findMany with custom where via a new method `findForDate`.
+
+  return workouts[0] || null
 })

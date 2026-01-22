@@ -1,6 +1,7 @@
-import { prisma } from '../../../utils/db'
 import { getServerSession } from '../../../utils/session'
 import { getUserLocalDate } from '../../../utils/date'
+import { plannedWorkoutRepository } from '../../../utils/repositories/plannedWorkoutRepository'
+import { prisma } from '../../../utils/db'
 
 export default defineEventHandler(async (event) => {
   const session = await getServerSession(event)
@@ -21,18 +22,12 @@ export default defineEventHandler(async (event) => {
   // We use the user's timezone to determine the start of the day
   const today = getUserLocalDate(user.timezone ?? 'UTC')
 
-  const workouts = await prisma.plannedWorkout.findMany({
+  const workouts = await plannedWorkoutRepository.list(user.id, {
+    startDate: today,
+    limit: 10,
     where: {
-      userId: user.id,
-      date: {
-        gte: today
-      },
       completed: false
     },
-    orderBy: {
-      date: 'asc'
-    },
-    take: 10, // Fetch next 10 workouts
     include: {
       trainingWeek: {
         include: {
@@ -57,7 +52,7 @@ export default defineEventHandler(async (event) => {
 
   // Map to a cleaner structure
   return {
-    workouts: workouts.map((w) => {
+    workouts: (workouts as any[]).map((w) => {
       const plan = w.trainingWeek?.block?.plan
       const planName = plan?.name || plan?.goal?.title || (plan ? 'Training Plan' : null)
 
