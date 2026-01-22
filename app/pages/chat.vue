@@ -133,14 +133,13 @@
     console.log('[Chat DEBUG] Chat object keys:', Object.keys(chat))
 
     // Force request if needed
-    // 'resumeStream' is available on the object per logs
-    if (typeof (chat as any).resumeStream === 'function') {
-      console.log('[Chat] Triggering resumeStream() to send approval...')
-      ;(chat as any).resumeStream()
+    // 'regenerate' is available and should resend the context including the approval
+    if (typeof (chat as any).regenerate === 'function') {
+      console.log('[Chat] Triggering regenerate() to send approval...')
+      ;(chat as any).regenerate()
     } else {
-      console.warn('[Chat] No resumeStream method found. Request might hang.')
+      console.warn('[Chat] No regenerate method found. Request might hang.')
     }
-
     return
     // Fallback: Append message manually
     const responsePart = {
