@@ -154,7 +154,39 @@ export default defineEventHandler(async (event) => {
         if (approvalPartIndex !== -1) {
           const approvalPart = msg.content[approvalPartIndex]
 
-          const toolCallId = approvalPart.toolCallId || approvalPart.approvalId
+          const approvalId = approvalPart.approvalId
+          let toolCallId = approvalPart.toolCallId || approvalId
+
+          // If we have an approvalId, try to resolve the real toolCallId from the history
+          // This handles cases where Vercel SDK uses a different ID for approval interaction
+          if (approvalId) {
+            const assistantMsg = coreMessages.find(
+              (m: any) =>
+                m.role === 'assistant' &&
+                Array.isArray(m.content) &&
+                m.content.some(
+                  (p: any) =>
+                    p.type === 'tool-approval-request' &&
+                    (p.approvalId === approvalId || p.toolCallId === approvalId)
+                )
+            )
+
+            if (assistantMsg) {
+              const requestPart = (assistantMsg.content as any[]).find(
+                (p: any) =>
+                  p.type === 'tool-approval-request' &&
+                  (p.approvalId === approvalId || p.toolCallId === approvalId)
+              )
+              if (requestPart && requestPart.toolCallId) {
+                toolCallId = requestPart.toolCallId
+                if (toolCallId !== approvalId) {
+                  console.log(
+                    `[Chat API] Resolved approvalId ${approvalId} to toolCallId ${toolCallId}`
+                  )
+                }
+              }
+            }
+          }
 
           if (toolCallId && !executedToolCallIds.has(toolCallId)) {
             console.log('[Chat API] Intercepted approval for:', toolCallId)
@@ -183,15 +215,18 @@ export default defineEventHandler(async (event) => {
               if (toolCallPart) {
                 const toolName = toolCallPart.toolName
 
-                const args = toolCallPart.args
+                const args = toolCallPart.args || (toolCallPart as any).input || {}
 
-                console.log(`[Chat API] Executing approved tool: ${toolName}`)
+                console.log(
+                  `[Chat API] Executing approved tool: ${toolName}. Args:`,
+                  JSON.stringify(args)
+                )
 
-                if (tools[toolName]) {
+                if ((tools as any)[toolName]) {
                   try {
                     // Execute
 
-                    const executionResult = await tools[toolName].execute(args, {
+                    const executionResult = await (tools as any)[toolName].execute(args, {
                       toolCallId,
 
                       messages: coreMessages
@@ -211,7 +246,10 @@ export default defineEventHandler(async (event) => {
 
                       toolName,
 
-                      result: executionResult
+                      output:
+                        typeof executionResult === 'string'
+                          ? { type: 'text', value: executionResult }
+                          : { type: 'json', value: executionResult }
                     }
 
                     executedToolCallIds.add(toolCallId)
@@ -237,7 +275,7 @@ export default defineEventHandler(async (event) => {
 
                       toolName,
 
-                      result: `Error executing tool: ${execErr.message}`,
+                      output: { type: 'text', value: `Error executing tool: ${execErr.message}` },
 
                       isError: true
                     }
@@ -261,7 +299,7 @@ export default defineEventHandler(async (event) => {
 
               toolName: 'unknown', // We might not know name easily here without lookup
 
-              result: 'Tool already executed in previous message.'
+              output: { type: 'text', value: 'Tool already executed in previous message.' }
             }
           }
         }
@@ -356,13 +394,14 @@ export default defineEventHandler(async (event) => {
                     const matchingCall = toolCalls.find((tc: any) => tc.toolCallId === id)
                     if (matchingCall) {
                       resolvedName = matchingCall.toolName
-                      resolvedArgs = matchingCall.args
+                      resolvedArgs = (matchingCall as any).args || (matchingCall as any).input
                     }
                   }
 
                   if (resolvedName) {
                     toolApprovals.push({
                       toolCallId: id,
+                      approvalId: part.approvalId, // Save original approval ID for frontend matching
                       name: resolvedName,
                       args: resolvedArgs,
                       timestamp: new Date().toISOString()

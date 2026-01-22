@@ -101,7 +101,7 @@ export default defineEventHandler(async (event) => {
       metadata.toolApprovals.forEach((approval: any) => {
         parts.push({
           type: 'tool-approval-request',
-          approvalId: approval.toolCallId, // Use toolCallId as approvalId
+          approvalId: approval.approvalId || approval.toolCallId, // Prefer stored approvalId
           toolCallId: approval.toolCallId,
           toolCall: {
             toolName: approval.name,
