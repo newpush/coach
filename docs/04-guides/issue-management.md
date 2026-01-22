@@ -16,9 +16,9 @@ When creating an issue, please adhere to the following templates.
 
 ### 🐛 Bug Report Template
 
-**Title**: `[Area/Component] Concise description of the bug`
+**Title**: `Concise description of the bug`
 
-- _Example_: `[Dashboard] Recent activities widget is not clickable`
+- _Example_: `Recent activities widget is not clickable`
 
 **Body**:
 
@@ -55,9 +55,9 @@ If applicable, add screenshots or copy-paste error logs to help explain your pro
 
 ### ✨ Feature Request Template
 
-**Title**: `[Area/Component] Concise description of the feature`
+**Title**: `Concise description of the feature`
 
-- _Example_: `[Training Plan] Add "Training Availability" section`
+- _Example_: `Add "Training Availability" section`
 
 **Body**:
 
@@ -84,9 +84,9 @@ Why is this feature needed? What problem does it solve for the user?
 
 ### 🛠️ Maintenance / Tech Debt
 
-**Title**: `[Tech/Docs] Concise description of the task`
+**Title**: `Concise description of the task`
 
-- _Example_: `[Docs] Update API documentation for v2 endpoints`
+- _Example_: `Update API documentation for v2 endpoints`
 
 **Body**:
 
@@ -158,4 +158,4 @@ We use a specific set of labels to categorize issues. Please apply at least one 
 
 ---
 
-**Note to AI Agents**: When asked to create issues, always follow these templates and labeling conventions. Ensure titles are prefixed with the area/component.
+**Note to AI Agents**: When asked to create issues, always follow these templates and labeling conventions. Do not prefix titles with the area/component, as labels handle categorization.
