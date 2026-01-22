@@ -143,7 +143,10 @@
 
                 <!-- Tool Invocation Part (Generic or Specific) -->
                 <ChatToolCall
-                  v-else-if="part.type === 'tool-invocation' || part.type.startsWith('tool-')"
+                  v-else-if="
+                    (part.type === 'tool-invocation' || part.type.startsWith('tool-')) &&
+                    part.type !== 'tool-approval-response'
+                  "
                   :tool-call="{
                     name:
                       (part as any).toolName ||
