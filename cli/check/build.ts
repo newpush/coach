@@ -4,15 +4,29 @@ import chalk from 'chalk'
 
 const buildCommand = new Command('build')
 
-const checkStatus = () => {
-  let gcloudStatusStr = ''
-  let githubStatusStr = ''
+interface BuildStatus {
+  gcloud?: {
+    id: string
+    status: string
+    createTime: string
+    logUrl: string
+  }
+  github?: {
+    status: string
+    conclusion: string
+    workflowName: string
+    displayTitle: string
+    createdAt: string
+    url: string
+  }
+  errors: string[]
+}
 
-  console.log(chalk.blue('=== Build Status Check ===\n'))
+const fetchStatus = (): BuildStatus => {
+  const result: BuildStatus = { errors: [] }
 
   // 1. Check Gcloud Build Status
   try {
-    console.log(chalk.yellow('Checking Gcloud Build status...'))
     const gcloudOutput = execSync(
       'gcloud builds list --limit=1 --format="json(status,createTime,logUrl,id)"',
       { encoding: 'utf-8', stdio: ['ignore', 'pipe', 'ignore'] }
@@ -20,30 +34,16 @@ const checkStatus = () => {
     const gcloudBuilds = JSON.parse(gcloudOutput)
 
     if (gcloudBuilds.length > 0) {
-      const build = gcloudBuilds[0]
-      gcloudStatusStr = build.status
-      const statusColor = build.status === 'SUCCESS' ? chalk.green : chalk.red
-      console.log(`Latest Gcloud Build: `)
-      console.log(`  ID:     ${build.id}`)
-      console.log(`  Status: ${statusColor(build.status)}`)
-      console.log(`  Time:   ${build.createTime}`)
-      console.log(`  Logs:   ${build.logUrl}`)
-    } else {
-      console.log(chalk.gray('No Gcloud builds found.'))
+      result.gcloud = gcloudBuilds[0]
     }
   } catch (error) {
-    console.error(
-      chalk.red(
-        '✗ Failed to check Gcloud status. Ensure gcloud CLI is installed and authenticated.'
-      )
+    result.errors.push(
+      '✗ Failed to check Gcloud status. Ensure gcloud CLI is installed and authenticated.'
     )
   }
 
-  console.log('')
-
   // 2. Check GitHub Actions Status
   try {
-    console.log(chalk.yellow('Checking GitHub Actions status...'))
     const ghOutput = execSync(
       'gh run list --limit=10 --json status,conclusion,workflowName,createdAt,url,displayTitle',
       { encoding: 'utf-8', stdio: ['ignore', 'pipe', 'ignore'] }
@@ -54,33 +54,69 @@ const checkStatus = () => {
     )
 
     if (filteredRuns.length > 0) {
-      console.log(`Latest GitHub Action: `)
-      const run = filteredRuns[0]
-      githubStatusStr = run.conclusion || run.status
-      const icon = run.conclusion === 'success' ? '✓' : run.conclusion === 'failure' ? '✗' : '•'
-      const color =
-        run.conclusion === 'success'
-          ? chalk.green
-          : run.conclusion === 'failure'
-            ? chalk.red
-            : chalk.yellow
-      console.log(color(`  ${icon} ${run.workflowName}: ${run.conclusion || run.status}`))
-      console.log(`    Title: ${run.displayTitle}`)
-      console.log(`    Time:  ${run.createdAt}`)
-      console.log(`    Url:   ${run.url}`)
-      console.log('')
-    } else {
-      console.log(chalk.gray('No GitHub Action runs found.'))
+      result.github = filteredRuns[0]
     }
   } catch (error) {
-    console.error(
-      chalk.red(
-        '✗ Failed to check GitHub Actions status. Ensure gh CLI is installed and authenticated.'
-      )
+    result.errors.push(
+      '✗ Failed to check GitHub Actions status. Ensure gh CLI is installed and authenticated.'
     )
   }
 
-  return { gcloud: gcloudStatusStr, github: githubStatusStr }
+  return result
+}
+
+const printStatus = (status: BuildStatus) => {
+  console.log(chalk.blue('=== Build Status Check ===\n'))
+
+  // Gcloud Output
+  if (status.gcloud) {
+    const build = status.gcloud
+    const statusColor = build.status === 'SUCCESS' ? chalk.green : chalk.red
+    console.log(`Latest Gcloud Build: `)
+    console.log(`  ID:     ${build.id}`)
+    console.log(`  Status: ${statusColor(build.status)}`)
+    console.log(`  Time:   ${build.createTime}`)
+    console.log(`  Logs:   ${build.logUrl}`)
+  } else if (!status.errors.some((e) => e.includes('Gcloud'))) {
+    console.log(chalk.gray('No Gcloud builds found.'))
+  }
+
+  console.log('')
+
+  // GitHub Output
+  if (status.github) {
+    console.log(`Latest GitHub Action: `)
+    const run = status.github
+    const icon = run.conclusion === 'success' ? '✓' : run.conclusion === 'failure' ? '✗' : '•'
+    const color =
+      run.conclusion === 'success'
+        ? chalk.green
+        : run.conclusion === 'failure'
+          ? chalk.red
+          : chalk.yellow
+    console.log(color(`  ${icon} ${run.workflowName}: ${run.conclusion || run.status}`))
+    console.log(`    Title: ${run.displayTitle}`)
+    console.log(`    Time:  ${run.createdAt}`)
+    console.log(`    Url:   ${run.url}`)
+    console.log('')
+  } else if (!status.errors.some((e) => e.includes('GitHub'))) {
+    console.log(chalk.gray('No GitHub Action runs found.'))
+  }
+
+  // Errors
+  if (status.errors.length > 0) {
+    console.log('')
+    status.errors.forEach((err) => console.error(chalk.red(err)))
+  }
+}
+
+const checkStatus = () => {
+  const status = fetchStatus()
+  printStatus(status)
+  return {
+    gcloud: status.gcloud?.status || '',
+    github: status.github?.conclusion || status.github?.status || ''
+  }
 }
 
 const setTitle = (title: string) => {
@@ -101,12 +137,15 @@ buildCommand
       }
 
       const loop = () => {
+        // Fetch first to avoid blank screen
+        const status = fetchStatus()
+
         process.stdout.write('\x1Bc') // Clear screen
-        const status = checkStatus()
+        printStatus(status)
 
         const parts = []
-        if (status.gcloud) parts.push(`Gcloud: ${status.gcloud}`)
-        if (status.github) parts.push(`GH: ${status.github}`)
+        if (status.gcloud?.status) parts.push(`Gcloud: ${status.gcloud.status}`)
+        if (status.github) parts.push(`GH: ${status.github.conclusion || status.github.status}`)
 
         if (parts.length > 0) {
           setTitle(parts.join(' | '))
