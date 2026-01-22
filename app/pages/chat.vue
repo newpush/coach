@@ -119,6 +119,23 @@
         toolCallId: approval.approvalId, // Map approvalId back to toolCallId
         result: approval.result || (approval.approved ? 'Approved' : 'Denied')
       })
+
+      // DEBUG: Inspect chat object to find trigger method
+      console.log('[Chat DEBUG] Chat object keys:', Object.keys(chat))
+      console.log('[Chat DEBUG] Chat prototype:', Object.getPrototypeOf(chat))
+
+      // Force request if addToolResult doesn't trigger it automatically
+      // Check for common methods in AI SDK classes
+      if (typeof (chat as any).reload === 'function') {
+        console.log('[Chat] Triggering reload() to send approval...')
+        ;(chat as any).reload()
+      } else if (typeof (chat as any).process === 'function') {
+        console.log('[Chat] Triggering process() to send approval...')
+        ;(chat as any).process()
+      } else {
+        console.warn('[Chat] No reload/process method found. Request might hang.')
+      }
+
       return
     }
 
