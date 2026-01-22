@@ -407,12 +407,12 @@
 
   const zoneDistribution = computed(() => {
     const distribution = [
-      { name: 'Z1', min: 0, max: 0.55, duration: 0, color: '#9ca3af' }, // gray-400
-      { name: 'Z2', min: 0.55, max: 0.75, duration: 0, color: '#3b82f6' }, // blue-500
-      { name: 'Z3', min: 0.75, max: 0.9, duration: 0, color: '#22c55e' }, // green-500
-      { name: 'Z4', min: 0.9, max: 1.05, duration: 0, color: '#eab308' }, // yellow-500
-      { name: 'Z5', min: 1.05, max: 1.2, duration: 0, color: '#f97316' }, // orange-500
-      { name: 'Z6', min: 1.2, max: 9.99, duration: 0, color: '#ef4444' } // red-500
+      { name: 'Z1', min: 0, max: 0.55, duration: 0, color: 'rgb(34, 197, 94)' }, // Green (Recovery)
+      { name: 'Z2', min: 0.55, max: 0.75, duration: 0, color: 'rgb(59, 130, 246)' }, // Blue (Endurance)
+      { name: 'Z3', min: 0.75, max: 0.9, duration: 0, color: 'rgb(245, 158, 11)' }, // Yellow (Tempo)
+      { name: 'Z4', min: 0.9, max: 1.05, duration: 0, color: 'rgb(249, 115, 22)' }, // Orange (Threshold)
+      { name: 'Z5', min: 1.05, max: 1.2, duration: 0, color: 'rgb(239, 68, 68)' }, // Red (VO2 Max)
+      { name: 'Z6', min: 1.2, max: 9.99, duration: 0, color: 'rgb(124, 58, 237)' } // Violet (Anaerobic)
     ]
 
     if (!props.workout?.steps) return distribution
