@@ -137,6 +137,8 @@ interface StravaActivity {
   calories?: number
   device_name?: string
   embed_token?: string
+  updated_at?: string
+  [key: string]: any
 }
 
 interface StravaAthlete {
@@ -160,6 +162,7 @@ interface StravaAthlete {
   profile?: string
   friend?: any
   follower?: any
+  [key: string]: any
 }
 
 interface StravaStream {

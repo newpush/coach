@@ -106,6 +106,7 @@ interface WhoopSleep {
     sleep_efficiency_percentage?: number
     respiratory_rate?: number
   }
+  [key: string]: any
 }
 
 interface WhoopRecovery {
@@ -123,6 +124,7 @@ interface WhoopRecovery {
     spo2_percentage?: number
     skin_temp_celsius?: number
   }
+  [key: string]: any
 }
 
 interface WhoopRecoveryResponse {
@@ -165,6 +167,7 @@ export interface WhoopWorkout {
       zone_five_milli: number
     }
   }
+  [key: string]: any
 }
 
 interface WhoopWorkoutResponse {

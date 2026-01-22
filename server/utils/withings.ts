@@ -71,6 +71,7 @@ export interface WithingsActivity {
     hr_zone_2?: number
     hr_zone_3?: number
   }
+  [key: string]: any
 }
 
 interface WithingsActivityResponse {
