@@ -1,0 +1,12 @@
+[
+  {
+    "id": "mock-activity-1",
+    "title": "Morning Run",
+    "date": "2024-07-29T10:00:00.000Z",
+    "type": "Run",
+    "source": "completed",
+    "status": "completed",
+    "duration": 3600,
+    "tss": 50
+  }
+]

@@ -1,9 +1,11 @@
 <template>
   <div
+    ref="dayCell"
     class="min-h-[120px] p-2 bg-white dark:bg-gray-900 transition-colors flex flex-col relative"
     :class="{
       'opacity-50': isOtherMonth,
       'bg-blue-50 dark:bg-blue-900/20 z-10 shadow-md': isToday,
+      'today-cell': isToday,
       'bg-gray-100 dark:bg-gray-800 ring-2 ring-primary-500 ring-inset': isDayDragOver
     }"
     @dragover.prevent="onDayDragOver"

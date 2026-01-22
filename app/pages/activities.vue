@@ -768,6 +768,7 @@
 </template>
 
 <script setup lang="ts">
+  import { nextTick } from 'vue'
   import { format, isSameMonth, getISOWeek } from 'date-fns'
   import { useStorage } from '@vueuse/core'
   import type { CalendarActivity } from '../../types/calendar'
@@ -1503,22 +1504,38 @@
     await refresh()
   }
 
-  // Scroll to today on mobile
-  function scrollToTodayMobile() {
-    // Only applies if we are in calendar view (which has the mobile list)
-    if (viewMode.value !== 'calendar') return
+  // Scroll to today
+  function scrollToToday() {
+    if (viewMode.value !== 'calendar' || !isCurrentMonth.value) return
 
-    // Find the element
-    const el = document.getElementById('mobile-today-anchor')
-    if (el) {
-      el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    // For mobile, use the specific anchor
+    const mobileEl = document.getElementById('mobile-today-anchor')
+    if (mobileEl && window.innerWidth < 1024) {
+      mobileEl.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      return
+    }
+
+    // For desktop, find the cell and scroll its container
+    const todayCell = document.querySelector('.today-cell')
+    if (todayCell) {
+      const container = todayCell.closest('.overflow-y-auto')
+      if (container) {
+        // Scroll to the top of the week row containing the today-cell
+        const row = todayCell.parentElement
+        if (row) {
+          container.scrollTo({
+            top: row.offsetTop - container.getBoundingClientRect().top,
+            behavior: 'smooth'
+          })
+        }
+      }
     }
   }
 
   // Attempt to scroll on mount and when data changes
   onMounted(() => {
     // Give time for DOM to render if data is already present
-    setTimeout(scrollToTodayMobile, 500)
+    setTimeout(scrollToToday, 500)
   })
 
   // Also watch for data readiness
@@ -1527,7 +1544,7 @@
     (newStatus) => {
       if (newStatus === 'success') {
         // Wait for DOM update
-        setTimeout(scrollToTodayMobile, 100)
+        setTimeout(scrollToToday, 100)
       }
     }
   )
