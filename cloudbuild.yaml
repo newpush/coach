@@ -6,8 +6,10 @@ steps:
     args:
       - '-c'
       - |
-        npm install
-        npx prisma generate
+        corepack enable
+        corepack prepare pnpm@9.13.0 --activate
+        pnpm install --frozen-lockfile
+        pnpm prisma generate
     id: Install Dependencies
     entrypoint: sh
   - name: 'node:20-alpine'
@@ -17,7 +19,9 @@ steps:
     args:
       - '-c'
       - |
-        npx prisma migrate deploy
+        corepack enable
+        corepack prepare pnpm@9.13.0 --activate
+        pnpm prisma migrate deploy
     id: Run Migrations
     entrypoint: sh
   - name: gcr.io/k8s-skaffold/pack
