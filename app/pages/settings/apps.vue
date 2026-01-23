@@ -4,6 +4,16 @@
       <h2 class="text-2xl font-bold">Connected Apps</h2>
       <p class="text-neutral-500">Manage your connected apps and integrations.</p>
     </div>
+    <UAlert
+      v-if="intervalsConnected && !intervalsStravaWarningDismissed"
+      title="Strava Activity Sync"
+      icon="i-heroicons-exclamation-triangle"
+      color="warning"
+      variant="soft"
+      :actions="[{ label: 'Dismiss', color: 'warning', variant: 'link' }]"
+      description="Activities synced from Strava to Intervals.icu cannot be automatically imported. Please connect Strava directly or upload FIT files manually."
+      @dismiss="intervalsStravaWarningDismissed = true"
+    />
     <SettingsConnectedApps
       :intervals-connected="intervalsConnected"
       :whoop-connected="whoopConnected"
@@ -25,6 +35,10 @@
   const toast = useToast()
   const router = useRouter()
   const route = useRoute()
+
+  const intervalsStravaWarningDismissed = useCookie('intervals-strava-warning-dismissed', {
+    maxAge: 60 * 60 * 24 * 365
+  })
 
   definePageMeta({
     middleware: 'auth'
