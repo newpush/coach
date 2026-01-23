@@ -57,6 +57,7 @@ troubleshootWorkoutsCommand
         console.error(chalk.red('DATABASE_URL_PROD is not defined.'))
         process.exit(1)
       }
+      process.env.DATABASE_URL = connectionString
       console.log(chalk.yellow('Using PRODUCTION database.'))
     } else {
       console.log(chalk.blue('Using DEVELOPMENT database.'))
@@ -361,22 +362,24 @@ troubleshootWorkoutsCommand
             where: { workoutId: w.id }
           })
 
+          let streamsMissing = false
           if (dbStream) {
             console.log(chalk.green(`✓ DB Stream found (ID: ${dbStream.id})`))
 
             const timeLen = Array.isArray(dbStream.time) ? dbStream.time.length : 0
-
             const wattsLen = Array.isArray(dbStream.watts) ? dbStream.watts.length : 0
-
             const hrLen = Array.isArray(dbStream.heartrate) ? dbStream.heartrate.length : 0
-
+            const cadenceLen = Array.isArray(dbStream.cadence) ? dbStream.cadence.length : 0
             const velocityLen = Array.isArray(dbStream.velocity) ? dbStream.velocity.length : 0
-
             const distLen = Array.isArray(dbStream.distance) ? dbStream.distance.length : 0
 
             console.log(
-              `  Data Points: Time=${timeLen}, Watts=${wattsLen}, HR=${hrLen}, Velocity=${velocityLen}, Dist=${distLen}`
+              `  Data Points: Time=${timeLen}, Watts=${wattsLen}, HR=${hrLen}, Cadence=${cadenceLen}, Velocity=${velocityLen}, Dist=${distLen}`
             )
+
+            if (timeLen === 0 || (w.type !== 'WeightTraining' && wattsLen === 0)) {
+              streamsMissing = true
+            }
 
             console.log(
               `  Zone Data: HR Zones=${dbStream.hrZoneTimes ? 'Present' : 'Missing'}, Power Zones=${dbStream.powerZoneTimes ? 'Present' : 'Missing'}`
@@ -384,35 +387,26 @@ troubleshootWorkoutsCommand
 
             if (dbStream.hrZoneTimes)
               console.log(`    HR Zones: ${JSON.stringify(dbStream.hrZoneTimes)}`)
-
             if (dbStream.powerZoneTimes)
               console.log(`    Power Zones: ${JSON.stringify(dbStream.powerZoneTimes)}`)
 
             console.log(chalk.bold(`  Pacing Metrics (Stored):`))
-
             console.log(
               `    Avg Pace: ${dbStream.avgPacePerKm ? formatPace(dbStream.avgPacePerKm) : 'N/A'}`
             )
-
             console.log(
               `    Pace Variability: ${dbStream.paceVariability ? dbStream.paceVariability.toFixed(2) : 'N/A'}`
             )
 
             // Simulate Calculation
-
             if (velocityLen > 0 && timeLen > 0 && distLen > 0) {
               const simVariability = calculatePaceVariability(dbStream.velocity as number[])
-
               const simAvgPace = calculateAveragePace(
                 (dbStream.time as number[])[timeLen - 1],
-
                 (dbStream.distance as number[])[distLen - 1]
               )
-
               console.log(chalk.bold(`  Pacing Metrics (Simulated):`))
-
               console.log(`    Avg Pace: ${formatPace(simAvgPace)}`)
-
               console.log(`    Pace Variability: ${simVariability.toFixed(2)}`)
             } else {
               console.log(
@@ -421,15 +415,16 @@ troubleshootWorkoutsCommand
             }
           } else {
             console.log(chalk.red(`❌ DB Stream NOT found`))
+            streamsMissing = true
           }
 
-          if (w.source === 'intervals') {
+          if (w.source === 'intervals' && (options.reSyncStreams || streamsMissing)) {
             console.log(chalk.bold.yellow(`\n=== Re-Syncing Streams ===`))
             try {
               const result = await IntervalsService.syncActivityStream(w.userId, w.id, w.externalId)
 
               if (result) {
-                console.log(chalk.green(`✓ Successfully re-synced streams for ${w.id}`))
+                console.log(chalk.green(`✓ Successfully synced streams for ${w.id}`))
                 const timeLen = Array.isArray(result.time) ? result.time.length : 0
                 const velocityLen = Array.isArray(result.velocity) ? result.velocity.length : 0
 
