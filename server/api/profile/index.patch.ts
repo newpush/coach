@@ -6,6 +6,12 @@ import { sportSettingsRepository } from '../../utils/repositories/sportSettingsR
 const profileUpdateSchema = z.object({
   // Basic Settings
   name: z.string().min(2).optional(),
+  nickname: z
+    .string()
+    .max(50)
+    .regex(/^[a-zA-Z0-9]*$/, 'Nickname must be alphanumeric')
+    .nullable()
+    .optional(),
   language: z.string().optional(),
   weight: z.number().nullable().optional(),
   weightUnits: z.enum(['Kilograms', 'Pounds']).optional(),

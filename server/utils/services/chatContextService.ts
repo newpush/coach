@@ -18,6 +18,7 @@ export async function buildAthleteContext(userId: string): Promise<{
       where: { id: userId },
       select: {
         name: true,
+        nickname: true,
         ftp: true,
         maxHr: true,
         weight: true,
@@ -204,6 +205,7 @@ export async function buildAthleteContext(userId: string): Promise<{
 
   if (userProfile) {
     if (userProfile.name) athleteContext += `- **Name**: ${userProfile.name}\n`
+    if (userProfile.nickname) athleteContext += `- **Nickname**: ${userProfile.nickname}\n`
 
     const metrics: string[] = []
     if (userProfile.ftp) metrics.push(`Global FTP: ${userProfile.ftp}W`)
@@ -568,8 +570,10 @@ export async function buildAthleteContext(userId: string): Promise<{
     .join('\n')
 
   const persona = userProfile?.aiPersona || 'Supportive'
+  const preferredName = userProfile?.nickname || userProfile?.name?.split(' ')[0] || 'Athlete'
 
   const systemInstruction = `You are Coach Watts. Your coaching style and personality is **${persona}**.
+Address the athlete as **${preferredName}**.
 Adopt this persona fully in your interactions.
 
 ## Current Context

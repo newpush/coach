@@ -52,6 +52,47 @@
         <p v-else class="font-medium text-lg">{{ modelValue.name }}</p>
       </div>
 
+      <!-- Nickname -->
+      <div class="group relative">
+        <div class="flex items-center gap-1 mb-1">
+          <label class="text-sm text-muted">Nickname</label>
+          <button
+            class="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded hover:bg-gray-100 dark:hover:bg-gray-800"
+            @click="startEdit('nickname')"
+          >
+            <UIcon name="i-heroicons-pencil" class="w-3 h-3 text-muted hover:text-primary" />
+          </button>
+        </div>
+        <div v-if="editingField === 'nickname'" class="flex gap-2">
+          <UInput
+            v-model="editValue"
+            size="sm"
+            class="w-full"
+            placeholder="e.g. Turbo"
+            autofocus
+            @keyup.enter="saveField"
+            @keyup.esc="cancelEdit"
+          />
+          <UButton
+            size="xs"
+            color="primary"
+            variant="ghost"
+            icon="i-heroicons-check"
+            @click="saveField"
+          />
+          <UButton
+            size="xs"
+            color="neutral"
+            variant="ghost"
+            icon="i-heroicons-x-mark"
+            @click="cancelEdit"
+          />
+        </div>
+        <p v-else class="font-medium text-lg">
+          {{ modelValue.nickname || 'Not set' }}
+        </p>
+      </div>
+
       <!-- Language -->
       <div class="group relative">
         <div class="flex items-center gap-1 mb-1">
