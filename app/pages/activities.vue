@@ -710,6 +710,7 @@
     :user-zones="userZones"
     :all-sport-settings="allSportSettings"
     :streams="selectedWeekStreams"
+    :ftp="profile?.profile?.ftp"
   />
 
   <CalendarNoteModal v-model:open="showCalendarNoteModal" :note="selectedCalendarNote" />
@@ -1466,11 +1467,22 @@
   function openWeekZoneDetail(week: any[]) {
     const summary = getWeekSummary(week)
     const completedActivities: CalendarActivity[] = []
+    const allPlannedActivities: CalendarActivity[] = []
+
+    let totalPlannedDuration = 0
+    let totalPlannedDistance = 0
+    let totalPlannedTss = 0
 
     week.forEach((day) => {
       day.activities.forEach((activity: CalendarActivity) => {
         if (activity.source === 'completed') {
           completedActivities.push(activity)
+        }
+        if (activity.source === 'planned') {
+          allPlannedActivities.push(activity)
+          totalPlannedDuration += activity.plannedDuration || 0
+          totalPlannedDistance += activity.plannedDistance || 0
+          totalPlannedTss += activity.plannedTss || 0
         }
       })
     })
@@ -1478,11 +1490,15 @@
     selectedWeekData.value = {
       weekNumber: week[0] ? getWeekNumber(week[0].date) : 0,
       completedWorkouts: completedActivities.length,
-      totalDuration: summary.duration || summary.plannedDuration,
+      totalDuration: summary.duration,
+      plannedDuration: totalPlannedDuration,
       totalDistance: summary.distance,
-      totalTSS: summary.tss || summary.plannedTss,
+      plannedDistance: totalPlannedDistance,
+      totalTSS: summary.tss,
+      plannedTss: totalPlannedTss,
       workoutIds: getWeekWorkoutIds(week),
-      activities: completedActivities
+      activities: completedActivities,
+      plannedActivities: allPlannedActivities
     }
 
     selectedWeekStreams.value = getWeekStreams(week)

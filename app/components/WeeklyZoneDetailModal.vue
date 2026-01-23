@@ -4,9 +4,40 @@
       <div v-if="weekData" class="space-y-6">
         <!-- Week Info -->
         <div class="text-sm text-gray-600 dark:text-gray-400">
-          Week {{ weekData.weekNumber }} • {{ weekData.completedWorkouts }} workout{{
+          Week {{ weekData.weekNumber }} • {{ weekData.completedWorkouts }} completed workout{{
             weekData.completedWorkouts !== 1 ? 's' : ''
           }}
+        </div>
+
+        <!-- Summary Stats -->
+        <div class="grid grid-cols-3 gap-4 pt-4 border-b border-gray-200 dark:border-gray-700 pb-4">
+          <div class="text-center">
+            <div class="text-xs text-gray-500 mb-1">Duration</div>
+            <div class="text-xl font-bold text-gray-900 dark:text-white">
+              {{ formatTime(weekData.totalDuration) }}
+            </div>
+            <div class="text-xs text-gray-400">
+              Target: {{ formatTime(weekData.plannedDuration || 0) }}
+            </div>
+          </div>
+          <div class="text-center">
+            <div class="text-xs text-gray-500 mb-1">Distance</div>
+            <div class="text-xl font-bold text-gray-900 dark:text-white">
+              {{ (weekData.totalDistance / 1000).toFixed(1) }}k
+            </div>
+            <div class="text-xs text-gray-400">
+              Target: {{ ((weekData.plannedDistance || 0) / 1000).toFixed(1) }}k
+            </div>
+          </div>
+          <div class="text-center">
+            <div class="text-xs text-gray-500 mb-1">TSS</div>
+            <div class="text-xl font-bold text-gray-900 dark:text-white">
+              {{ Math.round(weekData.totalTSS) }}
+            </div>
+            <div class="text-xs text-gray-400">
+              Target: {{ Math.round(weekData.plannedTss || 0) }}
+            </div>
+          </div>
         </div>
 
         <!-- Zone Distribution Chart -->
@@ -14,24 +45,39 @@
           <h3 class="text-lg font-semibold mb-3">
             {{ zoneType === 'hr' ? 'Heart Rate' : 'Power' }} Zone Distribution
           </h3>
-          <div class="space-y-2">
+          <div class="space-y-3">
             <div v-for="(zone, index) in zoneBreakdown" :key="index" class="space-y-1">
-              <div class="flex items-center justify-between text-sm">
-                <span class="font-medium">{{ zone.name }}</span>
-                <span class="text-gray-600 dark:text-gray-400">
-                  {{ formatTime(zone.time) }} ({{ zone.percentage.toFixed(1) }}%)
-                </span>
+              <div class="flex items-center justify-between text-xs">
+                <span class="font-medium w-8">{{ zone.name }}</span>
+                <div class="text-gray-600 dark:text-gray-400">
+                  <span :class="{ 'font-bold text-gray-900 dark:text-white': zone.actualTime > 0 }">
+                    {{ formatTime(zone.actualTime) }}
+                  </span>
+                </div>
               </div>
-              <div class="w-full h-8 bg-gray-100 dark:bg-gray-800 rounded-lg overflow-hidden">
-                <div
-                  class="h-full flex items-center px-2 text-white text-xs font-medium transition-all"
+              <div class="relative w-full h-6 bg-gray-100 dark:bg-gray-800 rounded overflow-hidden">
+                <!-- Planned Bar (Background) -->
+                <UTooltip
+                  v-if="zone.plannedPerc > 0"
+                  :text="'Planned: ' + formatTime(zone.plannedTime)"
+                  class="absolute top-0 left-0 h-full bg-gray-300 dark:bg-gray-600 transition-all opacity-50"
+                  :style="{ width: zone.plannedPerc + '%' }"
+                >
+                  <div class="w-full h-full" />
+                </UTooltip>
+                <!-- Actual Bar (Foreground) -->
+                <UTooltip
+                  v-if="zone.actualPerc > 0"
+                  :text="'Actual: ' + formatTime(zone.actualTime)"
+                  class="absolute top-0 left-0 h-full transition-all opacity-90"
                   :style="{
-                    width: zone.percentage + '%',
-                    backgroundColor: zone.color
+                    width: zone.actualPerc + '%',
+                    backgroundColor: zone.color,
+                    zIndex: 10
                   }"
                 >
-                  <span v-if="zone.percentage > 10">{{ zone.percentage.toFixed(0) }}%</span>
-                </div>
+                  <div class="w-full h-full" />
+                </UTooltip>
               </div>
             </div>
           </div>
@@ -62,28 +108,6 @@
             </div>
           </div>
         </div>
-
-        <!-- Summary Stats -->
-        <div class="grid grid-cols-3 gap-4 pt-4 border-t border-gray-200 dark:border-gray-700">
-          <div class="text-center">
-            <div class="text-2xl font-bold text-gray-900 dark:text-white">
-              {{ formatTime(weekData.totalDuration) }}
-            </div>
-            <div class="text-xs text-gray-500">Total Duration</div>
-          </div>
-          <div class="text-center">
-            <div class="text-2xl font-bold text-gray-900 dark:text-white">
-              {{ (weekData.totalDistance / 1000).toFixed(1) }}
-            </div>
-            <div class="text-xs text-gray-500">Total Distance (km)</div>
-          </div>
-          <div class="text-center">
-            <div class="text-2xl font-bold text-gray-900 dark:text-white">
-              {{ Math.round(weekData.totalTSS) }}
-            </div>
-            <div class="text-xs text-gray-500">Total TSS</div>
-          </div>
-        </div>
       </div>
     </template>
 
@@ -105,14 +129,19 @@
       weekNumber: number
       completedWorkouts: number
       totalDuration: number
+      plannedDuration?: number
       totalDistance: number
+      plannedDistance?: number
       totalTSS: number
+      plannedTss?: number
       workoutIds: string[]
       activities: any[]
+      plannedActivities?: any[]
     } | null
     userZones: any
     allSportSettings?: any[]
     streams?: any[]
+    ftp?: number
   }>()
 
   const emit = defineEmits<{
@@ -125,33 +154,42 @@
   })
 
   const aggregatedZones = ref<number[]>([])
+  const aggregatedPlannedZones = ref<number[]>([])
   const zoneType = ref<'hr' | 'power'>('hr')
   const loading = ref(false)
 
   const zoneBreakdown = computed(() => {
-    if (!props.userZones || aggregatedZones.value.length === 0) return []
+    if (!props.userZones) return []
 
-    // Use default zones for labels if we have mixed zones?
-    // Ideally we should normalize, but for now we just show distribution.
-    // We use the default zones for NAMES and RANGES in the UI list, but the distribution IS calculated correctly per activity.
-    // Wait, if Activity A has Z1=100-120 and Activity B has Z1=110-130, we just aggregate "Z1".
-    // This is fine for "Zone Distribution" charts usually.
     const zones = zoneType.value === 'hr' ? props.userZones.hrZones : props.userZones.powerZones
-    const total = aggregatedZones.value.reduce((sum, val) => sum + val, 0)
 
-    if (total === 0) return []
+    // Scale calculation: based on the maximum total duration of either Actual or Planned for the week
+    // This allows bars to be comparable on the same timeline scale.
+    // However, if one week is huge, 100% might be too big?
+    // Usually we scale to the Max of (AllActualTimes U AllPlannedTimes) * 1.1?
+    // Or just use Total Duration of the week as the denominator?
+    // Using Total Duration (Actual vs Planned) works for "Distribution", but not for "Volume Comparison".
+    // "Volume Comparison" (Progress bar style) is what the user asked for ("bar above...").
+    // So we need a common denominator.
+    // Let's use Math.max(totalActualDuration, totalPlannedDuration) of the *whole week*.
+    const maxWeekDuration = Math.max(
+      props.weekData?.totalDuration || 1,
+      props.weekData?.plannedDuration || 1
+    )
 
-    return zones
-      .map((zone: any, index: number) => {
-        const timeInZone = aggregatedZones.value[index] || 0
-        return {
-          name: zone.name,
-          time: timeInZone,
-          percentage: total > 0 ? (timeInZone / total) * 100 : 0,
-          color: getZoneColor(index)
-        }
-      })
-      .filter((z: any) => z.time > 0)
+    return zones.map((zone: any, index: number) => {
+      const actualTime = aggregatedZones.value[index] || 0
+      const plannedTime = aggregatedPlannedZones.value[index] || 0
+
+      return {
+        name: zone.name,
+        actualTime,
+        plannedTime,
+        actualPerc: (actualTime / maxWeekDuration) * 100,
+        plannedPerc: (plannedTime / maxWeekDuration) * 100,
+        color: getZoneColor(index)
+      }
+    })
   })
 
   const workoutTypeBreakdown = computed(() => {
@@ -174,6 +212,7 @@
   })
 
   function formatTime(seconds: number): string {
+    if (!seconds) return '0m'
     const hours = Math.floor(seconds / 3600)
     const minutes = Math.floor((seconds % 3600) / 60)
 
@@ -208,9 +247,53 @@
     }
   }
 
+  function calculatePlannedZones() {
+    // We only support Power for planned workouts currently as we need FTP
+    const plannedPowerZones = new Array(8).fill(0)
+
+    if (!props.weekData?.plannedActivities || !props.ftp) return plannedPowerZones
+
+    props.weekData.plannedActivities.forEach((workout) => {
+      const steps = workout.structuredWorkout?.steps || []
+      steps.forEach((step: any) => {
+        const duration = step.duration || step.durationSeconds || 0
+        if (!duration) return
+
+        const power = step.power || {}
+        let targetWatts = 0
+
+        // Use average of range or exact value
+        if (power.value) {
+          targetWatts = power.value * props.ftp!
+        } else if (power.range) {
+          targetWatts = ((power.range.start + power.range.end) / 2) * props.ftp!
+        }
+
+        if (targetWatts > 0) {
+          const zoneIndex = getZoneIndex(targetWatts, props.userZones.powerZones)
+          if (zoneIndex >= 0 && zoneIndex < 8) {
+            plannedPowerZones[zoneIndex] += duration
+          }
+        }
+      })
+    })
+
+    return plannedPowerZones
+  }
+
   async function fetchZoneData() {
     if (import.meta.server) return
-    if (!props.weekData || props.weekData.workoutIds.length === 0) return
+    if (!props.weekData || props.weekData.workoutIds.length === 0) {
+      // Even if no completed workouts, we might have planned ones
+      // But we need to initialize
+      aggregatedZones.value = new Array(8).fill(0)
+      aggregatedPlannedZones.value = calculatePlannedZones()
+      // Default to power if we have planned power
+      if (aggregatedPlannedZones.value.some((v) => v > 0)) {
+        zoneType.value = 'power'
+      }
+      return
+    }
 
     loading.value = true
 
@@ -218,7 +301,6 @@
       let streams = props.streams
 
       if (!streams) {
-        // Fetch necessary keys with low resolution fallback to keep payload small
         streams = await $fetch<any[]>('/api/workouts/streams', {
           method: 'POST',
           body: {
@@ -229,7 +311,7 @@
         }).catch(() => [])
       }
 
-      // Aggregate zone data
+      // Aggregate Actuals
       const hrZoneTimes = new Array(8).fill(0)
       const powerZoneTimes = new Array(8).fill(0)
       let hasHrData = false
@@ -238,17 +320,12 @@
       streams.forEach((stream) => {
         if (!stream) return
 
-        // Resolve zones for this specific activity
         const activity = props.weekData?.activities.find((a) => a.id === stream.workoutId)
         const zones = getActivityZones(activity)
         if (!zones) return
 
         const timeArray = stream.time
 
-        // Priority 1: Use cached zone times if available (much faster and uses less data)
-        // Note: Cached zone times from DB/ingestion *should* have used the correct zones at ingestion time.
-        // If ingestion logic was correct, this is fine. If ingestion used default zones, this is bad.
-        // Assuming ingestion logic is/was correct (it runs on backend using sportSettingsRepository).
         if (
           stream.hrZoneTimes &&
           Array.isArray(stream.hrZoneTimes) &&
@@ -259,11 +336,9 @@
             if (index < 8) hrZoneTimes[index] += duration
           })
         } else if ('heartrate' in stream && Array.isArray(stream.heartrate) && zones.hrZones) {
-          // Fallback to manual calculation from stream
           hasHrData = true
           stream.heartrate.forEach((hr: number, index: number) => {
             if (hr === null || hr === undefined) return
-
             let duration = 1
             if (timeArray && Array.isArray(timeArray) && timeArray.length > index) {
               if (index < timeArray.length - 1) {
@@ -272,16 +347,13 @@
                 duration = timeArray[index] - timeArray[index - 1]
               }
             }
-            // Sanity check: cap duration to avoid massive spikes from pauses (e.g. > 5 mins)
             if (duration < 0) duration = 0
             if (duration > 300) duration = 1
-
             const zoneIndex = getZoneIndex(hr, zones.hrZones)
             if (zoneIndex >= 0 && zoneIndex < 8) hrZoneTimes[zoneIndex] += duration
           })
         }
 
-        // Priority 1: Use cached zone times if available
         if (
           stream.powerZoneTimes &&
           Array.isArray(stream.powerZoneTimes) &&
@@ -292,11 +364,9 @@
             if (index < 8) powerZoneTimes[index] += duration
           })
         } else if ('watts' in stream && Array.isArray(stream.watts) && zones.powerZones) {
-          // Fallback to manual calculation from stream
           hasPowerData = true
           stream.watts.forEach((watts: number, index: number) => {
             if (watts === null || watts === undefined) return
-
             let duration = 1
             if (timeArray && Array.isArray(timeArray) && timeArray.length > index) {
               if (index < timeArray.length - 1) {
@@ -307,20 +377,27 @@
             }
             if (duration < 0) duration = 0
             if (duration > 300) duration = 1
-
             const zoneIndex = getZoneIndex(watts, zones.powerZones)
             if (zoneIndex >= 0 && zoneIndex < 8) powerZoneTimes[zoneIndex] += duration
           })
         }
       })
 
-      // Prefer power if available
-      if (hasPowerData) {
+      // Calculate Planned (Always Power for now)
+      const plannedZones = calculatePlannedZones()
+      aggregatedPlannedZones.value = plannedZones
+
+      // Prefer power if available OR if planned power exists
+      const hasPlannedPower = plannedZones.some((v) => v > 0)
+
+      if (hasPowerData || hasPlannedPower) {
         zoneType.value = 'power'
         aggregatedZones.value = powerZoneTimes
       } else if (hasHrData) {
         zoneType.value = 'hr'
         aggregatedZones.value = hrZoneTimes
+        // Reset planned for HR mode as we don't have planned HR zones implemented yet
+        aggregatedPlannedZones.value = new Array(8).fill(0)
       }
     } catch (e) {
       console.error('Error fetching zone data for modal:', e)
