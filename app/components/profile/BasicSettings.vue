@@ -808,6 +808,45 @@
       </div>
     </div>
 
+    <!-- AI Context (Full Row) -->
+    <div class="lg:col-span-4 group relative mt-6">
+      <div class="flex items-center gap-1 mb-1">
+        <label class="text-sm text-muted">AI Personalization Context</label>
+        <button
+          class="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded hover:bg-gray-100 dark:hover:bg-gray-800"
+          @click="startEdit('aiContext')"
+        >
+          <UIcon name="i-heroicons-pencil" class="w-3 h-3 text-muted hover:text-primary" />
+        </button>
+      </div>
+      <p class="text-xs text-muted mb-2">
+        Provide any extra context for the AI to personalize your coaching. For example: "I have a
+        knee injury on my left leg and prefer low-impact workouts." or "I'm training for a
+        multi-day bike race."
+      </p>
+      <div v-if="editingField === 'aiContext'" class="flex flex-col gap-2">
+        <UTextarea
+          v-model="editValue"
+          size="sm"
+          class="w-full"
+          autofocus
+          :rows="5"
+          @keyup.esc="cancelEdit"
+        />
+        <div class="flex justify-end gap-2">
+          <UButton size="xs" color="primary" variant="solid" @click="saveField">
+            Save Context
+          </UButton>
+          <UButton size="xs" color="neutral" variant="ghost" @click="cancelEdit">
+            Cancel
+          </UButton>
+        </div>
+      </div>
+      <p v-else class="font-medium text-lg whitespace-pre-wrap">
+        {{ modelValue.aiContext || 'No context provided.' }}
+      </p>
+    </div>
+
     <!-- Autodetect Confirmation Modal -->
     <UModal
       v-model:open="showConfirmModal"

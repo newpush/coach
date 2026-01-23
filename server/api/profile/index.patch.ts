@@ -26,6 +26,9 @@ const profileUpdateSchema = z.object({
   country: z.string().nullable().optional(),
   timezone: z.string().nullable().optional(),
 
+  // AI Settings
+  aiContext: z.string().optional(),
+
   // Deprecated: Custom Zones (handled via Sport Settings now)
   hrZones: z.any().nullable().optional(),
   powerZones: z.any().nullable().optional(),
