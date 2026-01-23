@@ -1,22 +1,20 @@
 import './init'
-import { logger, schedules } from '@trigger.dev/sdk/v3'
+import { logger, task } from '@trigger.dev/sdk/v3'
 import { prisma } from '../server/utils/db'
 
 /**
  * Process Sync Queue - Retry failed Intervals.icu syncs
  *
- * This scheduled task runs every 5 minutes to process pending sync operations.
+ * This task processes pending sync operations.
  * It retries failed syncs to Intervals.icu for planned workouts and availability.
  *
  * Max attempts: 3 per operation
  * After 3 failures, the item is marked as FAILED and removed from retry queue.
  */
-export const processSyncQueueTask = schedules.task({
+export const processSyncQueueTask = task({
   id: 'process-sync-queue',
-  // Run every 5 minutes
-  cron: '*/5 * * * *',
   maxDuration: 300, // 5 minutes max
-  run: async (payload) => {
+  run: async (payload: any) => {
     logger.log('Starting sync queue processing')
 
     try {

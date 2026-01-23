@@ -8,6 +8,7 @@ import { ingestIntervalsTask } from './ingest-intervals'
 import { ingestYazioTask } from './ingest-yazio'
 import { ingestHevyTask } from './ingest-hevy'
 import { generateAthleteProfileTask } from './generate-athlete-profile'
+import { processSyncQueueTask } from './process-sync-queue'
 
 export const ingestAllTask = task({
   id: 'ingest-all',
@@ -21,6 +22,16 @@ export const ingestAllTask = task({
     logger.log(`User ID: ${userId}`)
     logger.log(`Date Range: ${startDate} to ${endDate}`)
     logger.log('')
+
+    // 1. Flush Sync Queue (Push pending changes to Intervals.icu)
+    // We do this first so external systems are up-to-date before we fetch from them.
+    try {
+      logger.log('📤 Triggering Sync Queue Processing (Push)...')
+      await processSyncQueueTask.trigger()
+      logger.log('✅ Sync Queue flushed')
+    } catch (error) {
+      logger.warn('⚠️ Failed to trigger sync queue processing', { error })
+    }
 
     // Fetch all active integrations for the user
     const integrations = await prisma.integration.findMany({
