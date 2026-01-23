@@ -10,9 +10,9 @@
       icon="i-heroicons-exclamation-triangle"
       color="warning"
       variant="soft"
-      :actions="[{ label: 'Dismiss', color: 'warning', variant: 'link' }]"
+      :close="{ color: 'warning', variant: 'link', label: 'Dismiss' }"
       description="Activities synced from Strava to Intervals.icu cannot be automatically imported. Please connect Strava directly or upload FIT files manually."
-      @dismiss="intervalsStravaWarningDismissed = true"
+      @update:open="intervalsStravaWarningDismissed = true"
     />
     <SettingsConnectedApps
       :intervals-connected="intervalsConnected"

@@ -1,6 +1,6 @@
-description = "Merges a GitHub Pull Request locally, reviewing comments and ensuring a clean merge."
+description = "Merges a GitHub Pull Request locally or remotely, ensuring non-interactive execution and inline commit messages."
 prompt = """
-Your goal is to help the user merge a GitHub Pull Request (PR) into their current local branch.
+Your goal is to help the user merge a GitHub Pull Request (PR) into their current local branch or the remote repository.
 
 User input: {{args}}
 
@@ -8,26 +8,32 @@ User input: {{args}}
 
 1.  **Identify the Pull Request:**
     - Parse `{{args}}` to find a PR number or URL.
-    - If no PR is specified, list open PRs using `search_pull_requests` (filtered by `state:open`) or `gh pr list` to help the user choose.
+    - If no PR is specified, list open PRs using `search_pull_requests` (filtered by `state:open`) or `gh pr list --json number,title,author -L 10` to help the user choose.
 
 2.  **Analyze Context & Comments (CRITICAL):**
     - **Fetch PR Details:** Use `pull_request_read` (method='get') to get the PR details (branch name, author, description).
-    - **Read Comments:** Use `pull_request_read` (method='get_comments' or 'get_review_comments') or `gh pr view <pr_number> --comments`.
-    - **Analyze:** specifically look for "suggestions", "requirements", or "feedback" from other agents or reviewers.
+    - **Read Comments:** Use `gh pr view <pr_number> --comments` or `pull_request_read` (method='get_comments').
+    - **Analyze:** Specifically look for "suggestions", "requirements", or "feedback" that might block the merge.
     - **Report:** Briefly summarize the PR and any crucial feedback found in the comments *before* merging.
 
-3.  **Fetch and Merge:**
-    - Fetch the PR branch: `git fetch origin pull/<pr_number>/head:<local_branch_name>` or `git fetch origin <branch_name>`.
-    - Merge the branch: `git merge <local_branch_name>` (or `FETCH_HEAD` if you fetched directly).
-    - **Handle Conflicts:** If `git merge` reports conflicts, stop and ask the user for assistance or use available tools to list conflicting files. Do not commit a broken merge.
+3.  **Fetch and Merge (Non-Interactive):**
+    - **Local Merge (Preferred for Testing):**
+        - Fetch the PR branch: `git fetch origin pull/<pr_number>/head:pr-<pr_number>`.
+        - Merge the branch using the `--no-edit` flag and a specific message to avoid triggering an interactive editor: 
+          `git merge pr-<pr_number> -m "Merge pull request #<pr_number> from <head_ref>" --no-edit`.
+    - **Remote Merge (GitHub CLI):**
+        - If the user wants to merge directly on GitHub:
+          `gh pr merge <pr_number> --merge --subject "Merge pull request #<pr_number>" --body "Merged via Gemini CLI"` 
+          (Always specify `--merge`, `--squash`, or `--rebase` and a subject to ensure non-interactive execution).
+    - **Handle Conflicts:** If `git merge` reports conflicts, stop immediately. Do not attempt to resolve them automatically unless specifically directed.
 
 4.  **Post-Merge Verification:**
-    - Run `git status` and `git log -n 1` to confirm the merge state.
-    - If the merge was successful, inform the user.
+    - Run `git status` and `git log -n 1` to confirm the successful merge.
+    - Inform the user of the merge result.
 
 5.  **Completion:**
     - Ask the user if they want to:
-        - Run tests/linting.
-        - Push the changes (`git push`).
-        - Close the PR (`gh pr close <pr_number>`).
+        - Run verification scripts (lint/test).
+        - Push the local changes if merged locally (`git push`).
+        - Delete the temporary local PR branch (`git branch -D pr-<pr_number>`).
 """
