@@ -50,7 +50,7 @@ export const analysisTools = (userId: string, timezone: string) => ({
     inputSchema: z.object({
       days: z.number().optional().default(3).describe('Number of days to sync back (default 3)')
     }),
-    needsApproval: true,
+    needsApproval: false,
     execute: async ({ days = 3 }) => {
       const startDate = formatUserDate(getStartOfDaysAgoUTC(timezone, days), timezone, 'yyyy-MM-dd')
       const endDate = formatUserDate(new Date(), timezone, 'yyyy-MM-dd')
@@ -81,7 +81,7 @@ export const analysisTools = (userId: string, timezone: string) => ({
         .enum(['WEEKLY_TRAINING', 'LAST_3_WORKOUTS', 'LAST_3_NUTRITION', 'WEEKLY_NUTRITION'])
         .describe('The type of report to generate')
     }),
-    needsApproval: true,
+    needsApproval: false,
     execute: async ({ type }) => {
       const TEMPLATE_MAP: Record<string, string> = {
         LAST_3_WORKOUTS: '00000000-0000-0000-0000-000000000001',

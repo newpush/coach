@@ -42,7 +42,7 @@ export const profileTools = (userId: string, timezone: string) => ({
     description:
       'Recalculate your athlete profile, FTP, and heart rate zones based on your most recent training data. Use this when the user says their fitness has changed or they want to update their zones.',
     inputSchema: z.object({}),
-    needsApproval: true,
+    needsApproval: false,
     execute: async () => {
       // Create a report record for tracking
       const report = await prisma.report.create({

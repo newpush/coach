@@ -116,7 +116,7 @@ export const workoutTools = (userId: string, timezone: string) => ({
     inputSchema: z.object({
       workout_id: z.string().describe('The ID of the workout to analyze')
     }),
-    needsApproval: true,
+    needsApproval: false,
     execute: async ({ workout_id }) => {
       const workout = await workoutRepository.getById(workout_id, userId)
       if (!workout) return { error: 'Workout not found' }

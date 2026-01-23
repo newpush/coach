@@ -179,7 +179,7 @@ export const planningTools = (userId: string, timezone: string) => ({
     inputSchema: z.object({
       workout_id: z.string()
     }),
-    needsApproval: true,
+    needsApproval: false,
     execute: async ({ workout_id }) => {
       // Use repository to find the workout
       const workout = (await plannedWorkoutRepository.getById(workout_id, userId, {
@@ -266,7 +266,7 @@ export const planningTools = (userId: string, timezone: string) => ({
       workout_id: z.string(),
       reason: z.string().optional()
     }),
-    needsApproval: true,
+    needsApproval: false,
     execute: async ({ workout_id }) => {
       try {
         await plannedWorkoutRepository.delete(workout_id, userId)
@@ -283,7 +283,7 @@ export const planningTools = (userId: string, timezone: string) => ({
       workout_id: z.string(),
       reason: z.string().optional()
     }),
-    needsApproval: true,
+    needsApproval: false,
     execute: async (args) => {
       // Try deleting from both tables or check which one
       // For simplicity, try PlannedWorkout first
