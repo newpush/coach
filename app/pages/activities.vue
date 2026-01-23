@@ -204,7 +204,7 @@
               </div>
 
               <!-- Week Rows -->
-              <template v-for="(week, weekIdx) in calendarWeeks" :key="weekIdx">
+              <template v-for="({ week, summary }, weekIdx) in calendarWeeksWithSummary" :key="weekIdx">
                 <!-- Week Summary Cell -->
                 <div
                   class="bg-gray-50 dark:bg-gray-800/50 p-2 flex flex-col justify-between border-r border-gray-200 dark:border-gray-700 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
@@ -213,50 +213,59 @@
                   <div class="text-xs font-bold text-gray-400">
                     W{{ week[0] ? getWeekNumber(week[0].date) : '' }}
                   </div>
-                  <div class="space-y-1 mt-2">
-                    <div class="flex items-center justify-between text-[10px]">
+                  <div class="space-y-1 mt-2 text-[11px]">
+                    <!-- Header -->
+                    <div class="flex items-center justify-between font-bold text-gray-400">
+                      <span />
+                      <span>Actual</span>
+                      <span>Total</span>
+                    </div>
+
+                    <!-- Time -->
+                    <div class="flex items-center justify-between">
                       <span class="text-gray-500">Time:</span>
-                      <span class="font-bold">{{
-                        formatDuration(getWeekSummary(week).duration)
-                      }}</span>
+                      <span class="font-bold">{{ formatDuration(summary.duration) }}</span>
+                      <span class="font-bold text-gray-400">{{ formatDuration(summary.duration + summary.plannedDuration) }}</span>
                     </div>
-                    <div class="flex items-center justify-between text-[10px]">
+
+                    <!-- Distance -->
+                    <div class="flex items-center justify-between">
                       <span class="text-gray-500">Dist:</span>
-                      <span class="font-bold">{{
-                        formatDistance(getWeekSummary(week).distance)
-                      }}</span>
+                      <span class="font-bold">{{ formatDistance(summary.distance) }}</span>
+                      <span class="font-bold text-gray-400">{{ formatDistance(summary.distance + summary.plannedDistance) }}</span>
                     </div>
-                    <div class="flex items-center justify-between text-[10px]">
+
+                    <!-- TSS -->
+                    <div class="flex items-center justify-between">
                       <span class="text-gray-500">TSS:</span>
-                      <span class="font-bold text-green-600 dark:text-green-400">{{
-                        Math.round(getWeekSummary(week).tss || getWeekSummary(week).plannedTss)
-                      }}</span>
+                      <span class="font-bold text-green-600 dark:text-green-400">{{ Math.round(summary.tss) }}</span>
+                      <span class="font-bold text-gray-400">{{ Math.round(summary.tss + summary.plannedTss) }}</span>
                     </div>
 
                     <!-- Training Stress Trends -->
                     <div
-                      v-if="getWeekSummary(week).ctl !== null"
+                      v-if="summary.ctl !== null"
                       class="pt-1 mt-1 border-t border-gray-200 dark:border-gray-700"
                     >
                       <div class="flex items-center justify-between text-[10px]">
                         <span class="text-gray-500">Fitness:</span>
                         <span class="font-bold text-blue-600">{{
-                          Math.round(getWeekSummary(week).ctl!)
+                          Math.round(summary.ctl!)
                         }}</span>
                       </div>
                       <div class="flex items-center justify-between text-[10px]">
                         <span class="text-gray-500">Form:</span>
-                        <UTooltip :text="getFormStatusTooltip(getWeekSummary(week).tsb)">
-                          <span class="font-bold" :class="getTSBColor(getWeekSummary(week).tsb!)">
-                            {{ Math.round(getWeekSummary(week).tsb!) }}
+                        <UTooltip :text="getFormStatusTooltip(summary.tsb)">
+                          <span class="font-bold" :class="getTSBColor(summary.tsb!)">
+                            {{ Math.round(summary.tsb!) }}
                           </span>
                         </UTooltip>
                       </div>
                       <div
                         class="text-[8px] text-center mt-0.5 font-medium uppercase tracking-tighter"
-                        :class="getTSBColor(getWeekSummary(week).tsb!)"
+                        :class="getTSBColor(summary.tsb!)"
                       >
-                        {{ getFormStatusText(getWeekSummary(week).tsb) }}
+                        {{ getFormStatusText(summary.tsb) }}
                       </div>
                     </div>
                   </div>
@@ -774,6 +783,7 @@
   import { format, isSameMonth, getISOWeek } from 'date-fns'
   import { useStorage } from '@vueuse/core'
   import type { CalendarActivity } from '../../types/calendar'
+  import { getWeekSummary } from '~/composables/useWeekSummary'
   import WorkoutMatcher from '~/components/workouts/WorkoutMatcher.vue'
   import MiniWorkoutChart from '~/components/workouts/MiniWorkoutChart.vue'
   import DeduplicateModal from '~/components/activities/DeduplicateModal.vue'
@@ -1006,6 +1016,13 @@
     return weeks
   })
 
+  const calendarWeeksWithSummary = computed(() => {
+    return calendarWeeks.value.map(week => ({
+      week,
+      summary: getWeekSummary(week)
+    }))
+  })
+
   const currentMonthLabel = computed(() => formatDateUTC(currentDate.value, 'MMMM yyyy'))
 
   const isCurrentMonth = computed(() => isSameMonth(currentDate.value, getUserLocalDate()))
@@ -1038,56 +1055,6 @@
     return getISOWeek(date)
   }
 
-  function getWeekSummary(weekDays: any[]) {
-    let lastCTL: number | null = null
-    let lastATL: number | null = null
-    let lastTSB: number | null = null
-
-    return weekDays.reduce(
-      (acc, day) => {
-        day.activities.forEach((act: CalendarActivity) => {
-          // Only count completed activities for actual totals
-          if (act.source === 'completed') {
-            acc.duration += act.duration || 0
-            acc.distance += act.distance || 0
-            acc.tss += act.tss ?? act.trimp ?? 0
-
-            // Track the last (most recent) CTL/ATL values in the week
-            if (act.ctl !== null && act.ctl !== undefined) lastCTL = act.ctl
-            if (act.atl !== null && act.atl !== undefined) lastATL = act.atl
-          } else if (act.source === 'planned' && act.status !== 'completed_plan') {
-            // Only count planned activities if they haven't been completed yet
-            // to avoid double counting
-            acc.plannedDuration += act.plannedDuration || 0
-            acc.plannedTss += act.plannedTss || 0
-          }
-        })
-
-        // Calculate TSB from last available CTL/ATL
-        if (lastCTL !== null && lastATL !== null) {
-          lastTSB = lastCTL - lastATL
-        }
-
-        return {
-          ...acc,
-          ctl: lastCTL,
-          atl: lastATL,
-          tsb: lastTSB
-        }
-      },
-      {
-        duration: 0,
-        distance: 0,
-        tss: 0,
-        plannedDuration: 0,
-        plannedTss: 0,
-        ctl: null as number | null,
-        atl: null as number | null,
-        tsb: null as number | null
-      }
-    )
-  }
-
   function getTSBColor(tsb: number | null): string {
     if (tsb === null) return 'text-gray-400'
     if (tsb >= 5) return 'text-green-600 dark:text-green-400'
@@ -1117,8 +1084,9 @@
   }
 
   function formatDuration(seconds: number): string {
-    const h = Math.floor(seconds / 3600)
-    return `${h}h`
+    if (!seconds) return '0.0h'
+    const hours = seconds / 3600
+    return `${hours.toFixed(1)}h`
   }
 
   function formatDistance(meters: number): string {
