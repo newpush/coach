@@ -83,6 +83,7 @@ export default defineNuxtConfig({
     '@nuxtjs/mdc',
     '@pinia/nuxt',
     'nuxt-gtag',
+    'nuxt-rate-limit',
     '@sentry/nuxt/module',
     '@nuxt/eslint'
   ],
@@ -198,5 +199,24 @@ export default defineNuxtConfig({
 
   sourcemap: {
     client: 'hidden'
+  },
+
+  rateLimit: {
+    exclude: ['/_nuxt/*', '/_ipx/*'],
+    redis: process.env.REDIS_URL,
+    routes: {
+      '/api/integrations/withings/webhook': {
+        max: parseInt(process.env.WEBHOOK_RATE_LIMIT_MAX || '100', 10),
+        ttl: parseInt(process.env.WEBHOOK_RATE_LIMIT_TTL || '60', 10)
+      },
+      '/api/integrations/whoop/webhook': {
+        max: parseInt(process.env.WEBHOOK_RATE_LIMIT_MAX || '100', 10),
+        ttl: parseInt(process.env.WEBHOOK_RATE_LIMIT_TTL || '60', 10)
+      },
+      '/api/integrations/intervals/webhook': {
+        max: parseInt(process.env.WEBHOOK_RATE_LIMIT_MAX || '100', 10),
+        ttl: parseInt(process.env.WEBHOOK_RATE_LIMIT_TTL || '60', 10)
+      }
+    }
   }
 })
