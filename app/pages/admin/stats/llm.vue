@@ -6,11 +6,22 @@
     Legend,
     BarElement,
     CategoryScale,
-    LinearScale
+    LinearScale,
+    LineElement,
+    PointElement
   } from 'chart.js'
-  import { Pie, Bar } from 'vue-chartjs'
+  import { Pie, Bar, Line } from 'vue-chartjs'
 
-  ChartJS.register(ArcElement, Tooltip, Legend, BarElement, CategoryScale, LinearScale)
+  ChartJS.register(
+    ArcElement,
+    Tooltip,
+    Legend,
+    BarElement,
+    CategoryScale,
+    LinearScale,
+    LineElement,
+    PointElement
+  )
 
   definePageMeta({
     layout: 'admin',
@@ -77,6 +88,48 @@
       y: {
         stacked: true,
         beginAtZero: true
+      }
+    }
+  }
+
+  const lineOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: {
+        display: true,
+        position: 'bottom' as const
+      }
+    },
+    scales: {
+      y: {
+        type: 'linear' as const,
+        display: true,
+        position: 'left' as const,
+        title: {
+          display: true,
+          text: 'Requests'
+        },
+        beginAtZero: true,
+        ticks: {
+          precision: 0
+        }
+      },
+      y1: {
+        type: 'linear' as const,
+        display: true,
+        position: 'right' as const,
+        title: {
+          display: true,
+          text: 'Unique Users'
+        },
+        beginAtZero: true,
+        ticks: {
+          precision: 0
+        },
+        grid: {
+          drawOnChartArea: false // only want the grid lines for one axis
+        }
       }
     }
   }
@@ -188,6 +241,43 @@
           })
         }
       })
+    }
+  })
+
+  const dailyChatRequestsChartData = computed(() => {
+    if (!stats.value?.dailyChatRequests) return { labels: [], datasets: [] }
+
+    const data = stats.value.dailyChatRequests
+    const dates = data.map((d) => d.date).sort()
+
+    return {
+      labels: dates.map((d) =>
+        new Date(d!).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+      ),
+      datasets: [
+        {
+          label: 'Requests',
+          borderColor: '#8b5cf6', // Purple
+          backgroundColor: '#8b5cf6',
+          data: dates.map((date) => {
+            const entry = data.find((d) => d.date === date)
+            return entry ? entry.count : 0
+          }),
+          tension: 0.3,
+          yAxisID: 'y'
+        },
+        {
+          label: 'Unique Users',
+          borderColor: '#10b981', // Emerald
+          backgroundColor: '#10b981',
+          data: dates.map((date) => {
+            const entry = data.find((d) => d.date === date)
+            return entry ? entry.userCount : 0
+          }),
+          tension: 0.3,
+          yAxisID: 'y1'
+        }
+      ]
     }
   })
 
@@ -438,6 +528,15 @@
             </div>
           </UCard>
         </div>
+
+        <UCard>
+          <template #header>
+            <h3 class="font-semibold">Daily LLM Requests from Chat</h3>
+          </template>
+          <div class="h-64 relative">
+            <Line :data="dailyChatRequestsChartData" :options="lineOptions" />
+          </div>
+        </UCard>
 
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <!-- Recent Failures -->
