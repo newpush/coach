@@ -46,6 +46,9 @@
       </ClientOnly>
     </div>
 
+    <!-- Identity & Context -->
+    <SettingsAiIdentitySettings v-if="aiSettings" :settings="aiSettings" @save="saveAiSettings" />
+
     <!-- Full-width history table below -->
     <ClientOnly>
       <SettingsAiUsageHistory />
