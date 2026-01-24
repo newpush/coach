@@ -8,6 +8,14 @@
         >
           <UIcon name="i-heroicons-arrow-path" class="w-10 h-10 animate-spin text-primary-500" />
           <p class="text-sm text-gray-500">Generating your personalized check-in...</p>
+          <UButton
+            v-if="showManualRefresh"
+            label="Taking too long? Click to retry"
+            variant="link"
+            size="xs"
+            color="gray"
+            @click="fetchToday()"
+          />
         </div>
 
         <div v-else-if="error || checkin?.status === 'FAILED'" class="text-center py-8">
@@ -126,12 +134,11 @@
     <template #footer>
       <div class="flex justify-between w-full">
         <UButton
-          v-if="localQuestions.length > 0"
+          v-if="!loading && !isPending"
           label="Regenerate"
           color="neutral"
           variant="ghost"
           icon="i-heroicons-arrow-path"
-          :loading="loading || isPending"
           @click="generate(true)"
         />
         <div class="flex gap-2 ml-auto">
@@ -150,6 +157,8 @@
 </template>
 
 <script setup lang="ts">
+  import { useIntervalFn } from '@vueuse/core'
+
   const props = defineProps<{
     open: boolean
   }>()
@@ -163,6 +172,7 @@
 
   const loading = ref(false)
   const submitting = ref(false)
+  const showManualRefresh = ref(false)
   const error = ref<string | null>(null)
   const checkin = ref<any>(null)
   const answers = ref<Record<string, string>>({})
@@ -173,6 +183,40 @@
   const isPending = computed(() => {
     return checkin.value?.status === 'PENDING' || checkin.value?.status === 'PROCESSING'
   })
+
+  // Poll while pending
+  const { pause, resume } = useIntervalFn(
+    async () => {
+      if (isOpen.value && isPending.value) {
+        await fetchToday(true) // silent fetch
+      }
+    },
+    3000,
+    { immediate: false }
+  )
+
+  watch(isPending, (pending) => {
+    if (pending) resume()
+    else pause()
+  })
+
+  // Show manual refresh if taking too long
+  let refreshTimer: NodeJS.Timeout | null = null
+  watch(
+    () => loading.value || isPending.value,
+    (busy) => {
+      if (busy) {
+        showManualRefresh.value = false
+        if (refreshTimer) clearTimeout(refreshTimer)
+        refreshTimer = setTimeout(() => {
+          showManualRefresh.value = true
+        }, 5000)
+      } else {
+        showManualRefresh.value = false
+        if (refreshTimer) clearTimeout(refreshTimer)
+      }
+    }
+  )
 
   function isExpanded(id: string) {
     return expandedQuestions.value.has(id)
@@ -208,38 +252,34 @@
       localQuestions.value = checkin.value.questions || []
       userNotes.value = checkin.value.userNotes || ''
       useCheckinStore().currentCheckin = checkin.value
-      // Note: we don't need to manually set loading=false because fetchToday handles it
-      // but if we were stuck in "loading" state from generate(), we might.
-      // However, generate() sets loading=true then makes API call then sets checkin value.
-      // The UI shows loader based on `loading || isPending`.
-      // `isPending` checks `checkin.status`.
-      // So once `fetchToday` updates `checkin` to COMPLETED, `isPending` becomes false.
     } else if (checkin.value?.status === 'FAILED') {
       error.value = 'Generation failed'
     }
   })
 
-  async function fetchToday() {
+  async function fetchToday(silent = false) {
     try {
-      loading.value = true
+      if (!silent) loading.value = true
       error.value = null
       const data = await $fetch<any>('/api/checkin/today')
       if (data) {
         checkin.value = data
-        localQuestions.value = data.questions || []
-        userNotes.value = data.userNotes || ''
-        // Pre-fill answers if they exist
-        data.questions.forEach((q: any) => {
-          if (q.answer) answers.value[q.id] = q.answer
-        })
-      } else {
+        if (data.status === 'COMPLETED') {
+          localQuestions.value = data.questions || []
+          userNotes.value = data.userNotes || ''
+          // Pre-fill answers if they exist
+          data.questions.forEach((q: any) => {
+            if (q.answer) answers.value[q.id] = q.answer
+          })
+        }
+      } else if (!silent) {
         // Generate if not found
         await generate(false)
       }
     } catch (e: any) {
-      error.value = e.message
+      if (!silent) error.value = e.message
     } finally {
-      loading.value = false
+      if (!silent) loading.value = false
     }
   }
 
@@ -252,7 +292,11 @@
         body: { force }
       })
       checkin.value = data
-      localQuestions.value = data.questions || []
+      if (data.status === 'COMPLETED') {
+        localQuestions.value = data.questions || []
+      } else {
+        localQuestions.value = []
+      }
       userNotes.value = ''
       answers.value = {} // Reset answers on regenerate
 
@@ -300,6 +344,8 @@
     (isOpen) => {
       if (isOpen) {
         fetchToday()
+      } else {
+        pause()
       }
     }
   )
