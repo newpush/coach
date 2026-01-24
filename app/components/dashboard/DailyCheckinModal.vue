@@ -196,43 +196,23 @@
   const localQuestions = ref<any[]>([])
   const expandedQuestions = ref<Set<string>>(new Set())
 
-  // Dynamic Loading Messages
-  const loadingMessages = [
-    'Generating your personalized check-in...',
-    "Crunching the numbers on yesterday's ride...",
-    'Analyzing your heart rate variability...',
-    'Evaluating your training stress balance...',
-    'Checking if you really did those intervals...',
-    'Consulting with your digital physiologist...',
-    'Formulating the perfect questions...'
-  ]
-  const currentLoadingMessage = ref(loadingMessages[0])
-  const loadingMessageIndex = ref(0)
+  const {
+    message: currentLoadingMessage,
+    start: startMessages,
+    stop: stopMessages
+  } = useLoadingMessages('daily-checkin')
 
   const isPending = computed(() => {
     return checkin.value?.status === 'PENDING' || checkin.value?.status === 'PROCESSING'
   })
 
-  // Rotate loading messages
-  const { pause: pauseMessages, resume: resumeMessages } = useIntervalFn(
-    () => {
-      loadingMessageIndex.value = (loadingMessageIndex.value + 1) % loadingMessages.length
-      currentLoadingMessage.value = loadingMessages[loadingMessageIndex.value]
-    },
-    4000,
-    { immediate: false }
-  )
-
   watch(
     () => loading.value || isPending.value,
     (busy) => {
       if (busy) {
-        resumeMessages()
+        startMessages()
       } else {
-        pauseMessages()
-        // Reset message for next time
-        loadingMessageIndex.value = 0
-        currentLoadingMessage.value = loadingMessages[0]
+        stopMessages()
       }
     }
   )
