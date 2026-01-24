@@ -1598,7 +1598,8 @@ model DailyCheckin {
   // AI Content
   questions       Json     // Array of { id: string, text: string, reasoning: string, answer: "YES" | "NO" | null }
   userNotes       String?  @db.Text
-  
+  openingRemark   String?  @db.Text
+
   status          String   @default("PENDING") // PENDING, PROCESSING, COMPLETED, FAILED
   modelVersion    String?
   llmUsageId      String?

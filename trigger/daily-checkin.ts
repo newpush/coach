@@ -13,6 +13,7 @@ import { userReportsQueue } from './queues'
 const checkinSchema = {
   type: 'object',
   properties: {
+    openingRemark: { type: 'string' },
     questions: {
       type: 'array',
       items: {
@@ -26,10 +27,11 @@ const checkinSchema = {
       }
     }
   },
-  required: ['questions']
+  required: ['openingRemark', 'questions']
 }
 
 interface CheckinAnalysis {
+  openingRemark: string
   questions: Array<{
     id: string
     text: string
@@ -335,7 +337,8 @@ ${projectedMetricsContext}
 ${historyContext}
 
 TASK:
-Generate a set of 3 to 5 YES/NO questions to assess the athlete's readiness, mental state, and potential issues (niggles, stress, motivation) that might not be captured by the hard data.
+1. Generate a contextually relevant opening remark. It should be motivational, analytical, or friendly based on your persona and the athlete's context (upcoming events, recent performance, etc.). Keep it concise.
+2. Generate a set of 3 to 5 YES/NO questions to assess the athlete's readiness, mental state, and potential issues (niggles, stress, motivation) that might not be captured by the hard data.
 
 STRATEGY:
 1. **Contextualize:** Use the upcoming events and workouts to ask relevant forward-looking questions (e.g., "Are you mentally ready for the big climb on Saturday?").
@@ -352,6 +355,7 @@ REQUIREMENTS:
 
 OUTPUT JSON FORMAT:
 {
+  "openingRemark": "Good morning! I see you have a big climb coming up this weekend. Let's make sure you're ready.",
   "questions": [
     { "id": "q1", "text": "Are you feeling any residual soreness in your quads?", "reasoning": "You had a hard interval session yesterday." },
     ...
@@ -381,6 +385,7 @@ OUTPUT JSON FORMAT:
     // Save questions
     await dailyCheckinRepository.update(checkinId, {
       questions: analysis.questions,
+      openingRemark: analysis.openingRemark,
       status: 'COMPLETED',
       modelVersion: aiSettings.aiModelPreference,
       llmUsageId: currentLlmUsageId
