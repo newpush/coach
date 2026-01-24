@@ -7,13 +7,71 @@
       </div>
     </template>
 
-    <div class="space-y-6">
+    <div ref="chartContainer" class="space-y-6 relative">
       <!-- Loading State -->
       <div v-if="loading" class="flex items-center justify-center py-12">
         <UIcon name="i-heroicons-arrow-path" class="w-8 h-8 animate-spin text-primary" />
       </div>
 
       <template v-if="!loading && data">
+        <!-- Token Usage Chart -->
+        <div>
+          <h3 class="text-sm font-medium text-muted mb-3">Token Usage Trend</h3>
+          <div class="relative h-32">
+            <svg viewBox="0 0 300 100" class="w-full h-full" preserveAspectRatio="none">
+              <!-- Grid lines -->
+              <line
+                x1="0"
+                y1="25"
+                x2="300"
+                y2="25"
+                stroke="currentColor"
+                stroke-width="0.5"
+                class="text-gray-200 dark:text-gray-700"
+              />
+              <line
+                x1="0"
+                y1="50"
+                x2="300"
+                y2="50"
+                stroke="currentColor"
+                stroke-width="0.5"
+                class="text-gray-200 dark:text-gray-700"
+              />
+              <line
+                x1="0"
+                y1="75"
+                x2="300"
+                y2="75"
+                stroke="currentColor"
+                stroke-width="0.5"
+                class="text-gray-200 dark:text-gray-700"
+              />
+
+              <!-- Bar chart -->
+              <g v-for="(day, index) in dailyData" :key="index">
+                <rect
+                  :x="index * (300 / dailyData.length) + 5"
+                  :y="100 - (day.tokens / maxTokens) * 90"
+                  :width="300 / dailyData.length - 10"
+                  :height="(day.tokens / maxTokens) * 90"
+                  class="fill-purple-500 dark:fill-purple-400 hover:fill-purple-600 dark:hover:fill-purple-300 transition-colors cursor-pointer"
+                  opacity="0.7"
+                  @mouseenter="
+                    showTooltip($event, `${day.dateLabel}: ${formatNumber(day.tokens)} tokens`)
+                  "
+                  @mousemove="moveTooltip($event)"
+                  @mouseleave="hideTooltip"
+                />
+              </g>
+            </svg>
+          </div>
+          <div class="flex justify-between text-xs text-muted mt-2">
+            <span>{{ dailyData[0]?.dateLabel }}</span>
+            <span>{{ dailyData[dailyData.length - 1]?.dateLabel }}</span>
+          </div>
+        </div>
+
         <!-- Operations Pie Chart -->
         <div>
           <h3 class="text-sm font-medium text-muted mb-3">Operations Distribution</h3>
@@ -57,6 +115,14 @@
                   :fill="getColor(index)"
                   :opacity="0.8"
                   class="hover:opacity-100 transition-opacity cursor-pointer"
+                  @mouseenter="
+                    showTooltip(
+                      $event,
+                      `${formatOperation(segment.label)}: ${segment.value} calls (${segment.percentage}%)`
+                    )
+                  "
+                  @mousemove="moveTooltip($event)"
+                  @mouseleave="hideTooltip"
                 />
               </g>
             </svg>
@@ -67,15 +133,25 @@
         <div>
           <h3 class="text-sm font-medium text-muted mb-3">Daily Usage (Last 7 Days)</h3>
           <div class="space-y-3">
-            <div v-for="day in dailyData" :key="day.date" class="space-y-1">
+            <div v-for="day in dailyData" :key="day.date" class="space-y-1 group">
               <div class="flex items-center justify-between text-xs">
                 <span class="text-muted">{{ day.dateLabel }}</span>
                 <span class="font-medium">{{ day.calls }} calls</span>
               </div>
-              <div class="flex items-center gap-2">
+              <div
+                class="flex items-center gap-2 cursor-help"
+                @mouseenter="
+                  showTooltip(
+                    $event,
+                    `${day.dateLabel}: ${day.calls} calls, ${formatNumber(day.tokens)} tokens`
+                  )
+                "
+                @mousemove="moveTooltip($event)"
+                @mouseleave="hideTooltip"
+              >
                 <div class="flex-1 bg-gray-200 dark:bg-gray-700 rounded-full h-2 overflow-hidden">
                   <div
-                    class="h-full bg-gradient-to-r from-blue-500 to-blue-600 rounded-full transition-all"
+                    class="h-full bg-gradient-to-r from-blue-500 to-blue-600 rounded-full transition-all group-hover:from-blue-400 group-hover:to-blue-500"
                     :style="{ width: `${day.percentage}%` }"
                   />
                 </div>
@@ -84,60 +160,19 @@
             </div>
           </div>
         </div>
-
-        <!-- Token Usage Chart -->
-        <div>
-          <h3 class="text-sm font-medium text-muted mb-3">Token Usage Trend</h3>
-          <div class="relative h-32">
-            <svg viewBox="0 0 300 100" class="w-full h-full" preserveAspectRatio="none">
-              <!-- Grid lines -->
-              <line
-                x1="0"
-                y1="25"
-                x2="300"
-                y2="25"
-                stroke="currentColor"
-                stroke-width="0.5"
-                class="text-gray-200 dark:text-gray-700"
-              />
-              <line
-                x1="0"
-                y1="50"
-                x2="300"
-                y2="50"
-                stroke="currentColor"
-                stroke-width="0.5"
-                class="text-gray-200 dark:text-gray-700"
-              />
-              <line
-                x1="0"
-                y1="75"
-                x2="300"
-                y2="75"
-                stroke="currentColor"
-                stroke-width="0.5"
-                class="text-gray-200 dark:text-gray-700"
-              />
-
-              <!-- Bar chart -->
-              <g v-for="(day, index) in dailyData" :key="index">
-                <rect
-                  :x="index * (300 / dailyData.length) + 5"
-                  :y="100 - (day.tokens / maxTokens) * 90"
-                  :width="300 / dailyData.length - 10"
-                  :height="(day.tokens / maxTokens) * 90"
-                  class="fill-purple-500 dark:fill-purple-400"
-                  opacity="0.7"
-                />
-              </g>
-            </svg>
-          </div>
-          <div class="flex justify-between text-xs text-muted mt-2">
-            <span>{{ dailyData[0]?.dateLabel }}</span>
-            <span>{{ dailyData[dailyData.length - 1]?.dateLabel }}</span>
-          </div>
-        </div>
       </template>
+
+      <!-- Tooltip -->
+      <div
+        v-if="tooltip.visible"
+        class="fixed z-50 px-3 py-2 text-xs font-medium text-white bg-gray-900 rounded shadow-lg pointer-events-none transform -translate-x-1/2 -translate-y-full mb-2 whitespace-nowrap dark:bg-gray-700"
+        :style="{ left: `${tooltip.x}px`, top: `${tooltip.y - 8}px` }"
+      >
+        {{ tooltip.content }}
+        <div
+          class="absolute left-1/2 bottom-0 transform -translate-x-1/2 translate-y-1/2 border-4 border-transparent border-t-gray-900 dark:border-t-gray-700"
+        ></div>
+      </div>
     </div>
   </UCard>
 </template>
@@ -145,6 +180,30 @@
 <script setup lang="ts">
   const loading = ref(true)
   const { formatDate } = useFormat()
+  const chartContainer = ref<HTMLElement | null>(null)
+
+  // Tooltip State
+  const tooltip = reactive({
+    visible: false,
+    x: 0,
+    y: 0,
+    content: ''
+  })
+
+  function showTooltip(event: MouseEvent, content: string) {
+    tooltip.content = content
+    tooltip.visible = true
+    moveTooltip(event)
+  }
+
+  function moveTooltip(event: MouseEvent) {
+    tooltip.x = event.clientX
+    tooltip.y = event.clientY
+  }
+
+  function hideTooltip() {
+    tooltip.visible = false
+  }
 
   const { data } = useFetch('/api/analytics/llm-usage', {
     query: {
@@ -228,7 +287,13 @@
         ' '
       )
 
-      segments.push({ path, color: getColor(index) })
+      segments.push({
+        path,
+        color: getColor(index),
+        label: item.operation,
+        value: item.calls,
+        percentage: item.percentage
+      })
       currentAngle = endAngle
     })
 
