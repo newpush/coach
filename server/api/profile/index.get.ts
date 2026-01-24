@@ -19,6 +19,7 @@ defineRouteMeta({
                   type: 'object',
                   properties: {
                     name: { type: 'string', nullable: true },
+                    nickname: { type: 'string', nullable: true },
                     email: { type: 'string' },
                     ftp: { type: 'integer', nullable: true },
                     maxHr: { type: 'integer', nullable: true },
@@ -56,6 +57,7 @@ export default defineEventHandler(async (event) => {
       select: {
         id: true,
         name: true,
+        nickname: true,
         email: true,
         ftp: true,
         maxHr: true,
@@ -100,6 +102,7 @@ export default defineEventHandler(async (event) => {
       connected: true, // Assuming if we have user data we are "connected" to the app
       profile: {
         name: user.name,
+        nickname: user.nickname,
         email: user.email,
         language: user.language || 'English',
         weight: user.weight,

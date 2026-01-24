@@ -83,6 +83,7 @@
   // Profile Data
   const profile = ref<any>({
     name: user.value?.name || 'Athlete',
+    nickname: '',
     language: 'English',
     weight: 0,
     weightUnits: 'Kilograms',
