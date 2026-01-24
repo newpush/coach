@@ -26,12 +26,18 @@
         </div>
 
         <div v-else-if="localQuestions.length > 0" class="space-y-4">
-          <p
+          <div
             v-if="checkin?.openingRemark"
-            class="text-sm text-gray-600 dark:text-gray-300 italic bg-primary-50 dark:bg-primary-900/10 p-3 rounded-md border border-primary-100 dark:border-primary-800"
+            class="text-sm text-gray-700 dark:text-gray-200 bg-primary-50/50 dark:bg-primary-900/10 p-4 rounded-lg border border-primary-100 dark:border-primary-800 flex gap-3 items-start shadow-sm"
           >
-            {{ checkin.openingRemark }}
-          </p>
+            <UIcon
+              name="i-heroicons-chat-bubble-bottom-center-text"
+              class="w-6 h-6 text-primary-500 shrink-0 mt-0.5"
+            />
+            <div class="italic leading-relaxed">
+              {{ checkin.openingRemark }}
+            </div>
+          </div>
 
           <UCard
             v-for="q in localQuestions"
@@ -59,10 +65,15 @@
             <!-- Expanded Reasoning -->
             <div
               v-if="isExpanded(q.id)"
-              class="mt-2 text-xs text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-800/50 p-2 rounded"
+              class="mt-3 text-sm text-gray-600 dark:text-gray-400 bg-gray-100/50 dark:bg-gray-800/50 p-3 rounded-md flex gap-2.5 items-start border border-gray-100 dark:border-gray-800"
             >
-              <UIcon name="i-heroicons-information-circle" class="w-3 h-3 inline mr-1" />
-              {{ q.reasoning }}
+              <UIcon name="i-heroicons-light-bulb" class="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
+              <div class="flex-1 leading-relaxed">
+                <span class="font-medium text-gray-900 dark:text-gray-200 block mb-0.5">
+                  Coach's Reasoning
+                </span>
+                {{ q.reasoning }}
+              </div>
             </div>
 
             <div class="mt-3 flex justify-end" @click.stop>
