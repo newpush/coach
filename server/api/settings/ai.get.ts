@@ -18,7 +18,8 @@ defineRouteMeta({
                 aiPersona: { type: 'string' },
                 aiModelPreference: { type: 'string' },
                 aiAutoAnalyzeWorkouts: { type: 'boolean' },
-                aiAutoAnalyzeNutrition: { type: 'boolean' }
+                aiAutoAnalyzeNutrition: { type: 'boolean' },
+                aiContext: { type: 'string', nullable: true }
               }
             }
           }
@@ -45,7 +46,8 @@ export default defineEventHandler(async (event) => {
       aiPersona: true,
       aiModelPreference: true,
       aiAutoAnalyzeWorkouts: true,
-      aiAutoAnalyzeNutrition: true
+      aiAutoAnalyzeNutrition: true,
+      aiContext: true
     }
   })
 
@@ -60,6 +62,7 @@ export default defineEventHandler(async (event) => {
     aiPersona: user.aiPersona || 'Supportive',
     aiModelPreference: user.aiModelPreference || 'flash',
     aiAutoAnalyzeWorkouts: user.aiAutoAnalyzeWorkouts ?? false,
-    aiAutoAnalyzeNutrition: user.aiAutoAnalyzeNutrition ?? false
+    aiAutoAnalyzeNutrition: user.aiAutoAnalyzeNutrition ?? false,
+    aiContext: user.aiContext
   }
 })

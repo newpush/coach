@@ -179,6 +179,8 @@ Adapt your tone and style to match your persona.
 
 ${athleteContext}
 
+${aiSettings.aiContext ? `USER PROVIDED CONTEXT / ABOUT ME:\n${aiSettings.aiContext}\n` : ''}
+
 ${formattedContext}
 
 YESTERDAY'S TRAINING:

@@ -8,6 +8,21 @@
     </template>
 
     <div class="space-y-6">
+      <!-- AI Context / About Me -->
+      <div>
+        <label class="block text-sm font-medium mb-2">About Me (Context for AI)</label>
+        <p class="text-sm text-muted mb-3">
+          Share details about your injuries, experience, goals, or preferences. The AI will use this
+          to personalize your coaching.
+        </p>
+        <UTextarea
+          v-model="localSettings.aiContext"
+          :rows="4"
+          placeholder="e.g., I'm recovering from a knee injury. I prefer high cadence. I'm training for my first Ironman."
+          @update:model-value="handleChange"
+        />
+      </div>
+
       <!-- Coach Personality -->
       <div>
         <label class="block text-sm font-medium mb-2">Coach Personality</label>
@@ -88,6 +103,7 @@
       aiModelPreference: string
       aiAutoAnalyzeWorkouts: boolean
       aiAutoAnalyzeNutrition: boolean
+      aiContext?: string | null
     }
   }>()
 

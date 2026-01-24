@@ -66,6 +66,7 @@ model User {
   aiModelPreference    String?  @default("flash") // "flash" (faster, cheaper) or "pro" (higher quality, more expensive)
   aiAutoAnalyzeWorkouts Boolean @default(false) // Auto-analyze workouts on sync
   aiAutoAnalyzeNutrition Boolean @default(false) // Auto-analyze nutrition logs on sync
+  aiContext            String?  @db.Text
 
   // Athlete Profile Scores (1-10 scale, updated periodically from profile generation)
   currentFitnessScore       Int?      // Current overall fitness level
