@@ -14,6 +14,7 @@ import {
 } from '../server/utils/date'
 import { getCurrentFitnessSummary } from '../server/utils/training-stress'
 import { getUserAiSettings } from '../server/utils/ai-settings'
+import { TRAINING_BLOCK_TYPES, TRAINING_BLOCK_FOCUSES } from '../app/utils/training-constants'
 
 const trainingBlockSchema = {
   type: 'object',
@@ -128,6 +129,11 @@ export const generateTrainingBlockTask = task({
     })
 
     const userAge = calculateAge(user?.dob)
+    logger.log('[GenerateBlock] Block fetched', {
+      name: block.name,
+      durationWeeks: block.durationWeeks,
+      startDate: block.startDate
+    })
 
     // Fetch Anchored Workouts
     const anchoredWorkouts = anchorWorkoutIds?.length
@@ -204,7 +210,6 @@ ${profile.planning_context?.opportunities?.length ? `Opportunities: ${profile.pl
       )
       .join('\n')
 
-    // Calculate Explicit Calendar with strict constraints
     const weekSchedules: {
       weekNumber: number
       startDate: Date
@@ -232,17 +237,10 @@ ${profile.planning_context?.opportunities?.length ? `Opportunities: ${profile.pl
       const validDays = []
       const loopDate = new Date(weekStart)
 
-      // We iterate through the days of this "calendar week" segment
-      // and filter out any that are strictly BEFORE "Today" in the user's timezone.
-      // We use string comparison of YYYY-MM-DD to be safe and simple.
       const todayStr = formatUserDate(userLocalToday, timezone)
 
-      // Helper to avoid infinite loop safety, max 7 days
       for (let d = 0; d <= daysToSunday; d++) {
-        // Use UTC formatting for comparison to maintain stability
         const dateStr = formatDateUTC(loopDate)
-
-        // Allow today and future
         if (dateStr >= todayStr) {
           validDays.push(new Date(loopDate))
         }
@@ -259,19 +257,20 @@ ${profile.planning_context?.opportunities?.length ? `Opportunities: ${profile.pl
       // Format for Prompt
       const daysText = validDays
         .map((d) => {
-          // Keep display names local but dates stable
           const dayName = d.toLocaleDateString('en-US', { weekday: 'long', timeZone: 'UTC' })
           const dStr = formatDateUTC(d)
           return `${dayName} (${dStr})`
         })
         .join(', ')
 
-      calendarContext += `Week ${i + 1}: ${daysText || 'No valid training days remaining in this week (Skipped)'}\n`
+      calendarContext += `Week ${i + 1} (${formatDateUTC(weekStart)} to ${formatDateUTC(weekEnd)}): ${daysText || 'All days in this week are in the past. Provide focus/explanation but NO workouts.'}\n`
 
       // Next week starts next day (Monday)
       currentCursor = new Date(weekEnd)
       currentCursor.setUTCDate(currentCursor.getUTCDate() + 1)
     }
+
+    logger.log('[GenerateBlock] Calendar schedules generated', { count: weekSchedules.length })
 
     // 3. Build Prompt
     const eventsList =
@@ -284,6 +283,13 @@ ${profile.planning_context?.opportunities?.length ? `Opportunities: ${profile.pl
     // NEW: Get activity types from plan
     const allowedTypes = (block.plan as any).activityTypes || ['Ride'] // Default to Ride if missing
     const allowedTypesString = Array.isArray(allowedTypes) ? allowedTypes.join(', ') : 'Ride'
+
+    const allowedBlockTypes = TRAINING_BLOCK_TYPES.map(
+      (t) => `- ${t.value}: ${t.description}`
+    ).join('\n')
+    const allowedFocuses = TRAINING_BLOCK_FOCUSES.map((f) => `- ${f.value}: ${f.description}`).join(
+      '\n'
+    )
 
     // NEW: Get custom instructions from plan
     const customInstructions = (block.plan as any).customInstructions || ''
@@ -369,15 +375,23 @@ Generate a detailed daily training plan for each week in this block (${block.dur
 - Start each week on a Monday.
 - Provide a summary for each week explaining the focus and volume.
 - **Weekly Focus Details:**
-  - focus_key: A standardized, uppercase key (e.g., AEROBIC_ENDURANCE, TEMPO, THRESHOLD, VO2_MAX, RECOVERY, TAPER, RACE).
-  - focus_label: A friendly, descriptive title for the week (e.g., "Base Building 1", "High Intensity Interval Week").
-  - explanation: A clear "Why it works" explanation for the athlete, describing the physiological goal of the week's structure.
+  - focus_key: MUST be selected from the "ALLOWED FOCUS KEYS" list below.
+  - focus_label: A friendly, descriptive title for the week.
+
+ALLOWED FOCUS KEYS:
+${allowedFocuses}
+
+ALLOWED BLOCK TYPES:
+${allowedBlockTypes}
 
 OUTPUT FORMAT:
 Return valid JSON matching the schema provided.`
 
     // 4. Generate with Gemini
-    logger.log(`Prompting Gemini (${aiSettings.aiModelPreference})...`)
+    logger.log(`[GenerateBlock] Prompting Gemini (${aiSettings.aiModelPreference})...`, {
+      blockId,
+      userId
+    })
     const result = await generateStructuredAnalysis<any>(
       prompt,
       trainingBlockSchema,
@@ -391,162 +405,193 @@ Return valid JSON matching the schema provided.`
     )
 
     // 5. Persist Results
-    logger.log('Persisting generated plan...', { weeksCount: result.weeks.length })
+    logger.log('[GenerateBlock] AI Result received', {
+      weeksCount: result?.weeks?.length,
+      hasWeeks: !!result?.weeks,
+      firstWeekWorkouts: result?.weeks?.[0]?.workouts?.length
+    })
 
-    await prisma.$transaction(
-      async (tx) => {
-        // Clear existing generated weeks for this block to avoid duplicates if re-running
-        // First, find existing weeks to delete their workouts
-        const existingWeeks = await tx.trainingWeek.findMany({
-          where: { blockId },
-          select: { id: true }
-        })
+    if (!result.weeks || result.weeks.length === 0) {
+      logger.error('[GenerateBlock] AI returned NO weeks', { result })
+      throw new Error('AI returned no weeks for the block')
+    }
 
-        const weekIds = existingWeeks.map((w) => w.id)
+    logger.log('[GenerateBlock] Starting DB Transaction', { blockId })
 
-        if (weekIds.length > 0) {
-          // 1. Detach anchored workouts if they are currently linked to these weeks
-          if (anchorWorkoutIds?.length) {
-            await tx.plannedWorkout.updateMany({
+    try {
+      await prisma.$transaction(
+        async (tx) => {
+          // Clear existing generated weeks for this block to avoid duplicates if re-running
+          const existingWeeks = await tx.trainingWeek.findMany({
+            where: { blockId },
+            select: { id: true }
+          })
+
+          const weekIds = existingWeeks.map((w) => w.id)
+          logger.log('[GenerateBlock] Found existing weeks for cleanup', { count: weekIds.length })
+
+          if (weekIds.length > 0) {
+            // 1. Detach anchored workouts
+            const unlinkedAnchors = await tx.plannedWorkout.updateMany({
               where: {
-                id: { in: anchorWorkoutIds },
+                id: { in: anchorWorkoutIds || [] },
                 trainingWeekId: { in: weekIds }
               },
               data: { trainingWeekId: null }
             })
+            logger.log('[GenerateBlock] Unlinked anchors', { count: unlinkedAnchors.count })
+
+            // 2. Unlink User-Managed Workouts
+            const unlinkedUsers = await tx.plannedWorkout.updateMany({
+              where: {
+                trainingWeekId: { in: weekIds },
+                id: { notIn: anchorWorkoutIds || [] },
+                managedBy: 'USER'
+              },
+              data: { trainingWeekId: null }
+            })
+            logger.log('[GenerateBlock] Unlinked user workouts', { count: unlinkedUsers.count })
+
+            // 3. Delete AI-Managed Workouts
+            const deletedAIWorkouts = await tx.plannedWorkout.deleteMany({
+              where: {
+                trainingWeekId: { in: weekIds },
+                id: { notIn: anchorWorkoutIds || [] },
+                managedBy: { not: 'USER' }
+              }
+            })
+            logger.log('[GenerateBlock] Deleted AI workouts', { count: deletedAIWorkouts.count })
+
+            // 4. Delete the weeks themselves
+            const deletedWeeks = await tx.trainingWeek.deleteMany({
+              where: { blockId }
+            })
+            logger.log('[GenerateBlock] Deleted weeks', { count: deletedWeeks.count })
           }
 
-          // 2. Unlink User-Managed Workouts
-          await tx.plannedWorkout.updateMany({
-            where: {
-              trainingWeekId: { in: weekIds },
-              id: { notIn: anchorWorkoutIds || [] },
-              managedBy: 'USER'
-            },
-            data: { trainingWeekId: null }
+          // 5. Create New Weeks
+          logger.log('[GenerateBlock] Processing weeks for schedule', {
+            scheduleCount: weekSchedules.length,
+            aiWeeksCount: result.weeks.length
           })
 
-          // 3. Delete AI-Managed Workouts attached to these weeks
-          await tx.plannedWorkout.deleteMany({
-            where: {
-              trainingWeekId: { in: weekIds },
-              id: { notIn: anchorWorkoutIds || [] },
-              managedBy: { not: 'USER' }
+          for (const schedule of weekSchedules) {
+            // Find AI data for this specific week
+            const weekData = result.weeks.find((w) => Number(w.weekNumber) === schedule.weekNumber)
+
+            // Validate Focus Key
+            let focusKey = (weekData?.focus_key || '').toUpperCase()
+            const isValidKey = TRAINING_BLOCK_FOCUSES.some((f) => f.value === focusKey)
+            if (!isValidKey) {
+              // Fallback to block's primary focus
+              focusKey = block.primaryFocus.split('_WITH_RACE')[0]
             }
-          })
 
-          // 4. Delete the weeks themselves
-          await tx.trainingWeek.deleteMany({
-            where: { blockId }
-          })
-        }
+            const focusLabel = weekData?.focus_label || weekData?.focus_key || 'Training Week'
 
-        for (const weekData of result.weeks) {
-          const scheduleIndex = weekData.weekNumber - 1
-          const schedule = weekSchedules[scheduleIndex]
-
-          if (!schedule) {
-            logger.warn('AI generated extra week not in schedule', {
-              weekNumber: weekData.weekNumber
+            // Create Week
+            const createdWeek = await tx.trainingWeek.create({
+              data: {
+                blockId,
+                weekNumber: schedule.weekNumber,
+                startDate: schedule.startDate,
+                endDate: schedule.endDate,
+                focus: focusLabel,
+                focusKey: focusKey,
+                focusLabel: focusLabel,
+                explanation: weekData?.explanation || 'Weekly progression.',
+                volumeTargetMinutes: weekData?.volumeTargetMinutes || 0,
+                tssTarget:
+                  weekData?.workouts?.reduce(
+                    (acc: number, w: any) => acc + (w.tssEstimate || 0),
+                    0
+                  ) || 0,
+                isRecovery: focusKey === 'RECOVERY' || focusKey === 'TAPER'
+              }
             })
-            continue
-          }
-
-          // Create Week
-          const createdWeek = await tx.trainingWeek.create({
-            data: {
-              blockId,
-              weekNumber: weekData.weekNumber,
-              startDate: schedule.startDate,
-              endDate: schedule.endDate,
-              focus: weekData.focus_label || weekData.focus_key || 'Training Week',
-              focusKey: weekData.focus_key,
-              focusLabel: weekData.focus_label,
-              explanation: weekData.explanation,
-              volumeTargetMinutes: weekData.volumeTargetMinutes || 0,
-              tssTarget: weekData.workouts.reduce(
-                (acc: number, w: any) => acc + (w.tssEstimate || 0),
-                0
-              ),
-              isRecovery: weekData.focus?.toLowerCase().includes('recovery') || false
-            }
-          })
-
-          // Link Anchored Workouts to this week
-          if (anchorWorkoutIds?.length && anchoredWorkouts.length > 0) {
-            // Find anchors that fall within this week's schedule
-            // Use strict calendar date matching against the validDays generated for this week
-            const weekAnchors = anchoredWorkouts.filter((anchor) => {
-              const anchorDateStr = formatDateUTC(anchor.date)
-              return schedule.validDays.some((d) => formatDateUTC(d) === anchorDateStr)
+            logger.log(`[GenerateBlock] Created Week ${schedule.weekNumber}`, {
+              id: createdWeek.id,
+              hasAiData: !!weekData
             })
 
-            if (weekAnchors.length > 0) {
-              await tx.plannedWorkout.updateMany({
-                where: { id: { in: weekAnchors.map((w) => w.id) } },
-                data: { trainingWeekId: createdWeek.id }
+            if (!weekData) continue
+
+            // Link Anchored Workouts
+            if (anchorWorkoutIds?.length && anchoredWorkouts.length > 0) {
+              const weekAnchors = anchoredWorkouts.filter((anchor) => {
+                const anchorDateStr = formatDateUTC(anchor.date)
+                return schedule.validDays.some((d) => formatDateUTC(d) === anchorDateStr)
               })
+
+              if (weekAnchors.length > 0) {
+                await tx.plannedWorkout.updateMany({
+                  where: { id: { in: weekAnchors.map((w) => w.id) } },
+                  data: { trainingWeekId: createdWeek.id }
+                })
+                logger.log(
+                  `[GenerateBlock] Linked ${weekAnchors.length} anchors to Week ${schedule.weekNumber}`
+                )
+              }
+            }
+
+            // Create Workouts
+            if (weekData.workouts && Array.isArray(weekData.workouts)) {
+              const workoutsToCreate = weekData.workouts
+                .map((workout: any, index: number) => {
+                  const targetDate = schedule.validDays.find(
+                    (d) => d.getUTCDay() === workout.dayOfWeek
+                  )
+                  if (!targetDate) return null
+
+                  if (anchorWorkoutIds?.length) {
+                    const targetDateStr = formatDateUTC(targetDate)
+                    const hasAnchor = anchoredWorkouts.some(
+                      (anchor) => formatDateUTC(anchor.date) === targetDateStr
+                    )
+                    if (hasAnchor) return null
+                  }
+
+                  return {
+                    userId,
+                    trainingWeekId: createdWeek.id,
+                    date: targetDate,
+                    title: workout.title,
+                    description: workout.description,
+                    type: workout.type,
+                    durationSec: (workout.durationMinutes || 0) * 60,
+                    tss: workout.tssEstimate,
+                    workIntensity: getIntensityScore(workout.intensity),
+                    externalId: `ai-gen-${createdWeek.id}-${workout.dayOfWeek}-${index}-${Date.now()}`,
+                    category: 'WORKOUT',
+                    managedBy: 'COACH_WATTS'
+                  }
+                })
+                .filter((w: any) => w !== null)
+
+              if (workoutsToCreate.length > 0) {
+                const createdWorkouts = await tx.plannedWorkout.createMany({
+                  data: workoutsToCreate
+                })
+                logger.log(
+                  `[GenerateBlock] Created ${createdWorkouts.count} workouts for Week ${schedule.weekNumber}`
+                )
+              }
             }
           }
-
-          // Create Workouts
-          const workoutsData = weekData.workouts
-            .map((workout: any, index: number) => {
-              // Find the exact date from validDays matching this dayOfWeek
-              // Use getUTCDay() for stability with calendar dates.
-              const targetDate = schedule.validDays.find((d) => d.getUTCDay() === workout.dayOfWeek)
-
-              if (!targetDate) {
-                logger.warn('Skipping workout for invalid day (past or outside week)', {
-                  week: weekData.weekNumber,
-                  dayOfWeek: workout.dayOfWeek
-                })
-                return null
-              }
-
-              // Check for conflict with Anchor
-              // IMPORTANT: Use formatDateUTC to compare calendar days without timezone shifting
-              if (anchorWorkoutIds?.length) {
-                const targetDateStr = formatDateUTC(targetDate)
-                const hasAnchor = anchoredWorkouts.some((anchor) => {
-                  const anchorDateStr = formatDateUTC(anchor.date)
-                  return anchorDateStr === targetDateStr
-                })
-
-                if (hasAnchor) {
-                  // Log but don't warn, as this is expected
-                  return null
-                }
-              }
-
-              return {
-                userId,
-                trainingWeekId: createdWeek.id,
-                date: targetDate,
-                title: workout.title,
-                description: workout.description,
-                type: workout.type,
-                durationSec: (workout.durationMinutes || 0) * 60,
-                tss: workout.tssEstimate,
-                workIntensity: getIntensityScore(workout.intensity),
-                externalId: `ai-gen-${createdWeek.id}-${workout.dayOfWeek}-${index}-${Date.now()}`,
-                category: 'WORKOUT',
-                managedBy: 'COACH_WATTS'
-              }
-            })
-            .filter((w: any) => w !== null)
-
-          if (workoutsData.length > 0) {
-            await tx.plannedWorkout.createMany({
-              data: workoutsData
-            })
-          }
+        },
+        {
+          timeout: 40000 // Further increase timeout
         }
-      },
-      {
-        timeout: 20000 // Increase timeout to 20s to handle larger blocks/slower db
-      }
-    )
+      )
+      logger.log('[GenerateBlock] Transaction committed successfully', { blockId })
+    } catch (dbErr: any) {
+      logger.error('[GenerateBlock] DB Transaction Failed', {
+        error: dbErr.message,
+        stack: dbErr.stack,
+        blockId
+      })
+      throw dbErr
+    }
 
     return { success: true, blockId }
   }

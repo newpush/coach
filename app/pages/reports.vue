@@ -101,8 +101,8 @@
     <template #body>
       <div class="p-6 space-y-6">
         <div>
-          <h2 class="text-2xl font-bold">Your Reports</h2>
-          <p class="text-muted mt-1">AI-generated training analysis and recommendations</p>
+          <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Reports</h1>
+          <p class="text-sm text-muted mt-1">AI-generated training analysis and recommendations</p>
           <p class="text-sm text-gray-600 dark:text-gray-400 mt-2">
             Select from predefined templates or use the <strong>Custom Report</strong> option to
             configure exactly what you want to analyze.

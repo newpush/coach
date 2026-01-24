@@ -27,12 +27,8 @@
       <div class="p-3 sm:p-6 space-y-4 sm:space-y-6">
         <!-- Page Header -->
         <div>
-          <h1 class="text-3xl font-bold text-gray-900 dark:text-white tracking-tight">
-            Events Management
-          </h1>
-          <p class="text-sm font-medium text-gray-500 dark:text-gray-400 mt-1">
-            Plan your races, events, and training milestones
-          </p>
+          <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Events Management</h1>
+          <p class="text-sm text-muted mt-1">Plan your races, events, and training milestones</p>
         </div>
 
         <!-- Events List -->

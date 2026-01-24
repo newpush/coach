@@ -294,7 +294,7 @@ function calculateBlocks(startDate: Date, totalWeeks: number, strategy: string, 
 
     // Build Phase first (Intensity)
     while (buildWeeks > 0) {
-      const duration = buildWeeks >= 6 ? 4 : buildWeeks
+      const duration = buildWeeks > 6 ? 4 : buildWeeks
       blocks.push({
         order: order++,
         name: `Build Phase ${buildCount++}`,
@@ -310,7 +310,7 @@ function calculateBlocks(startDate: Date, totalWeeks: number, strategy: string, 
 
     // Base Phase second (Aerobic Specificity)
     while (baseWeeks > 0) {
-      const duration = baseWeeks >= 6 ? 4 : baseWeeks
+      const duration = baseWeeks > 6 ? 4 : baseWeeks
       blocks.push({
         order: order++,
         name: `Base Phase ${baseCount++}`,
@@ -341,7 +341,7 @@ function calculateBlocks(startDate: Date, totalWeeks: number, strategy: string, 
     let count = 1
 
     while (remainingWeeks > 0) {
-      const duration = remainingWeeks >= 6 ? 4 : remainingWeeks
+      const duration = remainingWeeks > 6 ? 4 : remainingWeeks
       blocks.push({
         order: order++,
         name: `Maintenance Phase ${count++}`,
@@ -371,12 +371,13 @@ function calculateBlocks(startDate: Date, totalWeeks: number, strategy: string, 
 
     // Base Phase
     while (baseWeeks > 0) {
-      const duration = baseWeeks >= 6 ? 4 : baseWeeks
+      // If remaining is 5 or 6, just make one block instead of a 4 and a 1/2
+      const duration = baseWeeks > 6 ? 4 : baseWeeks
       blocks.push({
         order: order++,
         name: `Base Phase ${baseCount++}`,
         type: 'BASE',
-        primaryFocus: strategy === 'POLARIZED' ? 'AEROBIC_ENDURANCE' : 'SWEET_SPOT', // Polarized is stricter Z2
+        primaryFocus: strategy === 'POLARIZED' ? 'AEROBIC_ENDURANCE' : 'SWEET_SPOT',
         startDate: new Date(currentDate),
         durationWeeks: duration,
         recoveryWeekIndex: 4
@@ -387,7 +388,7 @@ function calculateBlocks(startDate: Date, totalWeeks: number, strategy: string, 
 
     // Build Phase
     while (buildWeeks > 0) {
-      const duration = buildWeeks >= 6 ? 4 : buildWeeks
+      const duration = buildWeeks > 6 ? 4 : buildWeeks
       blocks.push({
         order: order++,
         name: `Build Phase ${buildCount++}`,

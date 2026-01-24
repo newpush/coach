@@ -94,6 +94,18 @@ export const TRAINING_BLOCK_FOCUSES = [
     description: 'Drills focused on efficiency, form, and sport-specific technical skills.'
   },
   {
+    label: 'Race Specific',
+    value: 'RACE_SPECIFIC',
+    description:
+      'High-intensity work mimicking the exact power and duration demands of your target event.'
+  },
+  {
+    label: 'Taper',
+    value: 'TAPER',
+    description:
+      'Reducing volume while maintaining intensity to shed fatigue and peak for race day.'
+  },
+  {
     label: 'Recovery',
     value: 'RECOVERY',
     description: 'Very low intensity to allow physiological adaptations and shed fatigue.'

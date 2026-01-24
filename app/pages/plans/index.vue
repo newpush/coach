@@ -6,6 +6,14 @@
 
     <template #body>
       <div class="p-3 sm:p-6 space-y-4 sm:space-y-6">
+        <!-- Page Header -->
+        <div>
+          <h1 class="text-2xl font-bold text-gray-900 dark:text-white">My Plans</h1>
+          <p class="text-sm text-muted mt-1">
+            Manage your training templates and view plan history
+          </p>
+        </div>
+
         <!-- Templates Section -->
         <div>
           <h3 class="text-lg font-semibold mb-4 flex items-center gap-2">

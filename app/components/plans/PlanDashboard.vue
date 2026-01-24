@@ -290,11 +290,13 @@
       v-if="selectedBlock"
       class="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700"
     >
+      <!-- Header -->
       <div
         class="p-3 sm:p-4 border-b border-gray-200 dark:border-gray-700 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4"
       >
         <h3 class="font-semibold text-lg">{{ selectedBlock.name }} - Overview</h3>
-        <div class="flex flex-wrap gap-2 w-full sm:w-auto">
+
+        <div v-if="selectedBlock.weeks?.length > 0" class="flex flex-wrap gap-2 w-full sm:w-auto">
           <UTooltip text="Show independent workouts not part of this plan">
             <UButton
               :icon="showIndependentWorkouts ? 'i-heroicons-eye' : 'i-heroicons-eye-slash'"
@@ -331,26 +333,170 @@
       </div>
 
       <div class="p-3 sm:p-4">
-        <div v-if="selectedWeek" class="space-y-3 sm:space-y-4">
-          <!-- Week Stats -->
+        <!-- 1. Case: Block has NO weeks (Failure or corrupted state) -->
+        <div
+          v-if="!selectedBlock.weeks || selectedBlock.weeks.length === 0"
+          class="py-12 text-center space-y-4"
+        >
+          <div
+            class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-amber-50 dark:bg-amber-900/20 text-amber-500 mb-2"
+          >
+            <UIcon name="i-heroicons-exclamation-circle" class="w-10 h-10" />
+          </div>
+          <div>
+            <h4 class="text-lg font-bold text-gray-900 dark:text-white">Empty Phase</h4>
+            <p class="text-sm text-muted max-w-xs mx-auto mt-1">
+              This phase hasn't been initialized yet. Would you like the AI to design the weekly
+              structure?
+            </p>
+          </div>
+          <UButton
+            size="lg"
+            color="primary"
+            icon="i-heroicons-sparkles"
+            :loading="generatingWorkouts"
+            @click="generateWorkoutsForBlock"
+          >
+            Initialize Phase Structure
+          </UButton>
+        </div>
+
+        <!-- 2. Case: Block has weeks, show Active Week -->
+        <div v-else-if="selectedWeek" class="space-y-3 sm:space-y-4">
+          <!-- Week Stats (Interactive Tuning) -->
           <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-4 mb-3 sm:mb-4">
-            <div class="p-3 bg-gray-50 dark:bg-gray-900 rounded-lg">
-              <div class="text-xs text-muted">Focus</div>
-              <div class="font-bold">{{ selectedWeek.focus || selectedBlock.primaryFocus }}</div>
-            </div>
-            <div class="p-3 bg-gray-50 dark:bg-gray-900 rounded-lg">
-              <div class="text-xs text-muted">Volume</div>
-              <div class="font-bold">
-                {{ Math.round((selectedWeek.volumeTargetMinutes / 60) * 10) / 10 }}h
+            <!-- 1. Focus Tuning -->
+            <UPopover :ui="{ content: 'w-64 p-4' }">
+              <div
+                class="p-3 bg-gray-50 dark:bg-gray-900 rounded-lg cursor-pointer hover:ring-1 hover:ring-primary-500/50 transition-all group"
+              >
+                <div class="flex justify-between items-center mb-0.5">
+                  <div class="text-[10px] uppercase font-bold text-muted tracking-wider">Focus</div>
+                  <UIcon
+                    name="i-heroicons-pencil"
+                    class="w-3 h-3 text-primary-500 opacity-0 group-hover:opacity-100"
+                  />
+                </div>
+                <div class="font-bold text-sm sm:text-base truncate">
+                  {{ selectedWeek.focusLabel || selectedWeek.focus || selectedBlock.primaryFocus }}
+                </div>
               </div>
-            </div>
-            <div class="p-3 bg-gray-50 dark:bg-gray-900 rounded-lg">
-              <div class="text-xs text-muted">TSS</div>
-              <div class="font-bold">{{ selectedWeek.tssTarget }}</div>
-            </div>
-            <div class="p-3 bg-gray-50 dark:bg-gray-900 rounded-lg">
-              <div class="text-xs text-muted">Type</div>
-              <div class="font-bold" :class="selectedWeek.isRecovery ? 'text-green-500' : ''">
+
+              <template #content>
+                <div class="space-y-3">
+                  <div class="font-bold text-xs uppercase tracking-widest text-muted">
+                    Change Week Focus
+                  </div>
+                  <USelect
+                    :model-value="selectedWeek.focusKey || selectedWeek.focus"
+                    :items="TRAINING_BLOCK_FOCUSES"
+                    value-key="value"
+                    size="sm"
+                    class="w-full"
+                    @update:model-value="updateWeekFocus"
+                  />
+                  <p class="text-[10px] italic text-muted leading-tight">
+                    Changing the focus will help the AI design better workouts when you next "Plan
+                    with AI".
+                  </p>
+                </div>
+              </template>
+            </UPopover>
+
+            <!-- 2. Volume Tuning -->
+            <UPopover :ui="{ content: 'w-48 p-4' }">
+              <div
+                class="p-3 bg-gray-50 dark:bg-gray-900 rounded-lg cursor-pointer hover:ring-1 hover:ring-primary-500/50 transition-all group"
+              >
+                <div class="flex justify-between items-center mb-0.5">
+                  <div class="text-[10px] uppercase font-bold text-muted tracking-wider">
+                    Volume
+                  </div>
+                  <UIcon
+                    name="i-heroicons-pencil"
+                    class="w-3 h-3 text-primary-500 opacity-0 group-hover:opacity-100"
+                  />
+                </div>
+                <div class="font-bold text-sm sm:text-base tabular-nums">
+                  {{ Math.round((selectedWeek.volumeTargetMinutes / 60) * 10) / 10 }}h
+                </div>
+              </div>
+
+              <template #content>
+                <div class="space-y-3">
+                  <div class="font-bold text-xs uppercase tracking-widest text-muted">
+                    Target Hours
+                  </div>
+                  <div class="flex items-center gap-2">
+                    <UInput
+                      :model-value="Math.round((selectedWeek.volumeTargetMinutes / 60) * 10) / 10"
+                      type="number"
+                      step="0.5"
+                      min="0"
+                      size="sm"
+                      class="flex-1"
+                      @update:model-value="(v) => updateWeekVolume(Number(v))"
+                    />
+                    <span class="text-xs font-bold text-muted">HRS</span>
+                  </div>
+                </div>
+              </template>
+            </UPopover>
+
+            <!-- 3. TSS Tuning -->
+            <UPopover :ui="{ content: 'w-48 p-4' }">
+              <div
+                class="p-3 bg-gray-50 dark:bg-gray-900 rounded-lg cursor-pointer hover:ring-1 hover:ring-primary-500/50 transition-all group"
+              >
+                <div class="flex justify-between items-center mb-0.5">
+                  <div class="text-[10px] uppercase font-bold text-muted tracking-wider">TSS</div>
+                  <UIcon
+                    name="i-heroicons-pencil"
+                    class="w-3 h-3 text-primary-500 opacity-0 group-hover:opacity-100"
+                  />
+                </div>
+                <div class="font-bold text-sm sm:text-base tabular-nums">
+                  {{ selectedWeek.tssTarget }}
+                </div>
+              </div>
+
+              <template #content>
+                <div class="space-y-3">
+                  <div class="font-bold text-xs uppercase tracking-widest text-muted">
+                    Target TSS
+                  </div>
+                  <UInput
+                    :model-value="selectedWeek.tssTarget"
+                    type="number"
+                    min="0"
+                    size="sm"
+                    class="w-full"
+                    @update:model-value="(v) => updateWeekTss(Number(v))"
+                  />
+                </div>
+              </template>
+            </UPopover>
+
+            <!-- 4. Type Tuning -->
+            <div
+              class="p-3 bg-gray-50 dark:bg-gray-900 rounded-lg cursor-pointer hover:ring-1 hover:ring-primary-500/50 transition-all group select-none"
+              @click="toggleWeekRecovery"
+            >
+              <div class="flex justify-between items-center mb-0.5">
+                <div class="text-[10px] uppercase font-bold text-muted tracking-wider">Type</div>
+                <UIcon
+                  name="i-heroicons-arrows-right-left"
+                  class="w-3 h-3 text-primary-500 opacity-0 group-hover:opacity-100"
+                />
+              </div>
+              <div
+                class="font-bold text-sm sm:text-base"
+                :class="
+                  selectedWeek.isRecovery
+                    ? 'text-green-500'
+                    : 'text-primary-600 dark:text-primary-400'
+                "
+              >
                 {{ selectedWeek.isRecovery ? 'Recovery' : 'Training' }}
               </div>
             </div>
@@ -693,6 +839,7 @@
   import WeeklyZoneSummary from '~/components/ui/WeeklyZoneSummary.vue'
   import PlanAIModal from '~/components/plans/PlanAIModal.vue'
   import PlanTimelineEditor from '~/components/plans/PlanTimelineEditor.vue'
+  import { TRAINING_BLOCK_FOCUSES } from '~/utils/training-constants'
   import {
     getWorkoutIcon,
     getWorkoutColorClass as getIconColorClass,
@@ -737,12 +884,96 @@
   const fetchingIndependent = ref(false)
 
   function onStructureSaved() {
+    console.log('[Dashboard] Structure saved, refreshing plan')
     showTimelineEditor.value = false
     emit('refresh')
   }
 
+  // Week Tuning Methods
+  async function updateWeekFocus(value: string) {
+    if (!selectedWeek.value) return
+    const focus = TRAINING_BLOCK_FOCUSES.find((f) => f.value === value)
+    if (!focus) return
+
+    try {
+      console.log('[Dashboard] Updating week focus', {
+        weekId: selectedWeek.value.id,
+        focus: value
+      })
+      await $fetch(`/api/plans/weeks/${selectedWeek.value.id}`, {
+        method: 'PATCH',
+        body: {
+          focusKey: focus.value,
+          focusLabel: focus.label,
+          isRecovery: focus.value === 'RECOVERY'
+        }
+      })
+      emit('refresh')
+      toast.add({ title: 'Week focus updated', color: 'success' })
+    } catch (e) {
+      console.error('[Dashboard] Failed to update week focus', e)
+      toast.add({ title: 'Failed to update focus', color: 'error' })
+    }
+  }
+
+  async function updateWeekVolume(hours: number) {
+    if (!selectedWeek.value) return
+    try {
+      console.log('[Dashboard] Updating week volume', { weekId: selectedWeek.value.id, hours })
+      await $fetch(`/api/plans/weeks/${selectedWeek.value.id}`, {
+        method: 'PATCH',
+        body: { volumeTargetMinutes: Math.round(hours * 60) }
+      })
+      emit('refresh')
+      toast.add({ title: 'Volume target updated', color: 'success' })
+    } catch (e) {
+      console.error('[Dashboard] Failed to update volume', e)
+      toast.add({ title: 'Failed to update volume', color: 'error' })
+    }
+  }
+
+  async function updateWeekTss(tss: number) {
+    if (!selectedWeek.value) return
+    try {
+      console.log('[Dashboard] Updating week TSS', { weekId: selectedWeek.value.id, tss })
+      await $fetch(`/api/plans/weeks/${selectedWeek.value.id}`, {
+        method: 'PATCH',
+        body: { tssTarget: tss }
+      })
+      emit('refresh')
+      toast.add({ title: 'TSS target updated', color: 'success' })
+    } catch (e) {
+      console.error('[Dashboard] Failed to update TSS', e)
+      toast.add({ title: 'Failed to update TSS', color: 'error' })
+    }
+  }
+
+  async function toggleWeekRecovery() {
+    if (!selectedWeek.value) return
+    try {
+      const newState = !selectedWeek.value.isRecovery
+      console.log('[Dashboard] Toggling week recovery state', {
+        weekId: selectedWeek.value.id,
+        isRecovery: newState
+      })
+      await $fetch(`/api/plans/weeks/${selectedWeek.value.id}`, {
+        method: 'PATCH',
+        body: { isRecovery: newState }
+      })
+      emit('refresh')
+      toast.add({
+        title: `Week set to ${newState ? 'Recovery' : 'Training'}`,
+        color: 'success'
+      })
+    } catch (e) {
+      console.error('[Dashboard] Failed to toggle recovery state', e)
+      toast.add({ title: 'Failed to update week type', color: 'error' })
+    }
+  }
+
   watch([showIndependentWorkouts, selectedWeekId], async ([show, weekId]) => {
     if (show && weekId && selectedWeek.value) {
+      console.log('[Dashboard] Fetching independent workouts for week', { weekId })
       fetchingIndependent.value = true
       try {
         const workouts = await $fetch('/api/planned-workouts', {
@@ -755,7 +986,7 @@
         })
         independentWorkouts.value = workouts
       } catch (e) {
-        console.error('Failed to fetch independent workouts', e)
+        console.error('[Dashboard] Failed to fetch independent workouts', e)
       } finally {
         fetchingIndependent.value = false
       }
@@ -777,13 +1008,18 @@
       .map((w: any) => ({
         ...w,
         isIndependent: true,
-        // Ensure syncStatus is present if missing (though API returns full object)
         syncStatus: w.syncStatus || 'LOCAL_ONLY'
       }))
 
-    return [...baseWorkouts, ...extras].sort(
+    const allVisible = [...baseWorkouts, ...extras].sort(
       (a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime()
     )
+    console.log('[Dashboard] visibleWorkouts computed', {
+      total: allVisible.length,
+      planWorkouts: baseWorkouts.length,
+      independent: extras.length
+    })
+    return allVisible
   })
 
   // Background Task Monitoring
@@ -791,7 +1027,11 @@
   const { onTaskCompleted } = useUserRunsState()
 
   // Listeners
-  onTaskCompleted('generate-training-block', async () => {
+  onTaskCompleted('generate-training-block', async (run) => {
+    console.log('[Dashboard] Task generate-training-block completed', {
+      runId: run.id,
+      status: run.status
+    })
     emit('refresh')
     generatingWorkouts.value = false
     generatingBlockId.value = null
@@ -800,26 +1040,20 @@
     // Wait for refresh to propagate, then trigger structure generation if needed
     nextTick(() => {
       if (selectedBlockId.value) {
+        console.log('[Dashboard] Auto-triggering structure generation after block refresh')
         generateAllStructureForWeek()
       }
     })
   })
 
   onTaskCompleted('generate-structured-workout', async (run) => {
+    console.log('[Dashboard] Task generate-structured-workout completed', { runId: run.id })
     emit('refresh')
     generatingStructureForWorkoutId.value = null
-    // If we were running a batch, we might want to check progress, but simplicity:
-    // If generatingAllStructures is true, we can check if all are done or just wait for all triggers.
-    // The previous logic was polling. Here we get an event per workout.
-    // We can rely on the user seeing them update or just leave generatingAllStructures true until
-    // we detect all are done (complex state tracking).
-    // For now, let's keep it simple: we don't turn off generatingAllStructures here
-    // unless we track the count.
-    // Actually, `generateAllStructureForWeek` sets it to false immediately after triggering batch in the new logic below?
-    // No, we should probably just let the UI update.
   })
 
-  onTaskCompleted('adapt-training-plan', async () => {
+  onTaskCompleted('adapt-training-plan', async (run) => {
+    console.log('[Dashboard] Task adapt-training-plan completed', { runId: run.id })
     emit('refresh')
     adapting.value = null
     toast.add({
@@ -829,7 +1063,8 @@
     })
   })
 
-  onTaskCompleted('generate-weekly-plan', async () => {
+  onTaskCompleted('generate-weekly-plan', async (run) => {
+    console.log('[Dashboard] Task generate-weekly-plan completed', { runId: run.id })
     emit('refresh')
     generatingWorkouts.value = false
     toast.add({ title: 'Plan Updated', description: 'Check the new schedule.', color: 'info' })
@@ -841,21 +1076,36 @@
     const today = getUserLocalDate()
     const todayTime = today.getTime()
 
-    return (
+    const found =
       props.plan.blocks.find((b: any) => {
         const start = new Date(b.startDate).getTime()
         const end = start + b.durationWeeks * 7 * 24 * 3600 * 1000 - 1
         return todayTime >= start && todayTime <= end
       }) || props.plan.blocks[0]
-    )
+
+    console.log('[Dashboard] currentBlock computed', { name: found?.name, id: found?.id })
+    return found
   })
 
-  const selectedBlock = computed(() =>
-    props.plan.blocks.find((b: any) => b.id === selectedBlockId.value)
-  )
-  const selectedWeek = computed(() =>
-    selectedBlock.value?.weeks.find((w: any) => w.id === selectedWeekId.value)
-  )
+  const selectedBlock = computed(() => {
+    const block = props.plan.blocks.find((b: any) => b.id === selectedBlockId.value)
+    console.log('[Dashboard] selectedBlock computed', {
+      id: selectedBlockId.value,
+      name: block?.name,
+      weeksCount: block?.weeks?.length
+    })
+    return block
+  })
+
+  const selectedWeek = computed(() => {
+    const week = selectedBlock.value?.weeks.find((w: any) => w.id === selectedWeekId.value)
+    console.log('[Dashboard] selectedWeek computed', {
+      id: selectedWeekId.value,
+      weekNumber: week?.weekNumber,
+      hasWorkouts: !!week?.workouts?.length
+    })
+    return week
+  })
 
   const totalWeeksInPlan = computed(() => {
     return props.plan.blocks.reduce((acc: number, b: any) => acc + b.durationWeeks, 0)
@@ -940,40 +1190,6 @@
     )
   }
 
-  async function publishWorkout(workout: any) {
-    if (!workout.id) return
-
-    publishingId.value = workout.id
-    try {
-      const response: any = await $fetch(`/api/workouts/planned/${workout.id}/publish`, {
-        method: 'POST'
-      })
-
-      // Update local state
-      if (response.success && response.workout) {
-        // Direct mutation of the prop object (Vue reactivity handles this)
-        workout.syncStatus = response.workout.syncStatus
-        workout.externalId = response.workout.externalId
-        workout.lastSyncedAt = response.workout.lastSyncedAt
-
-        toast.add({
-          title: isLocalWorkout(workout) ? 'Published' : 'Updated', // Check logic might be inverted here since we just updated it? No, checking response state.
-          description: response.message || 'Workout synced with Intervals.icu.',
-          color: 'success'
-        })
-      }
-    } catch (error: any) {
-      console.error('Failed to publish/sync workout:', error)
-      toast.add({
-        title: 'Sync Failed',
-        description: error.data?.message || 'Failed to sync workout with Intervals.icu',
-        color: 'error'
-      })
-    } finally {
-      publishingId.value = null
-    }
-  }
-
   function navigateToWorkout(workoutId: string) {
     navigateTo(`/workouts/planned/${workoutId}`)
   }
@@ -1027,6 +1243,10 @@
   async function linkWorkout(workout: any) {
     if (!selectedWeek.value?.id) return
     try {
+      console.log('[Dashboard] Linking workout to week', {
+        workoutId: workout.id,
+        weekId: selectedWeek.value.id
+      })
       await $fetch(`/api/workouts/planned/${workout.id}/link`, {
         method: 'POST',
         body: { trainingWeekId: selectedWeek.value.id }
@@ -1038,12 +1258,14 @@
       emit('refresh')
       toast.add({ title: 'Workout Linked', color: 'success' })
     } catch (e) {
+      console.error('[Dashboard] Link failed', e)
       toast.add({ title: 'Failed to link', color: 'error' })
     }
   }
 
   async function unlinkWorkout(workout: any) {
     try {
+      console.log('[Dashboard] Unlinking workout', { workoutId: workout.id })
       await $fetch(`/api/workouts/planned/${workout.id}/unlink`, {
         method: 'POST'
       })
@@ -1058,6 +1280,7 @@
       emit('refresh')
       toast.add({ title: 'Workout Unlinked', color: 'success' })
     } catch (e) {
+      console.error('[Dashboard] Unlink failed', e)
       toast.add({ title: 'Failed to unlink', color: 'error' })
     }
   }
@@ -1066,14 +1289,16 @@
     if (!selectedBlockId.value) return
 
     const blockId = selectedBlockId.value
+    console.log('[Dashboard] Starting generateWorkoutsForBlock', { blockId })
     generatingWorkouts.value = true
     generatingBlockId.value = blockId
 
     try {
-      await $fetch('/api/plans/generate-block', {
+      const response: any = await $fetch('/api/plans/generate-block', {
         method: 'POST',
         body: { blockId }
       })
+      console.log('[Dashboard] API response for generate-block', response)
       refreshRuns()
 
       toast.add({
@@ -1082,6 +1307,7 @@
         color: 'info'
       })
     } catch (error: any) {
+      console.error('[Dashboard] API error for generate-block', error)
       generatingWorkouts.value = false
       generatingBlockId.value = null
       toast.add({
@@ -1095,6 +1321,7 @@
   async function generateStructureForWorkout(workoutId: string) {
     generatingStructureForWorkoutId.value = workoutId
     try {
+      console.log('[Dashboard] Generating structure for workout', { workoutId })
       await $fetch(`/api/workouts/planned/${workoutId}/generate-structure`, {
         method: 'POST'
       })
@@ -1106,6 +1333,7 @@
         color: 'info'
       })
     } catch (error: any) {
+      console.error('[Dashboard] Structure generation failed', error)
       toast.add({
         title: 'Generation Failed',
         description: error.data?.message || 'Failed to generate structure',
@@ -1120,6 +1348,7 @@
 
     // Find workouts without structure
     const pendingWorkouts = visibleWorkouts.value.filter((w: any) => !w.structuredWorkout)
+    console.log('[Dashboard] generateAllStructureForWeek', { count: pendingWorkouts.length })
 
     if (pendingWorkouts.length === 0) return
 
@@ -1154,7 +1383,6 @@
       console.error('Batch generation failed', error)
       toast.add({ title: 'Batch Generation Failed', color: 'error' })
     } finally {
-      // We stop the spinner here, and let individual updates happen via WebSocket
       generatingAllStructures.value = false
     }
   }
@@ -1162,6 +1390,7 @@
   async function adaptPlan(type: string) {
     adapting.value = type
     try {
+      console.log('[Dashboard] Adapting plan', { type })
       await $fetch('/api/plans/adapt', {
         method: 'POST',
         body: {
@@ -1179,6 +1408,7 @@
 
       showAdaptModal.value = false
     } catch (error: any) {
+      console.error('[Dashboard] Adaptation failed', error)
       toast.add({
         title: 'Adaptation Failed',
         description: error.data?.message || 'Failed to trigger adaptation',
@@ -1191,11 +1421,13 @@
   async function confirmAbandon() {
     abandoning.value = true
     try {
+      console.log('[Dashboard] Abandoning plan', { id: props.plan.id })
       await $fetch(`/api/plans/${props.plan.id}/abandon`, { method: 'POST' })
       toast.add({ title: 'Plan Abandoned', color: 'success' })
       emit('refresh')
       showAbandonModal.value = false
     } catch (error: any) {
+      console.error('[Dashboard] Abandon failed', error)
       toast.add({ title: 'Failed to abandon plan', description: error.message, color: 'error' })
     } finally {
       abandoning.value = false
@@ -1210,6 +1442,10 @@
 
     savingTemplate.value = true
     try {
+      console.log('[Dashboard] Saving plan as template', {
+        id: props.plan.id,
+        name: templateName.value
+      })
       await $fetch(`/api/plans/${props.plan.id}/save-template`, {
         method: 'POST',
         body: {
@@ -1220,6 +1456,7 @@
       toast.add({ title: 'Template Saved', color: 'success' })
       showSaveTemplateModal.value = false
     } catch (error: any) {
+      console.error('[Dashboard] Save template failed', error)
       toast.add({ title: 'Failed to save template', description: error.message, color: 'error' })
     } finally {
       savingTemplate.value = false
@@ -1233,6 +1470,7 @@
     generatingWorkouts.value = true
 
     try {
+      console.log('[Dashboard] Starting generate-ai-week', { weekId: selectedWeekId.value })
       await $fetch('/api/plans/generate-ai-week', {
         method: 'POST',
         body: {
@@ -1251,7 +1489,7 @@
         color: 'success'
       })
     } catch (error: any) {
-      console.error(error)
+      console.error('[Dashboard] AI planning failed', error)
       toast.add({
         title: 'Generation Failed',
         description: error.data?.message || 'Failed to start AI planning',
@@ -1261,43 +1499,67 @@
     }
   }
 
+  async function publishWorkout(workout: any) {
+    if (!workout.id) return
+    publishingId.value = workout.id
+    try {
+      console.log('[Dashboard] Publishing workout to Intervals.icu', { id: workout.id })
+      const response: any = await $fetch(`/api/workouts/planned/${workout.id}/publish`, {
+        method: 'POST'
+      })
+      if (response.success && response.workout) {
+        workout.syncStatus = response.workout.syncStatus
+        workout.externalId = response.workout.externalId
+        workout.lastSyncedAt = response.workout.lastSyncedAt
+        toast.add({
+          title: isLocalWorkout(workout) ? 'Published' : 'Updated',
+          description: response.message || 'Workout synced with Intervals.icu.',
+          color: 'success'
+        })
+      }
+    } catch (error: any) {
+      console.error('[Dashboard] Publish failed', error)
+      toast.add({
+        title: 'Sync Failed',
+        description: error.data?.message || 'Failed to sync workout with Intervals.icu',
+        color: 'error'
+      })
+    } finally {
+      publishingId.value = null
+    }
+  }
+
   // Watchers to auto-select defaults
   watch(
     () => props.plan,
     (newPlan) => {
-      // Only auto-select if we don't have a selection already, OR if the plan ID actually changed (loaded a new plan)
-      // This prevents resetting the selection on every 'refresh' poll which updates the same plan object
+      console.log('[Dashboard] plan watcher triggered', {
+        hasPlan: !!newPlan,
+        blocksCount: newPlan?.blocks?.length
+      })
       if (newPlan && newPlan.blocks.length > 0) {
-        // Check if we are already viewing a valid block/week for this plan
-        const currentBlock = newPlan.blocks.find((b: any) => b.id === selectedBlockId.value)
+        const currentBlockObj = newPlan.blocks.find((b: any) => b.id === selectedBlockId.value)
 
-        if (currentBlock) {
-          // We are still on the same plan/block.
-          // But check if the selected week still exists (generation might have replaced weeks)
-          const weekExists = currentBlock.weeks.some((w: any) => w.id === selectedWeekId.value)
-
-          if (!weekExists && currentBlock.weeks.length > 0) {
-            // Week ID is stale (likely regenerated). Find matching week by number or date, or default to first.
+        if (currentBlockObj) {
+          const weekExists = currentBlockObj.weeks.some((w: any) => w.id === selectedWeekId.value)
+          if (!weekExists && currentBlockObj.weeks.length > 0) {
             const today = getUserLocalDate()
             const todayTime = today.getTime()
-
-            const activeWeek = currentBlock.weeks.find((w: any) => {
+            const activeWeek = currentBlockObj.weeks.find((w: any) => {
               const start = new Date(w.startDate).getTime()
               const end = new Date(w.endDate).getTime()
               return todayTime >= start && todayTime <= end
             })
-
-            selectedWeekId.value = activeWeek ? activeWeek.id : currentBlock.weeks[0].id
+            selectedWeekId.value = activeWeek ? activeWeek.id : currentBlockObj.weeks[0].id
+            console.log('[Dashboard] selectedWeekId updated (recovery)', {
+              id: selectedWeekId.value
+            })
           }
-
           return
         }
 
-        // 1. Determine Active Block
         const today = getUserLocalDate()
         const todayTime = today.getTime()
-
-        // Helper to get block range
         const getBlockRange = (b: any) => {
           const start = new Date(b.startDate).getTime()
           const end = start + b.durationWeeks * 7 * 24 * 3600 * 1000 - 1
@@ -1305,8 +1567,6 @@
         }
 
         let targetBlock = newPlan.blocks[0]
-
-        // Try to find the exact current block
         const activeBlock = newPlan.blocks.find((b: any) => {
           const { start, end } = getBlockRange(b)
           return todayTime >= start && todayTime <= end
@@ -1315,21 +1575,12 @@
         if (activeBlock) {
           targetBlock = activeBlock
         } else {
-          // No exact match. Are we before or after?
           const firstBlock = newPlan.blocks[0]
           const lastBlock = newPlan.blocks[newPlan.blocks.length - 1]
-
-          const { start: firstStart } = getBlockRange(firstBlock)
           const { end: lastEnd } = getBlockRange(lastBlock)
-
           if (todayTime > lastEnd) {
-            // Plan finished, show last block
             targetBlock = lastBlock
-          } else if (todayTime < firstStart) {
-            // Plan future, show first block
-            targetBlock = firstBlock
           } else {
-            // In a gap? Find next block
             targetBlock =
               newPlan.blocks.find((b: any) => {
                 const { end } = getBlockRange(b)
@@ -1339,8 +1590,8 @@
         }
 
         selectedBlockId.value = targetBlock.id
+        console.log('[Dashboard] selectedBlockId initial set', { id: selectedBlockId.value })
 
-        // 2. Determine Active Week within that block
         if (targetBlock.weeks.length > 0) {
           const currentWeek = targetBlock.weeks.find((w: any) => {
             const start = new Date(w.startDate).getTime()
@@ -1351,24 +1602,14 @@
           if (currentWeek) {
             selectedWeekId.value = currentWeek.id
           } else {
-            // Fallback for week
-            const firstWeek = targetBlock.weeks[0]
             const lastWeek = targetBlock.weeks[targetBlock.weeks.length - 1]
-
-            const startFirst = new Date(firstWeek.startDate).getTime()
             const endLast = new Date(lastWeek.endDate).getTime()
-
-            if (todayTime > endLast) {
-              selectedWeekId.value = lastWeek.id
-            } else {
-              selectedWeekId.value = firstWeek.id
-            }
+            selectedWeekId.value = todayTime > endLast ? lastWeek.id : targetBlock.weeks[0].id
           }
+          console.log('[Dashboard] selectedWeekId initial set', { id: selectedWeekId.value })
         }
 
-        // 3. Auto-trigger structure generation if requested
         if (props.shouldAutoGenerate) {
-          // Wait a tick for computed properties to update
           nextTick(() => {
             generateAllStructureForWeek()
             emit('generation-started')
@@ -1379,25 +1620,11 @@
     { immediate: true }
   )
 
-  // Watch specifically for the auto-generate prop to change
-  watch(
-    () => props.shouldAutoGenerate,
-    (should) => {
-      if (should) {
-        nextTick(() => {
-          generateAllStructureForWeek()
-          emit('generation-started')
-        })
-      }
-    }
-  )
-
-  // When user manually changes block, update week
   watch(selectedBlockId, (newId) => {
     if (newId) {
+      console.log('[Dashboard] block manually changed', { newId })
       const block = props.plan.blocks.find((b: any) => b.id === newId)
       if (block && block.weeks.length > 0) {
-        // Only reset if the current selected week is NOT in this block
         const weekInBlock = block.weeks.find((w: any) => w.id === selectedWeekId.value)
         if (!weekInBlock) {
           const today = getUserLocalDate()
@@ -1409,30 +1636,9 @@
             )
           })
           selectedWeekId.value = currentWeek ? currentWeek.id : block.weeks[0].id
+          console.log('[Dashboard] week reset due to block change', { id: selectedWeekId.value })
         }
       }
     }
   })
 </script>
-
-<style scoped>
-  .bg-independent-stripes {
-    background-image: repeating-linear-gradient(
-      45deg,
-      rgba(0, 0, 0, 0.02),
-      rgba(0, 0, 0, 0.02) 10px,
-      transparent 10px,
-      transparent 20px
-    );
-  }
-
-  .dark .bg-independent-stripes {
-    background-image: repeating-linear-gradient(
-      45deg,
-      rgba(255, 255, 255, 0.03),
-      rgba(255, 255, 255, 0.03) 10px,
-      transparent 10px,
-      transparent 20px
-    );
-  }
-</style>

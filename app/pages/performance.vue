@@ -31,10 +31,8 @@
       <div class="p-3 sm:p-6 space-y-6 sm:space-y-10">
         <!-- Page Header -->
         <div>
-          <h1 class="text-3xl font-bold text-gray-900 dark:text-white tracking-tight">
-            Performance Scores
-          </h1>
-          <p class="text-sm font-medium text-gray-500 dark:text-gray-400 mt-1">
+          <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Performance Scores</h1>
+          <p class="text-sm text-muted mt-1">
             Track your fitness metrics and performance trends across all training dimensions
           </p>
         </div>
