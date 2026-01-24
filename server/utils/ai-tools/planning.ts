@@ -13,6 +13,7 @@ import {
 import { tags } from '@trigger.dev/sdk/v3'
 import { plannedWorkoutRepository } from '../repositories/plannedWorkoutRepository'
 import { workoutRepository } from '../repositories/workoutRepository'
+import { planService } from '../services/planService'
 
 export const planningTools = (userId: string, timezone: string) => ({
   create_planned_workout: tool({
@@ -298,6 +299,84 @@ export const planningTools = (userId: string, timezone: string) => ({
         } catch (e2: any) {
           return { success: false, error: e2.message || 'Failed to delete workout.' }
         }
+      }
+    }
+  }),
+
+  modify_training_plan_structure: tool({
+    description:
+      'Modify the structure of the active training plan (add, remove, or resize training blocks).',
+    inputSchema: z.object({
+      plan_id: z.string(),
+      operations: z.array(
+        z.object({
+          type: z.enum(['ADD', 'UPDATE', 'DELETE']),
+          block_id: z.string().optional().describe('Required for UPDATE and DELETE'),
+          name: z.string().optional(),
+          block_type: z.enum(['PREP', 'BASE', 'BUILD', 'PEAK', 'RACE', 'TRANSITION']).optional(),
+          primary_focus: z.string().optional(),
+          duration_weeks: z.number().int().min(1).max(12).optional(),
+          order: z.number().int().optional()
+        })
+      )
+    }),
+    execute: async ({ plan_id, operations }) => {
+      // Fetch current plan structure to work with
+      const plan = await trainingPlanRepository.getById(plan_id, userId, {
+        include: { blocks: { orderBy: { order: 'asc' } } }
+      })
+
+      if (!plan) return { success: false, error: 'Plan not found' }
+
+      // Map AI operations to the replan-structure format
+      const localBlocks = JSON.parse(JSON.stringify(plan.blocks))
+
+      for (const op of operations) {
+        if (op.type === 'DELETE' && op.block_id) {
+          const idx = localBlocks.findIndex((b: any) => b.id === op.block_id)
+          if (idx !== -1) localBlocks.splice(idx, 1)
+        } else if (op.type === 'UPDATE' && op.block_id) {
+          const block = localBlocks.find((b: any) => b.id === op.block_id)
+          if (block) {
+            if (op.name) block.name = op.name
+            if (op.block_type) block.type = op.block_type
+            if (op.primary_focus) block.primaryFocus = op.primary_focus
+            if (op.duration_weeks) block.durationWeeks = op.duration_weeks
+          }
+        } else if (op.type === 'ADD') {
+          const newBlock = {
+            id: `new-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            name: op.name || 'New Phase',
+            type: op.block_type || 'BASE',
+            primaryFocus: op.primary_focus || 'AEROBIC_ENDURANCE',
+            durationWeeks: op.duration_weeks || 4,
+            order: op.order || localBlocks.length + 1
+          }
+          if (op.order !== undefined) {
+            localBlocks.splice(op.order - 1, 0, newBlock)
+          } else {
+            localBlocks.push(newBlock)
+          }
+        }
+      }
+
+      // Re-assign orders
+      const finalBlocks = localBlocks.map((b: any, idx: number) => ({
+        ...b,
+        order: idx + 1
+      }))
+
+      try {
+        await planService.replanStructure(userId, plan_id, finalBlocks)
+        return {
+          success: true,
+          message: 'Plan structure modified successfully.',
+          proposed_structure: finalBlocks
+            .map((b: any) => `${b.name} (${b.durationWeeks}w)`)
+            .join(' -> ')
+        }
+      } catch (e: any) {
+        return { success: false, error: e.message }
       }
     }
   }),
