@@ -62,6 +62,7 @@ export default defineEventHandler(async (event) => {
   }
 
   const anchorWorkoutIds = body?.anchorWorkoutIds || []
+  const startingBlockId = body?.startingBlockId
 
   // 1. Archive existing active plans
   await (prisma as any).trainingPlan.updateMany({
@@ -74,6 +75,22 @@ export default defineEventHandler(async (event) => {
       status: 'ARCHIVED'
     }
   })
+
+  // 1.5 Handle Starting Phase Selection
+  if (startingBlockId) {
+    const selectedBlock = plan.blocks.find((b: any) => b.id === startingBlockId)
+    if (selectedBlock) {
+      // Delete blocks before this one
+      await (prisma as any).trainingBlock.deleteMany({
+        where: {
+          planId: plan.id,
+          order: { lt: selectedBlock.order }
+        }
+      })
+      // Update plan start date to this block's start date
+      startDate = selectedBlock.startDate
+    }
+  }
 
   // 2. Handle Template vs Draft
   if (plan.isTemplate) {

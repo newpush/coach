@@ -10,7 +10,9 @@ const initializePlanSchema = z.object({
   endDate: z.string().datetime().optional(), // ISO string
   volumePreference: z.enum(['LOW', 'MID', 'HIGH']).default('MID'),
   volumeHours: z.number().optional(),
-  strategy: z.enum(['LINEAR', 'UNDULATING', 'BLOCK', 'POLARIZED']).default('LINEAR'),
+  strategy: z
+    .enum(['LINEAR', 'UNDULATING', 'BLOCK', 'POLARIZED', 'REVERSE', 'MAINTENANCE'])
+    .default('LINEAR'),
   preferredActivityTypes: z.array(z.string()).default(['Ride']),
   customInstructions: z.string().optional()
 })
@@ -276,6 +278,80 @@ function calculateBlocks(startDate: Date, totalWeeks: number, strategy: string, 
       durationWeeks: taperWeeks,
       recoveryWeekIndex: 2
     })
+  } else if (strategy === 'REVERSE') {
+    // Reverse Periodization: Build (Speed) -> Base (Endurance) -> Peak (Specific)
+    // Common for long-distance events (Ironman, Ultras)
+    const taperWeeks = 2
+    const trainingWeeks = totalWeeks - taperWeeks
+
+    let buildWeeks = Math.floor(trainingWeeks * 0.4)
+    let baseWeeks = trainingWeeks - buildWeeks
+    let order = 1
+    let buildCount = 1
+    let baseCount = 1
+
+    // Build Phase first (Intensity)
+    while (buildWeeks > 0) {
+      const duration = buildWeeks >= 6 ? 4 : buildWeeks
+      blocks.push({
+        order: order++,
+        name: `Build Phase ${buildCount++}`,
+        type: 'BUILD',
+        primaryFocus: buildFocus,
+        startDate: new Date(currentDate),
+        durationWeeks: duration,
+        recoveryWeekIndex: 4
+      })
+      buildWeeks -= duration
+      currentDate.setUTCDate(currentDate.getUTCDate() + duration * 7)
+    }
+
+    // Base Phase second (Aerobic Specificity)
+    while (baseWeeks > 0) {
+      const duration = baseWeeks >= 6 ? 4 : baseWeeks
+      blocks.push({
+        order: order++,
+        name: `Base Phase ${baseCount++}`,
+        type: 'BASE',
+        primaryFocus: 'AEROBIC_ENDURANCE',
+        startDate: new Date(currentDate),
+        durationWeeks: duration,
+        recoveryWeekIndex: 4
+      })
+      baseWeeks -= duration
+      currentDate.setUTCDate(currentDate.getUTCDate() + duration * 7)
+    }
+
+    // Peak/Taper
+    blocks.push({
+      order: order++,
+      name: 'Peak & Taper',
+      type: 'PEAK',
+      primaryFocus: peakFocus,
+      startDate: new Date(currentDate),
+      durationWeeks: taperWeeks,
+      recoveryWeekIndex: 2
+    })
+  } else if (strategy === 'MAINTENANCE') {
+    // Maintenance: Continuous Base/Tempo load, no tapering
+    let remainingWeeks = totalWeeks
+    let order = 1
+    let count = 1
+
+    while (remainingWeeks > 0) {
+      const duration = remainingWeeks >= 6 ? 4 : remainingWeeks
+      blocks.push({
+        order: order++,
+        name: `Maintenance Phase ${count++}`,
+        type: 'BASE',
+        primaryFocus: 'SWEET_SPOT',
+        startDate: new Date(currentDate),
+        durationWeeks: duration,
+        recoveryWeekIndex: 4
+      })
+      remainingWeeks -= duration
+      currentDate.setUTCDate(currentDate.getUTCDate() + duration * 7)
+    }
   } else {
     // Default: LINEAR / POLARIZED
     // (Polarized structure is same as Linear, just intensity distribution differs in execution)
@@ -288,13 +364,15 @@ function calculateBlocks(startDate: Date, totalWeeks: number, strategy: string, 
     let buildWeeks = trainingWeeks - baseWeeks
 
     let order = 1
+    let baseCount = 1
+    let buildCount = 1
 
     // Base Phase
     while (baseWeeks > 0) {
       const duration = baseWeeks >= 6 ? 4 : baseWeeks
       blocks.push({
         order: order++,
-        name: `Base Phase ${order}`,
+        name: `Base Phase ${baseCount++}`,
         type: 'BASE',
         primaryFocus: strategy === 'POLARIZED' ? 'AEROBIC_ENDURANCE' : 'SWEET_SPOT', // Polarized is stricter Z2
         startDate: new Date(currentDate),
@@ -310,7 +388,7 @@ function calculateBlocks(startDate: Date, totalWeeks: number, strategy: string, 
       const duration = buildWeeks >= 6 ? 4 : buildWeeks
       blocks.push({
         order: order++,
-        name: `Build Phase ${order - blocks.length}`,
+        name: `Build Phase ${buildCount++}`,
         type: 'BUILD',
         primaryFocus: buildFocus,
         startDate: new Date(currentDate),
@@ -331,6 +409,20 @@ function calculateBlocks(startDate: Date, totalWeeks: number, strategy: string, 
       durationWeeks: taperWeeks,
       recoveryWeekIndex: 2
     })
+  }
+
+  // 2.5 Clean up names: if only one block of a certain name exists, remove the number
+  const nameCounts: Record<string, number> = {}
+  for (const b of blocks) {
+    const baseName = b.name.replace(/ \d+$/, '')
+    nameCounts[baseName] = (nameCounts[baseName] || 0) + 1
+  }
+
+  for (const b of blocks) {
+    const baseName = b.name.replace(/ \d+$/, '')
+    if (nameCounts[baseName] === 1) {
+      b.name = baseName
+    }
   }
 
   // 3. Tag blocks with events

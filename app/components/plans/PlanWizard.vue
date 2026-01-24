@@ -4,7 +4,7 @@
     <div class="flex-1 overflow-y-auto px-1 py-2 space-y-6">
       <!-- Progress Indicator -->
       <div
-        v-if="step <= 4"
+        v-if="step <= 5"
         class="flex items-center justify-center gap-2 mb-4 overflow-x-auto pb-2"
       >
         <!-- Step 1 -->
@@ -59,7 +59,7 @@
           />
         </div>
 
-        <!-- Step 3 -->
+        <!-- Step 3 (NEW) -->
         <div class="flex items-center flex-shrink-0">
           <div
             class="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold transition-colors"
@@ -73,7 +73,7 @@
             class="text-xs font-medium ml-2"
             :class="step >= 3 ? 'text-primary' : 'text-gray-500'"
           >
-            Schedule
+            Phases
           </div>
         </div>
         <div
@@ -99,7 +99,7 @@
             class="text-xs font-medium ml-2"
             :class="step >= 4 ? 'text-primary' : 'text-gray-500'"
           >
-            Details
+            Schedule
           </div>
         </div>
         <div
@@ -124,6 +124,32 @@
           <div
             class="text-xs font-medium ml-2"
             :class="step >= 5 ? 'text-primary' : 'text-gray-500'"
+          >
+            Details
+          </div>
+        </div>
+        <div
+          class="w-8 sm:w-12 h-1 bg-gray-200 dark:bg-gray-800 rounded-full mx-2 overflow-hidden flex-shrink-0"
+        >
+          <div
+            class="h-full bg-primary transition-all duration-300"
+            :style="{ width: step >= 6 ? '100%' : '0%' }"
+          />
+        </div>
+
+        <!-- Step 6 -->
+        <div class="flex items-center flex-shrink-0">
+          <div
+            class="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold transition-colors"
+            :class="
+              step >= 6 ? 'bg-primary text-white' : 'bg-gray-200 dark:bg-gray-800 text-gray-500'
+            "
+          >
+            6
+          </div>
+          <div
+            class="text-xs font-medium ml-2"
+            :class="step >= 6 ? 'text-primary' : 'text-gray-500'"
           >
             Review
           </div>
@@ -322,6 +348,22 @@
                 >
                   <path d="M0 10 Q25 0 50 10 T100 10" stroke-width="2" />
                 </svg>
+                <svg
+                  v-else-if="strat.value === 'REVERSE'"
+                  viewBox="0 0 100 20"
+                  class="w-full h-full stroke-current text-primary"
+                  fill="none"
+                >
+                  <path d="M0 0 L20 4 L40 8 L60 12 L80 15 L100 18" stroke-width="2" />
+                </svg>
+                <svg
+                  v-else-if="strat.value === 'MAINTENANCE'"
+                  viewBox="0 0 100 20"
+                  class="w-full h-full stroke-current text-primary"
+                  fill="none"
+                >
+                  <path d="M0 10 L100 10" stroke-width="2" />
+                </svg>
               </div>
 
               <div class="text-xs text-muted leading-tight">{{ strat.description }}</div>
@@ -378,11 +420,75 @@
         </div>
       </div>
 
-      <!-- Step 3: Schedule & Existing Workouts -->
+      <!-- Step 3: Phase Selection -->
       <div v-else-if="step === 3" class="space-y-6">
         <div class="flex items-center gap-3 mb-2">
           <UButton icon="i-heroicons-arrow-left" variant="ghost" size="sm" @click="step = 2" />
-          <h3 class="text-xl font-semibold">Step 3: Review Schedule</h3>
+          <h3 class="text-xl font-semibold">Step 3: Select Starting Phase</h3>
+        </div>
+
+        <div v-if="generatedPlan" class="space-y-6">
+          <p class="text-sm text-muted">
+            Based on your timeline, we've designed these training phases. You can choose to start
+            from any phase if you're already in mid-season form.
+          </p>
+
+          <div class="space-y-4">
+            <button
+              v-for="block in generatedPlan.blocks"
+              :key="block.id"
+              class="w-full border-2 rounded-lg p-4 flex flex-col sm:flex-row gap-4 items-start sm:items-center transition-all text-left"
+              :class="
+                startingBlockId === block.id
+                  ? 'border-primary bg-primary/5 dark:bg-primary/10 ring-1 ring-primary'
+                  : 'border-gray-200 dark:border-gray-800 hover:border-primary/50'
+              "
+              @click="startingBlockId = block.id"
+            >
+              <div class="flex items-center gap-3 w-full">
+                <div
+                  class="w-6 h-6 rounded-full border-2 flex items-center justify-center flex-shrink-0"
+                  :class="
+                    startingBlockId === block.id
+                      ? 'border-primary bg-primary'
+                      : 'border-gray-300 dark:border-gray-600'
+                  "
+                >
+                  <div v-if="startingBlockId === block.id" class="w-2 h-2 rounded-full bg-white" />
+                </div>
+                <div class="flex-1 min-w-0">
+                  <div class="flex justify-between items-center">
+                    <h4
+                      class="font-bold truncate"
+                      :class="startingBlockId === block.id ? 'text-primary' : ''"
+                    >
+                      {{ block.name.split('[')[0].trim() }}
+                    </h4>
+                    <UBadge size="xs" color="neutral" variant="soft">{{ block.type }}</UBadge>
+                  </div>
+                  <div class="text-xs text-muted mt-1">{{ getBlockDescription(block.type) }}</div>
+                  <div class="flex items-center gap-2 mt-2">
+                    <span
+                      class="text-xs font-medium px-2 py-0.5 rounded bg-gray-100 dark:bg-gray-800"
+                    >
+                      {{ block.durationWeeks }} Weeks
+                    </span>
+                    <span class="text-xs text-muted">
+                      Starts: {{ formatDate(block.startDate, 'MMM d') }}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Step 4: Schedule & Existing Workouts -->
+      <div v-else-if="step === 4" class="space-y-6">
+        <div class="flex items-center gap-3 mb-2">
+          <UButton icon="i-heroicons-arrow-left" variant="ghost" size="sm" @click="step = 3" />
+          <h3 class="text-xl font-semibold">Step 4: Review Schedule</h3>
         </div>
 
         <div class="space-y-4">
@@ -473,11 +579,11 @@
         </div>
       </div>
 
-      <!-- Step 4: Custom Instructions -->
-      <div v-else-if="step === 4" class="space-y-6">
+      <!-- Step 5: Custom Instructions -->
+      <div v-else-if="step === 5" class="space-y-6">
         <div class="flex items-center gap-3 mb-2">
-          <UButton icon="i-heroicons-arrow-left" variant="ghost" size="sm" @click="step = 3" />
-          <h3 class="text-xl font-semibold">Step 4: Custom Details</h3>
+          <UButton icon="i-heroicons-arrow-left" variant="ghost" size="sm" @click="step = 4" />
+          <h3 class="text-xl font-semibold">Step 5: Custom Details</h3>
         </div>
 
         <div class="space-y-4">
@@ -505,10 +611,11 @@
         </div>
       </div>
 
-      <!-- Step 5: Plan Preview (Blocks) -->
-      <div v-else-if="step === 5" class="space-y-6">
+      <!-- Step 6: Final Review -->
+      <div v-else-if="step === 6" class="space-y-6">
         <div class="flex items-center gap-3 mb-2">
-          <h3 class="text-xl font-semibold">Step 5: Review Your Plan</h3>
+          <UButton icon="i-heroicons-arrow-left" variant="ghost" size="sm" @click="step = 5" />
+          <h3 class="text-xl font-semibold">Step 6: Review Your Plan</h3>
         </div>
 
         <div v-if="generatedPlan" class="space-y-6">
@@ -517,8 +624,9 @@
           >
             We've designed a <strong>{{ generatedPlan.strategy }}</strong> plan focusing on your
             goal <strong>{{ selectedGoal.title }}</strong
-            >. It consists of {{ generatedPlan.blocks.length }} training blocks over
-            {{ totalWeeks }} weeks.
+            >. It consists of {{ filteredBlocks.length }} training blocks starting from
+            <strong>{{ selectedBlock?.name.split('[')[0].trim() }}</strong
+            >.
           </div>
 
           <!-- Add a note about background generation -->
@@ -535,7 +643,7 @@
           <!-- Block Timeline Visualization -->
           <div class="space-y-4">
             <div
-              v-for="block in generatedPlan.blocks"
+              v-for="block in filteredBlocks"
               :key="block.order"
               class="border border-gray-200 dark:border-gray-700 rounded-lg p-4 flex flex-col sm:flex-row gap-4 items-start sm:items-center"
             >
@@ -606,18 +714,6 @@
       </template>
 
       <template v-else-if="step === 2">
-        <UButton size="xl" color="primary" icon="i-heroicons-arrow-right" @click="step = 3">
-          Next: Schedule Review
-        </UButton>
-      </template>
-
-      <template v-else-if="step === 3">
-        <UButton size="xl" color="primary" icon="i-heroicons-arrow-right" @click="step = 4">
-          Next: Custom Details
-        </UButton>
-      </template>
-
-      <template v-else-if="step === 4">
         <UButton
           size="xl"
           color="primary"
@@ -626,12 +722,30 @@
           :disabled="selectedActivityTypes.length === 0"
           @click="initializePlan"
         >
-          Generate Plan Preview
+          Generate Phases
+        </UButton>
+      </template>
+
+      <template v-else-if="step === 3">
+        <UButton size="xl" color="primary" icon="i-heroicons-arrow-right" @click="step = 4">
+          Next: Schedule Review
+        </UButton>
+      </template>
+
+      <template v-else-if="step === 4">
+        <UButton size="xl" color="primary" icon="i-heroicons-arrow-right" @click="step = 5">
+          Next: Custom Details
         </UButton>
       </template>
 
       <template v-else-if="step === 5">
-        <UButton variant="ghost" @click="step = 4">Back</UButton>
+        <UButton size="xl" color="primary" icon="i-heroicons-arrow-right" @click="step = 6">
+          Review Plan
+        </UButton>
+      </template>
+
+      <template v-else-if="step === 6">
+        <UButton variant="ghost" @click="step = 5">Back</UButton>
         <UButton
           size="xl"
           color="success"
@@ -681,13 +795,28 @@
 
   const selectedActivityTypes = ref<string[]>(['Ride'])
   const availableActivityTypes = [
-    { value: 'Ride', label: 'Cycling', icon: 'i-heroicons-bolt' }, // Using bolt as simplified "power" icon or fallback
-    { value: 'Run', label: 'Running', icon: 'i-heroicons-fire' }, // Using fire as cardio/run icon
-    { value: 'Swim', label: 'Swimming', icon: 'i-material-symbols-water-drop' }, // Drop as water
-    { value: 'Gym', label: 'Strength', icon: 'i-heroicons-trophy' } // Trophy or similar for strength
+    { value: 'Ride', label: 'Cycling', icon: 'i-heroicons-bolt' },
+    { value: 'Run', label: 'Running', icon: 'i-heroicons-fire' },
+    { value: 'Swim', label: 'Swimming', icon: 'i-material-symbols-water-drop' },
+    { value: 'Gym', label: 'Strength', icon: 'i-heroicons-trophy' }
   ]
 
-  // Step 3 State
+  // Step 3 State (NEW)
+  const startingBlockId = ref<string | null>(null)
+  const selectedBlock = computed(() => {
+    if (!generatedPlan.value?.blocks) return null
+    return (
+      generatedPlan.value.blocks.find((b: any) => b.id === startingBlockId.value) ||
+      generatedPlan.value.blocks[0]
+    )
+  })
+
+  const filteredBlocks = computed(() => {
+    if (!generatedPlan.value?.blocks || !selectedBlock.value) return []
+    return generatedPlan.value.blocks.filter((b: any) => b.order >= selectedBlock.value.order)
+  })
+
+  // Step 4 State
   const customInstructions = ref('')
   const initializing = ref(false)
   const anchorWorkoutIds = ref<string[]>([])
@@ -697,30 +826,29 @@
   async function fetchIndependentWorkouts() {
     loadingWorkouts.value = true
     try {
-      // Determine range
-      // startDate.value is YYYY-MM-DD. Treat as UTC date for query consistency with DB.
-      if (!startDate.value) return
+      // Use selected block start date or plan start date
+      const startD = selectedBlock.value?.startDate || startDate.value
+      if (!startD) return
 
-      const start = new Date(startDate.value)
+      const start = new Date(startD)
       let end = new Date(start)
 
       if (isEventBased.value && endDate.value) {
         end = new Date(endDate.value)
       } else {
-        end.setDate(end.getDate() + durationWeeks.value * 7)
+        // Use filtered duration
+        const weeks = filteredBlocks.value.reduce((acc, b) => acc + b.durationWeeks, 0)
+        end.setDate(end.getDate() + weeks * 7)
       }
 
       const workouts: any[] = await $fetch('/api/planned-workouts', {
         query: {
           startDate: start.toISOString(),
           endDate: end.toISOString(),
-          // Fetch ALL workouts (including those in current plan) so user can carry them over
-          // independentOnly: 'true',
           limit: 100
         }
       })
       independentWorkouts.value = workouts
-      // Default select all? Or none? Let's select all by default as user likely wants to keep them if they added them manually.
       anchorWorkoutIds.value = workouts.map((w) => w.id)
     } catch (e) {
       console.error('Failed to fetch independent workouts', e)
@@ -729,14 +857,14 @@
     }
   }
 
-  // Watch step to fetch workouts when entering Step 3
+  // Watch step to fetch workouts when entering Step 4
   watch(step, (newStep) => {
-    if (newStep === 3) {
+    if (newStep === 4) {
       fetchIndependentWorkouts()
     }
   })
 
-  // Step 4 State
+  // Step 6 State
   const generatedPlan = ref<any>(null)
   const activating = ref(false)
 
@@ -748,12 +876,22 @@
       value: 'UNDULATING',
       label: 'Undulating',
       description: 'Varied daily focus. Prevents plateaus.'
+    },
+    {
+      value: 'REVERSE',
+      label: 'Reverse',
+      description: 'Intense first, then long. Ideal for Ironman/Ultras.'
+    },
+    {
+      value: 'MAINTENANCE',
+      label: 'Maintenance',
+      description: 'Steady load, no peak. Stay fit between goals.'
     }
   ]
 
   const totalWeeks = computed(() => {
-    if (!generatedPlan.value?.blocks) return 0
-    return generatedPlan.value.blocks.reduce((acc: number, b: any) => acc + b.durationWeeks, 0)
+    if (!filteredBlocks.value) return 0
+    return filteredBlocks.value.reduce((acc: number, b: any) => acc + b.durationWeeks, 0)
   })
 
   // Methods
@@ -899,8 +1037,8 @@
           goalId: selectedGoal.value.id,
           startDate: new Date(startDate.value + 'T00:00:00').toISOString(),
           endDate: finalEndDate ? new Date(finalEndDate).toISOString() : undefined,
-          volumePreference: volumeBucket, // Keeping for backward compat if needed
-          volumeHours: volumeHours.value, // New precise value
+          volumePreference: volumeBucket,
+          volumeHours: volumeHours.value,
           strategy: strategy.value,
           preferredActivityTypes: selectedActivityTypes.value,
           customInstructions: customInstructions.value
@@ -908,7 +1046,8 @@
       })
 
       generatedPlan.value = response.plan
-      step.value = 5
+      startingBlockId.value = response.plan.blocks[0]?.id
+      step.value = 3
     } catch (error: any) {
       toast.add({
         title: 'Failed to generate plan',
@@ -928,7 +1067,8 @@
       await $fetch(`/api/plans/${generatedPlan.value.id}/activate`, {
         method: 'POST',
         body: {
-          startDate: generatedPlan.value.startDate, // Ensure start date is respected
+          startDate: selectedBlock.value?.startDate || generatedPlan.value.startDate,
+          startingBlockId: startingBlockId.value,
           anchorWorkoutIds: anchorWorkoutIds.value
         }
       })
