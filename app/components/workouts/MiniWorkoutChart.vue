@@ -5,8 +5,27 @@
       :key="index"
       class="rounded-xs"
       :style="getStepStyle(step)"
-      :title="`${step.name}: ${formatDuration(step.durationSeconds || step.duration || 0)}`"
+      @mouseenter="
+        showTooltip(
+          $event,
+          `${step.name}: ${formatDuration(step.durationSeconds || step.duration || 0)}`
+        )
+      "
+      @mousemove="moveTooltip($event)"
+      @mouseleave="hideTooltip"
     />
+
+    <!-- Tooltip -->
+    <div
+      v-if="tooltip.visible"
+      class="fixed z-50 px-3 py-2 text-xs font-medium text-white bg-gray-900 rounded shadow-lg pointer-events-none transform -translate-x-1/2 -translate-y-full mb-2 whitespace-nowrap dark:bg-gray-700"
+      :style="{ left: `${tooltip.x}px`, top: `${tooltip.y - 8}px` }"
+    >
+      {{ tooltip.content }}
+      <div
+        class="absolute left-1/2 bottom-0 transform -translate-x-1/2 translate-y-1/2 border-4 border-transparent border-t-gray-900 dark:border-t-gray-700"
+      ></div>
+    </div>
   </div>
 </template>
 
@@ -14,6 +33,29 @@
   const props = defineProps<{
     workout: any // structuredWorkout JSON
   }>()
+
+  // Tooltip State
+  const tooltip = reactive({
+    visible: false,
+    x: 0,
+    y: 0,
+    content: ''
+  })
+
+  function showTooltip(event: MouseEvent, content: string) {
+    tooltip.content = content
+    tooltip.visible = true
+    moveTooltip(event)
+  }
+
+  function moveTooltip(event: MouseEvent) {
+    tooltip.x = event.clientX
+    tooltip.y = event.clientY
+  }
+
+  function hideTooltip() {
+    tooltip.visible = false
+  }
 
   const steps = computed(() => {
     if (!props.workout?.steps || props.workout.steps.length === 0) return []

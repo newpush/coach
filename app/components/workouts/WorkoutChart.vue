@@ -263,7 +263,9 @@
               width: `${(zone.duration / totalDuration) * 100}%`,
               backgroundColor: zone.color
             }"
-            :title="`${zone.name}: ${formatDuration(zone.duration)}`"
+            @mouseenter="showZoneTooltip($event, `${zone.name}: ${formatDuration(zone.duration)}`)"
+            @mousemove="moveZoneTooltip($event)"
+            @mouseleave="hideZoneTooltip"
           />
         </div>
 
@@ -310,6 +312,18 @@
           <div class="text-lg font-bold">{{ Math.round(avgPower * userFtp) }}W</div>
         </div>
       </div>
+
+      <!-- Zone Tooltip -->
+      <div
+        v-if="zoneTooltip.visible"
+        class="fixed z-50 px-3 py-2 text-xs font-medium text-white bg-gray-900 rounded shadow-lg pointer-events-none transform -translate-x-1/2 -translate-y-full mb-2 whitespace-nowrap dark:bg-gray-700"
+        :style="{ left: `${zoneTooltip.x}px`, top: `${zoneTooltip.y - 8}px` }"
+      >
+        {{ zoneTooltip.content }}
+        <div
+          class="absolute left-1/2 bottom-0 transform -translate-x-1/2 translate-y-1/2 border-4 border-transparent border-t-gray-900 dark:border-t-gray-700"
+        ></div>
+      </div>
     </div>
   </div>
 </template>
@@ -323,6 +337,29 @@
   }>()
 
   const hoveredStep = ref<any>(null)
+
+  // Zone Tooltip State
+  const zoneTooltip = reactive({
+    visible: false,
+    x: 0,
+    y: 0,
+    content: ''
+  })
+
+  function showZoneTooltip(event: MouseEvent, content: string) {
+    zoneTooltip.content = content
+    zoneTooltip.visible = true
+    moveZoneTooltip(event)
+  }
+
+  function moveZoneTooltip(event: MouseEvent) {
+    zoneTooltip.x = event.clientX
+    zoneTooltip.y = event.clientY
+  }
+
+  function hideZoneTooltip() {
+    zoneTooltip.visible = false
+  }
 
   const totalDuration = computed(() => {
     if (!props.workout?.steps) return 0
