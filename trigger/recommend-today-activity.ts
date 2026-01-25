@@ -627,8 +627,15 @@ TODAY'S PLANNED WORKOUT(S):
 ${
   plannedWorkouts.length > 0
     ? plannedWorkouts
-        .map(
-          (pw, i) => `
+        .map((pw, i) => {
+          if (pw.type === 'Rest') {
+            return `
+**IMPORTANT: Today is a planned REST DAY.**
+- Title: ${pw.title}
+- Type: ${pw.type}
+- Note: Reinforce the importance of recovery unless recovery metrics and user feedback are exceptionally positive and suggest light activity.`
+          }
+          return `
 WORKOUT ${i + 1}${i === 0 ? ' (Primary)' : ''}:
 - Title: ${pw.title}
 - Duration: ${pw.durationSec ? Math.round(pw.durationSec / 60) : 'Unknown'} minutes
@@ -636,7 +643,7 @@ WORKOUT ${i + 1}${i === 0 ? ' (Primary)' : ''}:
 - Type: ${pw.type || 'Unknown'}
 - Description: ${pw.description || 'None'}
 `
-        )
+        })
         .join('\n')
     : 'No workout planned for today'
 }

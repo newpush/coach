@@ -735,7 +735,6 @@ Maintain your **${aiSettings.aiPersona}** persona throughout the plan's reasonin
 
       // Insert new workouts from the generated plan
       const workoutsToCreate = (plan as any).days
-        .filter((d: any) => d.workoutType !== 'Rest')
         // Filter out any days that match an anchored workout date to avoid duplicates if AI ignored instruction
         .filter((d: any) => {
           if (!anchorWorkoutIds?.length) return true
@@ -809,9 +808,9 @@ Maintain your **${aiSettings.aiPersona}** persona throughout the plan's reasonin
             // If it still does, we map Active Recovery to a light Ride or Run based on user profile would be better,
             // but for now let's map to "Workout" as a fallback so it doesn't crash, but log it.
             type: d.workoutType === 'Gym' ? 'WeightTraining' : d.workoutType,
-            durationSec: (d.durationMinutes || 0) * 60,
+            durationSec: d.workoutType === 'Rest' ? 0 : (d.durationMinutes || 0) * 60,
             distanceMeters: d.distanceMeters,
-            tss: d.targetTSS,
+            tss: d.workoutType === 'Rest' ? 0 : d.targetTSS,
             targetArea: d.targetArea,
             workIntensity:
               d.intensity === 'recovery'

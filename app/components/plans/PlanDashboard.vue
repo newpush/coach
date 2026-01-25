@@ -628,16 +628,19 @@
                 <tr
                   v-for="workout in visibleWorkouts"
                   :key="workout.id"
-                  class="hover:bg-gray-50 dark:hover:bg-gray-800/50 cursor-pointer transition-colors group"
-                  draggable="true"
+                  class="transition-colors group"
                   :class="{
+                    'hover:bg-gray-50 dark:hover:bg-gray-800/50 cursor-pointer':
+                      workout.type !== 'Rest',
+                    'text-gray-400 dark:text-gray-500 italic': workout.type === 'Rest',
                     'opacity-50': draggingId === workout.id,
                     'bg-independent-stripes': workout.isIndependent
                   }"
+                  :draggable="workout.type !== 'Rest'"
                   @dragstart="onDragStart($event, workout)"
                   @dragover.prevent
                   @drop="onDrop($event, workout)"
-                  @click="navigateToWorkout(workout.id)"
+                  @click="workout.type !== 'Rest' && navigateToWorkout(workout.id)"
                 >
                   <td class="pl-2 text-center cursor-move text-gray-300 group-hover:text-gray-500">
                     <UTooltip v-if="workout.isIndependent" text="Link to Plan">
@@ -716,7 +719,7 @@
                         :workout="workout.structuredWorkout"
                       />
                       <UButton
-                        v-else
+                        v-else-if="workout.type !== 'Rest'"
                         size="xs"
                         color="neutral"
                         variant="ghost"
@@ -765,9 +768,14 @@
             <div
               v-for="workout in visibleWorkouts"
               :key="workout.id"
-              class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-3 cursor-pointer active:bg-gray-50 dark:active:bg-gray-700 w-full"
-              :class="{ 'bg-independent-stripes border-dashed': workout.isIndependent }"
-              @click="navigateToWorkout(workout.id)"
+              class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-3 w-full"
+              :class="{
+                'bg-independent-stripes border-dashed': workout.isIndependent,
+                'cursor-pointer active:bg-gray-50 dark:active:bg-gray-700':
+                  workout.type !== 'Rest',
+                'text-gray-400 dark:text-gray-500 italic': workout.type === 'Rest'
+              }"
+              @click="workout.type !== 'Rest' && navigateToWorkout(workout.id)"
             >
               <div class="flex items-start gap-3">
                 <!-- Sport Icon & Color Strip -->
