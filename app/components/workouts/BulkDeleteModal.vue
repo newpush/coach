@@ -9,30 +9,30 @@
           </p>
 
           <div class="grid grid-cols-2 gap-4">
-            <UFormGroup label="Start Date">
+            <UFormField label="Start Date">
               <UInput v-model="filters.startDate" type="date" />
-            </UFormGroup>
-            <UFormGroup label="End Date">
+            </UFormField>
+            <UFormField label="End Date">
               <UInput v-model="filters.endDate" type="date" />
-            </UFormGroup>
+            </UFormField>
           </div>
 
-          <UFormGroup label="Source">
+          <UFormField label="Source">
             <USelectMenu
               v-model="filters.source"
               :options="sourceOptions"
               option-attribute="label"
               value-attribute="value"
             />
-          </UFormGroup>
+          </UFormField>
 
-          <UFormGroup label="Keyword (Optional)">
+          <UFormField label="Keyword (Optional)">
             <UInput
               v-model="filters.keyword"
               placeholder="e.g. 'Rest', 'Zwift'"
               icon="i-heroicons-magnifying-glass"
             />
-          </UFormGroup>
+          </UFormField>
         </div>
 
         <div v-else-if="step === 'confirm'" class="space-y-4">
@@ -166,14 +166,13 @@
         success: boolean
         preview?: boolean
         counts?: { plannedWorkouts: number; events: number; notes: number; total: number }
-      }>('/api/workouts/planned/bulk.delete', {
+      }>('/api/workouts/planned/bulk-delete', {
         method: 'POST',
         body: {
           ...filters,
           preview: true
         }
       })
-
       if (res.counts) {
         previewCounts.value = res.counts
         step.value = 'confirm'
@@ -196,14 +195,13 @@
         success: boolean
         preview?: boolean
         deleted?: { plannedWorkouts: number; events: number; notes: number; total: number }
-      }>('/api/workouts/planned/bulk.delete', {
+      }>('/api/workouts/planned/bulk-delete', {
         method: 'POST',
         body: {
           ...filters,
           preview: false
         }
       })
-
       if (res.deleted) {
         toast.add({
           title: 'Deletion Complete',
