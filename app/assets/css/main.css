@@ -19,6 +19,14 @@
   --color-green-950: #052e16;
 }
 
+@utility no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
 body {
   /* @apply bg-gray-50 dark:bg-gray-900; */
 }

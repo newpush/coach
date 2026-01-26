@@ -8,7 +8,7 @@
       </UDashboardNavbar>
 
       <UDashboardToolbar>
-        <div class="flex gap-2">
+        <div class="flex gap-2 overflow-x-auto pb-1 w-full no-scrollbar">
           <UButton
             :variant="isActive('/settings/apps') ? 'solid' : 'ghost'"
             :color="isActive('/settings/apps') ? 'primary' : 'neutral'"
@@ -32,6 +32,14 @@
           >
             <UIcon name="i-lucide-users-round" class="w-4 h-4 mr-2" />
             Coaching
+          </UButton>
+          <UButton
+            :variant="isActive('/settings/billing') ? 'solid' : 'ghost'"
+            :color="isActive('/settings/billing') ? 'primary' : 'neutral'"
+            @click="navigateTo('/settings/billing')"
+          >
+            <UIcon name="i-heroicons-credit-card" class="w-4 h-4 mr-2" />
+            Billing
           </UButton>
           <UButton
             :variant="isActive('/settings/developer') ? 'solid' : 'ghost'"
