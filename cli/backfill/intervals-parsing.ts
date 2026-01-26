@@ -52,67 +52,112 @@ backfillIntervalsParsingCommand
 
       const workouts = await prisma.plannedWorkout.findMany({
         where,
-        select: { id: true, userId: true, rawJson: true, title: true }
+
+        select: { id: true, userId: true, rawJson: true, title: true, structuredWorkout: true }
       })
 
       console.log(chalk.gray(`Found ${workouts.length} workouts to process.`))
 
       let processedCount = 0
+
       let fixedCount = 0
+
+      let skippedCount = 0
+
       let errorCount = 0
 
       for (const w of workouts) {
         processedCount++
+
         try {
           const raw = w.rawJson as any
 
           // Re-normalize using the new logic
+
           const normalized = normalizeIntervalsPlannedWorkout(raw, w.userId)
+
+          // Optimization: Check if update is actually needed
+
+          // We compare the structuredWorkout objects
+
+          const currentJson = JSON.stringify(w.structuredWorkout)
+
+          const newJson = JSON.stringify(normalized.structuredWorkout)
+
+          // Also check other fields if critical, but structuredWorkout is the main target
+
+          const needsUpdate =
+            currentJson !== newJson ||
+            w.durationSec !== normalized.durationSec ||
+            w.distanceMeters !== normalized.distanceMeters
+
+          if (!needsUpdate) {
+            skippedCount++
+
+            if (processedCount % 100 === 0) process.stdout.write('s')
+
+            continue
+          }
 
           if (isDryRun) {
             // In dry run, maybe log something if it would change?
-            // Hard to compare JSON equality deeply without expensive checks,
-            // but we can just log that we processed it.
-            // Or verify specific fixes like cadence type.
-            const steps = normalized.structuredWorkout?.steps || []
-            const hasCadenceObject = steps.some((s: any) => typeof s.cadence === 'object')
-            const hasNestedPowerIssue = steps.some((s: any) =>
-              s.steps?.some((child: any) => child.power?.units === '%ftp' && child.power.value > 5)
-            )
 
-            if (hasCadenceObject || hasNestedPowerIssue) {
+            const steps = normalized.structuredWorkout?.steps || []
+
+            const hasCadenceObject = steps.some((s: any) => typeof s.cadence === 'object')
+
+            if (hasCadenceObject) {
               console.log(
                 chalk.red(
                   `[DRY RUN] Workout ${w.id} (${w.title}) STILL HAS ISSUES after normalization!`
                 )
               )
-            } else {
-              // console.log(chalk.green(`[DRY RUN] Workout ${w.id} normalized successfully.`))
             }
           } else {
             await prisma.plannedWorkout.update({
               where: { id: w.id },
+
               data: {
                 structuredWorkout: normalized.structuredWorkout as any,
+
                 durationSec: normalized.durationSec,
+
                 distanceMeters: normalized.distanceMeters,
+
                 tss: normalized.tss,
+
                 workIntensity: normalized.workIntensity
               }
             })
+
             if (fixedCount % 100 === 0) process.stdout.write('.')
           }
+
           fixedCount++
-        } catch (e) {
-          console.error(chalk.red(`Error fixing workout ${w.id} (${w.title}):`), e)
-          errorCount++
+        } catch (e: any) {
+          // Handle "Record to update not found" (P2025) gracefully
+
+          if (e.code === 'P2025') {
+            // Record was deleted during processing
+            // console.log(chalk.yellow(`\nSkipped ${w.id} (deleted during sync)`))
+          } else {
+            console.error(chalk.red(`\nError fixing workout ${w.id} (${w.title}):`), e)
+
+            errorCount++
+          }
         }
       }
 
       console.log('\n')
+
       console.log(chalk.bold('Summary:'))
+
       console.log(`Total Processed: ${processedCount}`)
-      console.log(`Fixed/Checked:   ${fixedCount}`)
+
+      console.log(`Fixed/Updated:   ${fixedCount}`)
+
+      console.log(`Skipped (No Change): ${skippedCount}`)
+
       console.log(`Errors:          ${errorCount}`)
 
       if (isDryRun) {
