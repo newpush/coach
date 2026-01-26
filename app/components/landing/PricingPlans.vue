@@ -137,7 +137,7 @@
 
   const { status } = useAuth()
   const userStore = useUserStore()
-  const { createCheckoutSession } = useStripe()
+  const { createCheckoutSession, openCustomerPortal } = useStripe()
 
   const billingInterval = ref<BillingInterval>('annual')
   const loading = ref(false)
@@ -173,7 +173,18 @@
   }
 
   async function handlePlanSelect(plan: PricingPlan) {
-    // Free plan - redirect to signup or dashboard
+    // 1. If user is already subscribed (has Stripe ID), redirect to Portal for ANY change
+    // This handles Upgrades, Downgrades, and Cancellations (Downgrade to Free) safely
+    if (userStore.user?.stripeCustomerId && userStore.user?.subscriptionTier !== 'FREE') {
+      loading.value = true
+      selectedPlan.value = plan.key
+      await openCustomerPortal(window.location.href)
+      loading.value = false
+      selectedPlan.value = null
+      return
+    }
+
+    // 2. Free plan logic for non-subscribers
     if (plan.key === 'free') {
       if (status.value === 'authenticated') {
         navigateTo('/dashboard')
@@ -183,9 +194,8 @@
       return
     }
 
-    // Paid plans
+    // 3. New Subscription Flow (Not logged in or Logged in but Free)
     if (status.value !== 'authenticated') {
-      // Not logged in - redirect to signup with plan parameter
       navigateTo(`/login?plan=${plan.key}&interval=${billingInterval.value}`)
       return
     }
@@ -205,7 +215,6 @@
       cancelUrl: `${window.location.origin}/pricing?canceled=true`
     })
 
-    // Reset loading state (in case redirect fails)
     setTimeout(() => {
       loading.value = false
       selectedPlan.value = null
