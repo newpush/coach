@@ -53,6 +53,8 @@ async function handleSubscriptionChange(subscription: Stripe.Subscription) {
   }
 
   const tier = getSubscriptionTier(productId)
+  console.log(`Resolved tier '${tier}' for product '${productId}'`)
+
   const status = mapStripeStatus(subscription.status)
   const periodEnd = new Date((subscription as any).current_period_end * 1000)
   // Update user in database (Skip if user is a CONTRIBUTOR)
@@ -196,6 +198,7 @@ export default defineEventHandler(async (event) => {
     return { received: true }
   } catch (error: any) {
     console.error('Error processing webhook:', error)
+    if (error.stack) console.error(error.stack)
     throw createError({
       statusCode: 500,
       message: `Webhook processing error: ${error.message}`
