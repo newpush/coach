@@ -44,11 +44,7 @@ export const PRICING_PLANS: PricingPlan[] = [
       'Priority processing',
       'Standard AI engine (Fast)'
     ],
-    popular: true,
-    stripePriceIds: {
-      monthly: 'price_1StpC5FnNyGK7WMpR7bszI8V',
-      annual: 'price_1StpC6FnNyGK7WMpbF7QUd2G'
-    }
+    popular: true
   },
   {
     key: 'pro',
@@ -63,11 +59,7 @@ export const PRICING_PLANS: PricingPlan[] = [
       'Priority processing',
       'Advanced insights'
     ],
-    popular: false,
-    stripePriceIds: {
-      monthly: 'price_1StpC6FnNyGK7WMpnE86oZan',
-      annual: 'price_1StpC7FnNyGK7WMpeFbStqjH'
-    }
+    popular: false
   }
 ]
 
@@ -103,5 +95,19 @@ export function getPrice(plan: PricingPlan, interval: BillingInterval): number {
  * Get Stripe price ID for a plan and interval
  */
 export function getStripePriceId(plan: PricingPlan, interval: BillingInterval): string | undefined {
-  return plan.stripePriceIds?.[interval]
+  const config = useRuntimeConfig()
+
+  if (plan.key === 'supporter') {
+    return interval === 'monthly'
+      ? config.public.stripeSupporterMonthlyPriceId
+      : config.public.stripeSupporterAnnualPriceId
+  }
+
+  if (plan.key === 'pro') {
+    return interval === 'monthly'
+      ? config.public.stripeProMonthlyPriceId
+      : config.public.stripeProAnnualPriceId
+  }
+
+  return undefined
 }

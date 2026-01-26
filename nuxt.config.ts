@@ -175,6 +175,10 @@ export default defineNuxtConfig({
       authBypassUser: process.env.AUTH_BYPASS_USER || '',
       authBypassName: process.env.AUTH_BYPASS_NAME || '',
       stripePublishableKey: process.env.STRIPE_PUBLISHABLE_KEY || '',
+      stripeSupporterMonthlyPriceId: process.env.STRIPE_SUPPORTER_MONTHLY_PRICE_ID || '',
+      stripeSupporterAnnualPriceId: process.env.STRIPE_SUPPORTER_ANNUAL_PRICE_ID || '',
+      stripeProMonthlyPriceId: process.env.STRIPE_PRO_MONTHLY_PRICE_ID || '',
+      stripeProAnnualPriceId: process.env.STRIPE_PRO_ANNUAL_PRICE_ID || '',
       gtag: {
         id: 'GTM-WJK5K3HK'
       }
