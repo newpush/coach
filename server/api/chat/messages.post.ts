@@ -213,10 +213,15 @@ export default defineEventHandler(async (event) => {
       const converted = await convertToModelMessages([msg])
 
       for (const coreMsg of converted) {
+        // Fix role mapping for Google Generative AI (assistant -> model)
+        if (coreMsg.role === 'assistant') {
+          coreMsg.role = 'model'
+        }
+
         // Patch: Inject tool-call parts from tool-approval-request parts
         // convertToModelMessages ignores our custom 'tool-approval-request' parts,
         // leading to missing tool calls in the history which invalidates the prompt schema.
-        if (coreMsg.role === 'assistant') {
+        if (coreMsg.role === 'model') {
           const approvalParts = (msg.parts || []).filter(
             (p: any) => p.type === 'tool-approval-request'
           )
@@ -275,15 +280,15 @@ export default defineEventHandler(async (event) => {
           }
         }
 
-        // Ensure no empty assistant messages
+        // Ensure no empty model messages (Google GenAI strictness)
         if (
-          coreMsg.role === 'assistant' &&
+          coreMsg.role === 'model' &&
           (!coreMsg.content || (Array.isArray(coreMsg.content) && coreMsg.content.length === 0))
         ) {
           coreMsg.content = [{ type: 'text', text: ' ' }]
         }
 
-        if (coreMsg.role === 'assistant' && Array.isArray(coreMsg.content)) {
+        if (coreMsg.role === 'model' && Array.isArray(coreMsg.content)) {
           // If the Assistant message contains tool-invocation parts with state: 'result',
           // we need to move them to a separate Tool message to satisfy Gemini requirements.
           const uiParts = (msg.parts || []) as any[]
