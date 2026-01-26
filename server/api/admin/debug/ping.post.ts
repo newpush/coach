@@ -15,7 +15,6 @@ export default defineEventHandler(async (event) => {
 
   const start = performance.now()
   try {
-    // @ts-expect-error -- $fetch.raw types are sometimes excessive
     const response = await $fetch.raw(url, {
       method,
       ignoreResponseError: true
