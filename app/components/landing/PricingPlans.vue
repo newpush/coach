@@ -91,7 +91,7 @@
             </span>
           </div>
 
-          <p class="mt-3 text-sm text-gray-500 dark:text-gray-400 min-h-[3rem]">
+          <p class="mt-3 text-sm text-gray-500 dark:text-gray-400 min-h-[4.5rem]">
             {{ plan.description }}
           </p>
         </template>
