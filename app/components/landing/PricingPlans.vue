@@ -75,8 +75,11 @@
           </div>
 
           <!-- Savings Badge for Annual -->
-          <div v-if="billingInterval === 'annual' && plan.annualPrice" class="mt-2">
-            <span class="text-xs text-green-600 dark:text-green-400 font-medium">
+          <div class="mt-2 h-4">
+            <span
+              v-if="billingInterval === 'annual' && plan.annualPrice"
+              class="text-xs text-green-600 dark:text-green-400 font-medium"
+            >
               Save {{ calculateAnnualSavings(plan) }}% vs monthly
             </span>
           </div>
