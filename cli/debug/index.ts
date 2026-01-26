@@ -21,6 +21,7 @@ import deduplicateCommand from './deduplicate'
 import compareIntervalsCommand from './compare-intervals'
 import calendarCommand from './calendar'
 import planCommand from './plan'
+import checkPlannedStepsCommand from './check-planned-steps'
 
 const debugCommand = new Command('debug').description('Debugging utilities')
 
@@ -46,5 +47,6 @@ debugCommand.addCommand(deduplicateCommand)
 debugCommand.addCommand(compareIntervalsCommand)
 debugCommand.addCommand(calendarCommand)
 debugCommand.addCommand(planCommand)
+debugCommand.addCommand(checkPlannedStepsCommand)
 
 export default debugCommand

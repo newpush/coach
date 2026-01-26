@@ -40,7 +40,9 @@ export default defineEventHandler(async (event) => {
     // Process remote deletions for local records
     await Promise.allSettled(
       localWorkouts.map(async (workout) => {
-        if (workout.externalId && !workout.externalId.startsWith('ai_gen')) {
+        // Only delete from Intervals if it looks like a valid Intervals ID (numeric)
+        // Ignore local AI-generated IDs (ai-gen-...) or UUIDs
+        if (workout.externalId && /^\d+$/.test(workout.externalId)) {
           try {
             await deleteIntervalsPlannedWorkout(integration, workout.externalId)
           } catch (error) {
