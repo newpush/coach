@@ -69,6 +69,33 @@ export const analyzePlanAdherenceTask = task({
     })
 
     try {
+      // Format structured plan for better readability
+      const formatStructuredPlan = (structure: any) => {
+        if (!structure || !Array.isArray(structure)) return 'N/A'
+        return structure
+          .map((s: any, i: number) => {
+            const duration = s.duration_s ? `${Math.round(s.duration_s / 60)}m` : 'Lap'
+            const target = s.target_value
+              ? `${s.target_value}${s.target_type === 'POWER' ? 'W' : ''}`
+              : 'N/A'
+            return `Step ${i + 1} [${s.type}]: ${duration} @ ${target}`
+          })
+          .join('\n      ')
+      }
+
+      // Format actual intervals including Cadence
+      const formatActualIntervals = (raw: any) => {
+        if (raw?.icu_intervals && Array.isArray(raw.icu_intervals)) {
+          return raw.icu_intervals
+            .map((i: any, idx: number) => {
+              const dur = i.elapsed_time || i.duration || 0
+              return `Int ${idx + 1}: ${Math.round(dur / 60)}m ${dur % 60}s | ${i.average_watts || 'N/A'}W | ${i.average_heartrate || 'N/A'}bpm | ${i.average_cadence || 'N/A'}rpm`
+            })
+            .join('\n      ')
+        }
+        return 'N/A'
+      }
+
       const prompt = `Analyze the adherence of this completed workout to the planned workout.
       
       PLANNED:
@@ -76,35 +103,22 @@ export const analyzePlanAdherenceTask = task({
       - Type: ${plan.type}
       - Duration: ${plan.durationSec ? Math.round(plan.durationSec / 60) + 'm' : 'N/A'}
       - TSS: ${plan.tss || 'N/A'}
-      - Intensity: ${plan.workIntensity ? plan.workIntensity * 100 + '%' : 'N/A'}
+      - Intensity: ${plan.workIntensity ? (plan.workIntensity * 100).toFixed(0) + '%' : 'N/A'}
       - Description: ${plan.description || 'N/A'}
-      - Structure: ${JSON.stringify(plan.structuredWorkout).substring(0, 1000)}
+      - Structured Plan:
+      ${formatStructuredPlan(plan.structuredWorkout)}
       
       COMPLETED:
       - Duration: ${Math.round(workout.durationSec / 60)}m
       - TSS: ${workout.tss || 'N/A'}
       - Avg Power: ${workout.averageWatts || 'N/A'}W
+      - Avg Cadence: ${workout.averageCadence || 'N/A'}rpm
       - Norm Power: ${workout.normalizedPower || 'N/A'}W
       - Avg HR: ${workout.averageHr || 'N/A'}bpm
       - Description: ${workout.description || 'N/A'}
-      - Intervals Data: ${(() => {
-        const raw = workout.rawJson as any
-        if (raw?.icu_intervals && Array.isArray(raw.icu_intervals)) {
-          // Provide summary of intervals for AI analysis
-          return JSON.stringify(
-            raw.icu_intervals.map((i: any) => ({
-              type: i.type,
-              duration: i.duration,
-              avgWatts: i.average_watts,
-              avgHr: i.average_heartrate,
-              distance: i.distance,
-              pace: i.pace,
-              avgGrade: i.average_grade
-            }))
-          ).substring(0, 3000)
-        }
-        return 'N/A'
-      })()}
+      
+      ACTUAL INTERVALS (The WORK):
+      ${formatActualIntervals(workout.rawJson)}
       
       USER CONTEXT:
       - FTP: ${workout.user.ftp || 'N/A'}W
@@ -113,7 +127,7 @@ export const analyzePlanAdherenceTask = task({
       1. Calculate an overall adherence score (0-100) based on how well the execution matched the plan.
       2. Analyze deviations in Duration, Intensity (Power/HR), and Structure.
       3. Provide specific feedback on what was missed or exceeded.
-      4. If the plan had intervals, estimate if they were executed correctly based on the aggregate data available.
+      4. Compare the "Structured Plan" steps against the "ACTUAL INTERVALS". Did they do the intervals?
       5. "impact" should describe how the deviation affects the training stimulus (e.g. "Reduced aerobic benefit", "Excessive fatigue risk").
       
       OUTPUT JSON matching the schema.`
