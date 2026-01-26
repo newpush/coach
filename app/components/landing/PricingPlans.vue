@@ -91,12 +91,12 @@
             </span>
           </div>
 
-          <p class="mt-3 text-sm text-gray-500 dark:text-gray-400 min-h-[2.5rem]">
+          <p class="mt-3 text-sm text-gray-500 dark:text-gray-400 min-h-[3rem]">
             {{ plan.description }}
           </p>
         </template>
 
-        <ul class="space-y-3 flex-grow">
+        <ul class="space-y-3 flex-grow flex flex-col justify-start">
           <li
             v-for="(feature, fIndex) in plan.features"
             :key="fIndex"
