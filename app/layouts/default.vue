@@ -195,6 +195,22 @@
           }
         },
         {
+          label: 'AI Coach',
+          icon: 'i-lucide-sparkles',
+          to: '/settings/ai',
+          onSelect: () => {
+            open.value = false
+          }
+        },
+        {
+          label: 'Billing',
+          icon: 'i-lucide-credit-card',
+          to: '/settings/billing',
+          onSelect: () => {
+            open.value = false
+          }
+        },
+        {
           label: 'Apps',
           icon: 'i-lucide-layout-grid',
           to: '/settings/apps',
@@ -206,14 +222,6 @@
           label: 'Authorized Apps',
           icon: 'i-lucide-shield-check',
           to: '/settings/authorized-apps',
-          onSelect: () => {
-            open.value = false
-          }
-        },
-        {
-          label: 'AI Coach',
-          icon: 'i-lucide-sparkles',
-          to: '/settings/ai',
           onSelect: () => {
             open.value = false
           }
