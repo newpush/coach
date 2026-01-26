@@ -25,7 +25,7 @@ export const PRICING_PLANS: PricingPlan[] = [
     features: [
       'Unlimited data history',
       'Manual sync mode',
-      'On-demand workout analysis',
+      'On-demand analysis',
       'Standard AI engine (Fast)'
     ],
     popular: false
