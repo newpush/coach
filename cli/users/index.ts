@@ -6,11 +6,13 @@ import { PrismaPg } from '@prisma/adapter-pg'
 import pg from 'pg'
 import statsCommand from './stats'
 import contributorCommand from './contributor'
+import subscriptionsCommand from './subscriptions'
 
 const usersCommand = new Command('users').description('User management commands')
 
 usersCommand.addCommand(statsCommand)
 usersCommand.addCommand(contributorCommand)
+usersCommand.addCommand(subscriptionsCommand)
 
 usersCommand
   .command('set-admin')
