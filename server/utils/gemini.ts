@@ -480,6 +480,33 @@ export function buildWorkoutSummary(workouts: any[], timezone?: string): string 
 
       // Zone Data (from Streams)
       if (w.streams) {
+        const hasStreamData = (data: any): boolean => {
+          if (!data) return false
+          if (Array.isArray(data)) return data.length > 0
+          if (typeof data === 'string') {
+            return data.length > 2 // minimal JSON array "[]" is 2 chars
+          }
+          return false
+        }
+
+        const availableStreams = []
+        if (hasStreamData(w.streams.heartrate)) availableStreams.push('Heart Rate')
+        if (hasStreamData(w.streams.watts)) availableStreams.push('Power')
+        if (hasStreamData(w.streams.cadence)) availableStreams.push('Cadence')
+        if (hasStreamData(w.streams.velocity)) availableStreams.push('Velocity')
+        if (hasStreamData(w.streams.latlng)) availableStreams.push('GPS/Location')
+        if (hasStreamData(w.streams.altitude)) availableStreams.push('Elevation')
+        if (hasStreamData(w.streams.grade)) availableStreams.push('Grade')
+        if (hasStreamData(w.streams.temp)) availableStreams.push('Temperature')
+        if (hasStreamData(w.streams.torque)) availableStreams.push('Torque')
+        if (hasStreamData(w.streams.leftRightBalance)) availableStreams.push('L/R Balance')
+        if (hasStreamData(w.streams.hrv)) availableStreams.push('HRV')
+        if (hasStreamData(w.streams.respiration)) availableStreams.push('Respiration')
+
+        if (availableStreams.length > 0) {
+          lines.push(`- **Available Data Streams**: ${availableStreams.join(', ')}`)
+        }
+
         if (w.streams.hrZoneTimes && Array.isArray(w.streams.hrZoneTimes)) {
           const times = w.streams.hrZoneTimes as number[]
           const totalTime = times.reduce((a, b) => a + b, 0)

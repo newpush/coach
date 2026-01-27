@@ -218,6 +218,33 @@ export async function normalizeTSS(
     select: { ftp: true, maxHr: true, restingHr: true }
   })
 
+  // DUAL RECORDING: Always try to calculate HR Load (HRSS) if HR data exists
+  // This allows us to have both Power TSS and HR Load for comparison/fallback
+  if (workout.streams && user?.maxHr && user?.restingHr) {
+    const hrData = parseStreamData((workout.streams as any).heartrate)
+    if (hrData && hrData.length > 0) {
+      const calculatedHrLoad = await calculateHRSSFromHRStream(
+        hrData,
+        workout.durationSec,
+        user.maxHr,
+        user.restingHr
+      )
+
+      // Only update hrLoad if it's missing or we want to ensure we have the calculated value
+      // If the source provided a value (e.g. Intervals icu_hrss), we might prefer that?
+      // For now, let's backfill it if missing, or if we are forcing recalculation.
+      // But if we have intervals data, we likely already mapped icu_hrss to hrLoad in normalization.
+      // So check if hrLoad is null or 0.
+      if (workout.hrLoad === null || workout.hrLoad === 0 || force) {
+        await prisma.workout.update({
+          where: { id: workoutId },
+          data: { hrLoad: calculatedHrLoad }
+        })
+        console.log(`[normalizeTSS] Calculated and saved HR Load: ${calculatedHrLoad}`)
+      }
+    }
+  }
+
   // 3. Try to calculate from power stream
   if (workout.streams && user?.ftp) {
     const wattsData = parseStreamData((workout.streams as any).watts)

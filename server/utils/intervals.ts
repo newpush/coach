@@ -62,6 +62,7 @@ interface IntervalsActivity {
   // Training load
   icu_training_load?: number
   icu_intensity?: number
+  icu_hrss?: number
   trimp?: number
   tss?: number
   intensity?: number
