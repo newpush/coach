@@ -17,6 +17,7 @@ import {
   formatDateUTC,
   calculateAge
 } from '../server/utils/date'
+import { buildWorkoutCleanupQuery } from '../server/utils/plans/cleanup'
 
 const weeklyPlanSchema = {
   type: 'object',
@@ -709,23 +710,13 @@ Maintain your **${aiSettings.aiPersona}** persona throughout the plan's reasonin
     // Also update the individual planned workouts if this is an active plan
     if (savedPlan.status === 'ACTIVE') {
       // First, handle existing workouts
-      const scope = {
+      const scope = buildWorkoutCleanupQuery({
         userId,
-        OR: [
-          {
-            date: {
-              gte: alignedWeekStart,
-              lte: alignedWeekEndUTC
-            }
-          },
-          // Also target workouts linked to this week (catch date bugs)
-          ...(trainingWeekId ? [{ trainingWeekId }] : [])
-        ],
-        completed: false,
-        id: {
-          notIn: anchorWorkoutIds || []
-        }
-      }
+        startDate: alignedWeekStart,
+        endDate: alignedWeekEndUTC,
+        trainingWeekId,
+        anchorWorkoutIds
+      })
 
       // 1. Unlink User-Managed Workouts (preserve them)
       await prisma.plannedWorkout.updateMany({
