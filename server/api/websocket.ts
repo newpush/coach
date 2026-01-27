@@ -5,7 +5,7 @@ import { buildAthleteContext } from '../utils/services/chatContextService'
 import { prisma } from '../utils/db'
 import { generateCoachAnalysis, MODEL_NAMES } from '../utils/gemini'
 import { createGoogleGenerativeAI } from '@ai-sdk/google'
-import { streamText, convertToModelMessages } from 'ai'
+import { streamText, convertToModelMessages, stepCountIs } from 'ai'
 import { getToolsWithContext } from '../utils/ai-tools'
 import { getUserTimezone } from '../utils/date'
 import { getUserAiSettings } from '../utils/ai-settings'
@@ -205,7 +205,7 @@ async function handleChatMessage(
     // Simple conversion for now: map user/model roles.
     // Note: This simplistic conversion might lose tool call history in legacy messages.
     // A robust converter would parse metadata for toolCalls.
-    let historyForModel = chronologicalHistory.map((msg: any) => ({
+    const historyForModel = chronologicalHistory.map((msg: any) => ({
       role: msg.senderId === 'ai_agent' ? 'assistant' : 'user',
       content: msg.content
     })) as any[]
@@ -216,7 +216,7 @@ async function handleChatMessage(
       historyForModel[0] &&
       historyForModel[0].role === 'assistant'
     ) {
-      historyForModel = historyForModel.slice(1)
+      historyForModel.shift()
     }
 
     // 5. Initialize Provider
@@ -234,7 +234,7 @@ async function handleChatMessage(
       system: systemInstruction,
       messages: historyForModel,
       tools,
-      maxSteps: 5, // Enable multi-step tool calls automatically
+      stopWhen: stepCountIs(5), // Enable multi-step tool calls automatically
       onStepFinish: async ({ text, toolCalls, toolResults, finishReason, usage }) => {
         // Notify client about tool execution
         if (toolCalls && toolCalls.length > 0) {
@@ -249,13 +249,13 @@ async function handleChatMessage(
 
         if (toolResults && toolResults.length > 0) {
           // Collect results for metadata
-          const detailedResults = toolResults.map((tr) => {
+          const detailedResults = toolResults.map((tr: any) => {
             const call = toolCalls?.find((tc) => tc.toolCallId === tr.toolCallId)
             return {
               ...tr,
-              args: tr.args,
-              toolName: tr.toolName,
-              result: tr.result
+              args: tr.args || (call as any)?.args || (call as any)?.input,
+              toolName: tr.toolName || call?.toolName,
+              result: tr.result || (tr as any).output
             }
           })
           allToolResults.push(...detailedResults)
@@ -272,12 +272,13 @@ async function handleChatMessage(
     // 7. Iterate Stream for Tokens
     for await (const part of result.fullStream) {
       if (part.type === 'text-delta') {
-        fullResponseText += part.textDelta
+        const textDelta = (part as any).text || (part as any).textDelta
+        fullResponseText += textDelta
         peer.send(
           JSON.stringify({
             type: 'chat_token',
             roomId,
-            text: part.textDelta
+            text: textDelta
           })
         )
       }

@@ -216,7 +216,7 @@ export default defineEventHandler(async (event) => {
         // Patch: Inject tool-call parts from UI parts (approvals or invocations)
         // convertToModelMessages ignores our custom 'tool-approval-request' parts and
         // sometimes mishandles 'tool-invocation' parts when they are results.
-        if (coreMsg.role === 'assistant' || coreMsg.role === 'model') {
+        if (coreMsg.role === 'assistant') {
           const uiParts = (msg.parts || []) as any[]
           const toolParts = uiParts.filter(
             (p: any) => p.type === 'tool-approval-request' || p.type === 'tool-invocation'
@@ -279,18 +279,15 @@ export default defineEventHandler(async (event) => {
           }
         }
 
-        // Ensure no empty model/assistant messages (Google GenAI strictness)
+        // Ensure no empty assistant messages (Google GenAI strictness)
         if (
-          (coreMsg.role === 'assistant' || coreMsg.role === 'model') &&
+          coreMsg.role === 'assistant' &&
           (!coreMsg.content || (Array.isArray(coreMsg.content) && coreMsg.content.length === 0))
         ) {
           coreMsg.content = [{ type: 'text', text: ' ' }]
         }
 
-        if (
-          (coreMsg.role === 'assistant' || coreMsg.role === 'model') &&
-          Array.isArray(coreMsg.content)
-        ) {
+        if (coreMsg.role === 'assistant' && Array.isArray(coreMsg.content)) {
           // If the Assistant message contains tool-invocation parts with state: 'result',
           // we need to move them to a separate Tool message to satisfy Gemini requirements.
           const uiParts = (msg.parts || []) as any[]
@@ -680,10 +677,10 @@ export default defineEventHandler(async (event) => {
       }
     })
     return result.toUIMessageStreamResponse({
-      onError: (error) => {
+      onError: (error: any) => {
         console.error('[Chat API] Stream error:', error)
-        console.error('[Chat API] Error Stack:', error.stack)
-        const errorMsg = error.message || 'Unknown error'
+        console.error('[Chat API] Error Stack:', error?.stack)
+        const errorMsg = error?.message || 'Unknown error'
         // Handle specific history sync errors gracefully
         if (
           errorMsg.includes('tool result without matching tool call') ||

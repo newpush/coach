@@ -78,23 +78,22 @@ export async function transformHistoryToCoreMessages(historyMessages: any[]) {
 
     for (const coreMsg of converted) {
       // 1. Fix role mapping (assistant -> model)
-      if (coreMsg.role === 'assistant') {
-        coreMsg.role = 'model'
-      }
+      // Note: We keep it as 'assistant' for Vercel AI SDK compatibility,
+      // the provider handles the mapping to 'model' internally.
 
       // 2. Repair & Patch: Fix broken tool calls and inject missing ones
-      if (coreMsg.role === 'model') {
+      if (coreMsg.role === 'assistant') {
         // Ensure content is an array
-        if (typeof coreMsg.content === 'string') {
-          coreMsg.content = [{ type: 'text', text: coreMsg.content }]
-        } else if (!Array.isArray(coreMsg.content)) {
-          coreMsg.content = []
+        if (typeof (coreMsg as any).content === 'string') {
+          ;(coreMsg as any).content = [{ type: 'text', text: (coreMsg as any).content }]
+        } else if (!Array.isArray((coreMsg as any).content)) {
+          ;(coreMsg as any).content = []
         }
 
         const uiParts = (msg.parts || []) as any[]
 
         // A. Repair: Fix tool calls that SDK converted but assigned generic names
-        const coreContent = coreMsg.content as any[]
+        const coreContent = (coreMsg as any).content as any[]
         coreContent.forEach((part) => {
           if (
             part.type === 'tool-call' &&
@@ -172,7 +171,7 @@ export async function transformHistoryToCoreMessages(historyMessages: any[]) {
         const currentMsgIndex = historyMessages.indexOf(msg)
         const subsequentMessages = historyMessages.slice(currentMsgIndex + 1)
 
-        coreMsg.content = (coreMsg.content as any[]).filter((part) => {
+        ;(coreMsg as any).content = ((coreMsg as any).content as any[]).filter((part) => {
           if (part.type !== 'tool-call') return true
 
           const id = part.toolCallId
@@ -185,7 +184,7 @@ export async function transformHistoryToCoreMessages(historyMessages: any[]) {
               )
           )
           // 2. Check for result in SAME core message (interleaved)
-          const hasSameMessageResult = (coreMsg.content as any[]).some(
+          const hasSameMessageResult = ((coreMsg as any).content as any[]).some(
             (p) => p.type === 'tool-result' && p.toolCallId === id
           )
 
@@ -206,12 +205,13 @@ export async function transformHistoryToCoreMessages(historyMessages: any[]) {
         })
       }
 
-      // 3. Ensure no empty model messages
+      // 3. Ensure no empty assistant messages
       if (
-        coreMsg.role === 'model' &&
-        (!coreMsg.content || (Array.isArray(coreMsg.content) && coreMsg.content.length === 0))
+        coreMsg.role === 'assistant' &&
+        (!(coreMsg as any).content ||
+          (Array.isArray((coreMsg as any).content) && (coreMsg as any).content.length === 0))
       ) {
-        coreMsg.content = [{ type: 'text', text: ' ' }]
+        ;(coreMsg as any).content = [{ type: 'text', text: ' ' }]
       }
 
       coreMessages.push(coreMsg)
@@ -241,9 +241,9 @@ export async function transformHistoryToCoreMessages(historyMessages: any[]) {
   const validCoreMessages: any[] = []
   const toolCallIds = new Set<string>()
 
-  // First pass: Collect all valid tool call IDs from model messages
+  // First pass: Collect all valid tool call IDs from assistant messages
   coreMessages.forEach((msg) => {
-    if (msg.role === 'model' && Array.isArray(msg.content)) {
+    if (msg.role === 'assistant' && Array.isArray(msg.content)) {
       msg.content.forEach((p: any) => {
         if (p.type === 'tool-call') {
           toolCallIds.add(p.toolCallId)
