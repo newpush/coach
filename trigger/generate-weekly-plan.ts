@@ -260,14 +260,19 @@ export const generateWeeklyPlanTask = task({
         }
       }),
 
-      // Existing planned workouts for this week
+      // Existing planned workouts for this week (by Date OR by TrainingWeek ID)
       prisma.plannedWorkout.findMany({
         where: {
           userId,
-          date: {
-            gte: alignedWeekStart,
-            lte: alignedWeekEndUTC
-          }
+          OR: [
+            {
+              date: {
+                gte: alignedWeekStart,
+                lte: alignedWeekEndUTC
+              }
+            },
+            ...(trainingWeekId ? [{ trainingWeekId }] : [])
+          ]
         },
         orderBy: { date: 'asc' },
         select: {
@@ -699,10 +704,16 @@ Maintain your **${aiSettings.aiPersona}** persona throughout the plan's reasonin
       // First, handle existing workouts
       const scope = {
         userId,
-        date: {
-          gte: alignedWeekStart,
-          lte: alignedWeekEndUTC
-        },
+        OR: [
+          {
+            date: {
+              gte: alignedWeekStart,
+              lte: alignedWeekEndUTC
+            }
+          },
+          // Also target workouts linked to this week (catch date bugs)
+          ...(trainingWeekId ? [{ trainingWeekId }] : [])
+        ],
         completed: false,
         id: {
           notIn: anchorWorkoutIds || []
