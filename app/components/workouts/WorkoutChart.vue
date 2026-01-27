@@ -1,5 +1,16 @@
 <template>
   <div class="workout-chart-container">
+    <!-- Tooltip -->
+    <div
+      v-if="tooltip.visible"
+      class="fixed z-50 px-3 py-2 text-xs font-medium text-white bg-gray-900 rounded shadow-lg pointer-events-none transform -translate-x-1/2 -translate-y-full mb-2 whitespace-nowrap dark:bg-gray-700"
+      :style="{ left: `${tooltip.x}px`, top: `${tooltip.y - 8}px` }"
+    >
+      {{ tooltip.content }}
+      <div
+        class="absolute left-1/2 bottom-0 transform -translate-x-1/2 translate-y-1/2 border-4 border-transparent border-t-gray-900 dark:border-t-gray-700"
+      ></div>
+    </div>
     <div
       v-if="!workout || !workout.steps || workout.steps.length === 0"
       class="text-center py-8 text-muted text-sm"
@@ -254,6 +265,7 @@
         <!-- Stacked Horizontal Bar -->
         <div
           class="h-6 w-full rounded-md overflow-hidden flex relative bg-gray-100 dark:bg-gray-700 mb-3"
+          @mouseleave="hideTooltip"
         >
           <div
             v-for="(zone, index) in zoneDistribution"
@@ -263,7 +275,8 @@
               width: `${(zone.duration / totalDuration) * 100}%`,
               backgroundColor: zone.color
             }"
-            :title="`${zone.name}: ${formatDuration(zone.duration)}`"
+            @mouseenter="showTooltip($event, `${zone.name}: ${formatDuration(zone.duration)}`)"
+            @mousemove="moveTooltip($event)"
           />
         </div>
 
@@ -316,6 +329,8 @@
 
 <script setup lang="ts">
   import { ZONE_COLORS } from '~/utils/zone-colors'
+
+  const { tooltip, showTooltip, moveTooltip, hideTooltip } = useTooltip()
 
   const props = defineProps<{
     workout: any // structuredWorkout JSON
