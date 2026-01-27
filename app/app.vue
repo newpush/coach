@@ -9,7 +9,11 @@
       { name: 'viewport', content: 'width=device-width, initial-scale=1' },
       { key: 'theme-color', name: 'theme-color', content: color }
     ],
-    link: [{ rel: 'icon', href: '/favicon.ico' }],
+    link: [
+      { rel: 'icon', href: '/favicon.ico' },
+      { rel: 'apple-touch-icon', href: '/apple-touch-icon.png' },
+      { rel: 'manifest', href: '/manifest.json' }
+    ],
     htmlAttrs: {
       lang: 'en'
     }
