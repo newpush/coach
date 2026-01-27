@@ -16,7 +16,17 @@ defineRouteMeta({
             properties: {
               provider: {
                 type: 'string',
-                enum: ['intervals', 'whoop', 'withings', 'yazio', 'strava', 'hevy', 'fitbit', 'all']
+                enum: [
+                  'intervals',
+                  'whoop',
+                  'withings',
+                  'yazio',
+                  'strava',
+                  'hevy',
+                  'fitbit',
+                  'oura',
+                  'all'
+                ]
               },
               days: {
                 type: 'number',
@@ -75,12 +85,22 @@ export default defineEventHandler(async (event) => {
 
   if (
     !provider ||
-    !['intervals', 'whoop', 'withings', 'yazio', 'strava', 'hevy', 'fitbit', 'all'].includes(provider)
+    ![
+      'intervals',
+      'whoop',
+      'withings',
+      'yazio',
+      'strava',
+      'hevy',
+      'fitbit',
+      'oura',
+      'all'
+    ].includes(provider)
   ) {
     throw createError({
       statusCode: 400,
       message:
-        'Invalid provider. Must be "intervals", "whoop", "withings", "yazio", "strava", "hevy", "fitbit", or "all"'
+        'Invalid provider. Must be "intervals", "whoop", "withings", "yazio", "strava", "hevy", "fitbit", "oura", or "all"'
     })
   }
 
@@ -176,7 +196,9 @@ export default defineEventHandler(async (event) => {
                 ? 'ingest-strava'
                 : provider === 'fitbit'
                   ? 'ingest-fitbit'
-                  : 'ingest-hevy'
+                  : provider === 'oura'
+                    ? 'ingest-oura'
+                    : 'ingest-hevy'
 
   try {
     const handle = await tasks.trigger(
