@@ -26,6 +26,8 @@
       :intervals-connected="intervalsConnected"
       :whoop-connected="whoopConnected"
       :whoop-ingest-workouts="whoopIngestWorkouts"
+      :oura-connected="ouraConnected"
+      :oura-ingest-workouts="ouraIngestWorkouts"
       :withings-connected="withingsConnected"
       :yazio-connected="yazioConnected"
       :fitbit-connected="fitbitConnected"
@@ -90,6 +92,16 @@
         ?.ingestWorkouts ?? false
   )
 
+  const ouraConnected = computed(
+    () => integrationStatus.value?.integrations?.some((i: any) => i.provider === 'oura') ?? false
+  )
+
+  const ouraIngestWorkouts = computed(
+    () =>
+      integrationStatus.value?.integrations?.find((i: any) => i.provider === 'oura')
+        ?.ingestWorkouts ?? false
+  )
+
   const withingsConnected = computed(
     () =>
       integrationStatus.value?.integrations?.some((i: any) => i.provider === 'withings') ?? false
@@ -107,9 +119,7 @@
     integrationStatus.value?.integrations?.find((i: any) => i.provider === 'fitbit')
   )
 
-  const fitbitRateLimited = computed(
-    () => fitbitIntegration.value?.syncStatus === 'RATE_LIMITED'
-  )
+  const fitbitRateLimited = computed(() => fitbitIntegration.value?.syncStatus === 'RATE_LIMITED')
 
   const fitbitRateLimitMessage = computed(
     () => fitbitIntegration.value?.errorMessage || 'Rate limited by Fitbit. Try again later.'
@@ -289,6 +299,7 @@
   onMounted(() => {
     if (
       route.query.whoop_success ||
+      route.query.oura_success ||
       route.query.withings_success ||
       route.query.strava_success ||
       route.query.fitbit_success ||
@@ -298,6 +309,13 @@
         toast.add({
           title: 'Connected!',
           description: 'Successfully connected to WHOOP',
+          color: 'success'
+        })
+        refreshIntegrations()
+      } else if (route.query.oura_success) {
+        toast.add({
+          title: 'Connected!',
+          description: 'Successfully connected to Oura',
           color: 'success'
         })
         refreshIntegrations()
@@ -333,21 +351,25 @@
       router.replace({ query: {} })
     } else if (
       route.query.whoop_error ||
+      route.query.oura_error ||
       route.query.withings_error ||
       route.query.strava_error ||
       route.query.fitbit_error
     ) {
       const errorMsg = (route.query.whoop_error ||
+        route.query.oura_error ||
         route.query.withings_error ||
         route.query.strava_error ||
         route.query.fitbit_error) as string
       const provider = route.query.whoop_error
         ? 'WHOOP'
-        : route.query.withings_error
-          ? 'Withings'
-          : route.query.fitbit_error
-            ? 'Fitbit'
-            : 'Strava'
+        : route.query.oura_error
+          ? 'Oura'
+          : route.query.withings_error
+            ? 'Withings'
+            : route.query.fitbit_error
+              ? 'Fitbit'
+              : 'Strava'
       const description =
         errorMsg === 'no_code'
           ? 'Authorization was cancelled or no code was received'
