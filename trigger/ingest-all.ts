@@ -3,6 +3,7 @@ import { logger, task, batch } from '@trigger.dev/sdk/v3'
 import { prisma } from '../server/utils/db'
 import { ingestStravaTask } from './ingest-strava'
 import { ingestWhoopTask } from './ingest-whoop'
+import { ingestOuraTask } from './ingest-oura'
 import { ingestWithingsTask } from './ingest-withings'
 import { ingestIntervalsTask } from './ingest-intervals'
 import { ingestYazioTask } from './ingest-yazio'
@@ -78,6 +79,12 @@ export const ingestAllTask = task({
             payload: taskPayload
           })
           break
+        case 'oura':
+          tasksTrigger.push({
+            task: ingestOuraTask,
+            payload: taskPayload
+          })
+          break
         case 'withings':
           tasksTrigger.push({
             task: ingestWithingsTask,
@@ -134,6 +141,7 @@ export const ingestAllTask = task({
       const integration = integrations.find((i) => {
         if (item.task.id === 'ingest-strava' && i.provider === 'strava') return true
         if (item.task.id === 'ingest-whoop' && i.provider === 'whoop') return true
+        if (item.task.id === 'ingest-oura' && i.provider === 'oura') return true
         if (item.task.id === 'ingest-withings' && i.provider === 'withings') return true
         if (item.task.id === 'ingest-intervals' && i.provider === 'intervals') return true
         if (item.task.id === 'ingest-yazio' && i.provider === 'yazio') return true

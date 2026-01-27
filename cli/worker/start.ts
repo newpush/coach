@@ -4,6 +4,7 @@ import IORedis from 'ioredis'
 import chalk from 'chalk'
 import { IntervalsService } from '../../server/utils/services/intervalsService'
 import { WhoopService } from '../../server/utils/services/whoopService'
+import { OuraService } from '../../server/utils/services/ouraService'
 import { logWebhookRequest, updateWebhookStatus } from '../../server/utils/webhook-logger'
 import { prisma } from '../../server/utils/db'
 import { webhookQueue, pingQueue } from '../../server/utils/queue'
@@ -230,6 +231,60 @@ export const startCommand = new Command('start')
           }
 
           return { triggeredCount }
+        }
+
+        if (provider === 'oura') {
+          const { type, payload, headers } = job.data
+          let { userId, logId } = job.data
+
+          if (!logId) {
+            const log = await logWebhookRequest({
+              provider: 'oura',
+              eventType: payload?.event_type || type || 'UNKNOWN',
+              payload,
+              headers,
+              status: 'PENDING'
+            })
+            logId = log?.id
+          }
+
+          console.log(
+            chalk.cyan(`[OuraJob ${job.id}]`) +
+              ` Processing Oura event ${type || payload?.event_type} (LogID: ${logId})`
+          )
+
+          if (!userId) {
+            const externalUserId = payload?.user_id
+            if (externalUserId) {
+              const integration = await prisma.integration.findFirst({
+                where: {
+                  provider: 'oura',
+                  externalUserId: externalUserId.toString()
+                }
+              })
+              userId = integration?.userId
+            }
+          }
+
+          if (!userId) {
+            console.warn(`[OuraJob ${job.id}] No user found for oura payload`)
+            if (logId) await updateWebhookStatus(logId, 'IGNORED', 'User not found')
+            return { handled: false, message: 'User not found' }
+          }
+
+          try {
+            // OuraService.processWebhookEvent expects (userId, type, payload)
+            const eventType = type || payload?.event_type
+            const result = await OuraService.processWebhookEvent(userId, eventType, payload)
+
+            console.log(chalk.green(`[OuraJob ${job.id}] Completed: ${result.message}`))
+            if (logId) await updateWebhookStatus(logId, 'PROCESSED', result.message)
+            return result
+          } catch (error: any) {
+            console.error(chalk.red(`[OuraJob ${job.id}] Failed:`), error)
+            if (logId) await updateWebhookStatus(logId, 'FAILED', error.message || 'Unknown error')
+            throw error
+          }
         }
 
         console.log(
