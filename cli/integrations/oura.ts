@@ -1,8 +1,8 @@
 import { Command } from 'commander'
 import chalk from 'chalk'
-import fetch from 'node-fetch'
 
-export const ouraCommand = new Command('oura').description('Manage Oura integration')
+export const ouraCommand = new Command('oura')
+.description('Manage Oura integration')
 
 ouraCommand
   .command('register-webhooks')
