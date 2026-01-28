@@ -463,8 +463,13 @@ export const IntervalsService = {
         date: { gte: startDate, lte: endDate },
         OR: [{ syncStatus: 'SYNCED' }, { syncStatus: null }]
       },
-      select: { externalId: true }
+      select: { externalId: true, completed: true }
     })
+
+    // Create a set of completed workout IDs to prevent deletion
+    const completedWorkoutIds = new Set(
+      localWorkouts.filter((w) => w.completed).map((w) => w.externalId!)
+    )
 
     // 2. Find potential orphans in CalendarNote
     const localNotes = await prisma.calendarNote.findMany({
@@ -500,6 +505,10 @@ export const IntervalsService = {
     const orphans = [...allLocalIds].filter((id) => {
       // If it exists in remote, keep it (not an orphan)
       if (validExternalIds.has(id)) return false
+
+      // SAFETY: Do not delete completed workouts even if they are missing from remote
+      // (Intervals often removes completed planned workouts from the calendar)
+      if (completedWorkoutIds.has(id)) return false
 
       // If it's missing from remote, check if it's a local ID
       // Intervals.icu IDs are strictly numeric.
