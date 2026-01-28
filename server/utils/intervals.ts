@@ -660,6 +660,7 @@ export async function fetchIntervalsAthleteProfile(integration: Integration) {
     // So if API returns seconds (e.g. 600 for 10 min), we divide by 60.
 
     return {
+      source: 'intervals',
       externalId: s.id?.toString(),
       types: s.types || [],
       ftp: currentFtp,

@@ -3,7 +3,7 @@ export interface CalendarActivity {
   title: string
   date: string // ISO date string
   type?: string
-  source: 'completed' | 'planned' | 'note'
+  source: 'completed' | 'planned' | 'note' | 'wellness' | 'nutrition'
   status: 'completed' | 'planned' | 'missed' | 'completed_plan' | 'note'
 
   // Normalized metrics
