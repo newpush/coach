@@ -132,7 +132,7 @@ export default defineEventHandler(async (event) => {
           type: 'tool-invocation',
           toolCallId: tc.toolCallId || `call-${msg.id}-${index}`,
           toolName: tc.name,
-          args: tc.args,
+          args: tc.args || {}, // Ensure args is never undefined
           state: 'result',
           result: tc.response
         })

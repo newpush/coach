@@ -149,13 +149,45 @@ export default defineEventHandler(async (event) => {
       historyMessages.map((m: any) => m.role)
     )
 
-    // 4. Robust conversion to CoreMessages that handles interleaving and merges tool results correctly
     const coreMessages: any[] = []
+
+    /**
+     * Helper to ensure structural integrity for Gemini/Vercel AI SDK.
+     * 1. Ensures 'args' exists on all tool-call parts.
+     * 2. Flattens single-part text arrays to strings for user/system roles.
+     * 3. Ensures assistant messages are not empty.
+     */
+    const cleanCoreMessage = (msg: any) => {
+      if (msg.role === 'assistant' && Array.isArray(msg.content)) {
+        msg.content = msg.content.map((part: any) => {
+          if (part.type === 'tool-call' && !part.args) {
+            return { ...part, args: {} }
+          }
+          return part
+        })
+        // Final fallback for empty assistant content
+        if (msg.content.length === 0) {
+          msg.content = [{ type: 'text', text: ' ' }]
+        }
+      }
+
+      // Gemini specific: avoid array content for user/system if it's just text
+      if (
+        (msg.role === 'user' || msg.role === 'system') &&
+        Array.isArray(msg.content) &&
+        msg.content.length === 1 &&
+        msg.content[0].type === 'text'
+      ) {
+        msg.content = msg.content[0].text
+      }
+
+      return msg
+    }
 
     // Map approval IDs to tool call IDs to ensure consistency
     const approvalIdMap = new Map<string, string>()
     for (const m of historyMessages) {
-      // 1. Check message parts (if preserved by client)
+      // ... (approvalIdMap logic remains same)
       if (m.role === 'assistant' && Array.isArray(m.parts)) {
         m.parts.forEach((p: any) => {
           if (p.type === 'tool-approval-request' && p.approvalId && p.toolCallId) {
@@ -163,8 +195,6 @@ export default defineEventHandler(async (event) => {
           }
         })
       }
-
-      // 2. Check metadata (fallback for stripped parts)
       if (m.role === 'assistant' && m.metadata?.toolApprovals) {
         const approvals = m.metadata.toolApprovals
         if (Array.isArray(approvals)) {
@@ -176,12 +206,9 @@ export default defineEventHandler(async (event) => {
         }
       }
     }
-    console.log(`[Chat API] Mapped ${approvalIdMap.size} tool approvals`)
 
     for (const msg of historyMessages) {
       if (msg.role === 'tool') {
-        // Correctly interleave tool messages
-        // Extract results from tool response part or content
         const parts = Array.isArray(msg.content) ? msg.content : msg.parts || []
         const results = parts
           .filter(
@@ -209,13 +236,9 @@ export default defineEventHandler(async (event) => {
         continue
       }
 
-      // Use SDK helper for user/assistant messages but post-process assistant results
       const converted = await convertToModelMessages([msg])
 
       for (const coreMsg of converted) {
-        // Patch: Inject tool-call parts from UI parts (approvals or invocations)
-        // convertToModelMessages ignores our custom 'tool-approval-request' parts and
-        // sometimes mishandles 'tool-invocation' parts when they are results.
         if (coreMsg.role === 'assistant') {
           const uiParts = (msg.parts || []) as any[]
           const toolParts = uiParts.filter(
@@ -223,16 +246,12 @@ export default defineEventHandler(async (event) => {
           )
 
           if (toolParts.length > 0) {
-            // Filter: Only inject tool-call if a subsequent tool message or a manual result part exists.
-            // This satisfies the "Every tool call must have a result" rule in Gemini history.
             const currentMsgIndex = historyMessages.indexOf(msg)
             const subsequentMessages = historyMessages.slice(currentMsgIndex + 1)
 
             const validToolParts = toolParts.filter((tp: any) => {
               const id = tp.toolCallId || tp.approvalId
               if (!id) return false
-
-              // Check subsequent messages for this ID
               const hasSubsequentResult = subsequentMessages.some(
                 (m: any) =>
                   m.role === 'tool' &&
@@ -240,15 +259,11 @@ export default defineEventHandler(async (event) => {
                     (p: any) => p.toolCallId === id || p.approvalId === id
                   )
               )
-
-              // Check if it's an invocation with a result already attached (same-message result)
               const isResolvedInvocation = tp.type === 'tool-invocation' && tp.state === 'result'
-
               return hasSubsequentResult || isResolvedInvocation
             })
 
             if (validToolParts.length > 0) {
-              // Ensure content is an array
               if (typeof coreMsg.content === 'string') {
                 coreMsg.content = [{ type: 'text', text: coreMsg.content }]
               } else if (!Array.isArray(coreMsg.content)) {
@@ -261,7 +276,6 @@ export default defineEventHandler(async (event) => {
                 const toolCallId = tp.toolCallId || tp.approvalId
                 const toolName = tp.toolCall?.toolName || tp.toolName || tp.name
 
-                // Only add if not already present
                 if (
                   toolCallId &&
                   toolName &&
@@ -279,52 +293,8 @@ export default defineEventHandler(async (event) => {
           }
         }
 
-        // Ensure no empty assistant messages (Google GenAI strictness)
-        if (
-          coreMsg.role === 'assistant' &&
-          (!coreMsg.content || (Array.isArray(coreMsg.content) && coreMsg.content.length === 0))
-        ) {
-          coreMsg.content = [{ type: 'text', text: ' ' }]
-        }
-
-        if (coreMsg.role === 'assistant' && Array.isArray(coreMsg.content)) {
-          // If the Assistant message contains tool-invocation parts with state: 'result',
-          // we need to move them to a separate Tool message to satisfy Gemini requirements.
-          const uiParts = (msg.parts || []) as any[]
-          const toolResultParts = uiParts.filter(
-            (p) => p.type === 'tool-invocation' && p.state === 'result'
-          )
-
-          if (toolResultParts.length > 0) {
-            // Fix tool names in assistant content if they were converted to "invocation"
-            coreMsg.content = coreMsg.content.map((p: any) => {
-              if (p.type === 'tool-call' && (p.toolName === 'invocation' || !p.toolName)) {
-                const originalPart = uiParts.find((op) => op.toolCallId === p.toolCallId)
-                if (originalPart) {
-                  return { ...p, toolName: originalPart.toolName }
-                }
-              }
-              return p
-            })
-
-            coreMessages.push(coreMsg)
-
-            // Add a Tool message with the results
-            coreMessages.push({
-              role: 'tool',
-              content: toolResultParts.map((p) => ({
-                type: 'tool-result',
-                toolCallId: p.toolCallId,
-                toolName: p.toolName,
-                result: p.result
-              }))
-            })
-          } else {
-            coreMessages.push(coreMsg)
-          }
-        } else {
-          coreMessages.push(coreMsg)
-        }
+        // Apply cleaning logic
+        coreMessages.push(cleanCoreMessage(coreMsg))
       }
     }
 
