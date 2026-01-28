@@ -29,13 +29,6 @@
         "https://trigger.newpush.com/"
       ]
     },
-    "chrome-devtools": {
-      "command": "npx",
-      "args": [
-        "chrome-devtools-mcp@latest",
-        "--autoConnect"
-      ]
-    },
     "analytics-mcp": {
       "command": "pipx",
       "args": [
