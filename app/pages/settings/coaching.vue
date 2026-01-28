@@ -21,7 +21,7 @@
             </div>
           </div>
           <UButton
-            color="red"
+            color="error"
             variant="ghost"
             label="Remove"
             icon="i-heroicons-trash"
@@ -97,7 +97,7 @@
           variant="ghost"
           @click="isRemoveModalOpen = false"
         />
-        <UButton label="Remove Coach" color="red" :loading="removing" @click="removeCoach" />
+        <UButton label="Remove Coach" color="error" :loading="removing" @click="removeCoach" />
       </template>
     </UModal>
   </div>
@@ -131,9 +131,9 @@
     generating.value = true
     try {
       activeInvite.value = await $fetch('/api/coaching/invite', { method: 'POST' })
-      toast.add({ title: 'Invite code generated', color: 'green' })
+      toast.add({ title: 'Invite code generated', color: 'success' })
     } catch (err) {
-      toast.add({ title: 'Failed to generate code', color: 'red' })
+      toast.add({ title: 'Failed to generate code', color: 'error' })
     } finally {
       generating.value = false
     }
@@ -154,11 +154,11 @@
       await $fetch(`/api/coaching/coaches/${selectedRelationship.value.coachId}`, {
         method: 'DELETE'
       })
-      toast.add({ title: 'Coach removed', color: 'green' })
+      toast.add({ title: 'Coach removed', color: 'success' })
       await fetchCoaches()
       isRemoveModalOpen.value = false
     } catch (err) {
-      toast.add({ title: 'Failed to remove coach', color: 'red' })
+      toast.add({ title: 'Failed to remove coach', color: 'error' })
     } finally {
       removing.value = false
     }
@@ -166,7 +166,7 @@
 
   function copyCode(code) {
     navigator.clipboard.writeText(code)
-    toast.add({ title: 'Code copied to clipboard', color: 'green' })
+    toast.add({ title: 'Code copied to clipboard', color: 'success' })
   }
 
   function formatDate(date) {

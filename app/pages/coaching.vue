@@ -90,7 +90,7 @@
               <UCard
                 :ui="{
                   body: 'p-6',
-                  base: 'overflow-hidden border-2 border-primary-500/20 bg-primary-50/30 dark:bg-primary-950/10'
+                  root: 'overflow-hidden border-2 border-primary-500/20 bg-primary-50/30 dark:bg-primary-950/10'
                 }"
               >
                 <div class="flex flex-col md:flex-row md:items-center justify-between gap-6">
@@ -288,7 +288,7 @@
       }
     } catch (e) {
       console.error(e)
-      toast.add({ title: 'Failed to load coaching data', color: 'red' })
+      toast.add({ title: 'Failed to load coaching data', color: 'error' })
     } finally {
       loading.value = false
     }
@@ -298,9 +298,9 @@
     generatingInvite.value = true
     try {
       invite.value = await $fetch('/api/coaching/invite', { method: 'POST' })
-      toast.add({ title: 'Invite code generated!', color: 'green' })
+      toast.add({ title: 'Invite code generated!', color: 'success' })
     } catch (e) {
-      toast.add({ title: 'Failed to generate code', color: 'red' })
+      toast.add({ title: 'Failed to generate code', color: 'error' })
     } finally {
       generatingInvite.value = false
     }
@@ -313,14 +313,14 @@
         method: 'POST',
         body: { code: connectCode.value.toUpperCase() }
       })
-      toast.add({ title: 'Athlete connected successfully!', color: 'green' })
+      toast.add({ title: 'Athlete connected successfully!', color: 'success' })
       await fetchData()
       isConnectModalOpen.value = false
       connectCode.value = ''
     } catch (err: any) {
       toast.add({
         title: 'Failed to connect: ' + (err.data?.message || 'Invalid code'),
-        color: 'red'
+        color: 'error'
       })
     } finally {
       connecting.value = false
@@ -337,11 +337,11 @@
     removingCoach.value = true
     try {
       await $fetch(`/api/coaching/coaches/${coachToRemove.value.id}`, { method: 'DELETE' })
-      toast.add({ title: 'Coach removed', color: 'green' })
+      toast.add({ title: 'Coach removed', color: 'success' })
       await fetchData()
       isRemoveModalOpen.value = false
     } catch (e) {
-      toast.add({ title: 'Failed to remove coach', color: 'red' })
+      toast.add({ title: 'Failed to remove coach', color: 'error' })
     } finally {
       removingCoach.value = false
     }
