@@ -5,6 +5,7 @@ import { workoutRepository } from '../repositories/workoutRepository'
 import { nutritionRepository } from '../repositories/nutritionRepository'
 import { wellnessRepository } from '../repositories/wellnessRepository'
 import { generateTrainingContext, formatTrainingContextForPrompt } from '../training-metrics'
+import { getInjuryLabel } from '../../utils/wellness'
 
 export async function buildAthleteContext(userId: string): Promise<{
   context: string
@@ -150,7 +151,8 @@ export async function buildAthleteContext(userId: string): Promise<{
       fatigue: true,
       soreness: true,
       stress: true,
-      mood: true
+      mood: true,
+      injury: true
     }
   })
 
@@ -442,6 +444,8 @@ export async function buildAthleteContext(userId: string): Promise<{
       if (wellness.sleepHours) metrics.push(`Sleep: ${wellness.sleepHours}h`)
       if (wellness.sleepScore) metrics.push(`Sleep Score: ${wellness.sleepScore}%`)
       if (wellness.readiness) metrics.push(`Readiness: ${wellness.readiness}%`)
+      if (wellness.injury)
+        metrics.push(`Injury: ${wellness.injury} (${getInjuryLabel(wellness.injury)})`)
 
       // Only include dates that have actual data
       if (metrics.length > 0) {
