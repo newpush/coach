@@ -1,5 +1,52 @@
 import { dailyCheckinRepository } from '../repositories/dailyCheckinRepository'
-import { formatUserDate } from '../date'
+import { formatUserDate, getUserLocalDate, getUserTimezone } from '../date'
+import { generateDailyCheckinTask } from '../../../trigger/daily-checkin'
+import { auditLogRepository } from '../repositories/auditLogRepository'
+
+/**
+ * Triggers a daily check-in generation if one doesn't exist for the user's current day.
+ */
+export async function triggerDailyCheckinIfNeeded(userId: string) {
+  try {
+    const timezone = await getUserTimezone(userId)
+    const today = getUserLocalDate(timezone)
+
+    // Check if check-in already exists for today
+    const existing = await dailyCheckinRepository.getByDate(userId, today)
+
+    if (existing) {
+      return { triggered: false, reason: 'Daily check-in already exists for today' }
+    }
+
+    console.log(
+      `🤖 [Auto-Analyze] [DailyCheckin] Triggering check-in generation for user ${userId} on ${today.toISOString()}`
+    )
+
+    await generateDailyCheckinTask.trigger(
+      {
+        userId,
+        date: today
+      },
+      {
+        concurrencyKey: userId,
+        tags: [`user:${userId}`]
+      }
+    )
+
+    // Log the action
+    await auditLogRepository.log({
+      userId,
+      action: 'AUTO_GENERATE_CHECKIN',
+      resourceType: 'DailyCheckin',
+      metadata: { date: today.toISOString(), source: 'webhook' }
+    })
+
+    return { triggered: true }
+  } catch (error) {
+    console.error(`[DailyCheckin] Failed to trigger check-in for user ${userId}:`, error)
+    return { triggered: false, error }
+  }
+}
 
 /**
  * Fetches and formats completed daily check-ins for a given date range.

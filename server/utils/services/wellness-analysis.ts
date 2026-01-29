@@ -5,6 +5,7 @@ import { getUserAiSettings } from '../ai-settings'
 import { auditLogRepository } from '../repositories/auditLogRepository'
 import { getUserLocalDate, getUserTimezone } from '../date'
 import { recommendTodayActivityTask } from '../../../trigger/recommend-today-activity'
+import { triggerDailyCheckinIfNeeded } from './checkin-service'
 import {
   getMoodLabel,
   getStressLabel,
@@ -267,6 +268,9 @@ export async function analyzeWellness(wellnessId: string, userId: string) {
         aiAnalyzedAt: new Date()
       }
     })
+
+    // Trigger daily check-in if needed (after wellness analysis so it has context)
+    await triggerDailyCheckinIfNeeded(userId)
 
     return {
       success: true,
