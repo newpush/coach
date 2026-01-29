@@ -253,15 +253,15 @@ export async function analyzeWellness(wellnessId: string, userId: string) {
 
         - Subjective:
 
-          * Stress: ${wellness.stress}/10 (${getStressLabel(wellness.stress || 0)})
+          * Stress: ${wellness.stress ? wellness.stress + '/10' : 'N/A'} (${getStressLabel(wellness.stress)})
 
-          * Fatigue: ${wellness.fatigue}/10 (${getFatigueLabel(wellness.fatigue || 0)})
+          * Fatigue: ${wellness.fatigue ? wellness.fatigue + '/10' : 'N/A'} (${getFatigueLabel(wellness.fatigue)})
 
-                * Soreness: ${wellness.soreness}/10 (${getSorenessLabel(wellness.soreness || 0)})
+                * Soreness: ${wellness.soreness ? wellness.soreness + '/10' : 'N/A'} (${getSorenessLabel(wellness.soreness)})
 
-                * Mood: ${wellness.mood}/10 (${getMoodLabel(wellness.mood || 0)})
+                * Mood: ${wellness.mood ? wellness.mood + '/10' : 'N/A'} (${getMoodLabel(wellness.mood)})
 
-                * Motivation: ${wellness.motivation}/10 (${getMotivationLabel(wellness.motivation || 0)})
+                * Motivation: ${wellness.motivation ? wellness.motivation + '/10' : 'N/A'} (${getMotivationLabel(wellness.motivation)})
 
                 * Hydration: ${wellness.hydration || 'N/A'} (${getHydrationLabel(wellness.hydration)})
 

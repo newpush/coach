@@ -666,11 +666,11 @@ ${
 - Sleep: ${enrichedTodayMetric.sleepHours?.toFixed(1) ?? 'Unknown'} hours (Score: ${enrichedTodayMetric.sleepScore ?? 'Unknown'}%)
 ${enrichedTodayMetric.spO2 ? `- SpO2: ${enrichedTodayMetric.spO2}%` : ''}
 - Subjective:
-  * Stress: ${enrichedTodayMetric.stress ?? 'N/A'}/10 (${getStressLabel(enrichedTodayMetric.stress || 0)})
-  * Fatigue: ${enrichedTodayMetric.fatigue ?? 'N/A'}/10 (${getFatigueLabel(enrichedTodayMetric.fatigue || 0)})
-  * Soreness: ${enrichedTodayMetric.soreness ?? 'N/A'}/10 (${getSorenessLabel(enrichedTodayMetric.soreness || 0)})
-  * Mood: ${enrichedTodayMetric.mood ?? 'N/A'}/10 (${getMoodLabel(enrichedTodayMetric.mood || 0)})
-  * Motivation: ${enrichedTodayMetric.motivation ?? 'N/A'}/10 (${getMotivationLabel(enrichedTodayMetric.motivation || 0)})
+  * Stress: ${enrichedTodayMetric.stress ? enrichedTodayMetric.stress + '/10' : 'N/A'} (${getStressLabel(enrichedTodayMetric.stress)})
+  * Fatigue: ${enrichedTodayMetric.fatigue ? enrichedTodayMetric.fatigue + '/10' : 'N/A'} (${getFatigueLabel(enrichedTodayMetric.fatigue)})
+  * Soreness: ${enrichedTodayMetric.soreness ? enrichedTodayMetric.soreness + '/10' : 'N/A'} (${getSorenessLabel(enrichedTodayMetric.soreness)})
+  * Mood: ${enrichedTodayMetric.mood ? enrichedTodayMetric.mood + '/10' : 'N/A'} (${getMoodLabel(enrichedTodayMetric.mood)})
+  * Motivation: ${enrichedTodayMetric.motivation ? enrichedTodayMetric.motivation + '/10' : 'N/A'} (${getMotivationLabel(enrichedTodayMetric.motivation)})
   * Hydration: ${enrichedTodayMetric.hydration ?? 'N/A'} (${getHydrationLabel(enrichedTodayMetric.hydration)})
   * Injury: ${enrichedTodayMetric.injury ?? 'None'} (${getInjuryLabel(enrichedTodayMetric.injury)})
 `

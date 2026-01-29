@@ -367,11 +367,11 @@ ${
 - HRV: ${todayMetric.hrv ?? 'N/A'}ms
 - Sleep: ${todayMetric.sleepHours?.toFixed(1) ?? 'N/A'}h (Score: ${todayMetric.sleepScore ?? 'N/A'}%)
 - Subjective:
-  * Stress: ${todayMetric.stress ?? 'N/A'}/10 (${getStressLabel(todayMetric.stress || 0)})
-  * Fatigue: ${todayMetric.fatigue ?? 'N/A'}/10 (${getFatigueLabel(todayMetric.fatigue || 0)})
-  * Soreness: ${todayMetric.soreness ?? 'N/A'}/10 (${getSorenessLabel(todayMetric.soreness || 0)})
-  * Mood: ${todayMetric.mood ?? 'N/A'}/10 (${getMoodLabel(todayMetric.mood || 0)})
-  * Motivation: ${todayMetric.motivation ?? 'N/A'}/10 (${getMotivationLabel(todayMetric.motivation || 0)})
+  * Stress: ${todayMetric.stress ? todayMetric.stress + '/10' : 'N/A'} (${getStressLabel(todayMetric.stress)})
+  * Fatigue: ${todayMetric.fatigue ? todayMetric.fatigue + '/10' : 'N/A'} (${getFatigueLabel(todayMetric.fatigue)})
+  * Soreness: ${todayMetric.soreness ? todayMetric.soreness + '/10' : 'N/A'} (${getSorenessLabel(todayMetric.soreness)})
+  * Mood: ${todayMetric.mood ? todayMetric.mood + '/10' : 'N/A'} (${getMoodLabel(todayMetric.mood)})
+  * Motivation: ${todayMetric.motivation ? todayMetric.motivation + '/10' : 'N/A'} (${getMotivationLabel(todayMetric.motivation)})
   * Hydration: ${todayMetric.hydration ?? 'N/A'} (${getHydrationLabel(todayMetric.hydration)})
   * Injury: ${todayMetric.injury ?? 'None'} (${getInjuryLabel(todayMetric.injury)})
 `
