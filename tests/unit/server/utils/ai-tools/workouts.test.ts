@@ -83,12 +83,16 @@ describe('workoutTools', () => {
         { toolCallId: '1', messages: [] }
       )
 
-      expect(workoutRepository.getById).toHaveBeenCalledWith('w1', userId)
+      expect(workoutRepository.getById).toHaveBeenCalledWith('w1', userId, {
+        include: {
+          plannedWorkout: true,
+          streams: true
+        }
+      })
       expect(result).toEqual({
         ...mockWorkout,
         date: expect.any(String),
-        power_curve: 'Not available',
-        intervals: []
+        streams: null
       })
     })
 

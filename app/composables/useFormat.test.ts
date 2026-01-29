@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+
 import { useFormat } from './useFormat'
 
-// Mock useAuth
+// Mock useAuth and computed which are normally auto-imported by Nuxt
 vi.stubGlobal('useAuth', () => ({
   data: {
     value: {
@@ -12,10 +13,7 @@ vi.stubGlobal('useAuth', () => ({
   }
 }))
 
-// Mock computed
-vi.stubGlobal('computed', (fn: any) => {
-  return { value: fn() }
-})
+vi.stubGlobal('computed', (fn: any) => ({ value: fn() }))
 
 describe('useFormat', () => {
   beforeEach(() => {

@@ -24,6 +24,7 @@ describe('getUserAiSettings', () => {
       aiModelPreference: 'pro',
       aiAutoAnalyzeWorkouts: true,
       aiAutoAnalyzeNutrition: true,
+      aiAutoAnalyzeReadiness: true,
       aiContext: 'I have a sore knee.'
     }
 
@@ -38,6 +39,7 @@ describe('getUserAiSettings', () => {
         aiModelPreference: true,
         aiAutoAnalyzeWorkouts: true,
         aiAutoAnalyzeNutrition: true,
+        aiAutoAnalyzeReadiness: true,
         aiContext: true,
         nickname: true,
         nutritionTrackingEnabled: true
@@ -49,6 +51,7 @@ describe('getUserAiSettings', () => {
       aiModelPreference: 'pro',
       aiAutoAnalyzeWorkouts: true,
       aiAutoAnalyzeNutrition: true,
+      aiAutoAnalyzeReadiness: true,
       aiContext: 'I have a sore knee.',
       nickname: undefined,
       nutritionTrackingEnabled: true
@@ -65,6 +68,7 @@ describe('getUserAiSettings', () => {
       aiModelPreference: 'flash',
       aiAutoAnalyzeWorkouts: false,
       aiAutoAnalyzeNutrition: false,
+      aiAutoAnalyzeReadiness: false,
       aiContext: null,
       nickname: null,
       nutritionTrackingEnabled: true
@@ -85,6 +89,7 @@ describe('getUserAiSettings', () => {
       aiModelPreference: 'flash',
       aiAutoAnalyzeWorkouts: false,
       aiAutoAnalyzeNutrition: false,
+      aiAutoAnalyzeReadiness: false,
       aiContext: undefined,
       nickname: undefined,
       nutritionTrackingEnabled: true
