@@ -153,7 +153,6 @@ export const wellnessRepository = {
           ) {
             finalUpdateData[key] = { ...existing.rawJson, ...value }
           } else {
-            // @ts-expect-error - Dynamic assignment
             finalUpdateData[key] = value
           }
         }

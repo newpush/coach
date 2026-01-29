@@ -12,6 +12,7 @@ import { workoutRepository } from '../repositories/workoutRepository'
 import { wellnessRepository } from '../repositories/wellnessRepository'
 import { normalizeTSS } from '../normalize-tss'
 import { calculateWorkoutStress } from '../calculate-workout-stress'
+import { triggerReadinessCheckIfNeeded } from './wellness-analysis'
 
 export const OuraService = {
   /**
@@ -123,6 +124,9 @@ export const OuraService = {
     await OuraService.syncDay(userId, twoDaysAgo)
     await OuraService.syncDay(userId, yesterday)
     await OuraService.syncDay(userId, today)
+
+    // Trigger auto-analysis/recommendation if needed
+    await triggerReadinessCheckIfNeeded(userId)
 
     return { handled: true, message: 'Synced last 3 days' }
   }

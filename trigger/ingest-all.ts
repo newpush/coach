@@ -12,6 +12,10 @@ import { ingestHevyTask } from './ingest-hevy'
 import { generateAthleteProfileTask } from './generate-athlete-profile'
 import { processSyncQueueTask } from './process-sync-queue'
 import { deduplicateWorkoutsTask } from './deduplicate-workouts'
+import { recommendTodayActivityTask } from './recommend-today-activity'
+import { analyzeNutritionTask } from './analyze-nutrition'
+import { getUserTimezone, getUserLocalDate } from '../server/utils/date'
+import { getUserAiSettings } from '../server/utils/ai-settings'
 
 export const ingestAllTask = task({
   id: 'ingest-all',
@@ -136,6 +140,8 @@ export const ingestAllTask = task({
 
     // Trigger all tasks sequentially to avoid BatchTriggerError in production
     const results = []
+    let anyWellnessUpdated = false
+    let yazioUpdated = false
 
     for (const item of tasksTrigger) {
       const integration = integrations.find((i) => {
@@ -160,6 +166,17 @@ export const ingestAllTask = task({
         if (run.ok) {
           logger.log(`✅ ${integration?.provider || item.task.id}: SUCCESS`)
           logger.log(`   ${JSON.stringify(run.output, null, 2)}`)
+
+          const output = run.output as any
+          // Check for wellness updates (Intervals returns { wellness: count }, others return { wellnessCount: count })
+          if (output.wellness > 0 || output.wellnessCount > 0 || output.sleepCount > 0) {
+            anyWellnessUpdated = true
+          }
+
+          // Check for Yazio updates
+          if (item.task.id === 'ingest-yazio' && output.count > 0) {
+            yazioUpdated = true
+          }
 
           results.push({
             provider: integration?.provider || item.task.id,
@@ -251,6 +268,65 @@ export const ingestAllTask = task({
         logger.log('✅ Triggered generate-athlete-profile')
       } catch (err) {
         logger.error('❌ Failed to chain generate-athlete-profile', { err })
+      }
+    }
+
+    // CHAIN: Auto-Analyze Nutrition (if updated)
+    if (yazioUpdated) {
+      try {
+        const aiSettings = await getUserAiSettings(userId)
+        if (aiSettings.aiAutoAnalyzeNutrition) {
+          logger.log('🔄 Nutrition updated: Checking for unanalyzed records...')
+          // Find unanalyzed nutrition records in the date range
+          const unanalyzedNutrition = await prisma.nutrition.findMany({
+            where: {
+              userId,
+              date: {
+                gte: new Date(startDate),
+                lte: new Date(endDate)
+              },
+              aiAnalysisStatus: 'NOT_STARTED'
+            },
+            select: { id: true, date: true }
+          })
+
+          if (unanalyzedNutrition.length > 0) {
+            logger.log(
+              `Found ${unanalyzedNutrition.length} unanalyzed nutrition records. Triggering analysis...`
+            )
+            for (const record of unanalyzedNutrition) {
+              await analyzeNutritionTask.trigger({ nutritionId: record.id })
+            }
+          }
+        }
+      } catch (err) {
+        logger.error('❌ Failed to trigger nutrition analysis', { err })
+      }
+    }
+
+    // CHAIN: Check Readiness (if wellness updated)
+    if (anyWellnessUpdated) {
+      try {
+        const aiSettings = await getUserAiSettings(userId)
+        if (aiSettings.aiAutoAnalyzeReadiness) {
+          logger.log('🔄 Wellness updated: Checking readiness...')
+          const timezone = await getUserTimezone(userId)
+          const todayLocal = getUserLocalDate(timezone)
+
+          await recommendTodayActivityTask.trigger(
+            {
+              userId,
+              date: todayLocal
+            },
+            {
+              concurrencyKey: userId,
+              tags: [`user:${userId}`]
+            }
+          )
+          logger.log('✅ Triggered recommend-today-activity (Readiness Check)')
+        }
+      } catch (err) {
+        logger.error('❌ Failed to trigger readiness check', { err })
       }
     }
 

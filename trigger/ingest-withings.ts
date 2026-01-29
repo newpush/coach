@@ -17,6 +17,7 @@ import { wellnessRepository } from '../server/utils/repositories/wellnessReposit
 import { workoutRepository } from '../server/utils/repositories/workoutRepository'
 import { getUserTimezone, getStartOfDayUTC } from '../server/utils/date'
 import { roundToTwoDecimals } from '../server/utils/number'
+import { triggerReadinessCheckIfNeeded } from '../server/utils/services/wellness-analysis'
 
 export const ingestWithingsTask = task({
   id: 'ingest-withings',
@@ -352,6 +353,9 @@ export const ingestWithingsTask = task({
           errorMessage: null
         }
       })
+
+      // Trigger auto-analysis/recommendation if needed
+      await triggerReadinessCheckIfNeeded(userId)
 
       return {
         success: true,

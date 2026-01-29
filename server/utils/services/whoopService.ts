@@ -9,6 +9,7 @@ import {
 import { workoutRepository } from '../repositories/workoutRepository'
 import { wellnessRepository } from '../repositories/wellnessRepository'
 import { getUserTimezone, getStartOfDayUTC } from '../date'
+import { triggerReadinessCheckIfNeeded } from './wellness-analysis'
 
 export const WhoopService = {
   /**
@@ -143,6 +144,8 @@ export const WhoopService = {
         // For recovery.updated, ID is Sleep UUID (V2).
         // For sleep.updated, ID is Sleep UUID.
         await WhoopService.syncRecovery(userId, resourceId)
+        // Trigger auto-analysis/recommendation if needed
+        await triggerReadinessCheckIfNeeded(userId)
         break
 
       case 'recovery.deleted':

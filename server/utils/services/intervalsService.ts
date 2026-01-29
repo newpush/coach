@@ -30,6 +30,8 @@ import {
   detectSurges
 } from '../pacing'
 import { getZoneIndex, DEFAULT_HR_ZONES, DEFAULT_POWER_ZONES } from '../training-metrics'
+import { triggerReadinessCheckIfNeeded } from './wellness-analysis'
+import { deduplicateWorkoutsTask } from '../../../trigger/deduplicate-workouts'
 
 export const IntervalsService = {
   /**
@@ -710,6 +712,8 @@ export const IntervalsService = {
         startDate = new Date()
         startDate.setDate(startDate.getDate() - 2)
         await IntervalsService.syncActivities(userId, startDate, endDate)
+        // Trigger deduplication and analysis
+        await deduplicateWorkoutsTask.trigger({ userId, dryRun: false }, { concurrencyKey: userId })
         break
 
       case 'ACTIVITY_UPDATED': {
@@ -731,6 +735,8 @@ export const IntervalsService = {
           startDate.setDate(startDate.getDate() - 2)
         }
         await IntervalsService.syncActivities(userId, startDate, endDate)
+        // Trigger deduplication and analysis
+        await deduplicateWorkoutsTask.trigger({ userId, dryRun: false }, { concurrencyKey: userId })
         break
       }
 
@@ -738,6 +744,8 @@ export const IntervalsService = {
         startDate = new Date()
         startDate.setDate(startDate.getDate() - 2)
         await IntervalsService.syncWellness(userId, startDate, endDate)
+        // Trigger auto-analysis/recommendation if needed
+        await triggerReadinessCheckIfNeeded(userId)
         break
 
       case 'FITNESS_UPDATED': {
@@ -751,6 +759,8 @@ export const IntervalsService = {
           startDate.setDate(startDate.getDate() - 2)
         }
         await IntervalsService.syncWellness(userId, startDate, endDate)
+        // Trigger auto-analysis/recommendation if needed
+        await triggerReadinessCheckIfNeeded(userId)
         break
       }
 

@@ -2,6 +2,8 @@ import { prisma } from '../db'
 import { generateStructuredAnalysis } from '../gemini'
 import { wellnessRepository } from '../repositories/wellnessRepository'
 import { getUserAiSettings } from '../ai-settings'
+import { getUserLocalDate, getUserTimezone } from '../date'
+import { recommendTodayActivityTask } from '../../../trigger/recommend-today-activity'
 import {
   getMoodLabel,
   getStressLabel,
@@ -14,49 +16,62 @@ import {
 
 // Define the schema for the AI analysis
 const wellnessAnalysisSchema = {
-  type: 'object',
-  properties: {
-    executive_summary: {
-      type: 'string',
-      description: "A concise summary of the athlete's wellness status (2-3 sentences)."
-    },
-    status: {
-      type: 'string',
-      enum: ['optimal', 'good', 'caution', 'rest_required'],
-      description: 'Overall wellness status classification.'
-    },
-    sections: {
-      type: 'array',
-      items: {
-        type: 'object',
-        properties: {
-          title: { type: 'string' },
-          status: { type: 'string', enum: ['optimal', 'good', 'caution', 'attention'] },
-          analysis_points: {
-            type: 'array',
-            items: { type: 'string' }
-          }
-        },
-        required: ['title', 'status', 'analysis_points']
-      }
-    },
-    recommendations: {
-      type: 'array',
-      items: {
-        type: 'object',
-        properties: {
-          title: { type: 'string' },
-          description: { type: 'string' },
-          priority: { type: 'string', enum: ['high', 'medium', 'low'] }
-        },
-        required: ['title', 'description', 'priority']
-      }
-    }
-  },
+  // ... existing code ...
   required: ['executive_summary', 'status', 'sections', 'recommendations']
 }
 
+/**
+ * Triggers a readiness check (recommend-today-activity) if enabled and not already done.
+ * Useful for webhooks (Whoop, Oura, Intervals) to react to new wellness data.
+ */
+export async function triggerReadinessCheckIfNeeded(userId: string) {
+  try {
+    const aiSettings = await getUserAiSettings(userId)
+
+    if (!aiSettings.aiAutoAnalyzeReadiness) {
+      return { triggered: false, reason: 'Auto-analyze readiness disabled' }
+    }
+
+    const timezone = await getUserTimezone(userId)
+    const today = getUserLocalDate(timezone)
+
+    // Check if a recommendation already exists for today
+    const existing = await prisma.activityRecommendation.findFirst({
+      where: {
+        userId,
+        date: today
+      }
+    })
+
+    if (existing) {
+      return { triggered: false, reason: 'Recommendation already exists for today' }
+    }
+
+    console.log(
+      `[ReadinessCheck] Triggering recommendation for user ${userId} on ${today.toISOString()}`
+    )
+
+    await recommendTodayActivityTask.trigger(
+      {
+        userId,
+        date: today
+      },
+      {
+        concurrencyKey: userId,
+        tags: [`user:${userId}`]
+      }
+    )
+
+    return { triggered: true }
+  } catch (error) {
+    console.error(`[ReadinessCheck] Failed to trigger check for user ${userId}:`, error)
+    return { triggered: false, error }
+  }
+}
+
 export async function analyzeWellness(wellnessId: string, userId: string) {
+  // ... existing code ...
+
   // Fetch the wellness record
   const wellness = await prisma.wellness.findUnique({
     where: { id: wellnessId }
