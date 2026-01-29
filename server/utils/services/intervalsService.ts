@@ -413,6 +413,8 @@ export const IntervalsService = {
     const historicalEnd = endDate > historicalEndLocal ? historicalEndLocal : endDate
 
     const wellnessData = await fetchIntervalsWellness(integration, startDate, historicalEnd)
+    const settings = integration.settings as any
+    const readinessScale = settings?.readinessScale || 'STANDARD'
 
     let upsertedCount = 0
     for (const wellness of wellnessData) {
@@ -423,7 +425,12 @@ export const IntervalsService = {
         Date.UTC(rawDate.getUTCFullYear(), rawDate.getUTCMonth(), rawDate.getUTCDate())
       )
 
-      const normalizedWellness = normalizeIntervalsWellness(wellness, userId, wellnessDate)
+      const normalizedWellness = normalizeIntervalsWellness(
+        wellness,
+        userId,
+        wellnessDate,
+        readinessScale
+      )
 
       await wellnessRepository.upsert(userId, wellnessDate, normalizedWellness, normalizedWellness)
       upsertedCount++

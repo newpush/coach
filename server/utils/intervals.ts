@@ -1234,8 +1234,37 @@ function mapIntervalsMotivation(val: number | undefined | null): number | null {
 export function normalizeIntervalsWellness(
   wellness: IntervalsWellness,
   userId: string,
-  date: Date
+  date: Date,
+  readinessScale: string = 'STANDARD'
 ) {
+  let readiness = wellness.readiness || null
+
+  // Normalize Readiness based on user preference
+  if (readiness !== null) {
+    if (readinessScale === 'POLAR') {
+      // Map 1-6 scale to 1-10
+      // 1 -> 1.6
+      // 6 -> 10
+      readiness = Math.round((readiness / 6) * 10)
+    } else if (readinessScale === 'TEN_POINT') {
+      // Already 1-10, ensure it's capped
+      if (readiness > 10) readiness = Math.round(readiness / 10) // Handle accidental 0-100 inputs
+    } else {
+      // STANDARD (0-100) or Default
+      // If we receive a small number (<=10) but expect STANDARD (0-100), convert it?
+      // No, "STANDARD" implies we expect 0-100 inputs from Oura/Whoop,
+      // BUT if Intervals sends 1-10, we usually map to 1-10 in our DB.
+      // Wait, our DB field 'readiness' is Int? (1-10).
+      // So if input is 0-100, we should convert to 1-10.
+      if (readiness > 10) {
+        readiness = Math.round(readiness / 10)
+      }
+    }
+
+    // Safety clamp
+    readiness = Math.max(1, Math.min(10, readiness))
+  }
+
   return {
     userId,
     date,
@@ -1255,7 +1284,7 @@ export function normalizeIntervalsWellness(
     sleepQuality: mapIntervalsSleepQuality(wellness.sleepQuality),
 
     // Recovery
-    readiness: wellness.readiness || null,
+    readiness: readiness,
     recoveryScore: null, // Not directly available from Intervals.icu
 
     // Subjective
