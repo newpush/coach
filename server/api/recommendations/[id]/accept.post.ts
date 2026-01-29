@@ -46,7 +46,7 @@ export default defineEventHandler(async (event) => {
   // Fetch the recommendation with the user check
   const recommendation = await prisma.activityRecommendation.findUnique({
     where: { id },
-    include: { plannedWorkout: true }
+    include: { plannedWorkout: { include: { completedWorkouts: true } } }
   })
 
   if (!recommendation || recommendation.userId !== userId) {
@@ -68,6 +68,20 @@ export default defineEventHandler(async (event) => {
   const newDescription = `${modifications.description}${modifications.zone_adjustments ? `\n\nZone Adjustments: ${modifications.zone_adjustments}` : ''}`
 
   let targetPlannedWorkoutId = recommendation.plannedWorkoutId
+
+  // Check if the linked planned workout is already completed
+  if (
+    recommendation.plannedWorkout &&
+    (recommendation.plannedWorkout.completed ||
+      recommendation.plannedWorkout.completionStatus === 'COMPLETED' ||
+      recommendation.plannedWorkout.completedWorkouts.length > 0)
+  ) {
+    // If the workout is already completed, we treat this as a new recommendation request
+    // and create a NEW workout instead of updating the completed one.
+    // This prevents the "517% compliance" bug where a completed workout's targets are retroactively changed.
+    targetPlannedWorkoutId = null
+  }
+
   let updatedWorkout
 
   if (targetPlannedWorkoutId) {
