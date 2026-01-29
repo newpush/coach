@@ -4,7 +4,7 @@ import { generateStructuredAnalysis } from '../server/utils/gemini'
 import { prisma } from '../server/utils/db'
 import { nutritionRepository } from '../server/utils/repositories/nutritionRepository'
 import { userAnalysisQueue } from './queues'
-import { getUserTimezone, formatUserDate } from '../server/utils/date'
+import { getUserTimezone, formatUserDate, formatDateUTC } from '../server/utils/date'
 import { getUserAiSettings } from '../server/utils/ai-settings'
 
 interface NutritionAnalysis {
@@ -404,7 +404,7 @@ function buildNutritionAnalysisPrompt(
     return value !== undefined && value !== null ? Number(value).toFixed(decimals) : 'N/A'
   }
 
-  const dateStr = formatUserDate(nutritionData.date, timezone, 'yyyy-MM-dd')
+  const dateStr = formatDateUTC(nutritionData.date, 'yyyy-MM-dd')
 
   let prompt = `You are an expert nutrition coach analyzing a day's food intake.
 Your persona is: **${persona}**. Adapt your tone and feedback style accordingly.

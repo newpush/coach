@@ -4,7 +4,12 @@ import { generateStructuredAnalysis } from '../server/utils/gemini'
 import { prisma } from '../server/utils/db'
 import { nutritionRepository } from '../server/utils/repositories/nutritionRepository'
 import { userReportsQueue } from './queues'
-import { getUserTimezone, formatUserDate, getStartOfDaysAgoUTC } from '../server/utils/date'
+import {
+  getUserTimezone,
+  formatUserDate,
+  formatDateUTC,
+  getStartOfDaysAgoUTC
+} from '../server/utils/date'
 
 // Analysis schema for nutrition reports
 const nutritionAnalysisSchema = {
@@ -104,7 +109,7 @@ function buildNutritionSummary(nutritionDays: any[], timezone: string) {
   return nutritionDays
     .map((day, idx) => {
       const dayNum = nutritionDays.length - idx
-      const dateStr = formatUserDate(day.date, timezone, 'EEE, MMM d')
+      const dateStr = formatDateUTC(day.date, 'EEE, MMM d')
 
       return `Day ${dayNum} (${dateStr}):
 - Calories: ${day.calories || 'N/A'}${day.caloriesGoal ? ` / ${day.caloriesGoal} goal` : ''} (${day.caloriesGoal && day.calories ? Math.round((day.calories / day.caloriesGoal) * 100) + '%' : 'N/A'})
@@ -120,7 +125,7 @@ function buildNutritionSummary(nutritionDays: any[], timezone: string) {
 function buildAnalysisPrompt(nutritionDays: any[], user: any, timezone: string) {
   const dateRange =
     nutritionDays.length > 0
-      ? `${formatUserDate(nutritionDays[nutritionDays.length - 1].date, timezone)} - ${formatUserDate(nutritionDays[0].date, timezone)}`
+      ? `${formatDateUTC(nutritionDays[nutritionDays.length - 1].date)} - ${formatDateUTC(nutritionDays[0].date)}`
       : 'Unknown'
 
   return `You are a friendly, supportive nutrition coach analyzing your athlete's weekly dietary intake.
