@@ -5,6 +5,7 @@ import { workoutRepository } from '../server/utils/repositories/workoutRepositor
 import { recalculateStressAfterDate } from '../server/utils/calculate-workout-stress'
 import { userBackgroundQueue } from './queues'
 import { deduplicationService } from '../server/utils/services/deduplicationService'
+import { analyzeWorkoutTask } from './analyze-workout'
 
 export const deduplicateWorkoutsTask = task({
   id: 'deduplicate-workouts',
@@ -41,6 +42,12 @@ export const deduplicateWorkoutsTask = task({
         actualUserId = user.id
         logger.log('Resolved user ID', { email: userId, actualUserId })
       }
+
+      // Fetch user settings for auto-analysis
+      const userSettings = await prisma.user.findUnique({
+        where: { id: actualUserId },
+        select: { aiAutoAnalyzeWorkouts: true }
+      })
 
       // Here we explicitly want ALL workouts, including potential duplicates, to analyze them.
       // So we use includeDuplicates: true
@@ -129,6 +136,7 @@ export const deduplicateWorkoutsTask = task({
 
       let deletedCount = 0
       let keptCount = 0
+      const processedPrimaryWorkoutIds = new Set<string>()
 
       for (const group of duplicateGroups) {
         // If specific targets are requested, skip groups that don't match
@@ -147,6 +155,7 @@ export const deduplicateWorkoutsTask = task({
         const result = await deduplicationService.mergeDuplicateGroup(group)
         deletedCount += result.deletedCount
         keptCount += result.keptCount
+        processedPrimaryWorkoutIds.add(group.bestWorkoutId)
       }
 
       logger.log('Deduplication complete', {
@@ -169,6 +178,45 @@ export const deduplicateWorkoutsTask = task({
 
         logger.log(`Triggering training stress recalculation after ${earliestDate.toISOString()}`)
         await recalculateStressAfterDate(actualUserId, earliestDate)
+      }
+
+      // Auto-Analyze Primary Workouts
+      // We check if the user has enabled auto-analysis
+      if (userSettings?.aiAutoAnalyzeWorkouts) {
+        logger.log('Checking for unanalyzed workouts (last 30 days)...')
+
+        const thirtyDaysAgo = new Date()
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+
+        // Find primary workouts that:
+        // 1. Are recent (last 30 days)
+        // 2. Have NOT been analyzed yet (or status is null/NOT_STARTED)
+        // 3. Are NOT duplicates (isDuplicate = false)
+        const unanalyzedWorkouts = await prisma.workout.findMany({
+          where: {
+            userId: actualUserId,
+            date: { gte: thirtyDaysAgo },
+            isDuplicate: false,
+            OR: [
+              { aiAnalysisStatus: null },
+              { aiAnalysisStatus: 'NOT_STARTED' },
+              { aiAnalysisStatus: 'FAILED' } // Retry failed ones too? Maybe safer to stick to NOT_STARTED.
+            ]
+          },
+          select: { id: true, title: true, date: true }
+        })
+
+        if (unanalyzedWorkouts.length > 0) {
+          logger.log(
+            `Found ${unanalyzedWorkouts.length} unanalyzed workouts. Triggering analysis...`
+          )
+          for (const workout of unanalyzedWorkouts) {
+            logger.log(`Triggering analysis for: ${workout.title} (${workout.date.toISOString()})`)
+            await analyzeWorkoutTask.trigger({ workoutId: workout.id })
+          }
+        } else {
+          logger.log('No unanalyzed workouts found in the last 30 days.')
+        }
       }
 
       return {
