@@ -74,6 +74,7 @@ export const useUserStore = defineStore('user', () => {
     // Grace period logic
     const isEffectivePremium =
       user.value.subscriptionStatus === 'ACTIVE' ||
+      user.value.subscriptionStatus === 'CONTRIBUTOR' ||
       (user.value.subscriptionPeriodEnd && now < periodEnd)
 
     const effectiveTier = isEffectivePremium ? user.value.subscriptionTier : 'FREE'

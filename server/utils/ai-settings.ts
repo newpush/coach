@@ -6,6 +6,7 @@ export interface AiSettings {
   aiModelPreference: GeminiModel
   aiAutoAnalyzeWorkouts: boolean
   aiAutoAnalyzeNutrition: boolean
+  aiAutoAnalyzeReadiness: boolean
   aiContext?: string | null
   nutritionTrackingEnabled: boolean
   nickname?: string | null
@@ -16,6 +17,7 @@ const DEFAULT_SETTINGS: AiSettings = {
   aiModelPreference: 'flash',
   aiAutoAnalyzeWorkouts: false,
   aiAutoAnalyzeNutrition: false,
+  aiAutoAnalyzeReadiness: false,
   aiContext: null,
   nutritionTrackingEnabled: true,
   nickname: null
@@ -29,6 +31,7 @@ export async function getUserAiSettings(userId: string): Promise<AiSettings> {
       aiModelPreference: true,
       aiAutoAnalyzeWorkouts: true,
       aiAutoAnalyzeNutrition: true,
+      aiAutoAnalyzeReadiness: true,
       aiContext: true,
       nutritionTrackingEnabled: true,
       nickname: true
@@ -45,6 +48,7 @@ export async function getUserAiSettings(userId: string): Promise<AiSettings> {
       (user.aiModelPreference as GeminiModel) || DEFAULT_SETTINGS.aiModelPreference,
     aiAutoAnalyzeWorkouts: user.aiAutoAnalyzeWorkouts ?? DEFAULT_SETTINGS.aiAutoAnalyzeWorkouts,
     aiAutoAnalyzeNutrition: user.aiAutoAnalyzeNutrition ?? DEFAULT_SETTINGS.aiAutoAnalyzeNutrition,
+    aiAutoAnalyzeReadiness: user.aiAutoAnalyzeReadiness ?? DEFAULT_SETTINGS.aiAutoAnalyzeReadiness,
     aiContext: user.aiContext,
     nutritionTrackingEnabled:
       user.nutritionTrackingEnabled ?? DEFAULT_SETTINGS.nutritionTrackingEnabled,
