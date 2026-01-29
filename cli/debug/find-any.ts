@@ -25,6 +25,13 @@ const findAnyCommand = new Command('find-any')
     try {
       console.log(`Searching for ${id}...`)
 
+      const user = await prisma.user.findUnique({ where: { id } })
+      if (user) {
+        console.log(chalk.green('Found in User (by ID)'))
+        console.log(user)
+        return
+      }
+
       const llm = await prisma.llmUsage.findUnique({ where: { id } })
       if (llm) {
         console.log(chalk.green('Found in LlmUsage (by ID)'))

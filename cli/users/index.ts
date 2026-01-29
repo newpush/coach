@@ -7,12 +7,14 @@ import pg from 'pg'
 import statsCommand from './stats'
 import contributorCommand from './contributor'
 import subscriptionsCommand from './subscriptions'
+import analyzeCommand from './analyze'
 
 const usersCommand = new Command('users').description('User management commands')
 
 usersCommand.addCommand(statsCommand)
 usersCommand.addCommand(contributorCommand)
 usersCommand.addCommand(subscriptionsCommand)
+usersCommand.addCommand(analyzeCommand)
 
 usersCommand
   .command('set-admin')
@@ -108,6 +110,7 @@ usersCommand
       const users = await prisma.user.findMany({
         where: {
           OR: [
+            { id: { equals: query } },
             { email: { contains: query, mode: 'insensitive' } },
             { name: { contains: query, mode: 'insensitive' } }
           ]
