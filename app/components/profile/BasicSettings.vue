@@ -614,13 +614,11 @@
           </button>
         </div>
         <div v-if="editingField === 'dob'" class="flex gap-2">
-          <UInput
-            :model-value="editValue ? formatUserDate(editValue, timezone, 'yyyy-MM-dd') : ''"
-            type="date"
+          <UInputDate
+            v-model="editValue"
             size="sm"
             class="w-full"
             autofocus
-            @update:model-value="(val) => (editValue = val)"
             @keyup.enter="saveField"
             @keyup.esc="cancelEdit"
           />
@@ -872,6 +870,7 @@
 </template>
 
 <script setup lang="ts">
+  import { CalendarDate, parseDate, type DateValue } from '@internationalized/date'
   import { countries } from '~/utils/countries'
   const props = defineProps<{
     modelValue: any
@@ -994,7 +993,15 @@
 
   function startEdit(field: string) {
     editingField.value = field
-    editValue.value = props.modelValue[field]
+    if (field === 'dob' && props.modelValue[field]) {
+      try {
+        editValue.value = parseDate(props.modelValue[field])
+      } catch (e) {
+        editValue.value = null
+      }
+    } else {
+      editValue.value = props.modelValue[field]
+    }
   }
 
   // Watch for changes to editValue
@@ -1005,6 +1012,10 @@
   function saveField() {
     if (editingField.value) {
       let newValue = editValue.value === '' ? null : editValue.value
+
+      if (editingField.value === 'dob' && newValue) {
+        newValue = newValue.toString()
+      }
 
       // Coerce numeric fields
       const numericFields = ['weight', 'height', 'restingHr', 'maxHr', 'lthr', 'ftp']
