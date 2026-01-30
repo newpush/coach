@@ -150,10 +150,28 @@
                 </UFormField>
 
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <UFormField label="Target URL (Optional)" name="targetUrl">
+                    <UInput
+                      v-model="state.targetUrl"
+                      class="w-full"
+                      placeholder="https://example.com"
+                    />
+                  </UFormField>
+
+                  <UFormField label="Action Button Label (Optional)" name="actionLabel">
+                    <UInput
+                      v-model="state.actionLabel"
+                      class="w-full"
+                      placeholder="e.g., Subscribe Now"
+                    />
+                  </UFormField>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <UFormField label="Type" name="type" required>
                     <USelect
                       v-model="state.type"
-                      :items="['INFO', 'WARNING', 'ERROR', 'SUCCESS']"
+                      :items="['INFO', 'WARNING', 'ERROR', 'SUCCESS', 'ADVERT']"
                       class="w-full"
                     />
                   </UFormField>
@@ -213,17 +231,24 @@
   const state = reactive({
     title: '',
     content: '',
-    type: 'INFO' as 'INFO' | 'WARNING' | 'ERROR' | 'SUCCESS',
+    type: 'INFO' as 'INFO' | 'WARNING' | 'ERROR' | 'SUCCESS' | 'ADVERT',
     isActive: true,
-    expiresAt: undefined as string | undefined
+    expiresAt: undefined as string | undefined,
+    targetUrl: undefined as string | undefined,
+    actionLabel: undefined as string | undefined
   })
 
   const schema = z.object({
     title: z.string().min(1),
     content: z.string().min(1),
-    type: z.enum(['INFO', 'WARNING', 'ERROR', 'SUCCESS']),
+    type: z.enum(['INFO', 'WARNING', 'ERROR', 'SUCCESS', 'ADVERT']),
     isActive: z.boolean(),
-    expiresAt: z.string().optional()
+    expiresAt: z.string().optional(),
+    targetUrl: z
+      .union([z.string().url(), z.literal('')])
+      .optional()
+      .nullable(),
+    actionLabel: z.string().optional().nullable()
   })
 
   function openCreateModal() {
@@ -233,6 +258,8 @@
     state.type = 'INFO'
     state.isActive = true
     state.expiresAt = undefined
+    state.targetUrl = undefined
+    state.actionLabel = undefined
     isModalOpen.value = true
   }
 
@@ -242,6 +269,8 @@
     state.content = row.content
     state.type = row.type
     state.isActive = row.isActive
+    state.targetUrl = row.targetUrl
+    state.actionLabel = row.actionLabel
     // Format date for datetime-local input (YYYY-MM-DDThh:mm)
     if (row.expiresAt) {
       const d = new Date(row.expiresAt)
@@ -270,6 +299,8 @@
         return 'red'
       case 'SUCCESS':
         return 'green'
+      case 'ADVERT':
+        return 'yellow'
       default:
         return 'gray'
     }
