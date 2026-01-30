@@ -64,15 +64,25 @@ polarCommand
 
       if (createRes.ok) {
         const data: any = await createRes.json()
-        console.log(chalk.green(`\n✔ Webhook created successfully!`))
-        console.log(chalk.bold(`ID: ${data.id}`))
-        console.log(chalk.bold(`Events: ${data.events.join(', ')}`))
-        console.log(chalk.bold(`Url: ${data.url}`))
+        const webhook = data.data || data
 
-        console.log(chalk.bgRed.white.bold('\n IMPORTANT: SAVE THIS SECRET KEY! '))
-        console.log(chalk.bgRed.white.bold(` SIGNATURE_SECRET_KEY: ${data.signature_secret_key} `))
-        console.log(chalk.yellow('\nAdd this to your .env file as:'))
-        console.log(chalk.cyan(`POLAR_WEBHOOK_SECRET="${data.signature_secret_key}"`))
+        console.log(chalk.green(`\n✔ Webhook created successfully!`))
+        console.log(chalk.bold(`ID: ${webhook.id}`))
+        if (webhook.events) {
+          console.log(chalk.bold(`Events: ${webhook.events.join(', ')}`))
+        }
+        console.log(chalk.bold(`Url: ${webhook.url}`))
+
+        if (webhook.signature_secret_key) {
+          console.log(chalk.bgRed.white.bold('\n IMPORTANT: SAVE THIS SECRET KEY! '))
+          console.log(
+            chalk.bgRed.white.bold(` SIGNATURE_SECRET_KEY: ${webhook.signature_secret_key} `)
+          )
+          console.log(chalk.yellow('\nAdd this to your .env file as:'))
+          console.log(chalk.cyan(`POLAR_WEBHOOK_SECRET="${webhook.signature_secret_key}"`))
+        } else {
+          console.log(chalk.yellow('\nWarning: signature_secret_key missing in response.'))
+        }
       } else {
         const text = await createRes.text()
         if (createRes.status === 409) {

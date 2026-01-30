@@ -313,7 +313,7 @@ export function normalizePolarExercise(exercise: PolarExercise, userId: string) 
     maxHr: exercise.heart_rate?.maximum || null,
     calories: exercise.calories || null,
     averageSpeed: exercise.distance && durationSec > 0 ? exercise.distance / durationSec : null,
-    rawJson: exercise
+    rawJson: exercise as any
   }
 }
 
@@ -333,7 +333,7 @@ export function normalizePolarSleep(sleep: PolarSleep, userId: string) {
     sleepHours,
     sleepScore: sleep.sleep_score,
     sleepQuality: sleep.sleep_rating,
-    rawJson: sleep
+    rawJson: sleep as any
   }
 }
 
@@ -381,6 +381,6 @@ export function normalizePolarNightlyRecharge(recharge: PolarNightlyRecharge, us
                     : null,
 
     respiration: recharge.breathing_rate_avg,
-    rawJson: recharge
+    rawJson: recharge as any
   }
 }
