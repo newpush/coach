@@ -156,9 +156,11 @@ model SystemMessage {
   id         String                       @id @default(uuid())
   title      String
   content    String
-  type       String                       @default("INFO")
-  isActive   Boolean                      @default(true)
-  expiresAt  DateTime?
+    type         String                       @default("INFO")
+    isActive     Boolean                      @default(true)
+    targetUrl    String?
+    actionLabel  String?
+    expiresAt    DateTime?
   createdAt  DateTime                     @default(now())
   updatedAt  DateTime                     @updatedAt
   dismissals UserSystemMessageDismissal[]

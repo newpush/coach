@@ -12,8 +12,10 @@ export default defineEventHandler(async (event) => {
   const schema = z.object({
     title: z.string().min(1),
     content: z.string().min(1),
-    type: z.enum(['INFO', 'WARNING', 'ERROR', 'SUCCESS']).default('INFO'),
+    type: z.enum(['INFO', 'WARNING', 'ERROR', 'SUCCESS', 'ADVERT']).default('INFO'),
     isActive: z.boolean().default(true),
+    targetUrl: z.string().optional().nullable(),
+    actionLabel: z.string().optional().nullable(),
     expiresAt: z.string().nullable().optional() // ISO string
   })
 
@@ -28,6 +30,8 @@ export default defineEventHandler(async (event) => {
       content: result.data.content,
       type: result.data.type,
       isActive: result.data.isActive,
+      targetUrl: result.data.targetUrl,
+      actionLabel: result.data.actionLabel,
       expiresAt: result.data.expiresAt ? new Date(result.data.expiresAt) : null
     }
   })
