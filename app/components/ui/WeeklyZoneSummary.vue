@@ -31,7 +31,7 @@
       </div>
 
       <!-- Legend/Stats -->
-      <div class="grid grid-cols-3 sm:grid-cols-6 gap-2 text-xs">
+      <div class="grid grid-cols-3 sm:grid-cols-7 gap-2 text-xs">
         <div
           v-for="zone in zones"
           :key="zone.name"
@@ -66,6 +66,8 @@
 </template>
 
 <script setup lang="ts">
+  import { useZoneDistribution } from '~/composables/useZoneDistribution'
+
   const props = defineProps<{
     workouts: any[]
     loading?: boolean
@@ -73,59 +75,13 @@
 
   const emit = defineEmits(['generate'])
 
-  const hasData = computed(() => props.workouts?.some((w) => w.structuredWorkout))
+  const hasData = computed(() =>
+    props.workouts?.some(
+      (w) => w.structuredWorkout || w.type === 'WeightTraining' || w.type === 'Gym'
+    )
+  )
 
-  const zones = computed(() => {
-    const distribution = [
-      { name: 'Z1', min: 0, max: 0.55, duration: 0, color: '#9ca3af' }, // gray-400
-      { name: 'Z2', min: 0.55, max: 0.75, duration: 0, color: '#3b82f6' }, // blue-500
-      { name: 'Z3', min: 0.75, max: 0.9, duration: 0, color: '#22c55e' }, // green-500
-      { name: 'Z4', min: 0.9, max: 1.05, duration: 0, color: '#eab308' }, // yellow-500
-      { name: 'Z5', min: 1.05, max: 1.2, duration: 0, color: '#f97316' }, // orange-500
-      { name: 'Z6', min: 1.2, max: 9.99, duration: 0, color: '#ef4444' } // red-500
-    ]
-
-    if (!props.workouts) return distribution
-
-    props.workouts.forEach((w) => {
-      if (w.structuredWorkout?.steps && Array.isArray(w.structuredWorkout.steps)) {
-        w.structuredWorkout.steps.forEach((step: any) => {
-          let intensity = 0
-
-          // Priority 1: Power (Cycling / Running Power)
-          // Usually provided as a decimal ratio (0.75 = 75% FTP) or a 'value' object
-          if (typeof step.power === 'number') {
-            intensity = step.power
-          } else if (step.power?.value) {
-            intensity = step.power.value
-          }
-          // Priority 2: Heart Rate (Running / Cardio)
-          // Usually provided as decimal ratio of LTHR/MaxHR
-          else if (typeof step.heartRate === 'number') {
-            intensity = step.heartRate
-          } else if (step.heartRate?.value) {
-            intensity = step.heartRate.value
-          }
-
-          // Intensity 0 means rest or undefined, often Z1
-
-          const duration = step.durationSeconds || step.duration || 0
-
-          // Find matching zone based on intensity
-          // Z1: 0 - 0.55
-          // ...
-          // Z6: 1.20+
-          const zone =
-            distribution.find((z) => intensity <= z.max) || distribution[distribution.length - 1]
-          if (zone) {
-            zone.duration += duration
-          }
-        })
-      }
-    })
-
-    return distribution
-  })
+  const zones = computed(() => useZoneDistribution(props.workouts))
 
   const totalDuration = computed(() =>
     Math.max(
