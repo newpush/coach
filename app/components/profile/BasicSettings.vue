@@ -614,16 +614,24 @@
           </button>
         </div>
         <div v-if="editingField === 'dob'" class="flex gap-2">
-          <UInput
-            :model-value="editValue ? formatUserDate(editValue, timezone, 'yyyy-MM-dd') : ''"
-            type="date"
-            size="sm"
+          <UPopover
+            :popper="{ placement: 'bottom-start' }"
             class="w-full"
-            autofocus
-            @update:model-value="(val) => (editValue = val)"
-            @keyup.enter="saveField"
-            @keyup.esc="cancelEdit"
-          />
+            @keydown.enter="saveField"
+            @keydown.esc="cancelEdit"
+          >
+            <UButton
+              icon="i-heroicons-calendar-days-20-solid"
+              :label="editValue ? formatUserDate(editValue, timezone, 'MMM d, yyyy') : 'Select date'"
+              color="gray"
+              variant="outline"
+              class="w-full"
+              autofocus
+            />
+            <template #panel="{ close }">
+              <DatePicker v-model="editValue" is-required @update:model-value="close" />
+            </template>
+          </UPopover>
           <UButton
             size="xs"
             color="primary"
@@ -640,7 +648,7 @@
           />
         </div>
         <p v-else class="font-medium text-lg">
-          {{ modelValue.dob ? formatDate(modelValue.dob) : 'Not set' }}
+          {{ modelValue.dob ? formatUserDate(modelValue.dob, timezone, 'MMM d, yyyy') : 'Not set' }}
         </p>
       </div>
 
@@ -872,6 +880,8 @@
 </template>
 
 <script setup lang="ts">
+  import { DatePicker } from 'v-calendar'
+  import 'v-calendar/dist/style.css'
   import { countries } from '~/utils/countries'
   const props = defineProps<{
     modelValue: any
@@ -879,7 +889,7 @@
   }>()
 
   const emit = defineEmits(['update:modelValue', 'autodetect'])
-  const { formatDate, formatUserDate, timezone } = useFormat()
+  const { formatUserDate, timezone } = useFormat()
 
   const editingField = ref<string | null>(null)
   const editValue = ref<any>(null)
