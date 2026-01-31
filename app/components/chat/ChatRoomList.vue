@@ -13,6 +13,8 @@
 
   const roomToDelete = ref<string | null>(null)
   const isDeleteModalOpen = ref(false)
+  const isReportModalOpen = ref(false)
+  const reportRoomId = ref<string | null>(null)
 
   // Share Modal State
   const isShareModalOpen = ref(false)
@@ -24,6 +26,11 @@
   function confirmDelete(roomId: string) {
     roomToDelete.value = roomId
     isDeleteModalOpen.value = true
+  }
+
+  function confirmReport(roomId: string) {
+    reportRoomId.value = roomId
+    isReportModalOpen.value = true
   }
 
   function handleDelete() {
@@ -86,6 +93,11 @@
       }
     ],
     [
+      {
+        label: 'Report Issue',
+        icon: 'i-heroicons-flag',
+        onSelect: () => confirmReport(room.roomId)
+      },
       {
         label: 'Delete Room',
         icon: 'i-heroicons-trash',
@@ -203,6 +215,21 @@
             @click="isShareModalOpen = false"
           />
         </div>
+      </template>
+    </UModal>
+
+    <!-- Report Issue Modal -->
+    <UModal
+      v-model:open="isReportModalOpen"
+      title="Report Issue"
+      description="Help us improve the chat experience."
+    >
+      <template #body>
+        <AiFeedbackForm
+          :room-id="reportRoomId"
+          @cancel="isReportModalOpen = false"
+          @submit="isReportModalOpen = false"
+        />
       </template>
     </UModal>
 

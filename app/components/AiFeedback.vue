@@ -81,28 +81,12 @@
       description="Your feedback helps improve the AI coach."
     >
       <template #body>
-        <div class="space-y-4">
-          <p class="text-sm text-gray-500">What went wrong with this response? (Optional)</p>
-          <UTextarea
-            v-model="feedbackText"
-            placeholder="The advice was generic..."
-            autofocus
-            class="w-full"
-          />
-        </div>
-      </template>
-
-      <template #footer>
-        <div class="flex justify-end gap-2 w-full">
-          <UButton color="neutral" variant="ghost" @click="isModalOpen = false">Skip</UButton>
-          <UButton
-            color="primary"
-            :loading="loading === 'SUBMITTING_TEXT'"
-            @click="submitTextFeedback"
-          >
-            Submit
-          </UButton>
-        </div>
+        <AiFeedbackForm
+          :llm-usage-id="llmUsageId"
+          :initial-feedback-text="feedbackText"
+          @cancel="isModalOpen = false"
+          @submit="isModalOpen = false"
+        />
       </template>
     </UModal>
   </div>
@@ -145,24 +129,5 @@
   function handleThumbsDown() {
     submitFeedback('THUMBS_DOWN')
     isModalOpen.value = true
-  }
-
-  async function submitTextFeedback() {
-    loading.value = 'SUBMITTING_TEXT'
-    try {
-      await $fetch('/api/llm/feedback', {
-        method: 'POST',
-        body: {
-          llmUsageId: props.llmUsageId,
-          feedback: 'THUMBS_DOWN',
-          feedbackText: feedbackText.value
-        }
-      })
-      isModalOpen.value = false
-    } catch (e) {
-      console.error('Failed to submit text feedback', e)
-    } finally {
-      loading.value = null
-    }
   }
 </script>
