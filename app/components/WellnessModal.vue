@@ -403,7 +403,7 @@
                   <div
                     class="absolute bottom-full mb-2 left-1/2 transform -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity bg-gray-900 text-white text-[10px] font-bold px-2 py-1 rounded shadow-xl whitespace-nowrap pointer-events-none z-10"
                   >
-                    {{ formatDate(day.date, 'MMM d') }}:
+                    {{ formatDateUTC(day.date, 'MMM d') }}:
                     {{ day.hrv ? Math.round(day.hrv) + 'ms' : 'N/A' }}
                   </div>
                 </div>
@@ -432,7 +432,7 @@
                   <div
                     class="absolute bottom-full mb-2 left-1/2 transform -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity bg-gray-900 text-white text-[10px] font-bold px-2 py-1 rounded shadow-xl whitespace-nowrap pointer-events-none z-10"
                   >
-                    {{ formatDate(day.date, 'MMM d') }}:
+                    {{ formatDateUTC(day.date, 'MMM d') }}:
                     {{ day.hoursSlept ? day.hoursSlept.toFixed(1) + 'h' : 'N/A' }}
                   </div>
                 </div>
@@ -463,7 +463,7 @@
                   <div
                     class="absolute bottom-full mb-2 left-1/2 transform -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity bg-gray-900 text-white text-[10px] font-bold px-2 py-1 rounded shadow-xl whitespace-nowrap pointer-events-none z-10"
                   >
-                    {{ formatDate(day.date, 'MMM d') }}:
+                    {{ formatDateUTC(day.date, 'MMM d') }}:
                     {{ day.restingHr ? day.restingHr + 'bpm' : 'N/A' }}
                   </div>
                 </div>
@@ -492,7 +492,7 @@
                   <div
                     class="absolute bottom-full mb-2 left-1/2 transform -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity bg-gray-900 text-white text-[10px] font-bold px-2 py-1 rounded shadow-xl whitespace-nowrap pointer-events-none z-10"
                   >
-                    {{ formatDate(day.date, 'MMM d') }}:
+                    {{ formatDateUTC(day.date, 'MMM d') }}:
                     {{ day.recoveryScore ? day.recoveryScore + '%' : 'N/A' }}
                   </div>
                 </div>
@@ -596,7 +596,7 @@
   const staleLabel = computed(() => wellnessStatus.value.label)
 
   const formattedDate = computed(() => {
-    return props.date ? formatDate(props.date, 'EEEE, MMMM d, yyyy') : ''
+    return props.date ? formatDateUTC(props.date, 'EEEE, MMMM d, yyyy') : ''
   })
 
   const loading = ref(false)
