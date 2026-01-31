@@ -160,28 +160,41 @@ export async function buildAthleteContext(userId: string): Promise<{
   const fourteenDaysAhead = new Date(todayDate)
   fourteenDaysAhead.setUTCDate(fourteenDaysAhead.getUTCDate() + 14)
 
-  const plannedWorkouts = await prisma.plannedWorkout.findMany({
-    where: {
-      userId,
-      date: {
-        gte: todayDate,
-        lte: fourteenDaysAhead
+  const [plannedWorkouts, lastPlannedWorkout] = await Promise.all([
+    prisma.plannedWorkout.findMany({
+      where: {
+        userId,
+        date: {
+          gte: todayDate,
+          lte: fourteenDaysAhead
+        },
+        completed: false
       },
-      completed: false
-    },
-    orderBy: { date: 'asc' },
-    take: 20,
-    select: {
-      id: true,
-      date: true,
-      title: true,
-      description: true,
-      type: true,
-      durationSec: true,
-      tss: true,
-      syncStatus: true
-    }
-  })
+      orderBy: { date: 'asc' },
+      take: 21,
+      select: {
+        id: true,
+        date: true,
+        title: true,
+        description: true,
+        type: true,
+        durationSec: true,
+        tss: true,
+        syncStatus: true
+      }
+    }),
+    prisma.plannedWorkout.findFirst({
+      where: { userId, completed: false, date: { gte: todayDate } },
+      orderBy: { date: 'desc' },
+      select: { date: true }
+    })
+  ])
+
+  // Check if we hit the limit
+  const hasMorePlannedWorkouts = plannedWorkouts.length > 20
+  const displayedPlannedWorkouts = hasMorePlannedWorkouts
+    ? plannedWorkouts.slice(0, 20)
+    : plannedWorkouts
 
   // Fetch training availability
   const trainingAvailability = await prisma.trainingAvailability.findMany({
@@ -518,10 +531,14 @@ export async function buildAthleteContext(userId: string): Promise<{
   }
 
   // Planned Workouts (Next 14 Days)
-  if (plannedWorkouts.length > 0) {
+  if (displayedPlannedWorkouts.length > 0) {
     athleteContext += `\n### Upcoming Planned Workouts (Next 14 Days)\n`
-    athleteContext += `*Total: ${plannedWorkouts.length} workouts scheduled*\n\n`
-    for (const workout of plannedWorkouts) {
+    athleteContext += `*Total: ${displayedPlannedWorkouts.length}${hasMorePlannedWorkouts ? '+' : ''} workouts scheduled*\n`
+    if (lastPlannedWorkout) {
+      athleteContext += `*Planning Horizon: Workouts scheduled until ${formatDateUTC(lastPlannedWorkout.date)}*\n`
+    }
+    athleteContext += `\n`
+    for (const workout of displayedPlannedWorkouts) {
       const syncIcon =
         workout.syncStatus === 'SYNCED'
           ? '✓'
@@ -540,6 +557,9 @@ export async function buildAthleteContext(userId: string): Promise<{
         athleteContext += `  - ${details.join(' | ')}\n`
       }
       athleteContext += `  - ID: ${workout.id}\n`
+    }
+    if (hasMorePlannedWorkouts) {
+      athleteContext += `\n*Note: List truncated. Use 'get_planned_workouts' tool to view all upcoming sessions.*\n`
     }
     athleteContext += `\n*Legend: ✓ Synced to Intervals.icu | ⏳ Sync pending | ⚠ Sync failed | ○ Local only*\n`
   } else {

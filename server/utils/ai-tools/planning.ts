@@ -13,9 +13,120 @@ import {
 import { tags } from '@trigger.dev/sdk/v3'
 import { plannedWorkoutRepository } from '../repositories/plannedWorkoutRepository'
 import { workoutRepository } from '../repositories/workoutRepository'
-import { getUserLocalDate, formatUserDate, formatDateUTC } from '../../utils/date'
+import {
+  getUserLocalDate,
+  formatUserDate,
+  formatDateUTC,
+  getStartOfDayUTC,
+  getEndOfDayUTC
+} from '../../utils/date'
 
 export const planningTools = (userId: string, timezone: string) => ({
+  get_planned_workouts: tool({
+    description: 'Get a list of planned workouts for a specific date range.',
+    inputSchema: z.object({
+      start_date: z.string().optional().describe('YYYY-MM-DD (defaults to today)'),
+      end_date: z.string().optional().describe('YYYY-MM-DD'),
+      limit: z.number().optional().default(20)
+    }),
+    execute: async ({ start_date, end_date, limit }) => {
+      let start: Date
+      if (start_date) {
+        const parts = start_date.split('-')
+        start = getStartOfDayUTC(
+          timezone,
+          new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]))
+        )
+      } else {
+        start = new Date(getUserLocalDate(timezone)) // Defaults to today user time
+      }
+
+      let end: Date | undefined
+      if (end_date) {
+        const parts = end_date.split('-')
+        end = getEndOfDayUTC(
+          timezone,
+          new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]))
+        )
+      }
+
+      const workouts = await plannedWorkoutRepository.list(userId, {
+        startDate: start,
+        endDate: end,
+        limit
+      })
+
+      return {
+        count: workouts.length,
+        workouts: workouts.map((w) => ({
+          id: w.id,
+          date: formatDateUTC(w.date),
+          title: w.title,
+          type: w.type,
+          duration: w.durationSec ? Math.round(w.durationSec / 60) + ' min' : undefined,
+          tss: w.tss,
+          description: w.description
+        }))
+      }
+    }
+  }),
+
+  search_planned_workouts: tool({
+    description: 'Search for planned workouts by title, description or type.',
+    inputSchema: z.object({
+      query: z.string().describe('Search term for title or description'),
+      type: z.string().optional(),
+      start_date: z.string().optional().describe('YYYY-MM-DD'),
+      end_date: z.string().optional().describe('YYYY-MM-DD')
+    }),
+    execute: async ({ query, type, start_date, end_date }) => {
+      let start: Date | undefined
+      if (start_date) {
+        const parts = start_date.split('-')
+        start = getStartOfDayUTC(
+          timezone,
+          new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]))
+        )
+      }
+
+      let end: Date | undefined
+      if (end_date) {
+        const parts = end_date.split('-')
+        end = getEndOfDayUTC(
+          timezone,
+          new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]))
+        )
+      }
+
+      const where: any = {
+        OR: [
+          { title: { contains: query, mode: 'insensitive' } },
+          { description: { contains: query, mode: 'insensitive' } }
+        ]
+      }
+
+      if (type) {
+        where.type = { contains: type, mode: 'insensitive' }
+      }
+
+      const workouts = await plannedWorkoutRepository.list(userId, {
+        startDate: start,
+        endDate: end,
+        where,
+        limit: 10
+      })
+
+      return workouts.map((w) => ({
+        id: w.id,
+        date: formatDateUTC(w.date),
+        title: w.title,
+        type: w.type,
+        duration: w.durationSec ? Math.round(w.durationSec / 60) + ' min' : undefined,
+        description: w.description
+      }))
+    }
+  }),
+
   get_current_plan: tool({
     description:
       'Get the current active training plan with all details including daily workouts and weekly summary.',
