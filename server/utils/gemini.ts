@@ -622,6 +622,7 @@ export function buildMetricsSummary(metrics: any[], timezone?: string): string {
 
       // Additional metrics
       if (m.spO2 !== null) parts.push(`SpO2 ${m.spO2}%`)
+      if (m.respiration !== null) parts.push(`Respiration ${m.respiration}br/min`)
       if (m.readiness !== null) parts.push(`Readiness ${m.readiness}/10`)
 
       // Subjective wellness
