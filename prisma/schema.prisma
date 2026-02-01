@@ -757,6 +757,7 @@ model Wellness {
   aiAnalyzedAt     DateTime?
   feedback         String?
   feedbackText     String?
+  history          Json?
   user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, date])

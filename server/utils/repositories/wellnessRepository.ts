@@ -120,12 +120,14 @@ export const wellnessRepository = {
   /**
    * Upsert a wellness entry with smart merging
    * Only updates fields that are non-null in the updateData to prevent overwriting existing data with nulls
+   * Tracks history of changes
    */
   async upsert(
     userId: string,
     date: Date,
     createData: Prisma.WellnessUncheckedCreateInput,
-    updateData: Prisma.WellnessUncheckedUpdateInput
+    updateData: Prisma.WellnessUncheckedUpdateInput,
+    source: string = 'unknown'
   ) {
     // 1. Fetch existing record
     const existing = await prisma.wellness.findUnique({
@@ -139,6 +141,7 @@ export const wellnessRepository = {
 
     // 2. If it exists, filter updateData to only include non-null values
     let finalUpdateData = updateData
+    const changes: Record<string, { old: any; new: any }> = {}
 
     if (existing) {
       finalUpdateData = {}
@@ -155,8 +158,38 @@ export const wellnessRepository = {
           } else {
             ;(finalUpdateData as any)[key] = value
           }
+
+          // Track changes (skip rawJson, updatedAt, history, createdAt)
+          if (
+            !['rawJson', 'updatedAt', 'createdAt', 'history'].includes(key) &&
+            (existing as any)[key] !== value
+          ) {
+            changes[key] = {
+              old: (existing as any)[key],
+              new: value
+            }
+          }
         }
       }
+    }
+
+    // 3. Prepare History Entry
+    const historyEntry = {
+      timestamp: new Date().toISOString(),
+      source,
+      changes: existing ? changes : 'created'
+    }
+
+    // Only add history if it's a new record OR there are actual changes
+    let historyUpdate: any = undefined
+    if (!existing || Object.keys(changes).length > 0) {
+      const currentHistory = (existing?.history as any[]) || []
+      historyUpdate = [...currentHistory, historyEntry]
+    }
+
+    if (historyUpdate) {
+      ;(createData as any).history = [historyEntry]
+      ;(finalUpdateData as any).history = historyUpdate
     }
 
     return prisma.wellness.upsert({
