@@ -826,51 +826,21 @@
             </div>
           </div>
 
-          <!-- Notes -->
-          <div v-if="wellness.comments" class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-            <h2 class="text-xl font-bold text-gray-900 dark:text-white mb-4">Notes</h2>
-            <div class="p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
-              <p class="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap">
-                {{ wellness.comments }}
-              </p>
-            </div>
-          </div>
+          <!-- Data & History -->
+          <div class="space-y-4">
+            <JsonViewer
+              v-if="wellness.rawJson"
+              title="Raw Data (JSON)"
+              :data="wellness.rawJson"
+              filename="wellness-raw.json"
+            />
 
-          <!-- JSON Data -->
-          <div
-            v-if="wellness.rawJson"
-            class="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden"
-          >
-            <button
-              class="w-full px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
-              @click="showRawJson = !showRawJson"
-            >
-              <h3
-                class="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2"
-              >
-                <span
-                  :class="showRawJson ? 'i-heroicons-chevron-down' : 'i-heroicons-chevron-right'"
-                  class="w-5 h-5"
-                />
-                Raw Data (JSON)
-              </h3>
-              <div class="flex items-center gap-2" @click.stop>
-                <UButton
-                  icon="i-heroicons-clipboard-document"
-                  color="neutral"
-                  variant="ghost"
-                  @click="copyJsonToClipboard"
-                >
-                  Copy JSON
-                </UButton>
-              </div>
-            </button>
-            <div v-if="showRawJson" class="p-6">
-              <pre
-                class="text-sm text-gray-800 dark:text-gray-200 overflow-x-auto bg-gray-50 dark:bg-gray-900 p-4 rounded-lg"
-                >{{ formattedRawJson }}</pre
-              >
-            </div>
+            <JsonViewer
+              v-if="wellness.history"
+              title="Change History"
+              :data="wellness.history"
+              filename="wellness-history.json"
+            />
           </div>
         </div>
       </div>
@@ -922,6 +892,7 @@
 <script setup lang="ts">
   import { marked } from 'marked'
   import SleepAnalysis from '~/components/fitness/SleepAnalysis.vue'
+  import JsonViewer from '~/components/JsonViewer.vue'
 
   definePageMeta({
     middleware: 'auth'
@@ -933,7 +904,6 @@
   const wellness = ref<any>(null)
   const loading = ref(true)
   const error = ref<string | null>(null)
-  const showRawJson = ref(false)
 
   // Feature states
   const analyzingWellness = ref(false)
@@ -1103,30 +1073,6 @@
     if (priority === 'low')
       return `${baseClass} bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-200`
     return `${baseClass} bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-200`
-  }
-
-  const formattedRawJson = computed(() => {
-    if (!wellness.value?.rawJson) return ''
-    return JSON.stringify(wellness.value.rawJson, null, 2)
-  })
-
-  async function copyJsonToClipboard() {
-    try {
-      await navigator.clipboard.writeText(formattedRawJson.value)
-      toast.add({
-        title: 'Copied to clipboard',
-        description: 'Raw JSON data copied successfully',
-        color: 'success',
-        icon: 'i-heroicons-check-circle'
-      })
-    } catch (e) {
-      toast.add({
-        title: 'Copy failed',
-        description: 'Failed to copy to clipboard',
-        color: 'error',
-        icon: 'i-heroicons-exclamation-circle'
-      })
-    }
   }
 
   useHead(() => {
