@@ -31,6 +31,9 @@ interface WorkoutData {
   exercises?: any[]
   messages?: WorkoutMessage[]
   ftp?: number // Optional, for calculating absolute watts if needed
+  sportSettings?: {
+    loadPreference?: string | null
+  }
 }
 
 export const WorkoutConverter = {
@@ -331,6 +334,10 @@ export const WorkoutConverter = {
     // Group steps by type to create sections
     let currentType = ''
 
+    // Determine preference (e.g. 'hr_power_pace' -> prioritize HR)
+    const loadPref = workout.sportSettings?.loadPreference?.toLowerCase() || ''
+    const prioritizeHr = loadPref.startsWith('hr')
+
     workout.steps.forEach((step, index) => {
       // Safely access power
       const power = step.power || { value: 0 }
@@ -372,8 +379,22 @@ export const WorkoutConverter = {
       // Format power or heart rate
       let intensityStr = ''
 
-      // Check for power first
-      if (power.value || power.range) {
+      const hasPower = !!(power.value || power.range)
+      const hasHr = !!(step.heartRate && (step.heartRate.value || step.heartRate.range))
+
+      // Check for Heart Rate first if prioritized
+      if (prioritizeHr && hasHr) {
+        if (step.heartRate!.range) {
+          const start = Math.round((step.heartRate!.range.start ?? 0) * 100)
+          const end = Math.round((step.heartRate!.range.end ?? 0) * 100)
+          intensityStr = `${start}-${end}% LTHR`
+        } else {
+          const val = Math.round((step.heartRate!.value || 0) * 100)
+          intensityStr = `${val}% LTHR`
+        }
+      }
+      // Check for power
+      else if (hasPower) {
         if (power.range) {
           const start = Math.round((power.range.start ?? 0) * 100)
           const end = Math.round((power.range.end ?? 0) * 100)
@@ -383,17 +404,17 @@ export const WorkoutConverter = {
           intensityStr = `${val}%`
         }
       }
-      // Then check for Heart Rate
-      else if (step.heartRate) {
+      // Fallback to Heart Rate
+      else if (hasHr) {
         // Heart Rate for Intervals.icu
         // Format: 85% LTHR (or % HR)
         // If range: 80-90% LTHR
-        if (step.heartRate.range) {
-          const start = Math.round((step.heartRate.range.start ?? 0) * 100)
-          const end = Math.round((step.heartRate.range.end ?? 0) * 100)
+        if (step.heartRate!.range) {
+          const start = Math.round((step.heartRate!.range.start ?? 0) * 100)
+          const end = Math.round((step.heartRate!.range.end ?? 0) * 100)
           intensityStr = `${start}-${end}% LTHR`
         } else {
-          const val = Math.round((step.heartRate.value || 0) * 100)
+          const val = Math.round((step.heartRate!.value || 0) * 100)
           intensityStr = `${val}% LTHR`
         }
       } else {
