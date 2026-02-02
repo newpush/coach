@@ -151,7 +151,7 @@ We welcome contributions! Whether it's fixing bugs, improving documentation, or 
 
 ## 📄 License
 
-Distributed under the MIT License. See [`LICENSE`](./LICENSE) for more information. Acknowledgements of third-party assets and contributors can be found in [`ACKNOWLEDGEMENTS.md`](./ACKNOWLEDGEMENTS.md).
+Distributed under the Server Side Public License (SSPL) v1. See [`LICENSE`](./LICENSE) for more information. Acknowledgements of third-party assets and contributors can be found in [`ACKNOWLEDGEMENTS.md`](./ACKNOWLEDGEMENTS.md).
 
 ## ❤️ Community & Support
 
