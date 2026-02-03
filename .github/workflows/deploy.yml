@@ -96,8 +96,8 @@ jobs:
     needs: build-and-deploy
     uses: ./.github/workflows/reusable-trigger-deploy.yml
     with:
-      environment: production
-      trigger-env: prod
+      environment: preview
+      trigger-env: preview
       trigger-version: '4.3.3'
       node-version: '22'
       preview-branch: false
