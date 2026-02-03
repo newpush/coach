@@ -95,6 +95,7 @@ jobs:
   deploy-trigger:
     name: Deploy Trigger.dev
     needs: build-and-deploy
+    environment: preview
     uses: ./.github/workflows/reusable-trigger-deploy.yml
     with:
       environment: preview

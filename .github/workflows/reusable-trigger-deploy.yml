@@ -123,9 +123,11 @@ jobs:
         run: |
           echo "🔎 Preflight:"
           if [ -n "${TRIGGER_ACCESS_TOKEN}" ]; then echo "  TRIGGER_ACCESS_TOKEN: present"; else echo "  TRIGGER_ACCESS_TOKEN: MISSING"; fi
-          # Sanitize possible surrounding quotes
-          API_URL=$(echo "${TRIGGER_API_URL}" | sed -e 's/^\s*"?\s*//' -e 's/\s*"?\s*$//')
-          PROJECT_REF=$(echo "${TRIGGER_PROJECT_REF}" | sed -e 's/^\s*"?\s*//' -e 's/\s*"?\s*$//')
+
+          # Sanitize possible surrounding quotes using sed for GH Actions compatibility
+          API_URL=$(echo "${TRIGGER_API_URL}" | sed -e 's/^[[:space:]"'"'"']*//' -e 's/[[:space:]"'"'"']*$//' | tr -d '\r')
+          PROJECT_REF=$(echo "${TRIGGER_PROJECT_REF}" | sed -e 's/^[[:space:]"'"'"']*//' -e 's/[[:space:]"'"'"']*$//' | tr -d '\r')
+
           if [ -n "${API_URL}" ]; then echo "  TRIGGER_API_URL: ${API_URL}"; else echo "  TRIGGER_API_URL: not set (defaults to Trigger.dev Cloud)"; fi
           if [ -n "${PROJECT_REF}" ]; then echo "  TRIGGER_PROJECT_REF: ${PROJECT_REF}"; else echo "  TRIGGER_PROJECT_REF: not set (will rely on config)"; fi
 
