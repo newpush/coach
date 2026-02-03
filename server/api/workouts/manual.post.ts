@@ -101,7 +101,10 @@ export default defineEventHandler(async (event) => {
     if (body.plannedWorkoutId) {
       await prisma.plannedWorkout.update({
         where: { id: body.plannedWorkoutId },
-        data: { completed: true }
+        data: {
+          completed: true,
+          completionStatus: 'COMPLETED'
+        }
       })
     }
 

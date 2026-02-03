@@ -426,7 +426,10 @@ export const deduplicationService = {
         // Mark the planned workout as completed
         await prisma.plannedWorkout.update({
           where: { id: plannedWorkoutIds[0] as string },
-          data: { completed: true }
+          data: {
+            completed: true,
+            completionStatus: 'COMPLETED'
+          }
         })
       } else {
         // Use shared logic to find matching planned workout
@@ -441,7 +444,10 @@ export const deduplicationService = {
 
           await prisma.plannedWorkout.update({
             where: { id: matchingPlanned.id },
-            data: { completed: true }
+            data: {
+              completed: true,
+              completionStatus: 'COMPLETED'
+            }
           })
         }
       }

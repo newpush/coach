@@ -162,6 +162,15 @@ export const IntervalsService = {
 
         if (plannedWorkout) {
           ;(workout as any).plannedWorkoutId = plannedWorkout.id
+
+          // Mark the planned workout as completed
+          await prisma.plannedWorkout.update({
+            where: { id: plannedWorkout.id },
+            data: {
+              completed: true,
+              completionStatus: 'COMPLETED'
+            }
+          })
         }
       }
 

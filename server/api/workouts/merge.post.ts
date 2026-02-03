@@ -99,11 +99,14 @@ export default defineEventHandler(async (event) => {
           }
         })
 
-        // Remove link from secondary to avoid unique constraint issues if any (though usually one-to-many is fine, but cleaner to move it)
-        // Actually, schema says: plannedWorkoutId String? (relation to PlannedWorkout)
-        // And PlannedWorkout has completedWorkouts Workout[]
-        // So multiple workouts can link to same planned workout.
-        // But for clarity, we might want to just ensure primary has it.
+        // Ensure the planned workout is marked as completed
+        await tx.plannedWorkout.update({
+          where: { id: secondaryWorkout.plannedWorkoutId },
+          data: {
+            completed: true,
+            completionStatus: 'COMPLETED'
+          }
+        })
       }
 
       // Mark secondary as duplicate
