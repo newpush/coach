@@ -108,7 +108,7 @@ jobs:
             echo "--- getent hosts ${HOST} ---"
             getent hosts "${HOST}" || echo "(no getent entry)"
 
-            HTTP_CODE=$(curl -sS -o /dev/null -w "%{http_code}" --connect-timeout 10 -L "${API_URL}" || echo "000")
+            HTTP_CODE=$(curl -sS -o /dev/null -w "%{{http_code}}" --connect-timeout 10 -L "${API_URL}" || echo "000")
             if [ "${HTTP_CODE}" = "000" ]; then
               echo "::error::Cannot connect to ${API_URL}. DNS/egress/firewall issue or incorrect API URL."
               exit 1
