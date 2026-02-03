@@ -54,6 +54,7 @@ jobs:
     environment: ${{ inputs.environment }}
     env:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
 
     steps:
       - name: Checkout code
@@ -199,10 +200,8 @@ jobs:
       - name: Discord Notification
         uses: sarisia/actions-status-discord@v1
         if: always() && env.DISCORD_WEBHOOK != ''
-        env:
-          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
         with:
-          webhook: ${{ secrets.DISCORD_WEBHOOK }}
+          webhook: ${{ env.DISCORD_WEBHOOK }}
           title: 'Deploy Status - ${{ github.repository }}'
           description: |
             **Deploy:** ${{ job.status }}
