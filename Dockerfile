@@ -18,6 +18,7 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 # We need DATABASE_URL for prisma generate if it's not set in env, 
 # but usually it's just for the client generation which doesn't strictly need a live DB if schemas are fine.
+ENV DATABASE_URL="postgresql://dummy:dummy@localhost:5432/dummy"
 RUN pnpm prisma generate
 RUN NODE_OPTIONS=--max-old-space-size=8192 pnpm build
 
