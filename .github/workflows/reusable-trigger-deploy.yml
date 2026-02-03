@@ -126,7 +126,7 @@ jobs:
           if [ -n "${TRIGGER_API_URL}" ]; then echo "  TRIGGER_API_URL: ${TRIGGER_API_URL}"; else echo "  TRIGGER_API_URL: not set (defaults to Trigger.dev Cloud)"; fi
           if [ -n "${TRIGGER_PROJECT_REF}" ]; then echo "  TRIGGER_PROJECT_REF: ${TRIGGER_PROJECT_REF}"; else echo "  TRIGGER_PROJECT_REF: not set (will rely on config)"; fi
 
-          pnpm dlx trigger.dev@${{ inputs.trigger-version }} deploy
+          npx trigger.dev@${{ inputs.trigger-version }} deploy
 
       - name: Verify deployment
         env:
