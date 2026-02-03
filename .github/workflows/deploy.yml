@@ -95,7 +95,6 @@ jobs:
   deploy-trigger:
     name: Deploy Trigger.dev
     needs: build-and-deploy
-    environment: preview
     uses: ./.github/workflows/reusable-trigger-deploy.yml
     with:
       environment: preview
@@ -103,8 +102,4 @@ jobs:
       trigger-version: '4.3.3'
       node-version: '22'
       preview-branch: false
-    secrets:
-      TRIGGER_ACCESS_TOKEN: ${{ secrets.TRIGGER_ACCESS_TOKEN }}
-      TRIGGER_API_URL: ${{ secrets.TRIGGER_API_URL }}
-      TRIGGER_PROJECT_REF: ${{ secrets.TRIGGER_PROJECT_REF }}
-      DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+    secrets: inherit
