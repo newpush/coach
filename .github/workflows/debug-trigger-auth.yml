@@ -35,10 +35,10 @@ jobs:
           echo "PROJECT_REF length: ${#TRIGGER_PROJECT_REF}"
           echo "API_URL length: ${#TRIGGER_API_URL}"
 
-          # Sanitize
-          CLEAN_TOKEN=$(echo "${TRIGGER_ACCESS_TOKEN}" | sed -e 's/^[[:space:]"'"'']\{0,\}\s*//' -e 's/[[:space:]"'"'']\{0,\}\s*$//' | tr -d '\r')
-          CLEAN_PROJECT=$(echo "${TRIGGER_PROJECT_REF}" | sed -e 's/^[[:space:]"'"'']\{0,\}\s*//' -e 's/[[:space:]"'"'']\{0,\}\s*$//' | tr -d '\r')
-          CLEAN_URL=$(echo "${TRIGGER_API_URL}" | sed -e 's/^[[:space:]"'"'']\{0,\}\s*//' -e 's/[[:space:]"'"'']\{0,\}\s*$//' | tr -d '\r')
+          # Sanitize using a simpler sed pattern
+          CLEAN_TOKEN=$(echo "${TRIGGER_ACCESS_TOKEN}" | sed -e 's/^[[:space:]"'"'']*//' -e 's/[[:space:]"'"'']*$//')
+          CLEAN_PROJECT=$(echo "${TRIGGER_PROJECT_REF}" | sed -e 's/^[[:space:]"'"'']*//' -e 's/[[:space:]"'"'']*$//')
+          CLEAN_URL=$(echo "${TRIGGER_API_URL}" | sed -e 's/^[[:space:]"'"'']*//' -e 's/[[:space:]"'"'']*$//')
 
           echo "Cleaned lengths:"
           echo "TOKEN: ${#CLEAN_TOKEN}"
