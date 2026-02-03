@@ -81,7 +81,7 @@ jobs:
   deploy-trigger:
     name: Deploy Trigger.dev
     needs: build-and-deploy
-    uses: ./.github/workflows/reusable-trigger-deploy.yml
+    uses: hdkiller/coach/.github/workflows/reusable-trigger-deploy.yml@master
     with:
       environment: production
       trigger-env: prod
