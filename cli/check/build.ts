@@ -5,12 +5,6 @@ import chalk from 'chalk'
 const buildCommand = new Command('build')
 
 interface BuildStatus {
-  gcloud?: {
-    id: string
-    status: string
-    createTime: string
-    logUrl: string
-  }
   github?: {
     status: string
     conclusion: string
@@ -25,24 +19,7 @@ interface BuildStatus {
 const fetchStatus = (): BuildStatus => {
   const result: BuildStatus = { errors: [] }
 
-  // 1. Check Gcloud Build Status
-  try {
-    const gcloudOutput = execSync(
-      'gcloud builds list --limit=1 --format="json(status,createTime,logUrl,id)"',
-      { encoding: 'utf-8', stdio: ['ignore', 'pipe', 'ignore'] }
-    )
-    const gcloudBuilds = JSON.parse(gcloudOutput)
-
-    if (gcloudBuilds.length > 0) {
-      result.gcloud = gcloudBuilds[0]
-    }
-  } catch (error) {
-    result.errors.push(
-      '✗ Failed to check Gcloud status. Ensure gcloud CLI is installed and authenticated.'
-    )
-  }
-
-  // 2. Check GitHub Actions Status
+  // Check GitHub Actions Status
   try {
     const ghOutput = execSync(
       'gh run list --limit=10 --json status,conclusion,workflowName,createdAt,url,displayTitle',
@@ -67,21 +44,6 @@ const fetchStatus = (): BuildStatus => {
 
 const printStatus = (status: BuildStatus) => {
   console.log(chalk.blue('=== Build Status Check ===\n'))
-
-  // Gcloud Output
-  if (status.gcloud) {
-    const build = status.gcloud
-    const statusColor = build.status === 'SUCCESS' ? chalk.green : chalk.red
-    console.log(`Latest Gcloud Build: `)
-    console.log(`  ID:     ${build.id}`)
-    console.log(`  Status: ${statusColor(build.status)}`)
-    console.log(`  Time:   ${build.createTime}`)
-    console.log(`  Logs:   ${build.logUrl}`)
-  } else if (!status.errors.some((e) => e.includes('Gcloud'))) {
-    console.log(chalk.gray('No Gcloud builds found.'))
-  }
-
-  console.log('')
 
   // GitHub Output
   if (status.github) {
@@ -114,7 +76,6 @@ const checkStatus = () => {
   const status = fetchStatus()
   printStatus(status)
   return {
-    gcloud: status.gcloud?.status || '',
     github: status.github?.conclusion || status.github?.status || ''
   }
 }
@@ -124,7 +85,7 @@ const setTitle = (title: string) => {
 }
 
 buildCommand
-  .description('Check the latest build status from Gcloud and GitHub Actions')
+  .description('Check the latest build status from GitHub Actions')
   .option('-m, --monitor [seconds]', 'Monitor status with refresh interval (default: 10s)')
   .action((options) => {
     if (options.monitor) {
@@ -144,7 +105,6 @@ buildCommand
         printStatus(status)
 
         const parts = []
-        if (status.gcloud?.status) parts.push(`Gcloud: ${status.gcloud.status}`)
         if (status.github) parts.push(`GH: ${status.github.conclusion || status.github.status}`)
 
         if (parts.length > 0) {
