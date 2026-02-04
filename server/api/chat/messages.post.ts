@@ -2,11 +2,12 @@ import { getServerSession } from '../../utils/session'
 import { streamText, convertToModelMessages, stepCountIs } from 'ai'
 import { createGoogleGenerativeAI } from '@ai-sdk/google'
 import { getToolsWithContext } from '../../utils/ai-tools'
-import { generateCoachAnalysis, MODEL_NAMES } from '../../utils/gemini'
+import { generateCoachAnalysis } from '../../utils/gemini'
 import { buildAthleteContext } from '../../utils/services/chatContextService'
 import { prisma } from '../../utils/db'
 import { getUserTimezone } from '../../utils/date'
 import { getUserAiSettings } from '../../utils/ai-settings'
+import { MODEL_NAMES, calculateLlmCost } from '../../utils/ai-config'
 
 export default defineEventHandler(async (event) => {
   const session = await getServerSession(event)
@@ -174,7 +175,7 @@ export default defineEventHandler(async (event) => {
           if (msg.role === 'tool') {
             last.content = [...(last.content as any[]), ...(msg.content as any[])]
           } else if (typeof last.content === 'string' && typeof msg.content === 'string') {
-            last.content = `${last.content}\n\n${msg.content}`
+            last.content = `${last.content} \n\n${msg.content} `
           } else {
             const lastParts = Array.isArray(last.content)
               ? last.content
@@ -188,7 +189,7 @@ export default defineEventHandler(async (event) => {
             for (const part of [...lastParts, ...msgParts]) {
               const lastCombined = combinedParts[combinedParts.length - 1]
               if (lastCombined?.type === 'text' && part.type === 'text') {
-                lastCombined.text = `${lastCombined.text}\n\n${part.text}`
+                lastCombined.text = `${lastCombined.text} \n\n${part.text} `
               } else {
                 combinedParts.push(part)
               }
@@ -231,7 +232,7 @@ export default defineEventHandler(async (event) => {
             const hasCalls = msg.content.some((p: any) => p.type === 'tool-call')
             if (hasCalls) {
               console.warn(
-                `[Chat API] Normalizer: Stripping orphaned tool calls from turn index ${i}`
+                `[Chat API]Normalizer: Stripping orphaned tool calls from turn index ${i} `
               )
               msg.content = msg.content.filter((p: any) => p.type !== 'tool-call')
             }
@@ -328,7 +329,10 @@ export default defineEventHandler(async (event) => {
               (tr: any) =>
                 tr.toolName === 'create_chart' && (tr.result?.success || tr.output?.success)
             )
-            .map((tr: any, index: number) => ({ id: `chart-${aiMessage.id}-${index}`, ...tr.args }))
+            .map((tr: any, index: number) => ({
+              id: `chart - ${aiMessage.id} -${index} `,
+              ...tr.args
+            }))
 
           if (charts.length > 0 || toolCallsUsed.length > 0) {
             await prisma.chatMessage.update({
@@ -348,10 +352,7 @@ export default defineEventHandler(async (event) => {
           try {
             const promptTokens = usage.inputTokens || 0
             const completionTokens = usage.outputTokens || 0
-            const PRICING = { input: 0.075, output: 0.3 }
-            const estimatedCost =
-              (promptTokens / 1_000_000) * PRICING.input +
-              (completionTokens / 1_000_000) * PRICING.output
+            const estimatedCost = calculateLlmCost(modelName, promptTokens, completionTokens)
             await prisma.llmUsage.create({
               data: {
                 userId,
@@ -379,7 +380,7 @@ export default defineEventHandler(async (event) => {
             console.error('[Chat] LLM usage log failed:', e)
           }
         } catch (err) {
-          console.error(`[Chat API] Metadata capture error: ${err}`)
+          console.error(`[Chat API] Metadata capture error: ${err} `)
         }
       }
     })
@@ -387,7 +388,7 @@ export default defineEventHandler(async (event) => {
     return result.toUIMessageStreamResponse({
       onError: (error: any) => {
         console.error('[Chat API] Stream error:', error)
-        return `An error occurred while generating the response: ${error?.message || 'Unknown error'}`
+        return `An error occurred while generating the response: ${error?.message || 'Unknown error'} `
       }
     })
   } catch (error: any) {

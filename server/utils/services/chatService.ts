@@ -5,7 +5,8 @@ import { getUserAiSettings } from '../../utils/ai-settings'
 import { buildAthleteContext } from './chatContextService'
 import { getToolsWithContext } from '../../utils/ai-tools'
 import { createGoogleGenerativeAI } from '@ai-sdk/google'
-import { MODEL_NAMES, generateCoachAnalysis } from '../../utils/gemini'
+import { generateCoachAnalysis } from '../../utils/gemini'
+import { calculateLlmCost, MODEL_NAMES } from '../../utils/ai-config'
 
 export class ChatService {
   async validateRoomAccess(userId: string, roomId: string) {
@@ -132,12 +133,7 @@ export class ChatService {
       const completionTokens = data.usage.outputTokens || 0
       const totalTokens = promptTokens + completionTokens
 
-      const PRICING = {
-        input: 0.075,
-        output: 0.3
-      }
-      const estimatedCost =
-        (promptTokens / 1_000_000) * PRICING.input + (completionTokens / 1_000_000) * PRICING.output
+      const estimatedCost = calculateLlmCost(data.modelName, promptTokens, completionTokens)
 
       await prisma.llmUsage.create({
         data: {
