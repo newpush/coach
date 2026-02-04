@@ -293,7 +293,7 @@ export const analyzeLast3WorkoutsTask = task({
       // Build the analysis prompt
       const prompt = buildAnalysisPrompt(workouts, user, timezone, sportSettings)
 
-      logger.log('Generating structured analysis with Gemini Flash')
+      logger.log('Generating structured analysis with Gemini 3.0 Flash')
 
       // Generate structured JSON analysis
       const structuredAnalysis = await generateStructuredAnalysis(prompt, analysisSchema, 'flash', {
