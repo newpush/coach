@@ -130,7 +130,7 @@
   const modelOptions = [
     {
       value: 'flash',
-      label: 'Flash (Gemini Flash)',
+      label: 'Flash (Gemini 3.0 Flash)',
       description: 'Fast responses, good for daily summaries and quick insights',
       pricing: ''
     },
