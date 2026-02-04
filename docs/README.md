@@ -150,8 +150,8 @@ graph TB
 
 ### AI Coaching
 
-- **Retrospective Analysis:** Deep weekly/monthly reports using Gemini Pro
-- **Prescriptive Guidance:** Daily workout suggestions using Gemini Flash
+- **Retrospective Analysis:** Deep weekly/monthly reports using Gemini 3.0 Pro
+- **Prescriptive Guidance:** Daily workout suggestions using Gemini 3.0 Flash
 - **Chain-of-Thought Reasoning:** Comprehensive analysis of training trends
 - **Structured Recommendations:** JSON-formatted actionable advice
 
@@ -172,7 +172,7 @@ graph TB
 | **ORM**        | Prisma            | Type-safe database access  |
 | **Auth**       | NuxtAuth          | Authentication & sessions  |
 | **Jobs**       | Trigger.dev       | Background processing      |
-| **AI**         | Google Gemini 2.5 | Analysis & recommendations |
+| **AI**         | Google Gemini 3.0 | Analysis & recommendations |
 | **Language**   | TypeScript        | Type safety throughout     |
 
 ## 📋 Prerequisites

@@ -137,7 +137,7 @@ Task fetches:
     ↓
 Builds comprehensive prompt
     ↓
-Calls Gemini Flash with structured schema
+Calls Gemini 3.0 Flash with structured schema
     ↓
 Returns structured suggestions JSON
     ↓
@@ -173,7 +173,7 @@ Analyzes each goal for:
   - Conflicts
   - Timing appropriateness
     ↓
-Calls Gemini Flash with structured schema
+Calls Gemini 3.0 Flash with structured schema
     ↓
 Returns structured review JSON
     ↓
@@ -354,7 +354,7 @@ Modify the JSON schemas at the top of each trigger file:
 
 ## Cost Considerations
 
-- Both features use Gemini Flash (cost-effective model)
+- Both features use Gemini 3.0 Flash (cost-effective model)
 - Typical suggestion generation: ~5,000-10,000 tokens
 - Typical goal review: ~3,000-8,000 tokens
 - Estimated cost per operation: $0.001-0.005

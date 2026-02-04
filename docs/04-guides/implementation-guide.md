@@ -772,7 +772,7 @@ GEMINI_API_KEY=your-api-key-here
 
 1. Create `trigger/generate-weekly-report.ts` job
 2. Query last 30 days of workouts and metrics
-3. Format data for Gemini Pro
+3. Format data for Gemini 3.0 Pro
 4. Use Chain-of-Thought prompting
 5. Save Markdown result to Report table
 
