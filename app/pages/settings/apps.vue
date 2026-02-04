@@ -24,6 +24,7 @@
     />
     <SettingsConnectedApps
       :intervals-connected="intervalsConnected"
+      :intervals-ingest-workouts="intervalsIngestWorkouts"
       :whoop-connected="whoopConnected"
       :whoop-ingest-workouts="whoopIngestWorkouts"
       :oura-connected="ouraConnected"
@@ -83,6 +84,12 @@
   const intervalsConnected = computed(
     () =>
       integrationStatus.value?.integrations?.some((i: any) => i.provider === 'intervals') ?? false
+  )
+
+  const intervalsIngestWorkouts = computed(
+    () =>
+      integrationStatus.value?.integrations?.find((i: any) => i.provider === 'intervals')
+        ?.ingestWorkouts ?? false
   )
 
   const intervalsSettings = computed(

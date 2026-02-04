@@ -96,6 +96,14 @@ export default defineEventHandler(async (event) => {
       )
     }
 
+    // Fetch user's Intervals integration to check settings
+    const integration = await prisma.integration.findFirst({
+      where: { userId, provider: 'intervals' }
+    })
+
+    const settings = (integration?.settings as any) || {}
+    const importPlannedWorkouts = settings.importPlannedWorkouts !== false // Default to true
+
     // Update workout locally first (optimistic update)
     const updated = await plannedWorkoutRepository.update(workoutId, userId, {
       ...(forcedDate && { date: forcedDate }),
@@ -107,7 +115,7 @@ export default defineEventHandler(async (event) => {
       ...(body.tss !== undefined && { tss: body.tss }),
       ...(body.workIntensity !== undefined && { workIntensity: body.workIntensity }),
       modifiedLocally: true,
-      syncStatus: 'PENDING'
+      ...(importPlannedWorkouts && { syncStatus: 'PENDING' })
     })
 
     // Determine if it's a local-only workout that needs CREATE instead of UPDATE
@@ -117,40 +125,52 @@ export default defineEventHandler(async (event) => {
       existing.externalId.startsWith('ai-gen-') ||
       existing.externalId.startsWith('adhoc-')
 
-    // Attempt sync to Intervals.icu
-    const syncResult = await syncPlannedWorkoutToIntervals(
-      isLocal ? 'CREATE' : 'UPDATE',
-      {
-        id: updated.id,
-        externalId: updated.externalId,
-        date: updated.date,
-        title: updated.title,
-        description: updated.description,
-        type: updated.type,
-        durationSec: updated.durationSec,
-        tss: updated.tss,
-        managedBy: updated.managedBy
-      },
-      userId
-    )
+    let finalWorkout = updated
 
-    // Update sync status based on result
-    const finalWorkout = await plannedWorkoutRepository.update(workoutId, userId, {
-      syncStatus: syncResult.synced ? 'SYNCED' : 'PENDING',
-      lastSyncedAt: syncResult.synced ? new Date() : undefined,
-      syncError: syncResult.error || null,
-      // If it was a CREATE operation, update the externalId with the real one from Intervals.icu
-      ...(syncResult.synced &&
-        syncResult.result?.id && {
-          externalId: String(syncResult.result.id)
-        })
-    })
+    // Only attempt sync if enabled
+    if (importPlannedWorkouts) {
+      // Attempt sync to Intervals.icu
+      const syncResult = await syncPlannedWorkoutToIntervals(
+        isLocal ? 'CREATE' : 'UPDATE',
+        {
+          id: updated.id,
+          externalId: updated.externalId,
+          date: updated.date,
+          title: updated.title,
+          description: updated.description,
+          type: updated.type,
+          durationSec: updated.durationSec,
+          tss: updated.tss,
+          managedBy: updated.managedBy
+        },
+        userId
+      )
+
+      // Update sync status based on result
+      finalWorkout = await plannedWorkoutRepository.update(workoutId, userId, {
+        syncStatus: syncResult.synced ? 'SYNCED' : 'PENDING',
+        lastSyncedAt: syncResult.synced ? new Date() : undefined,
+        syncError: syncResult.error || null,
+        // If it was a CREATE operation, update the externalId with the real one from Intervals.icu
+        ...(syncResult.synced &&
+          syncResult.result?.id && {
+            externalId: String(syncResult.result.id)
+          })
+      })
+
+      return {
+        success: true,
+        workout: finalWorkout,
+        syncStatus: syncResult.synced ? 'synced' : 'pending',
+        message: syncResult.message || 'Workout updated successfully'
+      }
+    }
 
     return {
       success: true,
       workout: finalWorkout,
-      syncStatus: syncResult.synced ? 'synced' : 'pending',
-      message: syncResult.message || 'Workout updated successfully'
+      syncStatus: 'local',
+      message: 'Workout updated locally (sync disabled)'
     }
   } catch (error: any) {
     if (error.statusCode) {

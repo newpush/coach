@@ -77,12 +77,8 @@ export default defineEventHandler(async (event) => {
       }
     })
 
-    if (!integration) {
-      throw createError({
-        statusCode: 400,
-        message: 'Intervals.icu integration not found. Please connect your account first.'
-      })
-    }
+    const settings = (integration?.settings as any) || {}
+    const importPlannedWorkouts = settings.importPlannedWorkouts !== false // Default to true
 
     // Force date to UTC midnight to avoid timezone shift issues
     const rawDate = new Date(body.date)
@@ -90,20 +86,34 @@ export default defineEventHandler(async (event) => {
       Date.UTC(rawDate.getUTCFullYear(), rawDate.getUTCMonth(), rawDate.getUTCDate())
     )
 
-    // Create the workout in Intervals.icu
-    const intervalsWorkout = await createIntervalsPlannedWorkout(integration, {
-      date: forcedDate,
-      title: body.title,
-      description: body.description,
-      type: body.type || 'Ride',
-      durationSec: body.durationSec,
-      tss: body.tss
-    })
+    let intervalsWorkout = null
+    let externalId = `adhoc-${Date.now()}`
+    let syncStatus = 'LOCAL_ONLY'
 
-    // Create planned workout in our database with the Intervals.icu ID
+    // If integration exists and planned workouts are enabled, sync to Intervals.icu
+    if (integration && importPlannedWorkouts) {
+      try {
+        intervalsWorkout = await createIntervalsPlannedWorkout(integration, {
+          date: forcedDate,
+          title: body.title,
+          description: body.description,
+          type: body.type || 'Ride',
+          durationSec: body.durationSec,
+          tss: body.tss
+        })
+        externalId = String(intervalsWorkout.id)
+        syncStatus = 'SYNCED'
+      } catch (error) {
+        console.error('Failed to sync to Intervals.icu:', error)
+        // If sync fails, we still create it locally as PENDING
+        syncStatus = 'PENDING'
+      }
+    }
+
+    // Create planned workout in our database
     const plannedWorkout = await plannedWorkoutRepository.create({
       userId,
-      externalId: String(intervalsWorkout.id),
+      externalId,
       date: forcedDate,
       title: body.title,
       description: body.description || '',
@@ -111,7 +121,8 @@ export default defineEventHandler(async (event) => {
       durationSec: body.durationSec || 3600,
       tss: body.tss,
       completed: false,
-      rawJson: intervalsWorkout
+      syncStatus,
+      rawJson: intervalsWorkout || {}
     })
 
     return {

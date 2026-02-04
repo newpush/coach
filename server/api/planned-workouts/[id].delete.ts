@@ -76,8 +76,11 @@ export default defineEventHandler(async (event) => {
       }
     })
 
-    // Delete from Intervals.icu if integration exists
-    if (integration && workout.externalId) {
+    const settings = (integration?.settings as any) || {}
+    const importPlannedWorkouts = settings.importPlannedWorkouts !== false // Default to true
+
+    // Delete from Intervals.icu if integration exists and sync is enabled
+    if (integration && workout.externalId && importPlannedWorkouts) {
       try {
         await deleteIntervalsPlannedWorkout(integration, workout.externalId)
       } catch (error) {

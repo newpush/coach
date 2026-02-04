@@ -109,6 +109,13 @@ export const IntervalsService = {
       throw new Error(`Intervals integration not found for user ${userId}`)
     }
 
+    if (!integration.ingestWorkouts) {
+      console.log(
+        `[Intervals Sync] ⏭️ Skipping activity sync for user ${userId} (ingestWorkouts disabled)`
+      )
+      return 0
+    }
+
     // Calculate 'now' to cap historical data fetching
     const timezone = await getUserTimezone(userId)
     const now = new Date()
@@ -483,6 +490,16 @@ export const IntervalsService = {
 
     if (!integration) {
       throw new Error(`Intervals integration not found for user ${userId}`)
+    }
+
+    const settings = (integration.settings as any) || {}
+    const importPlannedWorkouts = settings.importPlannedWorkouts !== false // Default to true
+
+    if (!importPlannedWorkouts) {
+      console.log(
+        `[Intervals Sync] ⏭️ Skipping planned workout sync for user ${userId} (disabled in settings)`
+      )
+      return { plannedWorkouts: 0, events: 0, notes: 0 }
     }
 
     const plannedWorkouts = await fetchIntervalsPlannedWorkouts(integration, startDate, endDate)

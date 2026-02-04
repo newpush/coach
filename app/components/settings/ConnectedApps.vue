@@ -612,9 +612,39 @@
             />
           </UFormField>
 
+          <UFormField
+            label="Planned Workouts Sync"
+            description="Enable bidirectional synchronization of planned workouts with Intervals.icu."
+          >
+            <UCheckbox
+              :model-value="intervalsSettings?.importPlannedWorkouts !== false"
+              label="Enable Sync"
+              @update:model-value="
+                (checked: any) =>
+                  $emit('updateSetting', 'intervals', 'settings', {
+                    ...intervalsSettings,
+                    importPlannedWorkouts: !!checked
+                  })
+              "
+            />
+          </UFormField>
+
+          <UFormField
+            label="Activities"
+            description="Import completed activities from Intervals.icu."
+          >
+            <UCheckbox
+              :model-value="intervalsIngestWorkouts"
+              label="Ingest Activities"
+              @update:model-value="
+                (checked: any) => $emit('updateSetting', 'intervals', 'ingestWorkouts', !!checked)
+              "
+            />
+          </UFormField>
+
           <p class="text-xs text-muted">
-            Note: Changing this only affects future data syncs. Existing records in the database
-            will not be re-calculated automatically.
+            Note: Changing these settings only affects future data syncs. Existing records in the
+            database will not be updated automatically.
           </p>
         </div>
       </template>
@@ -633,6 +663,7 @@
 <script setup lang="ts">
   const props = defineProps<{
     intervalsConnected: boolean
+    intervalsIngestWorkouts: boolean
     whoopConnected: boolean
     whoopIngestWorkouts: boolean
     ouraConnected: boolean
