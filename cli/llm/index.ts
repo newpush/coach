@@ -117,4 +117,113 @@ llmCommand
     }
   })
 
+llmCommand
+  .command('recalculate-costs')
+  .description('Recalculate AI usage costs for a specific date')
+  .option('--date <YYYY-MM-DD>', 'Target date (e.g., 2026-02-04)')
+  .option('--prod', 'Use production database')
+  .option('--dry', 'Dry run: print changes without applying them')
+  .action(async (options) => {
+    const isProd = options.prod
+    const isDry = options.dry
+    const dateStr = options.date
+
+    if (!dateStr) {
+      console.error(chalk.red('Error: --date <YYYY-MM-DD> is required.'))
+      process.exit(1)
+    }
+
+    const connectionString = isProd ? process.env.DATABASE_URL_PROD : process.env.DATABASE_URL
+
+    if (isProd) {
+      console.log(chalk.yellow('⚠️  Using PRODUCTION database.'))
+    } else {
+      console.log(chalk.blue('Using DEVELOPMENT database.'))
+    }
+
+    if (!connectionString) {
+      console.error(chalk.red('Error: Database connection string is not defined.'))
+      process.exit(1)
+    }
+
+    const pool = new pg.Pool({ connectionString })
+    const adapter = new PrismaPg(pool)
+    const prisma = new PrismaClient({ adapter })
+
+    try {
+      // Import the shared pricing logic
+      const { calculateLlmCost } = await import('../../server/utils/ai-config')
+
+      const startOfDay = new Date(`${dateStr}T00:00:00Z`)
+      const endOfDay = new Date(`${dateStr}T23:59:59Z`)
+
+      console.log(chalk.blue(`Fetching LLM usage for ${dateStr}...`))
+      const usageRecords = await prisma.llmUsage.findMany({
+        where: {
+          createdAt: {
+            gte: startOfDay,
+            lte: endOfDay
+          },
+          success: true,
+          promptTokens: { not: null },
+          completionTokens: { not: null }
+        }
+      })
+
+      console.log(chalk.blue(`Found ${usageRecords.length} successful records.`))
+
+      let totalUpdated = 0
+      let totalOldCost = 0
+      let totalNewCost = 0
+
+      for (const record of usageRecords) {
+        const newCost = calculateLlmCost(
+          record.model,
+          record.promptTokens || 0,
+          record.completionTokens || 0
+        )
+        const oldCost = record.estimatedCost || 0
+
+        totalOldCost += oldCost
+        totalNewCost += newCost
+
+        if (Math.abs(newCost - oldCost) > 0.000001) {
+          if (isDry) {
+            console.log(
+              chalk.yellow(
+                `[DRY] Would update ${record.id} (${record.model}): $${oldCost.toFixed(6)} -> $${newCost.toFixed(6)}`
+              )
+            )
+          } else {
+            await prisma.llmUsage.update({
+              where: { id: record.id },
+              data: { estimatedCost: newCost }
+            })
+          }
+          totalUpdated++
+        }
+      }
+
+      console.log(chalk.cyan('\n--- Recalculation Summary ---'))
+      console.log(chalk.cyan(`Date: ${dateStr}`))
+      console.log(chalk.cyan(`Records checked: ${usageRecords.length}`))
+      console.log(chalk.cyan(`Records with cost change: ${totalUpdated}`))
+      console.log(chalk.cyan(`Total Old Cost: $${totalOldCost.toFixed(4)}`))
+      console.log(chalk.cyan(`Total New Cost: $${totalNewCost.toFixed(4)}`))
+      console.log(chalk.cyan('-----------------------------\n'))
+
+      if (isDry) {
+        console.log(chalk.yellow(`[DRY] Finished. No changes applied.`))
+      } else {
+        console.log(chalk.green(`Successfully updated ${totalUpdated} records.`))
+      }
+    } catch (e) {
+      console.error(chalk.red('Error recalculating costs:'), e)
+      process.exit(1)
+    } finally {
+      await prisma.$disconnect()
+      await pool.end()
+    }
+  })
+
 export default llmCommand

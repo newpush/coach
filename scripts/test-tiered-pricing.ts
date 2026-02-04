@@ -18,6 +18,11 @@ function test() {
 
   const proPremium = calculateLlmCost('gemini-3-pro-preview', 250000, 1000)
   console.log(`Premium (> 200k): 250k in, 1k out -> $${proPremium.toFixed(4)} (Expected 1.0180)`)
+
+  // Legacy tests
+  console.log('\n[Gemini Flash Latest (Legacy)]')
+  const flashLegacy = calculateLlmCost('gemini-flash-latest', 100000, 1000)
+  console.log(`Fixed Rate: 100k in, 1k out -> $${flashLegacy.toFixed(4)} (Expected 0.0325)`)
 }
 
 test()
