@@ -3,7 +3,7 @@ import { runs } from '@trigger.dev/sdk/v3'
 import { verifyWsToken } from '../utils/ws-auth'
 import { buildAthleteContext } from '../utils/services/chatContextService'
 import { prisma } from '../utils/db'
-import { generateCoachAnalysis, MODEL_NAMES } from '../utils/gemini'
+import { MODEL_NAMES, calculateLlmCost } from '../utils/ai-config'
 import { createGoogleGenerativeAI } from '@ai-sdk/google'
 import { streamText, convertToModelMessages, stepCountIs } from 'ai'
 import { getToolsWithContext } from '../utils/ai-tools'
@@ -265,7 +265,111 @@ async function handleChatMessage(
         }
       },
       onFinish: async (event) => {
-        // This is called when the ENTIRE stream (including all steps) is done
+        const { text, usage } = event
+
+        // 8. Save AI Response
+        const aiMessage = await prisma.chatMessage.create({
+          data: {
+            content: text || ' ',
+            roomId,
+            senderId: 'ai_agent',
+            seen: {}
+          }
+        })
+
+        // 9. Extract Charts & Metadata
+        const toolCallsUsed = allToolResults.map((tr: any) => ({
+          name: tr.toolName,
+          args: tr.args,
+          response: tr.result,
+          timestamp: new Date().toISOString()
+        }))
+
+        const charts = toolCallsUsed
+          .filter((t) => t.name === 'create_chart')
+          .map((call, index) => ({
+            id: `chart-${aiMessage.id}-${index}`,
+            ...call.args
+          }))
+
+        if (charts.length > 0 || toolCallsUsed.length > 0) {
+          await prisma.chatMessage.update({
+            where: { id: aiMessage.id },
+            data: {
+              metadata: {
+                charts,
+                toolCalls: toolCallsUsed,
+                toolsUsed: toolCallsUsed.map((t) => t.name),
+                toolCallCount: toolCallsUsed.length
+              } as any
+            }
+          })
+        }
+
+        // 10. Send Completion Event
+        peer.send(
+          JSON.stringify({
+            type: 'chat_complete',
+            roomId,
+            messageId: aiMessage.id,
+            content: text,
+            metadata: {
+              charts,
+              toolCalls: toolCallsUsed
+            }
+          })
+        )
+
+        // Log usage
+        try {
+          const promptTokens = usage.inputTokens || 0
+          const completionTokens = usage.outputTokens || 0
+          const estimatedCost = calculateLlmCost(modelName, promptTokens, completionTokens)
+
+          await prisma.llmUsage.create({
+            data: {
+              userId,
+              provider: 'google',
+              model: modelName,
+              modelType: aiSettings.aiModelPreference === 'flash' ? 'flash' : 'pro',
+              operation: 'chat_ws',
+              entityType: 'ChatMessage',
+              entityId: aiMessage.id,
+              promptTokens,
+              completionTokens,
+              totalTokens: promptTokens + completionTokens,
+              estimatedCost,
+              retryCount: 0,
+              success: true,
+              promptPreview: content.substring(0, 500),
+              responsePreview: (text || '').substring(0, 500)
+            }
+          })
+        } catch (e) {
+          console.error('[WS Chat] LLM usage log failed:', e)
+        }
+
+        // 11. Auto-rename room
+        try {
+          const messageCount = await prisma.chatMessage.count({ where: { roomId } })
+          if (messageCount === 2) {
+            const titlePrompt = `Based on this conversation, generate a very concise, descriptive title (max 6 words). Just return the title, nothing else.\n\nUser: ${content}\nAI: ${text.substring(0, 500)}\n\nTitle:`
+            let roomTitle = await generateCoachAnalysis(titlePrompt, 'flash', {
+              userId,
+              operation: 'chat_title_generation',
+              entityType: 'ChatRoom',
+              entityId: roomId
+            })
+            roomTitle = roomTitle
+              .trim()
+              .replace(/^["']|["']$/g, '')
+              .substring(0, 60)
+            await prisma.chatRoom.update({ where: { id: roomId }, data: { name: roomTitle } })
+            peer.send(JSON.stringify({ type: 'room_renamed', roomId, name: roomTitle }))
+          }
+        } catch (e) {
+          // Ignore rename errors
+        }
       }
     })
 
@@ -281,81 +385,6 @@ async function handleChatMessage(
             text: textDelta
           })
         )
-      }
-    }
-
-    // 8. Save AI Response
-    const aiMessage = await prisma.chatMessage.create({
-      data: {
-        content: fullResponseText || ' ',
-        roomId,
-        senderId: 'ai_agent',
-        seen: {}
-      }
-    })
-
-    // 9. Extract Charts & Metadata
-    const toolCallsUsed = allToolResults.map((tr: any) => ({
-      name: tr.toolName,
-      args: tr.args,
-      response: tr.result,
-      timestamp: new Date().toISOString()
-    }))
-
-    const charts = toolCallsUsed
-      .filter((t) => t.name === 'create_chart')
-      .map((call, index) => ({
-        id: `chart-${aiMessage.id}-${index}`,
-        ...call.args
-      }))
-
-    if (charts.length > 0 || toolCallsUsed.length > 0) {
-      await prisma.chatMessage.update({
-        where: { id: aiMessage.id },
-        data: {
-          metadata: {
-            charts,
-            toolCalls: toolCallsUsed,
-            toolsUsed: toolCallsUsed.map((t) => t.name),
-            toolCallCount: toolCallsUsed.length
-          } as any
-        }
-      })
-    }
-
-    // 10. Send Completion Event
-    peer.send(
-      JSON.stringify({
-        type: 'chat_complete',
-        roomId,
-        messageId: aiMessage.id,
-        content: fullResponseText,
-        metadata: {
-          charts,
-          toolCalls: toolCallsUsed
-        }
-      })
-    )
-
-    // 11. Auto-rename room
-    const messageCount = await prisma.chatMessage.count({ where: { roomId } })
-    if (messageCount === 2) {
-      try {
-        const titlePrompt = `Based on this conversation, generate a very concise, descriptive title (max 6 words). Just return the title, nothing else.\n\nUser: ${content}\nAI: ${fullResponseText.substring(0, 500)}\n\nTitle:`
-        let roomTitle = await generateCoachAnalysis(titlePrompt, 'flash', {
-          userId,
-          operation: 'chat_title_generation',
-          entityType: 'ChatRoom',
-          entityId: roomId
-        })
-        roomTitle = roomTitle
-          .trim()
-          .replace(/^["']|["']$/g, '')
-          .substring(0, 60)
-        await prisma.chatRoom.update({ where: { id: roomId }, data: { name: roomTitle } })
-        peer.send(JSON.stringify({ type: 'room_renamed', roomId, name: roomTitle }))
-      } catch (e) {
-        // Ignore rename errors
       }
     }
   } catch (error: any) {
