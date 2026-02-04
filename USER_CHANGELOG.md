@@ -1,3 +1,55 @@
+# 🚴‍♂️ What’s New in Coach Watts v0.5.17
+
+Hello, Team! We’ve been busy under the hood making Coach Watts faster, smarter, and more connected. This update brings major upgrades to your AI coaching experience and expands how you sync your data.
+
+Here is the breakdown of what’s new in v0.5.17:
+
+### 🧠 A Smarter AI Coach
+
+We’ve upgraded the "brain" of Coach Watts to give you more accurate and personalized training advice.
+
+- **Upgraded AI Models:** We are now using the latest **Gemini 3.0** technology for faster and more insightful workout analysis.
+- **Better Context:** The AI now understands your specific injury status and your preferred training metrics (like whether you prefer Power or Heart Rate) to give you better advice.
+- **Automatic Check-ins:** The AI can now automatically generate daily check-ins based on your wellness data, helping you stay on top of your recovery.
+- **Feedback & Reporting:** Notice a weird AI response? You can now use the new **AI Feedback Form** to help us keep improving your coaching experience.
+
+### 🔗 More Ways to Connect
+
+We want your data to flow seamlessly into Coach Watts, no matter what devices you use.
+
+- **Polar Integration is Here!** You can now fully sync your Polar activities and data directly into the platform. ⌚
+- **Enhanced Intervals.icu Sync:** We’ve improved how planned workouts sync back and forth, including a new "Readiness Scale" to help align your training load with how you actually feel.
+- **Bulk FIT Uploads:** Got a backlog of files? You can now upload multiple FIT files at once for background processing. 📂
+
+### 📈 Deeper Wellness Tracking
+
+Your health off the bike is just as important as your power on it.
+
+- **New Health Metrics:** You can now track your **Weight** and **Blood Pressure** directly within the app.
+- **Clearer Wellness Labels:** Instead of just numbers, you’ll now see descriptive labels for things like **Mood, Stress, Hydration, and Injury status** so you can understand your data at a glance. 💧
+- **Auto-Analysis:** Coach Watts now automatically analyzes your nutrition and readiness data as soon as it arrives, giving you instant feedback.
+
+### 📱 Improved Experience & Dashboard
+
+We’ve refined the look and feel of the app to make it easier to use on the go.
+
+- **Mobile-Optimized Dashboard:** Your recent activities and upcoming workouts now look better and are easier to read on your phone. 📱
+- **Chat Sharing:** Find a great insight in your AI chat? You can now share chat rooms with others.
+- **Better Calendars:** We’ve fixed those pesky timezone bugs! Your workouts and events will now always show up at the correct time, no matter where you are in the world. 🌍
+
+### 🛠️ Small but Mighty Fixes
+
+- **Smart Sync:** Improved logic to ensure completed workouts don't get accidentally deleted or overwritten during sync.
+- **Goal Tracking:** Your training goals now automatically update when you change your weight or FTP.
+- **Flexible Profiles:** You can now leave certain profile fields (like nickname or sex) optional for more privacy.
+
+---
+
+**Ready to get started?** Log in to [Coach Watts](https://coachwatts.com) and check out your updated dashboard!
+
+_Happy Training!_
+**The Coach Watts Team** ⚡🚴‍♀️
+
 # 🚀 Coach Watts v0.5.16 Release: Deeper Insights & Enhanced Coaching Tools
 
 Hello Athletes and Coaches! We've just shipped a major update focusing on deeper performance metrics, new integrations, and powerful tools for athlete management. Get ready for smarter analysis and a much smoother user experience!
