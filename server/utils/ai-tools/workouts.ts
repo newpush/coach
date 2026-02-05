@@ -119,7 +119,23 @@ export const workoutTools = (userId: string, timezone: string) => ({
         }
       })) as any
 
-      if (!workout) return { error: 'Workout not found' }
+      if (!workout) {
+        // Fallback to planned workout
+        const planned = await prisma.plannedWorkout.findUnique({
+          where: { id: workout_id, userId },
+          include: {
+            trainingWeek: true
+          }
+        })
+
+        if (!planned) return { error: 'Workout not found' }
+
+        return {
+          ...planned,
+          isPlanned: true,
+          date: formatUserDate(planned.date, timezone)
+        }
+      }
 
       return {
         ...workout,

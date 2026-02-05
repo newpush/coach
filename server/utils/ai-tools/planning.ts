@@ -180,6 +180,35 @@ export const planningTools = (userId: string, timezone: string) => ({
     }
   }),
 
+  get_planned_workout_details: tool({
+    description: 'Get detailed information about a specific planned workout.',
+    inputSchema: z.object({
+      workout_id: z.string().describe('The ID of the planned workout')
+    }),
+    execute: async ({ workout_id }) => {
+      const workout = await plannedWorkoutRepository.getById(workout_id, userId, {
+        include: {
+          trainingWeek: {
+            include: {
+              block: {
+                include: {
+                  plan: true
+                }
+              }
+            }
+          }
+        }
+      })
+
+      if (!workout) return { error: 'Planned workout not found' }
+
+      return {
+        ...workout,
+        date: formatDateUTC(workout.date)
+      }
+    }
+  }),
+
   create_planned_workout: tool({
     description: 'Create a future planned workout in the calendar.',
     inputSchema: z.object({
