@@ -133,6 +133,20 @@ export const sportSettingsRepository = {
               loadPreference: setting.loadPreference
             }
           })
+
+          // Sync back to User model if this is the Default profile
+          if (updated.isDefault) {
+            await prisma.user.update({
+              where: { id: userId },
+              data: {
+                ftp: updated.ftp,
+                lthr: updated.lthr,
+                maxHr: updated.maxHr,
+                restingHr: updated.restingHr
+              }
+            })
+          }
+
           results.push(updated)
           continue
         }
@@ -175,6 +189,20 @@ export const sportSettingsRepository = {
             externalId: setting.externalId
           }
         })
+
+        // Sync back to User model if this is the Default profile
+        if (upserted.isDefault) {
+          await prisma.user.update({
+            where: { id: userId },
+            data: {
+              ftp: upserted.ftp,
+              lthr: upserted.lthr,
+              maxHr: upserted.maxHr,
+              restingHr: upserted.restingHr
+            }
+          })
+        }
+
         results.push(upserted)
         continue
       }
