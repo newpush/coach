@@ -210,7 +210,8 @@ llmCommand
           const newCost = calculateLlmCost(
             record.model,
             record.promptTokens || 0,
-            record.completionTokens || 0
+            record.completionTokens || 0,
+            record.cachedTokens || 0
           )
           const oldCost = record.estimatedCost || 0
 
@@ -257,6 +258,113 @@ llmCommand
       }
     } catch (e) {
       console.error(chalk.red('Error recalculating costs:'), e)
+      process.exit(1)
+    } finally {
+      await prisma.$disconnect()
+      await pool.end()
+    }
+  })
+
+llmCommand
+  .command('debug')
+  .description('Debug recent LLM usage entries')
+  .option('--limit <number>', 'Number of records to show', '10')
+  .option('--user <email>', 'Filter by user email')
+  .option('--prod', 'Use production database')
+  .option('--full', 'Show full prompts and responses if available')
+  .action(async (options) => {
+    const isProd = options.prod
+    const limit = parseInt(options.limit, 10)
+    const userEmail = options.user
+    const showFull = options.full
+
+    const connectionString = isProd ? process.env.DATABASE_URL_PROD : process.env.DATABASE_URL
+
+    if (isProd) {
+      console.log(chalk.yellow('⚠️  Using PRODUCTION database.'))
+    } else {
+      console.log(chalk.blue('Using DEVELOPMENT database.'))
+    }
+
+    if (!connectionString) {
+      console.error(chalk.red('Error: Database connection string is not defined.'))
+      process.exit(1)
+    }
+
+    const pool = new pg.Pool({ connectionString })
+    const adapter = new PrismaPg(pool)
+    const prisma = new PrismaClient({ adapter })
+
+    try {
+      let userId = undefined
+      if (userEmail) {
+        const user = await prisma.user.findUnique({
+          where: { email: userEmail },
+          select: { id: true }
+        })
+        if (!user) {
+          console.error(chalk.red(`User not found: ${userEmail}`))
+          process.exit(1)
+        }
+        userId = user.id
+      }
+
+      const records = await prisma.llmUsage.findMany({
+        where: userId ? { userId } : undefined,
+        take: limit,
+        orderBy: { createdAt: 'desc' },
+        include: {
+          user: {
+            select: {
+              email: true,
+              nickname: true
+            }
+          }
+        }
+      })
+
+      if (records.length === 0) {
+        console.log(chalk.yellow('No LLM usage records found.'))
+        return
+      }
+
+      console.log(chalk.blue(`\nShowing last ${records.length} LLM usage records:\n`))
+
+      for (const record of records) {
+        const status = record.success ? chalk.green('SUCCESS') : chalk.red('FAILED')
+        const cost = record.estimatedCost ? `$${record.estimatedCost.toFixed(4)}` : 'N/A'
+        const time = record.createdAt.toLocaleString()
+
+        console.log(chalk.bold('--------------------------------------------------'))
+        console.log(`${chalk.cyan('ID:')} ${record.id} | ${chalk.cyan('Date:')} ${time}`)
+        console.log(
+          `${chalk.cyan('User:')} ${record.user?.email || 'System'} | ${chalk.cyan('Op:')} ${record.operation} | ${chalk.cyan('Model:')} ${record.model}`
+        )
+        console.log(
+          `${chalk.cyan('Status:')} ${status} | ${chalk.cyan('Tokens:')} ${record.totalTokens} (In: ${record.promptTokens}, Out: ${record.completionTokens}) | ${chalk.cyan('Cost:')} ${cost}`
+        )
+
+        if (record.entityType) {
+          console.log(`${chalk.cyan('Entity:')} ${record.entityType}:${record.entityId}`)
+        }
+
+        console.log(chalk.yellow('\nPrompt Preview:'))
+        console.log(
+          showFull && record.promptFull ? record.promptFull : record.promptPreview || 'N/A'
+        )
+
+        console.log(chalk.green('\nResponse Preview:'))
+        console.log(
+          showFull && record.responseFull ? record.responseFull : record.responsePreview || 'N/A'
+        )
+
+        if (!record.success && record.errorMessage) {
+          console.log(chalk.red(`\nError: [${record.errorType}] ${record.errorMessage}`))
+        }
+        console.log('')
+      }
+    } catch (e) {
+      console.error(chalk.red('Error fetching LLM usage:'), e)
       process.exit(1)
     } finally {
       await prisma.$disconnect()
