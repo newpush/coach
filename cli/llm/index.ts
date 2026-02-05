@@ -341,8 +341,22 @@ llmCommand
           `${chalk.cyan('User:')} ${record.user?.email || 'System'} | ${chalk.cyan('Op:')} ${record.operation} | ${chalk.cyan('Model:')} ${record.model}`
         )
         console.log(
-          `${chalk.cyan('Status:')} ${status} | ${chalk.cyan('Tokens:')} ${record.totalTokens} (In: ${record.promptTokens}, Out: ${record.completionTokens}) | ${chalk.cyan('Cost:')} ${cost}`
+          `${chalk.cyan('Status:')} ${status} | ${chalk.cyan('Tokens:')} ${record.totalTokens} (In: ${record.promptTokens}, Cached: ${record.cachedTokens || 0}, Out: ${record.completionTokens}) | ${chalk.cyan('Cost:')} ${cost}`
         )
+
+        if (record.cachedTokens && record.cachedTokens > 0) {
+          // Calculate what it would have cost without caching
+          const uncachedCost = calculateLlmCost(
+            record.model,
+            record.promptTokens || 0,
+            record.completionTokens || 0,
+            0
+          )
+          const savings = uncachedCost - (record.estimatedCost || 0)
+          if (savings > 0) {
+            console.log(chalk.green(`Cache Savings: $${savings.toFixed(4)}`))
+          }
+        }
 
         if (record.entityType) {
           console.log(`${chalk.cyan('Entity:')} ${record.entityType}:${record.entityId}`)

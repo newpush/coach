@@ -6,31 +6,41 @@ function test() {
   // Flash tests
   console.log('\n[Gemini 3 Flash Preview]')
   const flashBase = calculateLlmCost('gemini-3-flash-preview', 100000, 1000)
-  console.log(`Fixed Rate (100k): 100k in, 1k out -> $${flashBase.toFixed(4)} (Expected 0.0530)`)
+  console.log(`Rate (100k): 100k in, 1k out -> $${flashBase.toFixed(4)} (Expected 0.0530)`)
 
-  const flashPremium = calculateLlmCost('gemini-3-flash-preview', 150000, 1000)
-  console.log(`Fixed Rate (150k): 150k in, 1k out -> $${flashPremium.toFixed(4)} (Expected 0.0780)`)
+  const flashCached = calculateLlmCost('gemini-3-flash-preview', 100000, 1000, 80000)
+  console.log(`Cached (100k total, 80k cached): -> $${flashCached.toFixed(4)} (Expected 0.0170)`)
+  console.log(
+    `  Calc: (20k * 0.5) + (80k * 0.05) + (1k * 3.0) / 1M = 0.01 + 0.004 + 0.003 = 0.0170`
+  )
+
+  console.log('\n[Gemini 2.5 Flash]')
+  const flash25 = calculateLlmCost('gemini-2.5-flash', 100000, 1000, 50000)
+  console.log(`Cached (100k total, 50k cached): -> $${flash25.toFixed(4)} (Expected 0.0096)`)
+  console.log(
+    `  Calc: (50k * 0.15) + (50k * 0.03) + (1k * 0.6) / 1M = 0.0075 + 0.0015 + 0.0006 = 0.0096`
+  )
 
   // Pro tests
   console.log('\n[Gemini 3 Pro Preview]')
   const proBase = calculateLlmCost('gemini-3-pro-preview', 150000, 1000)
-  console.log(`Base (< 200k): 150k in, 1k out -> $${proBase.toFixed(4)} (Expected 0.0420)`)
+  console.log(`Base (< 200k): 150k in, 1k out -> $${proBase.toFixed(4)} (Expected 0.3120)`)
 
   const proPremium = calculateLlmCost('gemini-3-pro-preview', 250000, 1000)
-  console.log(`Premium (> 200k): 250k in, 1k out -> $${proPremium.toFixed(4)} (Expected 0.1180)`)
+  console.log(`Premium (> 200k): 250k in, 1k out -> $${proPremium.toFixed(4)} (Expected 1.0180)`)
 
   const proCached = calculateLlmCost('gemini-3-pro-preview', 250000, 1000, 200000)
   console.log(
-    `Cached: 250k total (200k cached), 1k out -> $${proCached.toFixed(4)} (Expected 0.0580)`
+    `Cached: 250k total (200k cached), 1k out -> $${proCached.toFixed(4)} (Expected 0.2980)`
   )
   console.log(
-    `  Calc details: (50k * 0.4) + (200k * 0.1) + (1k * 18.0) / 1M = (0.02 + 0.02 + 0.018) = 0.0580`
+    `  Calc details: (50k * 4.0) + (200k * 0.4) + (1k * 18.0) / 1M = (0.2 + 0.08 + 0.018) = 0.2980`
   )
 
   // Legacy tests
   console.log('\n[Gemini Flash Latest (Legacy)]')
   const flashLegacy = calculateLlmCost('gemini-flash-latest', 100000, 1000)
-  console.log(`Fixed Rate: 100k in, 1k out -> $${flashLegacy.toFixed(4)} (Expected 0.0325)`)
+  console.log(`Fixed Rate: 100k in, 1k out -> $${flashLegacy.toFixed(4)} (Expected 0.0078)`)
 }
 
 test()
