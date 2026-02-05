@@ -847,6 +847,7 @@
   })
 
   const integrationStore = useIntegrationStore()
+  const userStore = useUserStore()
   const { formatDate, formatDateUTC, formatDateTime, getUserLocalDate } = useFormat()
   const { onTaskCompleted } = useUserRunsState()
 
