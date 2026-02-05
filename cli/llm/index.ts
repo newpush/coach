@@ -4,6 +4,7 @@ import 'dotenv/config'
 import { PrismaClient } from '@prisma/client'
 import { PrismaPg } from '@prisma/adapter-pg'
 import pg from 'pg'
+import { calculateLlmCost } from '../../server/utils/ai-config'
 
 const llmCommand = new Command('llm').description('LLM management commands')
 
@@ -146,9 +147,6 @@ llmCommand
     const prisma = new PrismaClient({ adapter })
 
     try {
-      // Import the shared pricing logic
-      const { calculateLlmCost } = await import('../../server/utils/ai-config')
-
       const where: any = {
         success: true,
         promptTokens: { not: null },
