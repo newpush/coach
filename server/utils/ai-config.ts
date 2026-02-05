@@ -9,22 +9,26 @@ export const PRICING = {
   'gemini-3-flash-preview': {
     threshold: 128_000,
     base: { input: 0.5, output: 3.0 },
-    premium: { input: 0.5, output: 3.0 }
+    premium: { input: 0.5, output: 3.0 },
+    cacheStorage: 1.0 // $1.00 / 1M tokens / hour
   },
   'gemini-3-pro-preview': {
     threshold: 200_000,
-    base: { input: 2.0, output: 12.0 },
-    premium: { input: 4.0, output: 18.0 }
+    base: { input: 0.2, output: 12.0 },
+    premium: { input: 0.4, output: 18.0 },
+    cacheStorage: 4.5 // $4.50 / 1M tokens / hour
   },
   'gemini-pro-latest': {
     threshold: 200_000,
     base: { input: 2.0, output: 12.0 },
-    premium: { input: 4.0, output: 18.0 }
+    premium: { input: 4.0, output: 18.0 },
+    cacheStorage: 4.5
   },
   'gemini-flash-latest': {
     threshold: 1_000_000,
     base: { input: 0.3, output: 2.5 },
-    premium: { input: 0.3, output: 2.5 }
+    premium: { input: 0.3, output: 2.5 },
+    cacheStorage: 1.0
   }
 } as const
 
