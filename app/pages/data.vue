@@ -56,12 +56,7 @@
               View your training data from connected integrations.
             </p>
           </div>
-          <UButton
-            to="/settings/apps"
-            color="primary"
-            variant="solid"
-            icon="i-lucide-settings-2"
-          >
+          <UButton to="/settings/apps" color="primary" variant="solid" icon="i-lucide-settings-2">
             Manage Connections
           </UButton>
         </div>
@@ -527,7 +522,9 @@
                 @click="analyzeAllWorkouts"
               >
                 <span v-if="analyzingWorkouts">Analyzing...</span>
-                <span v-else>Analyze All</span>
+                <span v-else>
+                  {{ userStore.entitlements?.tier === 'FREE' ? 'Analyze Last 10' : 'Analyze All' }}
+                </span>
               </button>
             </div>
           </div>
@@ -928,6 +925,7 @@
   })
 
   const toast = useToast()
+  const userStore = useUserStore()
   const loading = ref(true)
   const analyzingWorkouts = ref(false)
   const analyzingNutrition = ref(false)
