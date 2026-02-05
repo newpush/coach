@@ -116,7 +116,6 @@ export default defineEventHandler(async (event) => {
         maxHr: defaultProfile?.maxHr || user.maxHr,
         lthr: defaultProfile?.lthr || user.lthr,
         ftp: defaultProfile?.ftp || user.ftp,
-        form: user.form || 'Absolute value',
         visibility: user.visibility || 'Private',
         sex: user.sex,
         dob: formatDate(user.dob),

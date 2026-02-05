@@ -15,7 +15,6 @@ export const profileUpdateSchema = z.object({
   maxHr: z.number().nullable().optional(),
   lthr: z.number().nullable().optional(),
   ftp: z.number().nullable().optional(),
-  form: z.enum(['Absolute value', 'Percentage']).optional(),
   visibility: z.enum(['Private', 'Public', 'Followers Only']).optional(),
   sex: z.enum(['Male', 'Female', 'Other', 'M', 'F']).nullable().optional(),
   dob: z.string().nullable().optional(), // YYYY-MM-DD
