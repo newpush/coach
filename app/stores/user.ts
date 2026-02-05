@@ -121,6 +121,25 @@ export const useUserStore = defineStore('user', () => {
     }
   }
 
+  // Robust metric helpers that prefer Sport Settings (Default) over legacy Profile fields
+  const currentFtp = computed(() => {
+    if (!profile.value) return 0
+    const defaultSettings = profile.value.sportSettings?.find((s: any) => s.isDefault)
+    return defaultSettings?.ftp || profile.value.ftp || 0
+  })
+
+  const currentLthr = computed(() => {
+    if (!profile.value) return 0
+    const defaultSettings = profile.value.sportSettings?.find((s: any) => s.isDefault)
+    return defaultSettings?.lthr || profile.value.lthr || 0
+  })
+
+  const currentMaxHr = computed(() => {
+    if (!profile.value) return 0
+    const defaultSettings = profile.value.sportSettings?.find((s: any) => s.isDefault)
+    return defaultSettings?.maxHr || profile.value.maxHr || 0
+  })
+
   async function generateProfile() {
     generating.value = true
     try {
@@ -159,6 +178,9 @@ export const useUserStore = defineStore('user', () => {
   return {
     user,
     profile,
+    currentFtp,
+    currentLthr,
+    currentMaxHr,
     loading,
     generating,
     userLoading,
