@@ -8,6 +8,7 @@ import { metricTools } from './ai-tools/metric-tools'
 import { nutritionTools } from './ai-tools/nutrition'
 import { wellnessTools } from './ai-tools/wellness'
 import { availabilityTools } from './ai-tools/availability'
+import { timeTools } from './ai-tools/time'
 import type { AiSettings } from './ai-settings'
 import { getUserAiSettings } from './ai-settings'
 
@@ -22,6 +23,7 @@ export const getToolsWithContext = (userId: string, timezone: string, settings: 
     ...metricTools(userId, timezone),
     ...nutritionTools(userId, timezone),
     ...wellnessTools(userId, timezone),
-    ...availabilityTools(userId)
+    ...availabilityTools(userId),
+    ...timeTools(timezone)
   }
 }

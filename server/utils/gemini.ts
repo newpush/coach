@@ -31,6 +31,8 @@ async function logLlmUsage(params: {
   entityId?: string
   promptTokens?: number
   completionTokens?: number
+  cachedTokens?: number
+  reasoningTokens?: number
   totalTokens?: number
   estimatedCost?: number
   durationMs: number
@@ -55,6 +57,8 @@ async function logLlmUsage(params: {
         entityId: params.entityId,
         promptTokens: params.promptTokens,
         completionTokens: params.completionTokens,
+        cachedTokens: params.cachedTokens || 0,
+        reasoningTokens: params.reasoningTokens || 0,
         totalTokens: params.totalTokens,
         estimatedCost: params.estimatedCost,
         durationMs: params.durationMs,
@@ -99,6 +103,8 @@ async function logUsage(params: {
   usage: {
     promptTokens: number
     completionTokens: number
+    cachedTokens?: number
+    reasoningTokens?: number
   }
   success: boolean
   error?: any
@@ -107,7 +113,8 @@ async function logUsage(params: {
   const estimatedCost = calculateLlmCost(
     params.modelId,
     params.usage.promptTokens,
-    params.usage.completionTokens
+    params.usage.completionTokens,
+    params.usage.cachedTokens || 0
   )
 
   await logLlmUsage({
@@ -119,6 +126,8 @@ async function logUsage(params: {
     entityId: params.entityId,
     promptTokens: params.usage.promptTokens,
     completionTokens: params.usage.completionTokens,
+    cachedTokens: params.usage.cachedTokens || 0,
+    reasoningTokens: params.usage.reasoningTokens || 0,
     totalTokens: params.usage.promptTokens + params.usage.completionTokens,
     estimatedCost,
     durationMs,
@@ -207,6 +216,8 @@ async function retryWithBackoff<T>(
         // Extract token usage from response if available
         let promptTokens: number | undefined
         let completionTokens: number | undefined
+        let cachedTokens: number | undefined
+        let reasoningTokens: number | undefined
         let totalTokens: number | undefined
         let responseText: string = ''
 
@@ -219,12 +230,16 @@ async function retryWithBackoff<T>(
             promptTokens = anyResult.response.usageMetadata.promptTokenCount
             completionTokens = anyResult.response.usageMetadata.candidatesTokenCount
             totalTokens = anyResult.response.usageMetadata.totalTokenCount
+            cachedTokens = anyResult.response.usageMetadata.cachedContentTokenCount
+            reasoningTokens = anyResult.response.usageMetadata.thoughtsTokenCount
           }
           // Direct usageMetadata (for some response types)
           else if (anyResult.usageMetadata) {
             promptTokens = anyResult.usageMetadata.promptTokenCount
             completionTokens = anyResult.usageMetadata.candidatesTokenCount
             totalTokens = anyResult.usageMetadata.totalTokenCount
+            cachedTokens = anyResult.usageMetadata.cachedContentTokenCount
+            reasoningTokens = anyResult.usageMetadata.thoughtsTokenCount
           }
 
           // Try to get response text for preview
@@ -252,7 +267,7 @@ async function retryWithBackoff<T>(
         // Calculate estimated cost
         const estimatedCost =
           promptTokens && completionTokens
-            ? calculateLlmCost(trackingParams.model, promptTokens, completionTokens)
+            ? calculateLlmCost(trackingParams.model, promptTokens, completionTokens, cachedTokens)
             : undefined
 
         const usageId = await logLlmUsage({
@@ -264,6 +279,8 @@ async function retryWithBackoff<T>(
           entityId: trackingParams.entityId,
           promptTokens,
           completionTokens,
+          cachedTokens,
+          reasoningTokens,
           totalTokens,
           estimatedCost,
           durationMs,
@@ -397,7 +414,9 @@ export async function generateCoachAnalysis(
         text: text,
         usage: {
           promptTokens: usage.inputTokens || 0,
-          completionTokens: usage.outputTokens || 0
+          completionTokens: usage.outputTokens || 0,
+          cachedTokens: usage.inputTokenDetails?.cacheReadTokens || 0,
+          reasoningTokens: (usage as any).outputTokenDetails?.reasoningTokens || 0
         },
         success: true
       })
@@ -454,7 +473,9 @@ export async function generateStructuredAnalysis<T>(
         text: JSON.stringify(object),
         usage: {
           promptTokens: usage.inputTokens || 0,
-          completionTokens: usage.outputTokens || 0
+          completionTokens: usage.outputTokens || 0,
+          cachedTokens: usage.inputTokenDetails?.cacheReadTokens || 0,
+          reasoningTokens: (usage as any).outputTokenDetails?.reasoningTokens || 0
         },
         success: true
       })
