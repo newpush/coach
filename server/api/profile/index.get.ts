@@ -90,6 +90,7 @@ export default defineEventHandler(async (event) => {
 
     // Get Sport Settings via Repository (handles Default lazy creation)
     const sportSettings = await sportSettingsRepository.getByUserId(user.id)
+    const defaultProfile = sportSettings.find((s) => s.isDefault)
 
     // Helper to format date as YYYY-MM-DD
     const formatDate = (date: Date | null) => {
@@ -111,10 +112,10 @@ export default defineEventHandler(async (event) => {
         heightUnits: user.heightUnits || 'cm',
         distanceUnits: user.distanceUnits || 'Kilometers',
         temperatureUnits: user.temperatureUnits || 'Celsius',
-        restingHr: user.restingHr,
-        maxHr: user.maxHr,
-        lthr: user.lthr,
-        ftp: user.ftp,
+        restingHr: defaultProfile?.restingHr || user.restingHr,
+        maxHr: defaultProfile?.maxHr || user.maxHr,
+        lthr: defaultProfile?.lthr || user.lthr,
+        ftp: defaultProfile?.ftp || user.ftp,
         form: user.form || 'Absolute value',
         visibility: user.visibility || 'Private',
         sex: user.sex,

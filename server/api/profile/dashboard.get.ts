@@ -214,9 +214,13 @@ export default defineEventHandler(async (event) => {
 
     // Identify missing critical fields
     const missingFields: string[] = []
-    if (!user.ftp) missingFields.push('Functional Threshold Power (FTP)')
+    const effectiveFtp = defaultProfile?.ftp || user.ftp
+    const effectiveMaxHr = defaultProfile?.maxHr || user.maxHr
+    const effectiveRestingHr = recentRestingHR || defaultProfile?.restingHr || user.restingHr
+
+    if (!effectiveFtp) missingFields.push('Functional Threshold Power (FTP)')
     if (!user.weight) missingFields.push('Weight')
-    if (!user.maxHr || !user.restingHr) missingFields.push('Heart Rate Settings (HRR)')
+    if (!effectiveMaxHr || !effectiveRestingHr) missingFields.push('Heart Rate Settings (HRR)')
 
     // Check if default profile has zones configured
     if (
@@ -247,12 +251,12 @@ export default defineEventHandler(async (event) => {
         country: user.country,
         age: age,
         weight: recentWeight,
-        ftp: user.ftp,
-        restingHr: recentRestingHR,
-        maxHr: user.maxHr,
+        ftp: effectiveFtp,
+        restingHr: effectiveRestingHr,
+        maxHr: effectiveMaxHr,
         estimatedMaxHR,
         recentHRV,
-        lthr: user.lthr,
+        lthr: defaultProfile?.lthr || user.lthr,
         avgRecentHRV: avgRecentHRV ? Math.round(avgRecentHRV * 10) / 10 : null,
         recentSleep,
         recentRecoveryScore,
