@@ -1177,9 +1177,12 @@ model LlmUsage {
   entityId         String?
   promptTokens     Int?
   completionTokens Int?
+  cachedTokens     Int?     @default(0)
+  reasoningTokens  Int?     @default(0)
   totalTokens      Int?
   estimatedCost    Float?
   durationMs       Int?
+  ttft             Int?
   retryCount       Int      @default(0)
   success          Boolean
   errorType        String?

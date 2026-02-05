@@ -1,0 +1,4 @@
+-- AlterTable
+ALTER TABLE "LlmUsage" ADD COLUMN "cachedTokens" INTEGER DEFAULT 0,
+ADD COLUMN "reasoningTokens" INTEGER DEFAULT 0,
+ADD COLUMN "ttft" INTEGER;
