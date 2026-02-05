@@ -2,7 +2,7 @@ export type GeminiModel = 'flash' | 'pro'
 
 export const MODEL_NAMES = {
     flash: 'gemini-flash-latest',
-    pro: 'gemini-3-flash-preview' // Using Gemini 1.5 Pro for advanced reasoning
+    pro: 'gemini-3-flash-preview'
 } as const
 
 export const PRICING = {
