@@ -87,6 +87,34 @@ export default defineEventHandler(async (event) => {
     })
   }
 
+  // Fetch historical scores from reports
+  const reports = await prisma.report.findMany({
+    where: {
+      userId: user.id,
+      type: 'ATHLETE_PROFILE',
+      status: 'COMPLETED'
+    },
+    orderBy: { createdAt: 'desc' },
+    take: 6, // Current one + 5 previous
+    select: {
+      analysisJson: true,
+      createdAt: true
+    }
+  })
+
+  const history = reports
+    .map((r) => {
+      const json = r.analysisJson as any
+      return {
+        date: r.createdAt,
+        currentFitness: json?.athlete_scores?.current_fitness,
+        recoveryCapacity: json?.athlete_scores?.recovery_capacity,
+        nutritionCompliance: json?.athlete_scores?.nutrition_compliance,
+        trainingConsistency: json?.athlete_scores?.training_consistency
+      }
+    })
+    .reverse()
+
   return {
     user: {
       id: user.id,
@@ -110,6 +138,7 @@ export default defineEventHandler(async (event) => {
       trainingConsistencyExplanation: user.trainingConsistencyExplanation,
       trainingConsistencyExplanationJson: user.trainingConsistencyExplanationJson,
       lastUpdated: user.profileLastUpdated
-    }
+    },
+    history
   }
 })
