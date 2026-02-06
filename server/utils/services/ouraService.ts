@@ -5,6 +5,10 @@ import {
   fetchOuraDailyActivity,
   fetchOuraDailyReadiness,
   fetchOuraWorkouts,
+  fetchOuraDailySpO2,
+  fetchOuraDailyStress,
+  fetchOuraVO2Max,
+  fetchOuraPersonalInfo,
   normalizeOuraWellness,
   normalizeOuraWorkout
 } from '../oura'
@@ -38,12 +42,25 @@ export const OuraService = {
     const start = new Date(date)
     const end = new Date(date) // Same day
 
-    // 1. Fetch Wellness (Sleep, Activity, Readiness)
-    const [sleepData, sleepPeriodsData, activityData, readinessData] = await Promise.all([
+    // 1. Fetch Wellness (Sleep, Activity, Readiness + New Metrics)
+    const [
+      sleepData,
+      sleepPeriodsData,
+      activityData,
+      readinessData,
+      spo2Data,
+      stressData,
+      vo2maxData,
+      personalInfo
+    ] = await Promise.all([
       fetchOuraDailySleep(integration, start, end),
       fetchOuraSleepPeriods(integration, start, end),
       fetchOuraDailyActivity(integration, start, end),
-      fetchOuraDailyReadiness(integration, start, end)
+      fetchOuraDailyReadiness(integration, start, end),
+      fetchOuraDailySpO2(integration, start, end),
+      fetchOuraDailyStress(integration, start, end),
+      fetchOuraVO2Max(integration, start, end),
+      fetchOuraPersonalInfo(integration)
     ])
 
     // Assume the first record matches the day (since we requested 1 day range)
@@ -51,8 +68,11 @@ export const OuraService = {
     const sleepPeriods = sleepPeriodsData // All periods for that day
     const activity = activityData[0]
     const readiness = readinessData[0]
+    const spo2 = spo2Data[0]
+    const stress = stressData[0]
+    const vo2max = vo2maxData[0]
 
-    if (sleep || activity || readiness || sleepPeriods.length > 0) {
+    if (sleep || activity || readiness || sleepPeriods.length > 0 || spo2 || stress || vo2max) {
       // Normalize
       // Use the requested date as the canonical date (UTC midnight)
       const utcDate = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()))
@@ -62,7 +82,13 @@ export const OuraService = {
         readiness,
         sleepPeriods,
         userId,
-        utcDate
+        utcDate,
+        {
+          spo2,
+          stress,
+          vo2max,
+          personalInfo
+        }
       )
 
       if (wellness) {

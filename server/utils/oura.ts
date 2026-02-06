@@ -171,6 +171,22 @@ export async function fetchOuraWorkouts(integration: Integration, startDate: Dat
   return fetchOuraData(integration, 'workout', startDate, endDate)
 }
 
+export async function fetchOuraDailySpO2(integration: Integration, startDate: Date, endDate: Date) {
+  return fetchOuraData(integration, 'daily_spo2', startDate, endDate)
+}
+
+export async function fetchOuraDailyStress(
+  integration: Integration,
+  startDate: Date,
+  endDate: Date
+) {
+  return fetchOuraData(integration, 'daily_stress', startDate, endDate)
+}
+
+export async function fetchOuraVO2Max(integration: Integration, startDate: Date, endDate: Date) {
+  return fetchOuraData(integration, 'vo2_max', startDate, endDate)
+}
+
 export async function fetchOuraPersonalInfo(tokenOrIntegration: string | Integration) {
   let accessToken: string
   if (typeof tokenOrIntegration === 'string') {
@@ -201,7 +217,13 @@ export function normalizeOuraWellness(
   dailyReadiness: any,
   sleepPeriods: any[],
   userId: string,
-  date: Date
+  date: Date,
+  extraData: {
+    spo2?: any
+    stress?: any
+    vo2max?: any
+    personalInfo?: any
+  } = {}
 ) {
   // Combine data into a single wellness record
   // date is expected to be the specific day (UTC midnight)
@@ -211,7 +233,9 @@ export function normalizeOuraWellness(
     !dailySleep &&
     !dailyActivity &&
     !dailyReadiness &&
-    (!sleepPeriods || sleepPeriods.length === 0)
+    (!sleepPeriods || sleepPeriods.length === 0) &&
+    !extraData.spo2 &&
+    !extraData.stress
   )
     return null
 
@@ -227,13 +251,29 @@ export function normalizeOuraWellness(
   // Readiness Metrics
   const readinessScore = dailyReadiness?.score
 
-  // Biometrics from Readiness contributors (as a fallback)
-  const readinessRhr = dailyReadiness?.contributors?.resting_heart_rate
-  const readinessHrv = dailyReadiness?.contributors?.hrv_balance
-
   // Biometrics from Sleep period (more precise raw values)
-  const restingHr = mainSleep?.lowest_heart_rate || readinessRhr
-  const avgHrv = mainSleep?.average_hrv || readinessHrv
+  // lowest_heart_rate and average_hrv are the standard raw metrics in Oura V2 sleep.
+  // Note: We avoid using readiness contributors (resting_heart_rate, hrv_balance)
+  // because they are 0-100 scores according to the OpenAPI schema.
+  const restingHr = mainSleep?.lowest_heart_rate
+  const avgHrv = mainSleep?.average_hrv
+
+  // SpO2
+  const spO2 = extraData.spo2?.spo2_percentage?.average || null
+
+  // Stress
+  // We map Oura daily summary to our stress field (if we use a 1-10 or category)
+  // For now, let's keep it simple or store the raw summary
+  let stressLevel = null
+  if (extraData.stress?.day_summary === 'stressful') stressLevel = 8
+  else if (extraData.stress?.day_summary === 'normal') stressLevel = 4
+  else if (extraData.stress?.day_summary === 'restored') stressLevel = 1
+
+  // VO2 Max
+  const vo2max = extraData.vo2max?.vo2_max || null
+
+  // Recovery Score (mapping 0-100 readiness to our 1-10)
+  const recoveryScore = readinessScore ? Math.round(readinessScore / 10) : null
 
   return {
     userId,
@@ -246,21 +286,28 @@ export function normalizeOuraWellness(
     sleepHours,
     sleepScore: sleepScore || null,
     sleepQuality: null,
-    readiness: readinessScore || null,
-    recoveryScore: readinessScore || null,
+    readiness: readinessScore ? Math.round(readinessScore / 10) : null, // Normalize to 1-10
+    recoveryScore: recoveryScore,
     soreness: null,
     fatigue: null,
-    stress: null,
+    stress: stressLevel,
     mood: null,
     motivation: null,
-    weight: null,
-    spO2: null,
+    weight: extraData.personalInfo?.weight || null,
+    spO2: spO2,
     respiration: mainSleep?.average_breath || null,
     skinTemp: dailyReadiness?.temperature_deviation || null,
+    vo2max: vo2max,
     ctl: null,
     atl: null,
     comments: null,
-    rawJson: { dailySleep, dailyActivity, dailyReadiness, sleepPeriods }
+    rawJson: {
+      dailySleep,
+      dailyActivity,
+      dailyReadiness,
+      sleepPeriods,
+      ...extraData
+    }
   }
 }
 
