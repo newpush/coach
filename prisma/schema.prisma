@@ -51,6 +51,7 @@ model User {
   aiAutoAnalyzeWorkouts              Boolean                      @default(false)
   aiModelPreference                  String?                      @default("flash")
   aiPersona                          String?                      @default("Supportive")
+  dashboardSettings                  Json?
   altitude                           Int?
   isAdmin                            Boolean                      @default(false)
   lthr                               Int?
