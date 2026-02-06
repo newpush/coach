@@ -260,32 +260,50 @@
               </div>
             </template>
             <div class="space-y-4">
-              <div class="flex justify-between items-center">
+              <NuxtLink
+                to="/admin/debug/database"
+                class="flex justify-between items-center hover:bg-gray-50 dark:hover:bg-gray-800/50 -mx-2 px-2 py-1 rounded transition-colors group"
+              >
                 <span class="text-sm">Database</span>
-                <span
-                  class="px-2 py-1 rounded text-xs font-semibold"
-                  :class="
-                    stats?.systemStatus?.database === 'Online'
-                      ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
-                      : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
-                  "
-                >
-                  {{ stats?.systemStatus?.database || 'Checking...' }}
-                </span>
-              </div>
-              <div class="flex justify-between items-center">
+                <div class="flex items-center gap-2">
+                  <span
+                    class="px-2 py-1 rounded text-xs font-semibold"
+                    :class="
+                      stats?.systemStatus?.database === 'Online'
+                        ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
+                        : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
+                    "
+                  >
+                    {{ stats?.systemStatus?.database || 'Checking...' }}
+                  </span>
+                  <UIcon
+                    name="i-lucide-chevron-right"
+                    class="w-4 h-4 text-gray-400 group-hover:text-gray-600"
+                  />
+                </div>
+              </NuxtLink>
+              <NuxtLink
+                to="/admin/debug/trigger"
+                class="flex justify-between items-center hover:bg-gray-50 dark:hover:bg-gray-800/50 -mx-2 px-2 py-1 rounded transition-colors group"
+              >
                 <span class="text-sm">Trigger.dev</span>
-                <span
-                  class="px-2 py-1 rounded text-xs font-semibold"
-                  :class="
-                    stats?.systemStatus?.trigger === 'Connected'
-                      ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
-                      : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200'
-                  "
-                >
-                  {{ stats?.systemStatus?.trigger || 'Checking...' }}
-                </span>
-              </div>
+                <div class="flex items-center gap-2">
+                  <span
+                    class="px-2 py-1 rounded text-xs font-semibold"
+                    :class="
+                      stats?.systemStatus?.trigger === 'Connected'
+                        ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
+                        : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200'
+                    "
+                  >
+                    {{ stats?.systemStatus?.trigger || 'Checking...' }}
+                  </span>
+                  <UIcon
+                    name="i-lucide-chevron-right"
+                    class="w-4 h-4 text-gray-400 group-hover:text-gray-600"
+                  />
+                </div>
+              </NuxtLink>
               <NuxtLink
                 to="/admin/queues"
                 class="flex justify-between items-center hover:bg-gray-50 dark:hover:bg-gray-800/50 -mx-2 px-2 py-1 rounded transition-colors group"
