@@ -432,16 +432,10 @@
 
         <!-- 10. Nutrition Scores -->
         <div class="space-y-4">
-          <div class="flex items-center justify-between px-1">
+          <div class="px-1">
             <h2 class="text-xl font-bold text-gray-900 dark:text-white uppercase tracking-tight">
               Nutrition Quality
             </h2>
-            <USelect
-              v-model="nutritionSport"
-              :items="sportOptions"
-              class="w-32 sm:w-36"
-              size="sm"
-            />
           </div>
 
           <div v-if="nutritionLoading" class="flex justify-center py-12">
@@ -661,7 +655,6 @@
   ]
 
   const workoutSport = ref<string>('all')
-  const nutritionSport = ref<string>('all')
 
   interface AthleteProfile {
     scores?: {
@@ -702,12 +695,10 @@
     '/api/scores/nutrition-trends',
     {
       query: computed(() => ({
-        days: selectedPeriod.value,
-        sport: nutritionSport.value
+        days: selectedPeriod.value
       }))
     }
   )
-
   // Modal state
   const showModal = ref(false)
   const loadingExplanation = ref(false)
