@@ -2,6 +2,7 @@ import { defineEventHandler, createError } from 'h3'
 import { getServerSession } from '../../utils/session'
 import { prisma } from '../../utils/db'
 import { Prisma } from '@prisma/client'
+import { webhookQueue, pingQueue } from '../../utils/queue'
 
 export default defineEventHandler(async (event) => {
   const session = await getServerSession(event)
@@ -14,11 +15,24 @@ export default defineEventHandler(async (event) => {
     })
   }
 
-  // Basic totals
-  const [totalUsers, totalWorkouts] = await Promise.all([
+  // Basic totals & System Status
+  const [totalUsers, totalWorkouts, dbCheck] = await Promise.all([
     prisma.user.count(),
-    prisma.workout.count()
+    prisma.workout.count(),
+    prisma.$queryRaw`SELECT 1`.catch(() => null)
   ])
+
+  // Queue Health
+  const [webhookPaused, pingPaused] = await Promise.all([
+    webhookQueue.isPaused().catch(() => true),
+    pingQueue.isPaused().catch(() => true)
+  ])
+
+  const systemStatus = {
+    database: dbCheck ? 'Online' : 'Offline',
+    trigger: process.env.TRIGGER_SECRET_KEY ? 'Connected' : 'Not Configured',
+    queues: !webhookPaused && !pingPaused ? 'Running' : 'Paused'
+  }
 
   // AI Costs & Usage (last 30 days)
   const thirtyDaysAgo = new Date()
@@ -230,6 +244,7 @@ export default defineEventHandler(async (event) => {
     usersByDay,
     activeUsersByDay,
     totalUsersLast30Days,
-    activeUsersLast30DaysCount
+    activeUsersLast30DaysCount,
+    systemStatus
   }
 })
