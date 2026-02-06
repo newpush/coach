@@ -85,10 +85,14 @@
 <script setup lang="ts">
   const props = defineProps<{
     period: number | string
+    sport?: string
   }>()
 
   const { data, refresh } = await useFetch('/api/activity/highlights', {
-    query: computed(() => ({ days: props.period }))
+    query: computed(() => ({
+      days: props.period,
+      sport: props.sport
+    }))
   })
 
   const formatDistance = (meters: number | undefined) => {

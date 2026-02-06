@@ -67,16 +67,20 @@
 
   const props = defineProps<{
     weeks?: number | string
+    sport?: string
   }>()
 
   const selectedType = ref<'power' | 'hr'>('power')
 
   const { data, pending, refresh } = await useFetch('/api/analytics/weekly-zones', {
-    query: { weeks: props.weeks || 12 }
+    query: {
+      weeks: props.weeks || 12,
+      sport: props.sport
+    }
   })
 
   watch(
-    () => props.weeks,
+    () => [props.weeks, props.sport],
     () => {
       refresh()
     }

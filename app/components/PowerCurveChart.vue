@@ -69,6 +69,7 @@
 
     // If provided, fetches aggregate data for a period (Performance Page mode)
     days?: number | string
+    sport?: string
   }>()
 
   const loading = ref(true)
@@ -96,7 +97,10 @@
       } else {
         // Performance Page Mode
         endpoint = `/api/workouts/power-curve`
-        query = { days: props.days || 90 }
+        query = {
+          days: props.days || 90,
+          sport: props.sport
+        }
       }
 
       const data = await $fetch(endpoint, { query })
@@ -111,7 +115,7 @@
 
   // Watch for prop changes to refetch
   watch(
-    () => props.days,
+    () => [props.days, props.sport],
     () => {
       if (!props.workoutId) {
         fetchPowerCurve()

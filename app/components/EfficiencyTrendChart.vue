@@ -79,6 +79,7 @@
 
   const props = defineProps<{
     days?: number | string
+    sport?: string
   }>()
 
   const loading = ref(true)
@@ -90,7 +91,10 @@
 
     try {
       const data = await $fetch('/api/scores/efficiency-trends', {
-        query: { days: props.days || 90 }
+        query: {
+          days: props.days || 90,
+          sport: props.sport
+        }
       })
       trendData.value = data
     } catch (e: any) {
@@ -103,7 +107,7 @@
 
   // Watch for prop changes
   watch(
-    () => props.days,
+    () => [props.days, props.sport],
     () => {
       fetchTrendData()
     }
