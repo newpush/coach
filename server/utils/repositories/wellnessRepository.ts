@@ -190,6 +190,8 @@ export const wellnessRepository = {
     if (historyUpdate) {
       ;(createData as any).history = [historyEntry]
       ;(finalUpdateData as any).history = historyUpdate
+      ;(createData as any).lastSource = source
+      ;(finalUpdateData as any).lastSource = source
     }
 
     return prisma.wellness.upsert({

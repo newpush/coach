@@ -758,6 +758,7 @@ model Wellness {
   feedback         String?
   feedbackText     String?
   history          Json?
+  lastSource       String?
   user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, date])
