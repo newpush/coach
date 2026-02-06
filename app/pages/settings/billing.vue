@@ -26,6 +26,9 @@
   const showCanceledMessage = ref(route.query.canceled === 'true')
   const showPlansModal = ref(false)
 
+  const config = useRuntimeConfig()
+  const subscriptionsEnabled = computed(() => config.public.subscriptionsEnabled)
+
   // Always refresh user data on mount to ensure latest subscription status
   onMounted(() => {
     userStore.fetchUser()
@@ -375,9 +378,9 @@
       </div>
 
       <!-- 1. Pricing & Comparison -->
-      <!-- Show ONLY if NOT premium (or in modal) -->
+      <!-- Show ONLY if NOT premium (or in modal) AND subscriptions are enabled -->
       <div
-        v-if="!isPremium"
+        v-if="!isPremium && subscriptionsEnabled"
         class="space-y-4 order-2 lg:order-1 pt-8 lg:pt-0 border-t lg:border-t-0 border-gray-200 dark:border-gray-800"
       >
         <div class="flex flex-col sm:flex-row sm:items-baseline sm:justify-between gap-1">
@@ -390,6 +393,20 @@
           </p>
         </div>
         <LandingPricingPlans />
+      </div>
+
+      <!-- Maintenance Message when Subscriptions are Disabled -->
+      <div
+        v-if="!isPremium && !subscriptionsEnabled"
+        class="space-y-4 order-2 lg:order-1 pt-8 lg:pt-0 border-t lg:border-t-0 border-gray-200 dark:border-gray-800"
+      >
+        <UAlert
+          icon="i-heroicons-information-circle"
+          color="info"
+          variant="soft"
+          title="Subscriptions Temporarily Unavailable"
+          description="We are currently performing maintenance on our subscription system. New subscriptions are temporarily disabled, but existing subscriptions remain active and functional."
+        />
       </div>
     </div>
 
@@ -409,7 +426,18 @@
             </div>
           </template>
 
-          <LandingPricingPlans />
+          <div v-if="subscriptionsEnabled">
+            <LandingPricingPlans />
+          </div>
+          <div v-else class="py-8">
+            <UAlert
+              icon="i-heroicons-information-circle"
+              color="info"
+              variant="soft"
+              title="Subscriptions Temporarily Unavailable"
+              description="New plan selections and changes are temporarily disabled while we perform system maintenance. Existing subscriptions remain active."
+            />
+          </div>
         </UCard>
       </template>
     </UModal>
