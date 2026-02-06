@@ -111,11 +111,11 @@
             >
               <template #header>
                 <h3 class="text-xs font-bold text-gray-500 uppercase tracking-widest">
-                  AI Cost (MTD)
+                  AI Cost (30d)
                 </h3>
               </template>
               <p class="text-3xl font-bold text-gray-900 dark:text-white relative z-10">
-                ${{ stats?.totalAiCost?.toFixed(2) || '0.00' }}
+                ${{ stats?.totalAiCost30d?.toFixed(2) || '0.00' }}
               </p>
               <!-- Chart -->
               <div
@@ -134,14 +134,115 @@
           </NuxtLink>
         </div>
 
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <UCard class="bg-gray-50/50 dark:bg-gray-800/50">
+            <div class="text-center">
+              <div class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">
+                AI Yesterday
+              </div>
+              <div class="text-xl font-bold font-mono">
+                ${{ stats?.aiCostYesterday?.toFixed(3) || '0.000' }}
+              </div>
+            </div>
+          </UCard>
+          <UCard class="bg-blue-50/50 dark:bg-blue-900/10">
+            <div class="text-center">
+              <div class="text-[10px] font-bold text-blue-500 uppercase tracking-widest mb-1">
+                AI Today
+              </div>
+              <div class="text-xl font-bold font-mono">
+                ${{ stats?.aiCostToday?.toFixed(3) || '0.000' }}
+              </div>
+            </div>
+          </UCard>
+          <UCard class="bg-indigo-50/50 dark:bg-indigo-900/10">
+            <div class="text-center">
+              <div class="text-[10px] font-bold text-indigo-500 uppercase tracking-widest mb-1">
+                AI Forecast
+              </div>
+              <div class="text-xl font-bold font-mono text-indigo-600 dark:text-indigo-400">
+                ${{ stats?.aiCostForecastToday?.toFixed(3) || '0.000' }}
+              </div>
+            </div>
+          </UCard>
+          <UCard class="bg-purple-50/50 dark:bg-purple-900/10">
+            <div class="text-center">
+              <div class="text-[10px] font-bold text-purple-500 uppercase tracking-widest mb-1">
+                AI MTD
+              </div>
+              <div class="text-xl font-bold font-mono text-purple-600 dark:text-purple-400">
+                ${{ stats?.aiCostMTD?.toFixed(2) || '0.00' }}
+              </div>
+            </div>
+          </UCard>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <NuxtLink to="/admin/subscriptions" class="block">
+            <UCard class="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
+              <template #header>
+                <h3 class="text-xs font-bold text-gray-500 uppercase tracking-widest">
+                  Est. Monthly Revenue
+                </h3>
+              </template>
+              <p class="text-3xl font-bold text-emerald-600 dark:text-emerald-400">
+                ${{ stats?.estimatedMRR?.toFixed(2) || '0.00' }}
+              </p>
+              <p class="text-xs text-gray-500 mt-2">
+                Based on {{ stats?.activeSubscribers || 0 }} active subscribers
+              </p>
+            </UCard>
+          </NuxtLink>
+
+          <UCard>
+            <template #header>
+              <h3 class="text-xs font-bold text-gray-500 uppercase tracking-widest">
+                Active Subscribers
+              </h3>
+            </template>
+            <p class="text-3xl font-bold text-gray-900 dark:text-white">
+              {{ stats?.activeSubscribers || 0 }}
+            </p>
+            <div class="mt-2 flex gap-2">
+              <UBadge color="neutral" variant="soft" size="xs">Supporter/Pro Only</UBadge>
+            </div>
+          </UCard>
+        </div>
+
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
           <UCard>
             <template #header>
-              <h2 class="text-xl font-bold uppercase tracking-tight">Recent Activity</h2>
+              <h2 class="text-xl font-bold uppercase tracking-tight">Recent Premium Users</h2>
             </template>
-            <!-- Placeholder for activity list -->
-            <div class="text-sm text-gray-500 italic">
-              Recent system-wide events will appear here...
+            <div class="space-y-3">
+              <div
+                v-for="user in stats?.recentPremiumUsers"
+                :key="user.id"
+                class="flex items-center justify-between text-sm border-b border-gray-100 dark:border-gray-800 pb-2 last:border-0 last:pb-0"
+              >
+                <div>
+                  <div class="font-medium text-gray-900 dark:text-white">
+                    {{ user.name || 'Unknown' }}
+                  </div>
+                  <div class="text-xs text-gray-500">{{ user.email }}</div>
+                </div>
+                <div class="text-right">
+                  <UBadge
+                    :color="user.subscriptionTier === 'PRO' ? 'primary' : 'neutral'"
+                    variant="soft"
+                    size="xs"
+                  >
+                    {{ user.subscriptionTier }}
+                  </UBadge>
+                  <div class="text-[10px] text-gray-400 mt-0.5">{{ user.subscriptionStatus }}</div>
+                </div>
+              </div>
+              <div
+                v-if="!stats?.recentPremiumUsers?.length"
+                class="text-center text-gray-500 italic py-4"
+              >
+                No premium users found
+              </div>
             </div>
           </UCard>
 
