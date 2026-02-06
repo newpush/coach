@@ -60,10 +60,10 @@
         :color="plan.popular || highlight ? 'primary' : 'neutral'"
         :variant="plan.popular || highlight ? 'solid' : 'outline'"
         block
-        :disabled="isCurrentPlan"
+        :disabled="isCurrentPlan || !subscriptionsEnabled"
         @click="$emit('select', plan)"
       >
-        {{ buttonLabel }}
+        {{ subscriptionsEnabled ? buttonLabel : 'Unavailable' }}
       </UButton>
     </template>
   </UCard>
@@ -90,6 +90,8 @@
   }>()
 
   const userStore = useUserStore()
+  const config = useRuntimeConfig()
+  const subscriptionsEnabled = computed(() => config.public.subscriptionsEnabled)
 
   const isCurrentPlan = computed(() => {
     const currentTier = userStore.user?.subscriptionTier?.toLowerCase()

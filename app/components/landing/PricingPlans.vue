@@ -112,11 +112,11 @@
             :color="plan.popular ? 'primary' : 'neutral'"
             :variant="plan.popular ? 'solid' : 'outline'"
             block
-            :disabled="isCurrentPlan(plan) || loading"
+            :disabled="isCurrentPlan(plan) || loading || !subscriptionsEnabled"
             :loading="loading && selectedPlan === plan.key"
             @click="handlePlanSelect(plan)"
           >
-            {{ getButtonLabel(plan) }}
+            {{ subscriptionsEnabled ? getButtonLabel(plan) : 'Temporarily Unavailable' }}
           </UButton>
         </div>
       </UCard>
@@ -138,10 +138,12 @@
   const { status } = useAuth()
   const userStore = useUserStore()
   const { createCheckoutSession, openCustomerPortal } = useStripe()
+  const config = useRuntimeConfig()
 
   const billingInterval = ref<BillingInterval>('annual')
   const loading = ref(false)
   const selectedPlan = ref<string | null>(null)
+  const subscriptionsEnabled = computed(() => config.public.subscriptionsEnabled)
 
   function isCurrentPlan(plan: PricingPlan): boolean {
     if (!userStore.user || status.value !== 'authenticated') return false

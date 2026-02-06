@@ -9,9 +9,20 @@
       </template>
 
       <div class="space-y-6">
+        <!-- Maintenance Message when Subscriptions are Disabled -->
+        <div v-if="!subscriptionsEnabled">
+          <UAlert
+            icon="i-heroicons-information-circle"
+            color="info"
+            variant="soft"
+            title="Subscriptions Temporarily Unavailable"
+            description="We are currently performing maintenance on our subscription system. New subscriptions and upgrades are temporarily disabled. Please check back later!"
+          />
+        </div>
+
         <!-- Feature-specific message -->
         <div
-          v-if="feature"
+          v-if="feature && subscriptionsEnabled"
           class="bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg p-4"
         >
           <div class="flex items-start gap-3">
@@ -31,13 +42,13 @@
         </div>
 
         <!-- Recommended plan (if specified) -->
-        <div v-if="recommendedTier">
+        <div v-if="recommendedTier && subscriptionsEnabled">
           <h4 class="font-semibold mb-3">Recommended Plan</h4>
           <PricingPlanCard :plan="recommendedPlan!" :show-popular="false" :highlight="true" />
         </div>
 
         <!-- All plans -->
-        <div>
+        <div v-if="subscriptionsEnabled">
           <h4 class="font-semibold mb-3">
             {{ recommendedTier ? 'All Plans' : 'Choose Your Plan' }}
           </h4>
@@ -54,8 +65,16 @@
 
       <template #footer>
         <div class="flex justify-between items-center">
-          <UButton variant="ghost" color="neutral" @click="close"> Maybe Later </UButton>
-          <UButton variant="link" color="primary" :to="'/pricing'" @click="close">
+          <UButton variant="ghost" color="neutral" @click="close">
+            {{ subscriptionsEnabled ? 'Maybe Later' : 'Close' }}
+          </UButton>
+          <UButton
+            v-if="subscriptionsEnabled"
+            variant="link"
+            color="primary"
+            :to="'/pricing'"
+            @click="close"
+          >
             View Full Pricing Details
             <UIcon name="i-heroicons-arrow-right" class="w-4 h-4 ml-1" />
           </UButton>
@@ -84,6 +103,8 @@
 
   const isOpen = defineModel<boolean>({ default: false })
   const userStore = useUserStore()
+  const config = useRuntimeConfig()
+  const subscriptionsEnabled = computed(() => config.public.subscriptionsEnabled)
 
   const recommendedPlan = computed(() => {
     if (!props.recommendedTier) return null
