@@ -107,28 +107,40 @@ async function handleSoftBackfill(prisma: any, options: any) {
     if (!normalized) continue
 
     const updateData: any = {
-      spO2: normalized.spO2,
-      stress: normalized.stress,
-      vo2max: normalized.vo2max,
-      weight: normalized.weight,
-      readiness: normalized.readiness,
-      recoveryScore: normalized.recoveryScore,
       lastSource: 'oura'
     }
 
-    // Only update HRV/RHR if Oura actually has raw data (not null)
-    // This prevents wiping out Intervals data during backfill
+    // Only set fields that are present in the normalized Oura data
+
+    // to avoid nulling out valid data from other sources (like Intervals)
+
     if (normalized.hrv !== null) updateData.hrv = normalized.hrv
+
     if (normalized.restingHr !== null) updateData.restingHr = normalized.restingHr
 
-    // Only update if something changed
-    const hasChanges = Object.entries(updateData).some(([key, val]) => {
-      if (key === 'lastSource') return entry.lastSource !== 'oura'
+    if (normalized.spO2 !== null) updateData.spO2 = normalized.spO2
+
+    if (normalized.stress !== null) updateData.stress = normalized.stress
+
+    if (normalized.vo2max !== null) updateData.vo2max = normalized.vo2max
+
+    if (normalized.weight !== null) updateData.weight = normalized.weight
+
+    if (normalized.readiness !== null) updateData.readiness = normalized.readiness
+
+    if (normalized.recoveryScore !== null) updateData.recoveryScore = normalized.recoveryScore
+
+    // Only update if something changed (and we're not just setting lastSource)
+
+    const hasActualChanges = Object.entries(updateData).some(([key, val]) => {
+      if (key === 'lastSource') return false
+
       const currentVal = (entry as any)[key]
-      return val !== undefined && val !== null && currentVal !== val
+
+      return currentVal !== val
     })
 
-    if (hasChanges) {
+    if (hasActualChanges || entry.lastSource !== 'oura') {
       if (dryRun) {
         if (updatedCount < 10) {
           console.log(
