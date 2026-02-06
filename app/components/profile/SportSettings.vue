@@ -87,6 +87,17 @@
                   >
                     Delete
                   </UButton>
+
+                  <UDropdownMenu
+                    v-if="settings.length > 1"
+                    :items="getCopyOptions(index)"
+                    :content="{ align: 'end' }"
+                  >
+                    <UButton icon="i-lucide-copy" size="xs" variant="ghost" color="neutral">
+                      Copy from
+                    </UButton>
+                  </UDropdownMenu>
+
                   <UButton
                     icon="i-lucide-pencil"
                     size="xs"
@@ -1101,6 +1112,75 @@
 
   function handleThresholdChange(type: 'power' | 'hr', mode: 'add' | 'edit') {
     recalculateZones(type, mode)
+  }
+
+  function copySettings(targetIndex: number, sourceProfile: any) {
+    const item = accordionItems.value[targetIndex]
+    if (!item) return
+
+    const targetProfile = item.content
+
+    // Start editing
+    editingIndex.value = targetIndex
+
+    // Clone target to editForm first to keep its identity (name/types)
+    editForm.value = JSON.parse(JSON.stringify(targetProfile))
+
+    // List of fields to copy (everything except identity and ID)
+    const fieldsToCopy = [
+      'ftp',
+      'eFtp',
+      'indoorFtp',
+      'wPrime',
+      'eWPrime',
+      'pMax',
+      'ePMax',
+      'powerSpikeThreshold',
+      'eftpMinDuration',
+      'lthr',
+      'maxHr',
+      'restingHr',
+      'hrLoadType',
+      'thresholdPace',
+      'warmupTime',
+      'cooldownTime',
+      'loadPreference',
+      'powerZones',
+      'hrZones'
+    ]
+
+    fieldsToCopy.forEach((field) => {
+      if (sourceProfile[field] !== undefined) {
+        editForm.value[field] = JSON.parse(JSON.stringify(sourceProfile[field]))
+      }
+    })
+
+    toast.add({
+      title: 'Settings Copied',
+      description: `Copied settings from ${
+        sourceProfile.name || sourceProfile.types?.join(', ') || 'another profile'
+      }. Review and save changes.`,
+      color: 'primary'
+    })
+  }
+
+  const getCopyOptions = (index: number) => {
+    const item = accordionItems.value[index]
+    if (!item) return []
+    const currentItem = item.content
+    const otherSports = props.settings.filter(
+      (s) => s !== currentItem && (s.id !== currentItem.id || !s.id)
+    )
+
+    if (otherSports.length === 0) return []
+
+    return [
+      otherSports.map((s) => ({
+        label: s.name || (s.isDefault ? 'Default Profile' : s.types.join(', ')),
+        icon: s.isDefault ? 'i-lucide-globe' : getIconForTypes(s.types),
+        onSelect: () => copySettings(index, s)
+      }))
+    ]
   }
 
   function recalculateZones(type: 'power' | 'hr', mode: 'add' | 'edit') {
