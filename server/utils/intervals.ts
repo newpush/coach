@@ -840,7 +840,12 @@ export function normalizeIntervalsWorkout(activity: IntervalsActivity, userId: s
 
     // Power metrics
     averageWatts: activity.icu_average_watts || activity.average_watts || null,
-    maxWatts: activity.max_watts || null,
+    maxWatts:
+      activity.max_watts ||
+      activity.icu_pm_p_max ||
+      activity.icu_rolling_p_max ||
+      activity.p_max ||
+      null,
     normalizedPower: activity.normalized_power || null,
     weightedAvgWatts: activity.icu_weighted_avg_watts || null,
 
