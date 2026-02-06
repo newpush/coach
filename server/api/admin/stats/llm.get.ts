@@ -385,6 +385,23 @@ export default defineEventHandler(async (event) => {
     count: Number(row.count)
   }))
 
+  // 14e. Daily Failures per Operation
+  const dailyFailuresByOperationRaw = await prisma.$queryRaw<
+    { date: string; operation: string; count: bigint }[]
+  >`
+    SELECT DATE("createdAt") as date, operation, COUNT(*) as count
+    FROM "LlmUsage"
+    WHERE "createdAt" >= ${thirtyDaysAgo} AND "success" = false
+    GROUP BY DATE("createdAt"), operation
+    ORDER BY date ASC
+  `
+
+  const dailyFailuresByOperation = dailyFailuresByOperationRaw.map((row) => ({
+    date: new Date(row.date).toISOString().split('T')[0],
+    operation: row.operation,
+    count: Number(row.count)
+  }))
+
   // 16. Daily Input Tokens Breakdown (Cached vs Uncached)
   const dailyTokenBreakdownRaw = await prisma.$queryRaw<
     { date: string; prompt: bigint; cached: bigint }[]
@@ -460,6 +477,7 @@ export default defineEventHandler(async (event) => {
     dailyTokensByModel,
     dailyTokensByOperation,
     dailyCountsByOperation,
+    dailyFailuresByOperation,
     dailyTotalUsers,
     dailyTokenBreakdown,
     hourlyStats,
