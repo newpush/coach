@@ -6,15 +6,24 @@
           <UIcon name="i-heroicons-chart-bar" class="w-5 h-5 text-primary-500" />
           <h3 class="font-bold text-sm tracking-tight uppercase">Performance Scores</h3>
         </div>
-        <UButton
-          color="neutral"
-          variant="ghost"
-          size="xs"
-          icon="i-heroicons-presentation-chart-line"
-          @click="$emit('open-training-load')"
-        >
-          Training Load
-        </UButton>
+        <div class="flex items-center gap-1">
+          <UButton
+            color="neutral"
+            variant="ghost"
+            size="xs"
+            icon="i-heroicons-cog-6-tooth"
+            @click="showSettingsModal = true"
+          />
+          <UButton
+            color="neutral"
+            variant="ghost"
+            size="xs"
+            icon="i-heroicons-presentation-chart-line"
+            @click="$emit('open-training-load')"
+          >
+            Training Load
+          </UButton>
+        </div>
       </div>
     </template>
 
@@ -33,24 +42,7 @@
     <!-- Actual scores data -->
     <div v-else-if="profileScores" class="grid gap-3 flex-grow">
       <button
-        v-for="(score, key) in {
-          currentFitness: {
-            label: 'Current Fitness',
-            color: 'bg-amber-50 dark:bg-amber-900/20 ring-amber-500/10'
-          },
-          recoveryCapacity: {
-            label: 'Recovery Capacity',
-            color: 'bg-emerald-50 dark:bg-emerald-900/20 ring-emerald-500/10'
-          },
-          nutritionCompliance: {
-            label: 'Nutrition Quality',
-            color: 'bg-purple-50 dark:bg-purple-900/20 ring-purple-500/10'
-          },
-          trainingConsistency: {
-            label: 'Consistency',
-            color: 'bg-blue-50 dark:bg-blue-900/20 ring-blue-500/10'
-          }
-        }"
+        v-for="(score, key) in visibleScoreOptions"
         :key="key"
         class="flex justify-between items-center p-3 rounded-xl ring-1 ring-inset hover:ring-primary-500/50 transition-all duration-200"
         :class="score.color"
@@ -59,7 +51,7 @@
         <div class="flex flex-col items-start gap-1">
           <span class="text-sm font-bold text-gray-700 dark:text-gray-200">{{ score.label }}</span>
           <TrendIndicator
-            v-if="scoresHistory.length > 1"
+            v-if="settings.showTrends && scoresHistory.length > 1"
             :current="(profileScores as any)?.[key] ?? 0"
             :previous="
               scoresHistory
@@ -110,11 +102,14 @@
         View Analysis
       </UButton>
     </template>
+
+    <DashboardPerformanceScoresSettingsModal v-model:open="showSettingsModal" />
   </UCard>
 </template>
 
 <script setup lang="ts">
   const integrationStore = useIntegrationStore()
+  const userStore = useUserStore()
   const { getScoreColor: getScoreBadgeColor } = useScoreColor()
   const { formatDate, formatDateUTC, getUserLocalDate } = useFormat()
 
@@ -132,6 +127,66 @@
 
   const profileScores = computed(() => scoresData.value?.scores || null)
   const scoresHistory = computed(() => scoresData.value?.history || [])
+
+  // Settings State
+  const showSettingsModal = ref(false)
+
+  const defaultSettings = {
+    showTrends: true,
+    visibleScores: {
+      currentFitness: true,
+      recoveryCapacity: true,
+      nutritionCompliance: true,
+      trainingConsistency: true
+    }
+  }
+
+  const settings = computed(() => {
+    const userSettings = userStore.user?.dashboardSettings?.performanceScores
+    if (userSettings) {
+      return {
+        ...defaultSettings,
+        ...userSettings,
+        visibleScores: {
+          ...defaultSettings.visibleScores,
+          ...(userSettings.visibleScores || {})
+        }
+      }
+    }
+    return defaultSettings
+  })
+
+  // Computed visible scores
+  const allScoreConfigs = {
+    currentFitness: {
+      label: 'Current Fitness',
+      color: 'bg-amber-50 dark:bg-amber-900/20 ring-amber-500/10'
+    },
+    recoveryCapacity: {
+      label: 'Recovery Capacity',
+      color: 'bg-emerald-50 dark:bg-emerald-900/20 ring-emerald-500/10'
+    },
+    nutritionCompliance: {
+      label: 'Nutrition Quality',
+      color: 'bg-purple-50 dark:bg-purple-900/20 ring-purple-500/10'
+    },
+    trainingConsistency: {
+      label: 'Consistency',
+      color: 'bg-blue-50 dark:bg-blue-900/20 ring-blue-500/10'
+    }
+  }
+
+  const visibleScoreOptions = computed(() => {
+    const options = {} as any
+    const visibleScores = settings.value.visibleScores || defaultSettings.visibleScores
+
+    for (const [key, config] of Object.entries(allScoreConfigs)) {
+      if (visibleScores[key as keyof typeof visibleScores] !== false) {
+        options[key] = config
+      }
+    }
+    return options
+  })
 
   // Helper to get score color
   function getScoreColor(score: number | null): 'error' | 'warning' | 'success' | 'neutral' {

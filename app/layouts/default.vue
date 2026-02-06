@@ -13,8 +13,14 @@
   const userStore = useUserStore()
 
   // Ensure user data (including subscription) is loaded
+  await callOnce(async () => {
+    await userStore.fetchUser()
+  })
+
   onMounted(() => {
-    userStore.fetchUser()
+    if (!userStore.user) {
+      userStore.fetchUser()
+    }
   })
 
   const impersonationMeta = useCookie<{
