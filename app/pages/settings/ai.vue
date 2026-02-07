@@ -17,7 +17,7 @@
             </h3>
             <p class="mt-1 text-sm text-gray-500 dark:text-gray-400 font-medium">
               Unlock the full potential of your AI Coach with a paid plan. Get automatic analysis,
-              deep reasoning, and proactive coaching to take your training to the next level.
+              thoughtful analysis, and proactive coaching to take your training to the next level.
             </p>
             <div class="mt-3">
               <UButton

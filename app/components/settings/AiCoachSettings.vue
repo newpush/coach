@@ -22,10 +22,10 @@
         />
       </div>
 
-      <!-- Model Selection -->
+      <!-- Analysis Levels Selection -->
       <div>
-        <label class="block text-sm font-medium mb-2">AI Model</label>
-        <p class="text-sm text-muted mb-3">Balance between speed/cost and analysis depth</p>
+        <label class="block text-sm font-medium mb-2">AI Analysis Levels</label>
+        <p class="text-sm text-muted mb-3">Choose the depth of analysis for your training data</p>
         <div class="space-y-3">
           <div
             v-for="model in modelOptions"
@@ -33,15 +33,13 @@
             class="flex items-start gap-3 p-4 border rounded-lg cursor-pointer hover:border-primary transition-colors relative"
             :class="{
               'border-primary bg-primary/5': localSettings.aiModelPreference === model.value,
-              'opacity-60 grayscale-[0.5]':
-                model.value === 'pro' && !userStore.hasMinimumTier('PRO')
+              'opacity-60 grayscale-[0.5]': !isModelAvailable(model)
             }"
             @click="
-              model.value === 'pro' && !userStore.hasMinimumTier('PRO')
+              !isModelAvailable(model)
                 ? upgradeModal.show({
-                    featureTitle: 'Deep Reasoning AI',
-                    featureDescription:
-                      'Unlock the most powerful AI engine for strategic planning and analysis.',
+                    featureTitle: model.label + ' Analysis',
+                    featureDescription: 'Unlock our most advanced AI analysis engines.',
                     recommendedTier: 'pro'
                   })
                 : selectModel(model.value)
@@ -50,14 +48,14 @@
             <input
               type="radio"
               :checked="localSettings.aiModelPreference === model.value"
-              :disabled="model.value === 'pro' && !userStore.hasMinimumTier('PRO')"
+              :disabled="!isModelAvailable(model)"
               class="mt-1"
             />
             <div class="flex-1">
               <div class="flex items-center gap-2">
                 <div class="font-medium">{{ model.label }}</div>
                 <div
-                  v-if="model.value === 'pro' && !userStore.hasMinimumTier('PRO')"
+                  v-if="model.minTier === 'PRO' && !isModelAvailable(model)"
                   class="flex items-center gap-2"
                 >
                   <UBadge color="primary" variant="subtle" size="sm">Pro</UBadge>
@@ -65,7 +63,6 @@
                 </div>
               </div>
               <div class="text-sm text-muted mt-1">{{ model.description }}</div>
-              <div class="text-xs text-muted mt-1">{{ model.pricing }}</div>
             </div>
           </div>
         </div>
@@ -130,17 +127,31 @@
   const modelOptions = [
     {
       value: 'flash',
-      label: 'Flash (Gemini 3.0 Flash)',
-      description: 'Fast responses, good for daily summaries and quick insights',
-      pricing: ''
+      label: 'Quick',
+      description: 'A well balanced experience with rapid-fire feedback.',
+      minTier: 'FREE'
     },
     {
       value: 'pro',
-      label: 'Pro (Gemini 3.0 Pro)',
-      description: 'Advanced reasoning, ideal for complex race analysis and strategic planning',
-      pricing: ''
+      label: 'Thoughtful',
+      description: 'State of the art, elite level intelligence for deep-dive strategy.',
+      minTier: 'PRO'
+    },
+    {
+      value: 'experimental',
+      label: 'Experimental',
+      description: "What we're cooking in the lab. Cutting-edge but potentially unstable.",
+      minTier: 'PRO'
     }
   ]
+
+  const isContributor = computed(() => userStore.user?.subscriptionStatus === 'CONTRIBUTOR')
+
+  function isModelAvailable(model: any) {
+    if (model.minTier === 'FREE') return true
+    if (isContributor.value) return true
+    return userStore.hasMinimumTier(model.minTier as any)
+  }
 
   function selectModel(value: string) {
     localSettings.value.aiModelPreference = value

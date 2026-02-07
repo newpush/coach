@@ -98,12 +98,12 @@
         </div>
       </div>
 
-      <!-- Deep Analysis (Pro+) -->
+      <!-- Thoughtful Analysis (Pro+) -->
       <div class="flex items-start justify-between">
         <div class="flex-1">
           <USwitch
             v-model="localSettings.aiDeepAnalysisEnabled"
-            label="Deep Analysis"
+            label="Thoughtful Analysis"
             description="Use advanced reasoning for more thorough activity breakdowns"
             :disabled="!userStore.hasMinimumTier('PRO')"
             @update:model-value="handleChange"
@@ -118,7 +118,7 @@
             size="xs"
             @click="
               upgradeModal.show({
-                featureTitle: 'Deep Analysis',
+                featureTitle: 'Thoughtful Analysis',
                 featureDescription:
                   'Get more thorough activity breakdowns with our most powerful AI engine.',
                 recommendedTier: 'pro'
