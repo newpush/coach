@@ -3,7 +3,8 @@ import GoogleProvider from 'next-auth/providers/google'
 import { PrismaAdapter } from '@next-auth/prisma-adapter'
 import { prisma } from '../../utils/db'
 import { tasks } from '@trigger.dev/sdk/v3'
-import { getRequestIP, getRequestHeader } from 'h3'
+import { getRequestIP, getRequestHeader, defineEventHandler } from 'h3'
+import { logAction } from '../../utils/audit'
 
 const adapter = PrismaAdapter(prisma)
 const originalLinkAccount = adapter.linkAccount
@@ -136,17 +137,31 @@ export default NuxtAuthHandler({
         await syncIntervalsIntegration(user, account)
       }
 
-      // Capture login IP and timestamp
+      // Capture login info
       try {
+        // Use useEvent() with experimental.asyncContext: true enabled in nuxt.config.ts
         const event = useEvent()
         const ip = getRequestIP(event, { xForwardedFor: true }) || 'unknown'
+        const locale = getRequestHeader(event, 'accept-language')
 
+        // Update User model
         await prisma.user.update({
           where: { id: user.id },
           data: {
             lastLoginAt: new Date(),
             lastLoginIp: ip
           }
+        })
+
+        // Log to AuditLog
+        await logAction({
+          userId: user.id,
+          action: 'USER_LOGIN',
+          metadata: {
+            locale,
+            provider: account?.provider || 'unknown'
+          },
+          event
         })
       } catch (error) {
         console.error('Failed to update user login info:', error)

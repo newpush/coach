@@ -103,7 +103,8 @@ export default defineNuxtConfig({
     experimental: {
       openAPI: true,
       websocket: true,
-      tasks: true
+      tasks: true,
+      asyncContext: true
     },
     openAPI: {
       production: 'runtime',
