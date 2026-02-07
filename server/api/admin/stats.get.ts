@@ -1,8 +1,10 @@
 import { defineEventHandler, createError } from 'h3'
 import { getServerSession } from '../../utils/session'
 import { prisma } from '../../utils/db'
+import type { SubscriptionTier } from '@prisma/client'
 import { Prisma } from '@prisma/client'
 import { webhookQueue, pingQueue } from '../../utils/queue'
+import { QUOTA_REGISTRY } from '../../utils/quotas/registry'
 
 export default defineEventHandler(async (event) => {
   const session = await getServerSession(event)
@@ -14,6 +16,33 @@ export default defineEventHandler(async (event) => {
       statusMessage: 'Forbidden'
     })
   }
+
+  // Quota Near Limit Check
+  const nearLimitChecks: Promise<any[]>[] = []
+  const validDbTiers = ['FREE', 'SUPPORTER', 'PRO']
+
+  for (const tier of Object.keys(QUOTA_REGISTRY) as SubscriptionTier[]) {
+    if (!validDbTiers.includes(tier)) continue
+
+    const tierQuotas = QUOTA_REGISTRY[tier]
+    for (const [op, def] of Object.entries(tierQuotas)) {
+      if (!def) continue
+      const threshold = Math.max(1, Math.floor(def.limit * 0.8))
+      nearLimitChecks.push(prisma.$queryRaw<any[]>`
+        SELECT u.id
+        FROM "User" u
+        JOIN "LlmUsage" l ON l."userId" = u.id
+        WHERE u."subscriptionTier"::text = ${tier}
+          AND l.operation = ${op}
+          AND l.success = true
+          AND l."createdAt" >= NOW() - CAST(${def.window} AS interval)
+        GROUP BY u.id
+        HAVING COUNT(l.id) >= ${threshold}
+      `)
+    }
+  }
+  const nearLimitResults = await Promise.all(nearLimitChecks)
+  const uniqueNearLimitUsers = new Set(nearLimitResults.flat().map((r) => r.id))
 
   // Basic totals & System Status
   const [totalUsers, totalWorkouts, dbCheck] = await Promise.all([
@@ -31,7 +60,8 @@ export default defineEventHandler(async (event) => {
   const systemStatus = {
     database: dbCheck ? 'Online' : 'Offline',
     trigger: process.env.TRIGGER_SECRET_KEY ? 'Connected' : 'Not Configured',
-    queues: !webhookPaused && !pingPaused ? 'Running' : 'Paused'
+    queues: !webhookPaused && !pingPaused ? 'Running' : 'Paused',
+    nearLimitUsers: uniqueNearLimitUsers.size
   }
 
   // AI Costs & Usage (last 30 days)
