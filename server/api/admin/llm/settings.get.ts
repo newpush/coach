@@ -10,8 +10,8 @@ export default defineEventHandler(async (event) => {
   }
 
   try {
-    const [tierSettings, overrides] = await Promise.all([
-      prisma.llmTierSettings.findMany({
+    const [levelSettings, overrides] = await Promise.all([
+      prisma.llmAnalysisLevelSettings.findMany({
         orderBy: { updatedAt: 'asc' }
       }),
       prisma.llmOperationOverride.findMany({
@@ -20,9 +20,9 @@ export default defineEventHandler(async (event) => {
     ])
 
     // Join in memory to bypass potential Prisma 'include' schema sync issues
-    const settings = tierSettings.map((tier) => ({
-      ...tier,
-      overrides: overrides.filter((o) => o.tierSettingsId === tier.id)
+    const settings = levelSettings.map((level) => ({
+      ...level,
+      overrides: overrides.filter((o) => o.analysisLevelSettingsId === level.id)
     }))
 
     return settings

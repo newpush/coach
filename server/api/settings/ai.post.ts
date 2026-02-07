@@ -17,7 +17,7 @@ defineRouteMeta({
                 type: 'string',
                 enum: ['Analytical', 'Supportive', 'Drill Sergeant', 'Motivational']
               },
-              aiModelPreference: { type: 'string', enum: ['flash', 'pro'] },
+              aiModelPreference: { type: 'string', enum: ['flash', 'pro', 'experimental'] },
               aiAutoAnalyzeWorkouts: { type: 'boolean' },
               aiAutoAnalyzeNutrition: { type: 'boolean' },
               aiAutoAnalyzeReadiness: { type: 'boolean' },
@@ -88,7 +88,7 @@ export default defineEventHandler(async (event) => {
 
   // Validate inputs
   const validPersonas = ['Analytical', 'Supportive', 'Drill Sergeant', 'Motivational']
-  const validModels = ['flash', 'pro']
+  const validModels = ['flash', 'pro', 'experimental']
 
   if (aiPersona && !validPersonas.includes(aiPersona)) {
     throw createError({

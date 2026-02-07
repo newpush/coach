@@ -13,7 +13,7 @@ export default defineEventHandler(async (event) => {
   const body = await readBody(event)
   const {
     action,
-    tierId,
+    levelId,
     overrideId,
     operation,
     model,
@@ -24,9 +24,9 @@ export default defineEventHandler(async (event) => {
   } = body
 
   try {
-    if (action === 'update_tier') {
-      await prisma.llmTierSettings.update({
-        where: { id: tierId },
+    if (action === 'update_level') {
+      await prisma.llmAnalysisLevelSettings.update({
+        where: { id: levelId },
         data: {
           model,
           modelId,
@@ -42,21 +42,37 @@ export default defineEventHandler(async (event) => {
           data: {
             model,
             modelId,
-            thinkingBudget: thinkingBudget ? parseInt(thinkingBudget, 10) : null,
+            thinkingBudget:
+              thinkingBudget !== undefined
+                ? thinkingBudget === null
+                  ? null
+                  : parseInt(thinkingBudget, 10)
+                : undefined,
             thinkingLevel,
-            maxSteps: maxSteps ? parseInt(maxSteps, 10) : null
+            maxSteps:
+              maxSteps !== undefined
+                ? maxSteps === null
+                  ? null
+                  : parseInt(maxSteps, 10)
+                : undefined
           }
         })
       } else {
         await prisma.llmOperationOverride.create({
           data: {
-            tierSettingsId: tierId,
+            analysisLevelSettingsId: levelId,
             operation,
             model,
             modelId,
-            thinkingBudget: thinkingBudget ? parseInt(thinkingBudget, 10) : null,
+            thinkingBudget:
+              thinkingBudget !== undefined
+                ? thinkingBudget === null
+                  ? null
+                  : parseInt(thinkingBudget, 10)
+                : null,
             thinkingLevel,
-            maxSteps: maxSteps ? parseInt(maxSteps, 10) : null
+            maxSteps:
+              maxSteps !== undefined ? (maxSteps === null ? null : parseInt(maxSteps, 10)) : null
           }
         })
       }
