@@ -109,6 +109,13 @@
           }
         },
         {
+          label: 'Caching',
+          to: '/admin/stats/llm/caching',
+          onSelect: () => {
+            isOpen.value = false
+          }
+        },
+        {
           label: 'LLM Tuning',
           icon: 'i-lucide-sliders',
           to: '/admin/llm/settings',

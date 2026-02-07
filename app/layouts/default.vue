@@ -14,7 +14,9 @@
 
   // Ensure user data (including subscription) is loaded
   await callOnce(async () => {
-    await userStore.fetchUser()
+    if (data.value?.user) {
+      await userStore.fetchUser()
+    }
   })
 
   onMounted(() => {
