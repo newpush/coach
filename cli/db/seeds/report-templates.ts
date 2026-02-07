@@ -300,7 +300,7 @@ Scoring Guidelines:
 
 Maintain your **{{persona}}** persona throughout. Be specific with numbers. Scores should realistically reflect the period's quality.`
 
-export const seed = async () => {
+export const seed = async (options: { force?: boolean } = {}) => {
   console.log('Seeding report templates...')
 
   const templates = [
@@ -366,19 +366,28 @@ export const seed = async () => {
   ]
 
   for (const template of templates) {
-    const existing = await prisma.reportTemplate.findUnique({
-      where: { id: template.id }
-    })
+    if (options.force) {
+      await prisma.reportTemplate.upsert({
+        where: { id: template.id },
+        update: template,
+        create: template
+      })
+      console.log(`  Upserted template: ${template.name}`)
+    } else {
+      const existing = await prisma.reportTemplate.findUnique({
+        where: { id: template.id }
+      })
 
-    if (existing) {
-      console.log(`  Skipping template: ${template.name} (already exists)`)
-      continue
+      if (existing) {
+        console.log(`  Skipping template: ${template.name} (already exists)`)
+        continue
+      }
+
+      await prisma.reportTemplate.create({
+        data: template
+      })
+      console.log(`  Created template: ${template.name}`)
     }
-
-    await prisma.reportTemplate.create({
-      data: template
-    })
-    console.log(`  Created template: ${template.name}`)
   }
 
   console.log('Templates seeded successfully.')
