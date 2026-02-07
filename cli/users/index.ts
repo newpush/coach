@@ -9,6 +9,7 @@ import growthCommand from './growth'
 import contributorCommand from './contributor'
 import analyzeCommand from './analyze'
 import adminsCommand from './admins'
+import locationCommand from './location'
 
 const usersCommand = new Command('users').description('User management commands')
 
@@ -17,6 +18,7 @@ usersCommand.addCommand(growthCommand)
 usersCommand.addCommand(contributorCommand)
 usersCommand.addCommand(analyzeCommand)
 usersCommand.addCommand(adminsCommand)
+usersCommand.addCommand(locationCommand)
 
 usersCommand
   .command('search')
