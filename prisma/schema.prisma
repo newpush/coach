@@ -1015,6 +1015,7 @@ model TrainingAvailability {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
   bikeAccess     Boolean  @default(false)
+  slots          Json?    // Detailed slot-specific availability
   user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, dayOfWeek])
