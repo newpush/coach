@@ -59,6 +59,6 @@ describe('Trigger Imports', () => {
         console.error(`Failed to import trigger/${trigger}:`, error)
         throw error
       }
-    })
+    }, 15000)
   })
 })

@@ -13,7 +13,7 @@ import {
   calculateAge
 } from '../server/utils/date'
 import { getCurrentFitnessSummary } from '../server/utils/training-stress'
-import { getUserAiSettings } from '../server/utils/ai-settings'
+import { getUserAiSettings } from '../server/utils/ai-user-settings'
 import { TRAINING_BLOCK_TYPES, TRAINING_BLOCK_FOCUSES } from '../app/utils/training-constants'
 
 const trainingBlockSchema = {

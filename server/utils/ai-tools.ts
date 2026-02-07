@@ -9,8 +9,8 @@ import { nutritionTools } from './ai-tools/nutrition'
 import { wellnessTools } from './ai-tools/wellness'
 import { availabilityTools } from './ai-tools/availability'
 import { timeTools } from './ai-tools/time'
-import type { AiSettings } from './ai-settings'
-import { getUserAiSettings } from './ai-settings'
+import type { AiSettings } from './ai-user-settings'
+import { getUserAiSettings } from './ai-user-settings'
 
 export const getToolsWithContext = (userId: string, timezone: string, settings: AiSettings) => {
   return {

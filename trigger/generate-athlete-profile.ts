@@ -20,7 +20,7 @@ import {
   calculateAge
 } from '../server/utils/date'
 import { getCheckinHistoryContext } from '../server/utils/services/checkin-service'
-import { getUserAiSettings } from '../server/utils/ai-settings'
+import { getUserAiSettings } from '../server/utils/ai-user-settings'
 import { recommendTodayActivityTask } from './recommend-today-activity'
 
 // Athlete Profile schema for structured JSON output

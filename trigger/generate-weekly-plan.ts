@@ -1,7 +1,7 @@
 import './init'
 import { logger, task } from '@trigger.dev/sdk/v3'
 import { generateStructuredAnalysis } from '../server/utils/gemini'
-import { getUserAiSettings } from '../server/utils/ai-settings'
+import { getUserAiSettings } from '../server/utils/ai-user-settings'
 import { prisma } from '../server/utils/db'
 import { workoutRepository } from '../server/utils/repositories/workoutRepository'
 import { wellnessRepository } from '../server/utils/repositories/wellnessRepository'

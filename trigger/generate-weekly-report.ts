@@ -10,7 +10,7 @@ import { workoutRepository } from '../server/utils/repositories/workoutRepositor
 import { wellnessRepository } from '../server/utils/repositories/wellnessRepository'
 import { userReportsQueue } from './queues'
 import { getUserTimezone, getStartOfDaysAgoUTC, getEndOfDayUTC } from '../server/utils/date'
-import { getUserAiSettings } from '../server/utils/ai-settings'
+import { getUserAiSettings } from '../server/utils/ai-user-settings'
 
 // Analysis schema for structured JSON output
 const analysisSchema = {

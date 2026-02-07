@@ -1,7 +1,7 @@
 import { prisma } from '../db'
 import { generateStructuredAnalysis } from '../gemini'
 import { wellnessRepository } from '../repositories/wellnessRepository'
-import { getUserAiSettings } from '../ai-settings'
+import { getUserAiSettings } from '../ai-user-settings'
 import { auditLogRepository } from '../repositories/auditLogRepository'
 import { getUserLocalDate, getUserTimezone } from '../date'
 import { triggerDailyCheckinIfNeeded } from './checkin-service'

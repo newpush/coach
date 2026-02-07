@@ -16,7 +16,7 @@ import {
   getEndOfDayUTC,
   formatUserDate
 } from '../server/utils/date'
-import { getUserAiSettings } from '../server/utils/ai-settings'
+import { getUserAiSettings } from '../server/utils/ai-user-settings'
 
 const suggestionSchema = {
   type: 'object',

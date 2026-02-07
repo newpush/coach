@@ -1,7 +1,7 @@
 import { createError } from 'h3'
 import { prisma } from '../../utils/db'
 import { getUserTimezone } from '../../utils/date'
-import { getUserAiSettings } from '../../utils/ai-settings'
+import { getUserAiSettings } from '../../utils/ai-user-settings'
 import { buildAthleteContext } from './chatContextService'
 import { getToolsWithContext } from '../../utils/ai-tools'
 import { createGoogleGenerativeAI } from '@ai-sdk/google'

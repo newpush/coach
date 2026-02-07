@@ -6,7 +6,7 @@ import { workoutRepository } from '../server/utils/repositories/workoutRepositor
 import { sportSettingsRepository } from '../server/utils/repositories/sportSettingsRepository'
 import { userAnalysisQueue } from './queues'
 import { getUserTimezone, formatUserDate, calculateAge } from '../server/utils/date'
-import { getUserAiSettings } from '../server/utils/ai-settings'
+import { getUserAiSettings } from '../server/utils/ai-user-settings'
 
 // TypeScript interface for the structured analysis
 interface StructuredAnalysis {

@@ -12,7 +12,7 @@ import {
   getEndOfDayUTC,
   formatUserDate
 } from '../server/utils/date'
-import { getUserAiSettings } from '../server/utils/ai-settings'
+import { getUserAiSettings } from '../server/utils/ai-user-settings'
 
 // Goal suggestions schema for structured JSON output
 const goalSuggestionsSchema = {

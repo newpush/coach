@@ -7,7 +7,7 @@ import { wellnessRepository } from '../server/utils/repositories/wellnessReposit
 import { dailyCheckinRepository } from '../server/utils/repositories/dailyCheckinRepository'
 import { formatUserDate, formatDateUTC, getUserLocalDate, calculateAge } from '../server/utils/date'
 import { calculateProjectedPMC, getCurrentFitnessSummary } from '../server/utils/training-stress'
-import { getUserAiSettings } from '../server/utils/ai-settings'
+import { getUserAiSettings } from '../server/utils/ai-user-settings'
 import { userReportsQueue } from './queues'
 import {
   getMoodLabel,

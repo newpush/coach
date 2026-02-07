@@ -59,8 +59,7 @@ export const profileTools = (userId: string, timezone: string) => ({
         await generateAthleteProfileTask.trigger(
           {
             userId,
-            reportId: report.id,
-            triggerRecommendation: true
+            reportId: report.id
           },
           {
             tags: [`user:${userId}`, 'manual-update'],

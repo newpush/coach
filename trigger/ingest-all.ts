@@ -16,7 +16,7 @@ import { deduplicateWorkoutsTask } from './deduplicate-workouts'
 import { recommendTodayActivityTask } from './recommend-today-activity'
 import { analyzeNutritionTask } from './analyze-nutrition'
 import { getUserTimezone, getUserLocalDate } from '../server/utils/date'
-import { getUserAiSettings } from '../server/utils/ai-settings'
+import { getUserAiSettings } from '../server/utils/ai-user-settings'
 import { auditLogRepository } from '../server/utils/repositories/auditLogRepository'
 import type { IngestionResult } from './types'
 

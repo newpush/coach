@@ -5,7 +5,7 @@ import { prisma } from '../server/utils/db'
 import { nutritionRepository } from '../server/utils/repositories/nutritionRepository'
 import { userAnalysisQueue } from './queues'
 import { getUserTimezone, formatUserDate, formatDateUTC } from '../server/utils/date'
-import { getUserAiSettings } from '../server/utils/ai-settings'
+import { getUserAiSettings } from '../server/utils/ai-user-settings'
 
 interface NutritionAnalysis {
   type: string

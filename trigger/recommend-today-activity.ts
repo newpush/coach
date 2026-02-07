@@ -11,7 +11,7 @@ import { formatUserDate, getUserLocalDate, formatDateUTC, calculateAge } from '.
 import { calculateProjectedPMC, getCurrentFitnessSummary } from '../server/utils/training-stress'
 import { analyzeWellness } from '../server/utils/services/wellness-analysis'
 import { getCheckinHistoryContext } from '../server/utils/services/checkin-service'
-import { getUserAiSettings } from '../server/utils/ai-settings'
+import { getUserAiSettings } from '../server/utils/ai-user-settings'
 import { generateAthleteProfileTask } from './generate-athlete-profile'
 import { userReportsQueue } from './queues'
 import {

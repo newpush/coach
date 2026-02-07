@@ -5,7 +5,7 @@ import { ingestAllTask } from '../../../trigger/ingest-all'
 import { generateReportTask } from '../../../trigger/generate-report'
 import { prisma } from '../../utils/db'
 import { getStartOfDaysAgoUTC, formatUserDate } from '../../utils/date'
-import type { AiSettings } from '../ai-settings'
+import type { AiSettings } from '../ai-user-settings'
 
 export const analysisTools = (userId: string, timezone: string, settings: AiSettings) => ({
   analyze_training_load: tool({

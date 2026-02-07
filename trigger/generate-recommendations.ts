@@ -6,7 +6,7 @@ import { generateStructuredAnalysis, buildWorkoutSummary } from '../server/utils
 import { getUserTimezone, getStartOfDaysAgoUTC } from '../server/utils/date'
 import { getCheckinHistoryContext } from '../server/utils/services/checkin-service'
 import { recommendationRepository } from '../server/utils/repositories/recommendationRepository'
-import { getUserAiSettings } from '../server/utils/ai-settings'
+import { getUserAiSettings } from '../server/utils/ai-user-settings'
 import { userReportsQueue } from './queues'
 
 interface RecommendationHistoryItem {
