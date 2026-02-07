@@ -49,10 +49,13 @@ export const useIntegrationStore = defineStore('integration', () => {
 
   async function fetchStatus() {
     try {
-      const data = await $fetch<{ integrations: IntegrationStatus[] }>('/api/integrations/status')
+      const fetcher = import.meta.server ? useRequestFetch() : $fetch
+      const data = await fetcher<{ integrations: IntegrationStatus[] }>('/api/integrations/status')
       integrationStatus.value = data
-    } catch (error) {
-      console.error('Error fetching integration status:', error)
+    } catch (error: any) {
+      if (!(import.meta.server && error.statusCode === 401)) {
+        console.error('Error fetching integration status:', error)
+      }
     }
   }
 

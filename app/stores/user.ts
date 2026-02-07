@@ -39,10 +39,14 @@ export const useUserStore = defineStore('user', () => {
 
     userLoading.value = true
     try {
-      const data = await $fetch('/api/user/me')
+      const fetcher = import.meta.server ? useRequestFetch() : $fetch
+      const data = await fetcher('/api/user/me')
       user.value = data as User
-    } catch (error) {
-      console.error('Error fetching user:', error)
+    } catch (error: any) {
+      // Don't log 401 on server to avoid noise if session is just not initialized yet
+      if (!(import.meta.server && error.statusCode === 401)) {
+        console.error('Error fetching user:', error)
+      }
       user.value = null
     } finally {
       userLoading.value = false
@@ -144,10 +148,13 @@ export const useUserStore = defineStore('user', () => {
 
     loading.value = true
     try {
-      const data = await $fetch('/api/profile/dashboard')
+      const fetcher = import.meta.server ? useRequestFetch() : $fetch
+      const data = await fetcher('/api/profile/dashboard')
       profile.value = data?.profile || null
-    } catch (error) {
-      console.error('Error fetching profile:', error)
+    } catch (error: any) {
+      if (!(import.meta.server && error.statusCode === 401)) {
+        console.error('Error fetching profile:', error)
+      }
     } finally {
       loading.value = false
     }

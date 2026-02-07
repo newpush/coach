@@ -26,7 +26,7 @@ export const PRICING_PLANS: PricingPlan[] = [
       'Unlimited data history',
       'Manual sync mode',
       'On-demand analysis',
-      'Standard AI engine (Fast)'
+      'Quick AI Analysis Level'
     ],
     popular: false
   },
@@ -41,7 +41,7 @@ export const PRICING_PLANS: PricingPlan[] = [
       'Automatic sync mode',
       'Always-on analysis',
       'Priority processing',
-      'Standard AI engine (Fast)'
+      'Quick AI Analysis Level'
     ],
     popular: true
   },
@@ -53,11 +53,11 @@ export const PRICING_PLANS: PricingPlan[] = [
     description: 'Your full-service Digital Twin and Coach.',
     features: [
       'Everything in Supporter',
-      'Access to Pro models',
-      'Deep Reasoning AI engine',
+      'Thoughtful AI Analysis Level',
+      'Advanced strategy & planning',
       'Proactive AI coaching',
       'Priority processing',
-      'Advanced insights'
+      'Deep insights'
     ],
     popular: false
   }
