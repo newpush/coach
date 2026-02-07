@@ -175,23 +175,44 @@ export const generateWeeklyPlanTask = task({
     // This is WRONG if we just want "The Start of This Calendar Date".
     // We already have the calendar date in `localDateStr` logic.
     // `alignedWeekStart` should be the UTC timestamp for 00:00 User Time on that date.
-    const alignedWeekStart = getStartOfDayUTC(timezone, localDateObj)
+    let alignedWeekStart = getStartOfDayUTC(timezone, localDateObj)
     // Wait, getStartOfDayUTC(timezone, 2026-01-12T00:00:00Z)
     // If user is UTC+9. 00:00 UTC is 09:00 User Time.
     // Start of day is 00:00 User Time (15:00 prev day UTC).
     // So getStartOfDayUTC is correct.
 
-    const alignedWeekEnd = new Date(alignedWeekStart)
-    alignedWeekEnd.setUTCDate(alignedWeekEnd.getUTCDate() + (daysToPlan - 1))
+    let effectiveDaysToPlan = daysToPlan
+    let alignedWeekEnd = new Date(alignedWeekStart)
+    alignedWeekEnd.setUTCDate(alignedWeekEnd.getUTCDate() + (effectiveDaysToPlan - 1))
     // Set to end of day in local time -> UTC
-    const alignedWeekEndUTC = getEndOfDayUTC(timezone, alignedWeekEnd)
+    let alignedWeekEndUTC = getEndOfDayUTC(timezone, alignedWeekEnd)
+
+    if (trainingWeekId) {
+      const trainingWeek = await prisma.trainingWeek.findUnique({
+        where: { id: trainingWeekId }
+      })
+      if (trainingWeek) {
+        alignedWeekStart = getStartOfDayUTC(timezone, trainingWeek.startDate)
+        alignedWeekEndUTC = getEndOfDayUTC(timezone, trainingWeek.endDate)
+        const alignedWeekEndStart = getStartOfDayUTC(timezone, trainingWeek.endDate)
+        const dayMs = 24 * 60 * 60 * 1000
+        effectiveDaysToPlan =
+          Math.round((alignedWeekEndStart.getTime() - alignedWeekStart.getTime()) / dayMs) + 1
+        alignedWeekEnd = new Date(alignedWeekEndStart)
+      } else {
+        logger.warn('trainingWeekId provided but not found, using payload dates', {
+          trainingWeekId
+        })
+      }
+    }
 
     logger.log('Week boundaries calculated (Timezone Aware)', {
       timezone,
       weekStart: alignedWeekStart.toISOString(),
       weekEnd: alignedWeekEndUTC.toISOString(),
       localStart: formatUserDate(alignedWeekStart, timezone),
-      localEnd: formatUserDate(alignedWeekEndUTC, timezone)
+      localEnd: formatUserDate(alignedWeekEndUTC, timezone),
+      daysToPlan: effectiveDaysToPlan
     })
 
     // Fetch user data
@@ -569,7 +590,7 @@ No active goals set. Plan for general fitness maintenance and improvement.
     }
 
     // Build prompt
-    const prompt = `You are a **${aiSettings.aiPersona}** expert cycling coach creating a personalized ${daysToPlan}-day training plan.
+    const prompt = `You are a **${aiSettings.aiPersona}** expert cycling coach creating a personalized ${effectiveDaysToPlan}-day training plan.
 Adapt your planning strategy and reasoning to match your **${aiSettings.aiPersona}** persona.
 
 ${phaseInstruction}
@@ -628,7 +649,7 @@ RECENT RECOVERY (Last 7 days):
 PLANNING PERIOD:
 - Start: ${formatUserDate(alignedWeekStart, timezone)} (YYYY-MM-DD)
 - End: ${formatUserDate(alignedWeekEndUTC, timezone)} (YYYY-MM-DD)
-- Days to plan: ${daysToPlan}
+- Days to plan: ${effectiveDaysToPlan}
 
 INSTRUCTIONS:
 1. **PRIORITIZE USER INSTRUCTIONS**: If the user asks for specific changes (e.g., "no rides this week"), STRICTLY follow them, even if it contradicts standard training principles.
@@ -644,7 +665,7 @@ INSTRUCTIONS:
 6. **CONTEXT**: Consider the "Current Planned Workouts" to understand what the user is replacing or modifying.
 7. **MULTI-SPORT THRESHOLDS**: When planning a specific sport (e.g. Run), refer to the sport-specific FTP/LTHR if provided in the context.
 
-Create a structured, progressive plan for the next ${daysToPlan} days.
+Create a structured, progressive plan for the next ${effectiveDaysToPlan} days.
 Maintain your **${aiSettings.aiPersona}** persona throughout the plan's reasoning and descriptions.`
 
     logger.log(`Generating plan with Gemini (${aiSettings.aiModelPreference})`)
@@ -682,7 +703,7 @@ Maintain your **${aiSettings.aiPersona}** persona throughout the plan's reasonin
       userId,
       weekStartDate: alignedWeekStart,
       weekEndDate: alignedWeekEndUTC,
-      daysPlanned: daysToPlan,
+      daysPlanned: effectiveDaysToPlan,
       status: 'ACTIVE',
       generatedBy: 'AI',
       modelVersion: aiSettings.aiModelPreference,
@@ -847,6 +868,12 @@ Maintain your **${aiSettings.aiPersona}** persona throughout the plan's reasonin
 
       // Determine the TrainingWeek ID to link to
       let targetTrainingWeekId: string | undefined = trainingWeekId
+      let targetTrainingWeekRange:
+        | {
+            start: Date
+            end: Date
+          }
+        | undefined
 
       // If explicitly passed, verify it exists and use it
       if (targetTrainingWeekId) {
@@ -857,6 +884,10 @@ Maintain your **${aiSettings.aiPersona}** persona throughout the plan's reasonin
           logger.warn('Explicitly passed trainingWeekId not found in DB', { trainingWeekId })
           targetTrainingWeekId = undefined // Fallback to search logic
         } else {
+          targetTrainingWeekRange = {
+            start: getStartOfDayUTC(timezone, verifiedWeek.startDate),
+            end: getEndOfDayUTC(timezone, verifiedWeek.endDate)
+          }
           logger.log('Using explicitly passed TrainingWeek ID', { trainingWeekId })
         }
       }
@@ -880,35 +911,22 @@ Maintain your **${aiSettings.aiPersona}** persona throughout the plan's reasonin
             }
           }
         })
-        if (trainingWeek) targetTrainingWeekId = trainingWeek.id
-      }
-
-      // FALLBACK: Try to find ANY training week for this user that overlaps with this week
-      if (!targetTrainingWeekId) {
-        const fallbackWeek = await prisma.trainingWeek.findFirst({
-          where: {
-            block: {
-              plan: {
-                userId: userId
-              }
-            },
-            startDate: {
-              lte: alignedWeekEndUTC
-            },
-            endDate: {
-              gte: alignedWeekStart
-            }
+        if (trainingWeek) {
+          targetTrainingWeekId = trainingWeek.id
+          targetTrainingWeekRange = {
+            start: getStartOfDayUTC(timezone, trainingWeek.startDate),
+            end: getEndOfDayUTC(timezone, trainingWeek.endDate)
           }
-        })
-
-        if (fallbackWeek) {
-          logger.log('Found fallback TrainingWeek', { trainingWeekId: fallbackWeek.id })
-          targetTrainingWeekId = fallbackWeek.id
         }
       }
 
       if (workoutsToCreate.length > 0) {
-        if (targetTrainingWeekId) {
+        if (
+          targetTrainingWeekId &&
+          targetTrainingWeekRange &&
+          alignedWeekStart >= targetTrainingWeekRange.start &&
+          alignedWeekEndUTC <= targetTrainingWeekRange.end
+        ) {
           logger.log('Linking generated workouts to TrainingWeek', {
             trainingWeekId: targetTrainingWeekId
           })
@@ -929,10 +947,11 @@ Maintain your **${aiSettings.aiPersona}** persona throughout the plan's reasonin
           }
         } else {
           logger.warn(
-            'No matching TrainingWeek found for these workouts - they will be unlinked from the structured plan',
+            'TrainingWeek range mismatch or missing - leaving generated workouts unlinked',
             {
               weekStart: alignedWeekStart.toISOString(),
-              weekEnd: alignedWeekEndUTC.toISOString()
+              weekEnd: alignedWeekEndUTC.toISOString(),
+              trainingWeekId: targetTrainingWeekId || null
             }
           )
         }
@@ -955,7 +974,7 @@ Maintain your **${aiSettings.aiPersona}** persona throughout the plan's reasonin
       userId,
       weekStart: alignedWeekStart.toISOString(),
       weekEnd: alignedWeekEndUTC.toISOString(),
-      daysPlanned: daysToPlan,
+      daysPlanned: effectiveDaysToPlan,
       totalTSS: savedPlan.totalTSS,
       workoutCount: savedPlan.workoutCount
     }
