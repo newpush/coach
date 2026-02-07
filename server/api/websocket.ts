@@ -8,7 +8,8 @@ import { createGoogleGenerativeAI } from '@ai-sdk/google'
 import { streamText, convertToModelMessages, stepCountIs } from 'ai'
 import { getToolsWithContext } from '../utils/ai-tools'
 import { getUserTimezone } from '../utils/date'
-import { getUserAiSettings } from '../utils/ai-settings'
+import { getUserAiSettings } from '../utils/ai-user-settings'
+import { getLlmOperationSettings } from '../utils/ai-operation-settings'
 
 // Map to store active subscriptions cancel functions per peer
 const subscriptions = new Map<any, Set<() => void>>()
@@ -223,19 +224,34 @@ async function handleChatMessage(
     const google = createGoogleGenerativeAI({
       apiKey: process.env.GEMINI_API_KEY
     })
-    const modelName = MODEL_NAMES[aiSettings.aiModelPreference]
+    const opSettings = await getLlmOperationSettings(userId, 'chat_ws')
+    const modelName = opSettings.modelId
 
     // 6. Stream Text with Tools
     const allToolResults: any[] = []
     let fullResponseText = ''
     const startTime = Date.now()
 
+    // Configure thinking based on model version and tier settings
+    const providerOptions: any = {}
+    if (modelName.includes('gemini-3')) {
+      providerOptions.google = {
+        thinkingConfig: { thinkingLevel: opSettings.thinkingLevel }
+      }
+    } else {
+      // Gemini 2.5
+      providerOptions.google = {
+        thinkingConfig: { thinkingBudget: opSettings.thinkingBudget }
+      }
+    }
+
     const result = await streamText({
       model: google(modelName),
       system: systemInstruction,
       messages: historyForModel,
       tools,
-      stopWhen: stepCountIs(5), // Enable multi-step tool calls automatically
+      stopWhen: stepCountIs(opSettings.maxSteps), // Enable multi-step tool calls automatically
+      providerOptions,
       onStepFinish: async ({ text, toolCalls, toolResults, finishReason, usage }) => {
         // Notify client about tool execution
         if (toolCalls && toolCalls.length > 0) {

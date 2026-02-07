@@ -1,7 +1,7 @@
 import { getServerSession } from '../../utils/session'
 import { prisma } from '../../utils/db'
 import { generateStructuredAnalysis } from '../../utils/gemini'
-import { getUserAiSettings } from '../../utils/ai-settings'
+import { getUserAiSettings } from '../../utils/ai-user-settings'
 
 defineRouteMeta({
   openAPI: {

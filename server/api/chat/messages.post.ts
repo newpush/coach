@@ -6,7 +6,8 @@ import { generateCoachAnalysis } from '../../utils/gemini'
 import { buildAthleteContext } from '../../utils/services/chatContextService'
 import { prisma } from '../../utils/db'
 import { getUserTimezone } from '../../utils/date'
-import { getUserAiSettings } from '../../utils/ai-settings'
+import { getUserAiSettings } from '../../utils/ai-user-settings'
+import { getLlmOperationSettings } from '../../utils/ai-operation-settings'
 import { MODEL_NAMES, calculateLlmCost } from '../../utils/ai-config'
 
 export default defineEventHandler(async (event) => {
@@ -122,7 +123,8 @@ export default defineEventHandler(async (event) => {
   const google = createGoogleGenerativeAI({
     apiKey: process.env.GEMINI_API_KEY
   })
-  const modelName = MODEL_NAMES[aiSettings.aiModelPreference]
+  const opSettings = await getLlmOperationSettings(userId, 'chat')
+  const modelName = opSettings.modelId
   const tools = getToolsWithContext(userId, timezone, aiSettings)
 
   // 4. Stream Text
@@ -270,12 +272,26 @@ export default defineEventHandler(async (event) => {
       normalizedMessages.map((m) => m.role).join(' -> ')
     )
 
+    // Configure thinking based on model version and tier settings
+    const providerOptions: any = {}
+    if (modelName.includes('gemini-3')) {
+      providerOptions.google = {
+        thinkingConfig: { thinkingLevel: opSettings.thinkingLevel }
+      }
+    } else {
+      // Gemini 2.5
+      providerOptions.google = {
+        thinkingConfig: { thinkingBudget: opSettings.thinkingBudget }
+      }
+    }
+
     const result = await streamText({
       model: google(modelName),
       system: systemInstruction,
       messages: normalizedMessages,
       tools,
-      stopWhen: stepCountIs(5),
+      stopWhen: stepCountIs(opSettings.maxSteps),
+      providerOptions,
       onStepFinish: async ({ toolCalls, toolResults }) => {
         if (toolCalls) toolCalls.forEach((tc) => historyToolCalls.set(tc.toolCallId, tc))
         if (toolResults) {
