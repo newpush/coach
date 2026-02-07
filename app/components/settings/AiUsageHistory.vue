@@ -253,6 +253,32 @@
       }
     },
     {
+      accessorKey: 'cost',
+      header: ({ column }) => {
+        const isSorted = column.getIsSorted()
+        return h(
+          'div',
+          { class: 'text-right' },
+          h(UButton, {
+            color: 'neutral',
+            variant: 'ghost',
+            label: 'Cost',
+            icon: isSorted
+              ? isSorted === 'asc'
+                ? 'i-heroicons-arrow-up'
+                : 'i-heroicons-arrow-down'
+              : 'i-heroicons-arrows-up-down',
+            class: '-mx-2.5',
+            onClick: () => column.toggleSorting(column.getIsSorted() === 'asc')
+          })
+        )
+      },
+      cell: ({ row }) => {
+        const cost = row.getValue('cost') as number | null
+        return h('div', { class: 'text-right text-muted' }, formatCost(cost))
+      }
+    },
+    {
       accessorKey: 'success',
       header: () => h('div', { class: 'text-center' }, 'Status'),
       cell: ({ row }) => {
@@ -314,6 +340,11 @@
       return (num / 1000).toFixed(1) + 'K'
     }
     return num.toString()
+  }
+
+  function formatCost(cost: number | null | undefined): string {
+    if (cost === null || cost === undefined) return '-'
+    return `$${cost.toFixed(2)}`
   }
 
   function formatOperation(op: string): string {
