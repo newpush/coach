@@ -18,6 +18,7 @@ import { analyzeNutritionTask } from './analyze-nutrition'
 import { getUserTimezone, getUserLocalDate } from '../server/utils/date'
 import { getUserAiSettings } from '../server/utils/ai-settings'
 import { auditLogRepository } from '../server/utils/repositories/auditLogRepository'
+import type { IngestionResult } from './types'
 
 export const ingestAllTask = task({
   id: 'ingest-all',
@@ -146,8 +147,10 @@ export const ingestAllTask = task({
 
     // Trigger all tasks sequentially to avoid BatchTriggerError in production
     const results = []
-    let anyWellnessUpdated = false
+    const anyDataUpdated = false
+    let newWorkoutsIngested = false
     let yazioUpdated = false
+    let anyWellnessUpdated = false
 
     for (const item of tasksTrigger) {
       const integration = integrations.find((i) => {
@@ -172,16 +175,55 @@ export const ingestAllTask = task({
 
         if (run.ok) {
           logger.log(`✅ ${integration?.provider || item.task.id}: SUCCESS`)
-          logger.log(`   ${JSON.stringify(run.output, null, 2)}`)
+          // logger.log(`   ${JSON.stringify(run.output, null, 2)}`)
 
-          const output = run.output as any
-          // Check for wellness updates (Intervals returns { wellness: count }, others return { wellnessCount: count })
-          if (output.wellness > 0 || output.wellnessCount > 0 || output.sleepCount > 0) {
+          const output = run.output as IngestionResult
+          const counts = output.counts || {}
+
+          console.log(`[DEBUG] ${integration?.provider} results:`, JSON.stringify(counts))
+
+          // Track if any meaningful data was updated to trigger profile generation
+          const workoutsCount = counts.workouts || counts.activity || 0
+          const wellnessCount = counts.wellness || 0
+          const sleepCount = counts.sleep || 0
+          const plannedCount = counts.plannedWorkouts || 0
+          const eventCount = counts.events || 0
+          const nutritionCount = counts.nutrition || 0
+
+          if (workoutsCount > 0) {
+            console.log(
+              `[DEBUG] ${integration?.provider} added ${workoutsCount} NEW workouts. Setting newWorkoutsIngested = true`
+            )
+            newWorkoutsIngested = true
+          }
+
+          if (wellnessCount > 0 || sleepCount > 0) {
+            console.log(
+              `[DEBUG] ${integration?.provider} added NEW health data (wellness: ${wellnessCount}, sleep: ${sleepCount}). (Triggering readiness check later)`
+            )
             anyWellnessUpdated = true
           }
 
-          // Check for Yazio updates
-          if (item.task.id === 'ingest-yazio' && output.count > 0) {
+          if (item.task.id === 'ingest-yazio' && nutritionCount > 0) {
+            console.log(
+              `[DEBUG] ${integration?.provider} added NEW nutrition data (${nutritionCount}). (Triggering nutrition analysis later)`
+            )
+            yazioUpdated = true
+          }
+
+          if (plannedCount > 0 || eventCount > 0) {
+            console.log(
+              `[DEBUG] ${integration?.provider} added ${plannedCount} planned workouts and ${eventCount} events.`
+            )
+          }
+
+          // Check specifically for wellness updates for readiness check
+          if (wellnessCount > 0 || sleepCount > 0) {
+            anyWellnessUpdated = true
+          }
+
+          // Check specifically for Yazio updates for nutrition analysis
+          if (item.task.id === 'ingest-yazio' && nutritionCount > 0) {
             yazioUpdated = true
           }
 
@@ -219,15 +261,21 @@ export const ingestAllTask = task({
     const successCount = results.filter((r) => r.status === 'success').length
     const failedCount = results.filter((r) => r.status === 'failed').length
 
+    console.log(
+      `[DEBUG] Final Sync Summary - newWorkoutsIngested: ${newWorkoutsIngested}, anyWellnessUpdated: ${anyWellnessUpdated}, yazioUpdated: ${yazioUpdated}`
+    )
+
     logger.log('')
     logger.log('Summary:')
     logger.log(`  ✅ Successful: ${successCount}`)
     logger.log(`  ❌ Failed: ${failedCount}`)
     logger.log(`  📊 Total: ${results.length}`)
+    logger.log(`  🏃 New Workouts: ${newWorkoutsIngested}`)
     logger.log('='.repeat(60))
 
     // CHAIN: Deduplicate Workouts (Autonomously)
-    if (results.length > 0) {
+    if (newWorkoutsIngested) {
+      console.log('[DEBUG] Triggering Workout Deduplication chain...')
       logger.log('🔄 Chaining: Triggering Workout Deduplication...')
       try {
         await deduplicateWorkoutsTask.trigger(
@@ -247,7 +295,8 @@ export const ingestAllTask = task({
     }
 
     // CHAIN: Trigger Athlete Profile Generation
-    if (results.length > 0) {
+    if (newWorkoutsIngested) {
+      console.log('[DEBUG] Triggering Athlete Profile Generation chain...')
       logger.log('🔄 Chaining: Triggering Athlete Profile Generation...')
       try {
         // Create a placeholder report
@@ -265,7 +314,7 @@ export const ingestAllTask = task({
           {
             userId,
             reportId: report.id,
-            triggerRecommendation: true
+            triggerRecommendation: true // Always true here since we only enter if newWorkoutsIngested is true
           },
           {
             concurrencyKey: userId,
@@ -276,6 +325,9 @@ export const ingestAllTask = task({
       } catch (err) {
         logger.error('❌ Failed to chain generate-athlete-profile', { err })
       }
+    } else {
+      console.log('[DEBUG] Skipping Athlete Profile Generation: No new workouts.')
+      logger.log('ℹ️ Skipping Athlete Profile Generation: No new workouts found.')
     }
 
     // CHAIN: Auto-Analyze Nutrition (if updated)
