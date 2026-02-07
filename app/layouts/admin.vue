@@ -34,7 +34,7 @@
       label: 'Statistics',
       icon: 'i-lucide-bar-chart-3',
       to: '/admin/stats',
-      defaultOpen: route.path.includes('stats'),
+      defaultOpen: route.path.includes('stats') && !route.path.includes('llm'),
       onSelect: () => {
         isOpen.value = false
       },
@@ -51,14 +51,6 @@
           label: 'Workouts',
           icon: 'i-lucide-activity',
           to: '/admin/stats/workouts',
-          onSelect: () => {
-            isOpen.value = false
-          }
-        },
-        {
-          label: 'LLM Intelligence',
-          icon: 'i-lucide-brain',
-          to: '/admin/stats/llm',
           onSelect: () => {
             isOpen.value = false
           }
@@ -83,6 +75,43 @@
           label: 'Developers',
           icon: 'i-lucide-code',
           to: '/admin/stats/developers',
+          onSelect: () => {
+            isOpen.value = false
+          }
+        }
+      ]
+    },
+    {
+      label: 'LLM Intelligence',
+      icon: 'i-lucide-brain',
+      defaultOpen: route.path.includes('llm'),
+      children: [
+        {
+          label: 'Overview',
+          to: '/admin/stats/llm',
+          exact: true,
+          onSelect: () => {
+            isOpen.value = false
+          }
+        },
+        {
+          label: 'Operations',
+          to: '/admin/stats/llm/operations',
+          onSelect: () => {
+            isOpen.value = false
+          }
+        },
+        {
+          label: 'User Economics',
+          to: '/admin/stats/llm/users',
+          onSelect: () => {
+            isOpen.value = false
+          }
+        },
+        {
+          label: 'LLM Tuning',
+          icon: 'i-lucide-sliders',
+          to: '/admin/llm/settings',
           onSelect: () => {
             isOpen.value = false
           }
