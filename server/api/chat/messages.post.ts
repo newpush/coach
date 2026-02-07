@@ -9,6 +9,7 @@ import { getUserTimezone } from '../../utils/date'
 import { getUserAiSettings } from '../../utils/ai-user-settings'
 import { getLlmOperationSettings } from '../../utils/ai-operation-settings'
 import { MODEL_NAMES, calculateLlmCost } from '../../utils/ai-config'
+import { checkQuota } from '../../utils/quotas/engine'
 
 export default defineEventHandler(async (event) => {
   const session = await getServerSession(event)
@@ -20,6 +21,9 @@ export default defineEventHandler(async (event) => {
   if (!userId) {
     throw createError({ statusCode: 401, message: 'User ID not found' })
   }
+
+  // 0. Check Quota
+  await checkQuota(userId, 'chat')
 
   const body = await readBody(event)
   const { roomId, messages, files, replyMessage } = body

@@ -10,6 +10,7 @@ import { getToolsWithContext } from '../utils/ai-tools'
 import { getUserTimezone } from '../utils/date'
 import { getUserAiSettings } from '../utils/ai-user-settings'
 import { getLlmOperationSettings } from '../utils/ai-operation-settings'
+import { checkQuota } from '../utils/quotas/engine'
 
 // Map to store active subscriptions cancel functions per peer
 const subscriptions = new Map<any, Set<() => void>>()
@@ -165,6 +166,9 @@ async function handleChatMessage(
   replyMessage?: any
 ) {
   try {
+    // 0. Check Quota
+    await checkQuota(userId, 'chat_ws')
+
     // 1. Save User Message (async)
     const userMessage = await prisma.chatMessage.create({
       data: {
