@@ -164,12 +164,15 @@ export const ingestOuraTask = task({
 
           // TSS Normalization
           try {
-            const tssResult = await normalizeTSS(upserted.id, userId)
+            const tssResult = await normalizeTSS(upserted.record.id, userId)
             if (tssResult.tss !== null) {
-              await calculateWorkoutStress(upserted.id, userId)
+              await calculateWorkoutStress(upserted.record.id, userId)
             }
           } catch (error) {
-            logger.error('[Oura Ingest] Failed to normalize TSS', { workoutId: upserted.id, error })
+            logger.error('[Oura Ingest] Failed to normalize TSS', {
+              workoutId: upserted.record.id,
+              error
+            })
           }
         }
         logger.log(`[Oura Ingest] Workouts Complete - Upserted: ${workoutUpsertCount}`)
@@ -191,9 +194,7 @@ export const ingestOuraTask = task({
         success: true,
         counts: {
           wellness: wellnessUpsertCount,
-          workouts: workoutUpsertCount,
-          sleep: sleepUpsertCount,
-          activity: activityCount
+          workouts: workoutUpsertCount
         },
         skipped: wellnessSkippedCount,
         userId,

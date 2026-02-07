@@ -113,7 +113,7 @@ export const ingestFitFile = task({
       }
 
       // Upsert workout
-      const workout = await workoutRepository.upsert(
+      const { record: upsertedWorkout } = await workoutRepository.upsert(
         userId,
         'fit_file',
         workoutData.externalId,
@@ -121,19 +121,19 @@ export const ingestFitFile = task({
         workoutData
       )
 
-      logger.log(`Upserted workout: ${workout.id}`)
+      logger.log(`Upserted workout: ${upsertedWorkout.id}`)
 
       // Link workout to file
       await prisma.fitFile.update({
         where: { id: fitFileId },
-        data: { workoutId: workout.id }
+        data: { workoutId: upsertedWorkout.id }
       })
 
       // Save streams
       await prisma.workoutStream.upsert({
-        where: { workoutId: workout.id },
+        where: { workoutId: upsertedWorkout.id },
         create: {
-          workoutId: workout.id,
+          workoutId: upsertedWorkout.id,
           ...streams,
           lapSplits,
           paceVariability,
@@ -153,15 +153,15 @@ export const ingestFitFile = task({
 
       // Calculate stress metrics
       try {
-        await calculateWorkoutStress(workout.id, userId)
-        logger.log(`Calculated workout stress for ${workout.id}`)
+        await calculateWorkoutStress(upsertedWorkout.id, userId)
+        logger.log(`Calculated workout stress for ${upsertedWorkout.id}`)
       } catch (error) {
-        logger.error(`Failed to calculate workout stress for ${workout.id}:`, { error })
+        logger.error(`Failed to calculate workout stress for ${upsertedWorkout.id}:`, { error })
       }
 
       return {
         success: true,
-        workoutId: workout.id,
+        workoutId: upsertedWorkout.id,
         filename: fitFile.filename
       }
     } catch (error) {

@@ -282,7 +282,7 @@ export const ingestYazioTask = task({
           )
 
           upsertedCount++
-          logger.log(`[${date}] ✅ Synced successfully (ID: ${result.id})`)
+          logger.log(`[${date}] ✅ Synced successfully (ID: ${result.record.id})`)
           logger.log('')
         } catch (error: any) {
           errorCount++

@@ -333,15 +333,15 @@ export const ingestWithingsTask = task({
 
           // Normalize TSS (if HR data available, we might estimate)
           try {
-            const tssResult = await normalizeTSS(upsertedWorkout.id, userId)
+            const tssResult = await normalizeTSS(upsertedWorkout.record.id, userId)
 
             // Update CTL/ATL if TSS was set
             if (tssResult.tss !== null) {
-              await calculateWorkoutStress(upsertedWorkout.id, userId)
+              await calculateWorkoutStress(upsertedWorkout.record.id, userId)
             }
           } catch (error) {
             logger.error('[Withings Ingest] Failed to normalize TSS', {
-              workoutId: upsertedWorkout.id,
+              workoutId: upsertedWorkout.record.id,
               error
             })
           }

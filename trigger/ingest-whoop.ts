@@ -155,9 +155,9 @@ export const ingestWhoopTask = task({
           const hrZoneTimes = extractWhoopHrZones(whoopWorkout)
           if (hrZoneTimes) {
             await prisma.workoutStream.upsert({
-              where: { workoutId: upsertedWorkout.id },
+              where: { workoutId: upsertedWorkout.record.id },
               create: {
-                workoutId: upsertedWorkout.id,
+                workoutId: upsertedWorkout.record.id,
                 hrZoneTimes
               },
               update: {
@@ -165,27 +165,27 @@ export const ingestWhoopTask = task({
               }
             })
             logger.log('[Whoop Ingest] Captured HR zones', {
-              workoutId: upsertedWorkout.id,
+              workoutId: upsertedWorkout.record.id,
               hrZoneTimes
             })
           }
 
           // Normalize TSS for the workout
           try {
-            const tssResult = await normalizeTSS(upsertedWorkout.id, userId)
+            const tssResult = await normalizeTSS(upsertedWorkout.record.id, userId)
             logger.log('[Whoop Ingest] TSS normalization complete', {
-              workoutId: upsertedWorkout.id,
+              workoutId: upsertedWorkout.record.id,
               tss: tssResult.tss,
               source: tssResult.source
             })
 
             // Update CTL/ATL if TSS was set
             if (tssResult.tss !== null) {
-              await calculateWorkoutStress(upsertedWorkout.id, userId)
+              await calculateWorkoutStress(upsertedWorkout.record.id, userId)
             }
           } catch (error) {
             logger.error('[Whoop Ingest] Failed to normalize TSS', {
-              workoutId: upsertedWorkout.id,
+              workoutId: upsertedWorkout.record.id,
               error
             })
             // Don't fail ingestion if TSS normalization fails

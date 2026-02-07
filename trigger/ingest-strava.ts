@@ -30,7 +30,8 @@ export const ingestStravaTask = task({
       logger.log('Strava ingestion is temporarily disabled on coachwatts.com')
       return {
         success: false,
-        message: 'Strava integration is temporarily disabled on coachwatts.com'
+        message: 'Strava integration is temporarily disabled on coachwatts.com',
+        counts: {}
       }
     }
 
