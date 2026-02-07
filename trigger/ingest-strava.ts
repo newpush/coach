@@ -9,12 +9,17 @@ import {
 import { prisma } from '../server/utils/db'
 import { workoutRepository } from '../server/utils/repositories/workoutRepository'
 import { calculateWorkoutStress } from '../server/utils/calculate-workout-stress'
+import type { IngestionResult } from './types'
 
 export const ingestStravaTask = task({
   id: 'ingest-strava',
   queue: userIngestionQueue,
   maxDuration: 900, // 15 minutes
-  run: async (payload: { userId: string; startDate: string; endDate: string }) => {
+  run: async (payload: {
+    userId: string
+    startDate: string
+    endDate: string
+  }): Promise<IngestionResult> => {
     const { userId, startDate, endDate } = payload
 
     logger.log('Starting Strava ingestion', { userId, startDate, endDate })
@@ -126,14 +131,17 @@ export const ingestStravaTask = task({
 
         const workout = normalizeStravaActivity(detailedActivity, userId)
 
-        const upsertedWorkout = await workoutRepository.upsert(
+        const { isNew, record: upsertedWorkout } = await workoutRepository.upsert(
           userId,
           'strava',
           workout.externalId,
           workout as any,
           workout as any
         )
-        workoutsUpserted++
+
+        if (isNew) {
+          workoutsUpserted++
+        }
 
         // Calculate CTL/ATL for the workout
         try {
@@ -250,10 +258,10 @@ export const ingestStravaTask = task({
 
       return {
         success: true,
-        workouts: workoutsUpserted,
+        counts: {
+          workouts: workoutsUpserted
+        },
         skipped: workoutsSkipped,
-        detailsFetched: detailsFetched,
-        total: activities.length,
         userId,
         startDate,
         endDate

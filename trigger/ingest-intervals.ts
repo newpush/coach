@@ -4,12 +4,17 @@ import { userIngestionQueue } from './queues'
 import { prisma } from '../server/utils/db'
 import { IntervalsService } from '../server/utils/services/intervalsService'
 import { getUserTimezone, getEndOfDayUTC } from '../server/utils/date'
+import type { IngestionResult } from './types'
 
 export const ingestIntervalsTask = task({
   id: 'ingest-intervals',
   maxDuration: 3600, // 1 hour
   queue: userIngestionQueue,
-  run: async (payload: { userId: string; startDate: string; endDate: string }) => {
+  run: async (payload: {
+    userId: string
+    startDate: string
+    endDate: string
+  }): Promise<IngestionResult> => {
     const { userId, startDate, endDate } = payload
 
     logger.log('Starting Intervals.icu ingestion', { userId, startDate, endDate })
@@ -80,10 +85,12 @@ export const ingestIntervalsTask = task({
 
       return {
         success: true,
-        workouts: workoutsUpserted,
-        wellness: wellnessUpserted,
-        plannedWorkouts: plannedWorkoutsUpserted,
-        events: eventsUpserted,
+        counts: {
+          workouts: workoutsUpserted,
+          wellness: wellnessUpserted,
+          plannedWorkouts: plannedWorkoutsUpserted,
+          events: eventsUpserted
+        },
         userId,
         startDate,
         endDate

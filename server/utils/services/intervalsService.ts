@@ -181,14 +181,16 @@ export const IntervalsService = {
         }
       }
 
-      const upsertedWorkout = await workoutRepository.upsert(
+      const { isNew: workoutIsNew, record: upsertedWorkout } = await workoutRepository.upsert(
         userId,
         'intervals',
         workout.externalId,
         workout,
         workout
       )
-      upsertedCount++
+      if (workoutIsNew) {
+        upsertedCount++
+      }
 
       // Normalize TSS
       try {
@@ -453,14 +455,16 @@ export const IntervalsService = {
         readinessScale
       )
 
-      await wellnessRepository.upsert(
+      const { isNew } = await wellnessRepository.upsert(
         userId,
         wellnessDate,
         normalizedWellness,
         normalizedWellness,
         'intervals'
       )
-      upsertedCount++
+      if (isNew) {
+        upsertedCount++
+      }
 
       // Also update the User profile weight if this is a recent measurement
       const isRecent = new Date().getTime() - wellnessDate.getTime() < 7 * 24 * 60 * 60 * 1000
