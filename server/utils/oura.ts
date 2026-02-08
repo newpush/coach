@@ -281,7 +281,7 @@ export function normalizeOuraWellness(
   const vo2max = extraData.vo2max?.vo2_max || null
 
   // Recovery Score (mapping 0-100 readiness to our 1-10)
-  const recoveryScore = readinessScore ? Math.round(readinessScore / 10) : null
+  const recoveryScore = readinessScore ? Math.round(readinessScore) : null
 
   return {
     userId,
