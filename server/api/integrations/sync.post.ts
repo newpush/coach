@@ -25,6 +25,7 @@ defineRouteMeta({
                   'hevy',
                   'fitbit',
                   'oura',
+                  'polar',
                   'all'
                 ]
               },
@@ -94,13 +95,14 @@ export default defineEventHandler(async (event) => {
       'hevy',
       'fitbit',
       'oura',
+      'polar',
       'all'
     ].includes(provider)
   ) {
     throw createError({
       statusCode: 400,
       message:
-        'Invalid provider. Must be "intervals", "whoop", "withings", "yazio", "strava", "hevy", "fitbit", "oura", or "all"'
+        'Invalid provider. Must be "intervals", "whoop", "withings", "yazio", "strava", "hevy", "fitbit", "oura", "polar", or "all"'
     })
   }
 
@@ -198,7 +200,9 @@ export default defineEventHandler(async (event) => {
                   ? 'ingest-fitbit'
                   : provider === 'oura'
                     ? 'ingest-oura'
-                    : 'ingest-hevy'
+                    : provider === 'polar'
+                      ? 'ingest-polar'
+                      : 'ingest-hevy'
 
   try {
     const handle = await tasks.trigger(

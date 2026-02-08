@@ -8,7 +8,10 @@ export const ingestPolarTask = task({
   id: 'ingest-polar',
   queue: userIngestionQueue,
   maxDuration: 900, // 15 minutes
-  run: async (payload: { userId: string }, { ctx }): Promise<IngestionResult> => {
+  run: async (
+    payload: { userId: string; startDate?: string; endDate?: string },
+    { ctx }
+  ): Promise<IngestionResult> => {
     const { userId } = payload
     logger.log('[Polar Ingest] Starting ingestion', { userId })
 

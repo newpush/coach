@@ -125,7 +125,7 @@ export const ingestAllTask = task({
         case 'polar':
           tasksTrigger.push({
             task: ingestPolarTask,
-            payload: { userId }
+            payload: { userId, startDate, endDate }
           })
           break
         default:
