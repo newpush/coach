@@ -106,6 +106,7 @@ model User {
   shareTokens                        ShareToken[]
   sportSettings                      SportSettings[]
   supportMessages                    SupportMessage[]
+  bugReports                         BugReport[]
   syncQueue                          SyncQueue[]
   trainingAvailability               TrainingAvailability[]
   trainingPlans                      TrainingPlan[]
@@ -113,6 +114,7 @@ model User {
   weeklyTrainingPlans                WeeklyTrainingPlan[]
   wellness                           Wellness[]
   workouts                           Workout[]
+  nutritionSettings                  UserNutritionSettings?
 
   @@index([createdAt])
   @@index([subscriptionTier])
@@ -664,6 +666,7 @@ model PlannedWorkout {
   trainingWeekId    String?
   targetArea        String?
   managedBy         String                   @default("USER")
+  fuelingStrategy   String?
   recommendations   ActivityRecommendation[]
   planAdherences    PlanAdherence[]
   trainingWeek      TrainingWeek?            @relation(fields: [trainingWeekId], references: [id])
@@ -808,11 +811,35 @@ model Nutrition {
   notesUpdatedAt                DateTime?
   feedback                      String?
   feedbackText                  String?
+  fuelingPlan                   Json?
+  isManualLock                  Boolean           @default(false)
+  sourcePrecedence              String?
   user                          User              @relation(fields: [userId], references: [id], onDelete: Cascade)
   reports                       ReportNutrition[]
 
   @@unique([userId, date])
   @@index([userId, date])
+}
+
+model UserNutritionSettings {
+  id                 String   @id @default(uuid())
+  userId             String   @unique
+  bmr                Int?
+  activityLevel      String?
+  baseProteinPerKg   Float    @default(1.6)
+  baseFatPerKg       Float    @default(1.0)
+  currentCarbMax     Int      @default(60)
+  ultimateCarbGoal   Int      @default(90)
+  sweatRate          Float?
+  sodiumTarget       Int      @default(750)
+  preWorkoutWindow   Int      @default(120)
+  postWorkoutWindow  Int      @default(60)
+  carbsPerHourLow    Int      @default(30)
+  carbsPerHourMedium Int      @default(60)
+  carbsPerHourHigh   Int      @default(90)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model YazioProductCache {
@@ -1122,6 +1149,7 @@ model ChatRoom {
   deletedAt DateTime?
   messages  ChatMessage[]
   users     ChatParticipant[]
+  bugReports BugReport[]
 }
 
 model ChatParticipant {
@@ -1308,4 +1336,30 @@ enum SubscriptionStatus {
   UNPAID
   NONE
   CONTRIBUTOR
+}
+
+model BugReport {
+  id          String    @id @default(uuid())
+  userId      String
+  chatRoomId  String?
+  title       String
+  description String
+  context     Json?
+  logs        String?
+  status      BugStatus @default(OPEN)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  chatRoom    ChatRoom? @relation(fields: [chatRoomId], references: [id])
+
+  @@index([userId])
+  @@index([chatRoomId])
+  @@index([status])
+}
+
+enum BugStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
 }

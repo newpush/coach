@@ -129,7 +129,7 @@ export default defineEventHandler(async (event) => {
   })
   const opSettings = await getLlmOperationSettings(userId, 'chat')
   const modelName = opSettings.modelId
-  const tools = getToolsWithContext(userId, timezone, aiSettings)
+  const tools = getToolsWithContext(userId, timezone, aiSettings, roomId)
 
   // 4. Stream Text
   try {

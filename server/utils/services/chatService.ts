@@ -98,7 +98,7 @@ export class ChatService {
     })
   }
 
-  async prepareAI(userId: string) {
+  async prepareAI(userId: string, chatRoomId?: string) {
     const { userProfile, systemInstruction } = await buildAthleteContext(userId)
     const timezone = await getUserTimezone(userId)
     const aiSettings = await getUserAiSettings(userId)
@@ -107,7 +107,7 @@ export class ChatService {
       apiKey: process.env.GEMINI_API_KEY
     })
     const modelName = MODEL_NAMES[aiSettings.aiModelPreference]
-    const tools = getToolsWithContext(userId, timezone, aiSettings)
+    const tools = getToolsWithContext(userId, timezone, aiSettings, chatRoomId)
 
     return {
       google,

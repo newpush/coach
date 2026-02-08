@@ -195,7 +195,7 @@ async function handleChatMessage(
     const { userProfile, systemInstruction } = await buildAthleteContext(userId)
     const timezone = await getUserTimezone(userId)
     const aiSettings = await getUserAiSettings(userId)
-    const tools = getToolsWithContext(userId, timezone, aiSettings)
+    const tools = getToolsWithContext(userId, timezone, aiSettings, roomId)
 
     // 3. Fetch History
     const history = await prisma.chatMessage.findMany({
