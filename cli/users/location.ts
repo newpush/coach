@@ -4,6 +4,7 @@ import 'dotenv/config'
 import { PrismaClient } from '@prisma/client'
 import { PrismaPg } from '@prisma/adapter-pg'
 import pg from 'pg'
+import geoip from 'geoip-lite'
 
 const locationCommand = new Command('location').description('Manage user location based on IP')
 
@@ -68,7 +69,7 @@ locationCommand
       console.log(chalk.blue(`User: ${user.name || 'N/A'} (${user.email})`))
       console.log(chalk.blue(`Current Country: ${user.country || 'Not set'}`))
 
-      let ip = user.lastLoginIp
+      let ip: string | null = user.lastLoginIp
 
       if (!ip) {
         const lastAudit = await prisma.auditLog.findFirst({
@@ -80,7 +81,7 @@ locationCommand
             createdAt: 'desc'
           }
         })
-        ip = lastAudit?.ipAddress
+        ip = lastAudit?.ipAddress || null
       }
 
       if (!ip) {
@@ -91,7 +92,7 @@ locationCommand
           },
           orderBy: { createdAt: 'desc' }
         })
-        ip = lastToken?.lastIp
+        ip = lastToken?.lastIp || null
       }
 
       if (!ip) {
@@ -101,37 +102,36 @@ locationCommand
 
       console.log(chalk.green(`Using IP: ${ip}`))
 
-      // IP Lookup
+      // GeoIP Lookup
       console.log(chalk.gray(`Looking up location for ${ip}...`))
-      const response = await fetch(`http://ip-api.com/json/${ip}`)
-      const data = (await response.json()) as any
+      const geo = geoip.lookup(ip)
 
-      if (data.status === 'success') {
+      if (geo) {
         console.log(
           chalk.green(
-            `Suggested Location: ${data.city}, ${data.regionName}, ${data.country} (${data.countryCode})`
+            `Suggested Location: ${geo.city || 'Unknown City'}, ${geo.region || ''}, ${geo.country}`
           )
         )
 
         if (options.update) {
-          if (user.country === data.country) {
+          if (user.country === geo.country) {
             console.log(chalk.yellow('User country is already correct.'))
           } else {
             await prisma.user.update({
               where: { id: user.id },
               data: {
-                country: data.country,
-                city: data.city,
-                state: data.regionName
+                country: geo.country,
+                city: geo.city || undefined,
+                state: geo.region || undefined
               }
             })
-            console.log(chalk.green(`Successfully updated user country to ${data.country}.`))
+            console.log(chalk.green(`Successfully updated user country to ${geo.country}.`))
           }
         } else if (!user.country) {
           console.log(chalk.cyan('Hint: Run with --update to set this country for the user.'))
         }
       } else {
-        console.error(chalk.red(`IP lookup failed: ${data.message}`))
+        console.error(chalk.red(`GeoIP lookup failed: No data found for IP`))
       }
     } catch (e: any) {
       console.error(chalk.red('Error:'), e.message)
@@ -240,7 +240,7 @@ locationCommand
       let totalWithIp = 0
 
       for (const user of allMissing) {
-        let ip = user.lastLoginIp
+        let ip: string | null = user.lastLoginIp
 
         if (!ip) {
           const lastAudit = await prisma.auditLog.findFirst({
@@ -251,7 +251,7 @@ locationCommand
             orderBy: { createdAt: 'desc' },
             select: { ipAddress: true }
           })
-          ip = lastAudit?.ipAddress
+          ip = lastAudit?.ipAddress || null
         }
 
         if (!ip) {
@@ -263,7 +263,7 @@ locationCommand
             orderBy: { createdAt: 'desc' },
             select: { lastIp: true }
           })
-          ip = lastToken?.lastIp
+          ip = lastToken?.lastIp || null
         }
 
         if (ip) {
@@ -289,28 +289,25 @@ locationCommand
       for (const user of usersWithIp) {
         process.stdout.write(chalk.gray(`- ${user.email} (${user.ip}): `))
 
-        const response = await fetch(`http://ip-api.com/json/${user.ip}`)
-        const data = (await response.json()) as any
+        // GeoIP Lookup
+        const geo = geoip.lookup(user.ip)
 
-        if (data.status === 'success') {
-          console.log(chalk.green(`${data.country} (${data.countryCode}) - ${data.city}`))
+        if (geo) {
+          console.log(chalk.green(`${geo.country} - ${geo.city || 'Unknown City'}`))
 
           if (options.update) {
             await prisma.user.update({
               where: { id: user.id },
               data: {
-                country: data.country,
-                city: data.city,
-                state: data.regionName
+                country: geo.country,
+                city: geo.city || undefined,
+                state: geo.region || undefined
               }
             })
           }
         } else {
-          console.log(chalk.red(`IP lookup failed: ${data.message}`))
+          console.log(chalk.red(`GeoIP lookup failed`))
         }
-
-        // Sleep to respect rate limits
-        await new Promise((resolve) => setTimeout(resolve, 1500))
       }
 
       console.log(chalk.blue('\nProcessing complete.'))
@@ -322,6 +319,134 @@ locationCommand
     } finally {
       await prisma.$disconnect()
       await pool.end()
+    }
+  })
+
+locationCommand
+  .command('list-recent')
+  .description('List the last 50 users with their IP and location info using GeoIP')
+  .option('--prod', 'Use production database')
+  .action(async (options) => {
+    const { prisma, pool } = await getPrisma(options.prod)
+
+    try {
+      const users = await prisma.user.findMany({
+        take: 50,
+        orderBy: { createdAt: 'desc' },
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          country: true,
+          city: true,
+          lastLoginIp: true,
+          createdAt: true
+        }
+      })
+
+      if (users.length === 0) {
+        console.log(chalk.yellow('No users found.'))
+        return
+      }
+
+      console.log(chalk.blue(`Found ${users.length} recent users:`))
+
+      const results = []
+      for (const user of users) {
+        let ip = user.lastLoginIp
+
+        if (!ip) {
+          const lastAudit = await prisma.auditLog.findFirst({
+            where: {
+              userId: user.id,
+              ipAddress: { not: null }
+            },
+            orderBy: { createdAt: 'desc' },
+            select: { ipAddress: true }
+          })
+          ip = lastAudit?.ipAddress
+        }
+
+        let geoInfo = 'Unknown'
+        let geoCity = 'Unknown'
+        let geoCountry = 'Unknown'
+
+        if (ip && ip !== 'unknown') {
+          const geo = geoip.lookup(ip)
+          if (geo) {
+            geoCountry = geo.country
+            geoCity = geo.city
+            geoInfo = `${geo.city}, ${geo.country}`
+          }
+        }
+
+        results.push({
+          email: user.email,
+          name: user.name || 'N/A',
+          stored_country: user.country || 'N/A',
+          stored_city: user.city || 'N/A',
+          ip: ip || 'None',
+          geoip_location: geoInfo,
+          joined: user.createdAt.toISOString().split('T')[0]
+        })
+      }
+
+      console.table(results)
+    } catch (e: any) {
+      console.error(chalk.red('Error:'), e.message)
+    } finally {
+      await prisma.$disconnect()
+      await pool.end()
+    }
+  })
+
+locationCommand
+  .command('update-db')
+  .description('Update the GeoIP database using MAXMIND_LICENSE_KEY')
+  .action(async () => {
+    const licenseKey = process.env.MAXMIND_LICENSE_KEY
+    if (!licenseKey) {
+      console.error(chalk.red('Error: MAXMIND_LICENSE_KEY is not set in .env'))
+      process.exit(1)
+    }
+
+    console.log(chalk.blue('Updating GeoIP database...'))
+
+    // We need to run the update script inside node_modules/geoip-lite
+    // Command: cd node_modules/geoip-lite && npm run-script updatedb license_key=KEY
+    // We use child_process to execute this.
+    const { exec } = await import('child_process')
+    const { createRequire } = await import('module')
+    const require = createRequire(import.meta.url)
+
+    // Determine path to geoip-lite. In pnpm, it might be nested or symlinked.
+    // Safest is to rely on require.resolve or just try standard path.
+    // Let's assume standard structure first or use require.resolve to find package.json
+    try {
+      const geoipPath = require.resolve('geoip-lite/package.json').replace('/package.json', '')
+      console.log(chalk.gray(`Found geoip-lite at: ${geoipPath}`))
+
+      const command = `cd "${geoipPath}" && npm run-script updatedb license_key=${licenseKey}`
+
+      const child = exec(command)
+
+      child.stdout?.on('data', (data) => {
+        console.log(chalk.gray(data.toString()))
+      })
+
+      child.stderr?.on('data', (data) => {
+        console.error(chalk.yellow(data.toString()))
+      })
+
+      child.on('close', (code) => {
+        if (code === 0) {
+          console.log(chalk.green('GeoIP database updated successfully.'))
+        } else {
+          console.error(chalk.red(`GeoIP update failed with exit code ${code}`))
+        }
+      })
+    } catch (e: any) {
+      console.error(chalk.red('Failed to locate geoip-lite package or execute update:'), e.message)
     }
   })
 
