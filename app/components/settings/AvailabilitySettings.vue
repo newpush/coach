@@ -353,39 +353,39 @@
                 </div>
               </div>
 
-              <USelectMenu
-                v-model="slot.activityTypes"
-                multiple
-                :items="activityTypes"
-                size="xs"
-                placeholder="All Sports"
-                class="w-full"
-              >
-                <template #default="{ modelValue }">
-                  <UButton
-                    color="neutral"
-                    variant="subtle"
-                    size="xs"
-                    class="w-full justify-start overflow-hidden px-3 py-2 h-auto min-h-8"
-                  >
-                    <template v-if="Array.isArray(modelValue) && modelValue.length">
-                      <div class="flex gap-1 flex-wrap overflow-hidden py-0.5">
-                        <UBadge
-                          v-for="type in modelValue"
-                          :key="String(type)"
-                          size="xs"
-                          variant="soft"
-                          color="neutral"
-                          class="whitespace-nowrap"
-                        >
-                          {{ type }}
-                        </UBadge>
-                      </div>
-                    </template>
-                    <span v-else class="text-neutral-400 text-xs italic">All Sports</span>
-                  </UButton>
-                </template>
-              </USelectMenu>
+                                          <USelectMenu v-model="slot.activityTypes" multiple :items="activityTypes" size="xs"
+
+                                            placeholder="All Sports" class="w-full" value-key="value">
+
+                            
+
+                              <template #default="{ modelValue }">
+
+                                <UButton color="neutral" variant="subtle" size="xs" class="w-full justify-start overflow-hidden px-3 py-2 h-auto min-h-8">
+
+                                  <template v-if="Array.isArray(modelValue) && modelValue.length">
+
+                                    <div class="flex gap-1 flex-wrap overflow-hidden py-0.5">
+
+                                      <UBadge v-for="type in modelValue" :key="String(type)" size="xs" variant="soft" color="neutral" class="whitespace-nowrap">
+
+                                        {{ type }}
+
+                                      </UBadge>
+
+                                    </div>
+
+                                  </template>
+
+                                  <span v-else class="text-neutral-400 text-xs italic">All Sports</span>
+
+                                </UButton>
+
+                              </template>
+
+                            </USelectMenu>
+
+              
 
               <div
                 class="flex items-center justify-between pt-2 border-t border-neutral-100 dark:border-neutral-800"
