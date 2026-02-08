@@ -4,6 +4,7 @@ import { PrismaClient, Prisma } from '@prisma/client'
 import { PrismaPg } from '@prisma/adapter-pg'
 import pg from 'pg'
 import { normalizeIntervalsWellness } from '../../server/utils/intervals'
+import { normalizeOuraWellness } from '../../server/utils/oura'
 
 const backfillWellnessScoresCommand = new Command('wellness-scores')
 
@@ -11,7 +12,10 @@ backfillWellnessScoresCommand
   .description('Fix wellness scores (mood/soreness) from rawJson (normalize Intervals 1-4 scale)')
   .option('--prod', 'Use production database')
   .option('--dry-run', 'Run without saving changes', false)
-  .option('--limit <number>', 'Limit the number of records to process', '100000')
+  .option('--id <id>', 'Process only a specific record ID')
+  .option('--userId <id>', 'Process only records for a specific user ID')
+  .option('--user <email>', 'Process only records for a specific user email')
+  .option('--limit <number>', 'Limit the number of records to process', '1000000')
   .action(async (options) => {
     const isProd = options.prod
     const isDryRun = options.dryRun
@@ -39,26 +43,42 @@ backfillWellnessScoresCommand
 
     try {
       console.log(chalk.gray('Fetching Wellness entries count...'))
-      const totalCount = await prisma.wellness.count({
-        where: { rawJson: { not: Prisma.JsonNull } }
-      })
-      console.log(chalk.gray(`Found ${totalCount} wellness entries total.`))
+
+      const where: any = {
+        rawJson: { not: Prisma.JsonNull }
+      }
+      if (options.id) {
+        where.id = options.id
+      }
+      if (options.userId) {
+        where.userId = options.userId
+      }
+      if (options.user) {
+        const user = await prisma.user.findUnique({ where: { email: options.user } })
+        if (!user) {
+          console.error(chalk.red(`User not found: ${options.user}`))
+          process.exit(1)
+        }
+        where.userId = user.id
+        console.log(chalk.green(`Filtering for user: ${user.name || user.email} (${user.id})`))
+      }
+
+      const totalCount = await prisma.wellness.count({ where })
+      console.log(chalk.gray(`Found ${totalCount} wellness entries for processing.`))
 
       let cursor: string | undefined
       let processedCount = 0
       let fixedCount = 0
       let skippedCount = 0
-      const batchSize = 500
+      const batchSize = 1000
 
-      while (true) {
+      while (processedCount < limit) {
         const wellnessEntries = await prisma.wellness.findMany({
-          where: {
-            rawJson: { not: Prisma.JsonNull }
-          },
+          where,
           take: batchSize,
           skip: cursor ? 1 : 0,
           cursor: cursor ? { id: cursor } : undefined,
-          orderBy: { id: 'asc' } // Stable sort for cursor
+          orderBy: { id: 'asc' }
         })
 
         if (wellnessEntries.length === 0) break
@@ -75,16 +95,51 @@ backfillWellnessScoresCommand
             continue
           }
 
-          const normalized = normalizeIntervalsWellness(raw, entry.userId, entry.date)
+          let normalized: any = null
+
+          // Detect Source
+          const isOuraFormat = raw.dailyReadiness || raw.readiness_score || (entry.lastSource === 'oura')
+
+          if (isOuraFormat && (raw.dailyReadiness || raw.dailySleep)) {
+            normalized = normalizeOuraWellness(
+              raw.dailySleep,
+              raw.dailyActivity,
+              raw.dailyReadiness,
+              raw.sleepPeriods || [],
+              entry.userId,
+              entry.date,
+              {
+                spo2: raw.spo2,
+                stress: raw.stress,
+                vo2max: raw.vo2max,
+                personalInfo: raw.personalInfo
+              }
+            )
+          } else {
+            // Default to Intervals normalization (also handles readiness -> recoveryScore)
+            normalized = normalizeIntervalsWellness(raw, entry.userId, entry.date)
+          }
+
+          if (!normalized) {
+            skippedCount++
+            continue
+          }
+
           const updateData: any = {}
           let needsUpdate = false
 
-          // Check fields
-          const fields = ['mood', 'soreness', 'stress', 'fatigue', 'sleepQuality', 'motivation']
+          // Fields to check for backfill
+          const fields = [
+            'mood', 'soreness', 'stress', 'fatigue',
+            'sleepQuality', 'motivation', 'readiness', 'recoveryScore'
+          ]
+
           for (const field of fields) {
             const newVal = (normalized as any)[field]
             const currentVal = (entry as any)[field]
-            if (newVal !== null && newVal !== currentVal) {
+
+            // If the field is non-null in normalized data and differs from current DB value
+            if (newVal !== null && newVal !== undefined && newVal !== currentVal) {
               updateData[field] = newVal
               needsUpdate = true
             }
@@ -92,17 +147,15 @@ backfillWellnessScoresCommand
 
           if (needsUpdate) {
             if (isDryRun) {
-              // Log only first few in dry run to avoid spam
-              if (fixedCount < 20) {
+              if (fixedCount < 10 || options.id) {
                 console.log(
-                  chalk.green(`[DRY RUN] Update for ${entry.date.toISOString().split('T')[0]}`)
+                  chalk.green(`[DRY RUN] Update for ${entry.date.toISOString().split('T')[0]} (${entry.id})`)
                 )
                 for (const [k, v] of Object.entries(updateData)) {
                   console.log(chalk.gray(`  ${k}: ${(entry as any)[k]} -> ${v}`))
                 }
               }
             } else {
-              // Push promise
               updates.push(
                 prisma.wellness.update({
                   where: { id: entry.id },
@@ -116,15 +169,15 @@ backfillWellnessScoresCommand
           }
         }
 
-        // Execute batch updates
         if (updates.length > 0) {
           await Promise.all(updates)
         }
 
-        // Progress
-        if (processedCount % 1000 === 0) {
-          console.log(chalk.gray(`Processed ${processedCount}/${totalCount}...`))
+        if (processedCount % 5000 === 0) {
+          console.log(chalk.gray(`Processed ${processedCount}/${totalCount}... (Fixed: ${fixedCount})`))
         }
+
+        if (wellnessEntries.length < batchSize) break
       }
 
       console.log('\n')

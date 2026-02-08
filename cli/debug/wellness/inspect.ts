@@ -12,6 +12,7 @@ inspectCommand
   .option('--prod', 'Use production database')
   .option('--user <email>', 'Filter by user email')
   .option('--date <date>', 'Filter by date (YYYY-MM-DD)')
+  .option('--id <id>', 'Filter by specific record ID')
   .option('-v, --verbose', 'Show all fields even if they match')
   .action(async (options) => {
     const isProd = options.prod
@@ -61,12 +62,16 @@ inspectCommand
         }
       }
 
+      if (options.id) {
+        where.id = options.id
+      }
+
       console.log(chalk.gray(`Fetching wellness records...`))
 
       const records = await prisma.wellness.findMany({
         where,
         orderBy: { date: 'desc' },
-        take: options.date ? 100 : 10 // Limit if no specific date
+        take: (options.date || options.id) ? 100 : 10 // Limit if no specific date/id
       })
 
       console.log(chalk.gray(`Found ${records.length} wellness records.`))
@@ -95,6 +100,7 @@ inspectCommand
           { label: 'Sleep Secs', db: w.sleepSecs, raw: raw.sleepSecs, unit: 's' },
           { label: 'Sleep Score', db: w.sleepScore, raw: raw.sleepScore, unit: '%' },
           { label: 'Readiness', db: w.readiness, raw: raw.readiness, unit: '' },
+          { label: 'Rec. Score', db: w.recoveryScore, raw: raw.readiness ?? raw.recovery_score ?? raw.recoveryScore, unit: '%' },
           { label: 'Weight', db: w.weight, raw: raw.weight, unit: 'kg' },
           { label: 'Systolic', db: w.systolic, raw: raw.systolic, unit: 'mmHg' },
           { label: 'Diastolic', db: w.diastolic, raw: raw.diastolic, unit: 'mmHg' },
@@ -108,8 +114,8 @@ inspectCommand
 
         for (const c of checks) {
           let status = chalk.green('✓ OK')
-          let dbVal = c.db
-          let rawVal = c.raw
+          let dbVal: any = c.db
+          let rawVal: any = c.raw
           let isMismatch = false
 
           // Normalization for comparison
@@ -117,7 +123,10 @@ inspectCommand
           if (rawVal === null || rawVal === undefined) rawVal = 'null'
 
           if (rawVal !== 'null' && dbVal !== 'null') {
-            if (Number(dbVal) !== Number(rawVal)) {
+            // Special handling for objects (like stress sometimes is)
+            if (typeof rawVal === 'object') {
+              status = chalk.yellow('! Object')
+            } else if (Number(dbVal) !== Number(rawVal)) {
               status = chalk.red('❌ MISMATCH')
               isMismatch = true
             }
@@ -140,7 +149,7 @@ inspectCommand
             const rawDisplay =
               typeof c.raw === 'number'
                 ? chalk.blue(c.raw) + (c.unit ? chalk.gray(c.unit) : '')
-                : chalk.blue(String(rawVal))
+                : chalk.blue(typeof rawVal === 'object' ? JSON.stringify(rawVal) : String(rawVal))
 
             console.log(`${c.label.padEnd(12)} | DB: ${dbDisplay} | Raw: ${rawDisplay} | ${status}`)
           }

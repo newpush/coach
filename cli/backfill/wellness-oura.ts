@@ -61,10 +61,24 @@ async function handleSoftBackfill(prisma: any, options: any) {
   console.log(chalk.blue('Starting SOFT backfill (re-normalizing local rawJson)...'))
   if (dryRun) console.log(chalk.cyan('🔍 DRY RUN mode enabled.'))
 
+  // DEBUG: Check what we have in DB
+  const totalCount = await prisma.wellness.count()
+  console.log(chalk.gray(`DEBUG: Total wellness records in DB: ${totalCount}`))
+
+  // DEBUG sample
+  const sample = await prisma.wellness.findFirst({
+    where: { lastSource: null, rawJson: { not: Prisma.AnyNull } }
+  })
+  if (sample && sample.rawJson) {
+    console.log(chalk.gray(`DEBUG: Sample Record ID: ${sample.id}`))
+    console.log(chalk.gray(`DEBUG: Sample rawJson keys: ${Object.keys(sample.rawJson as object).join(', ')}`))
+  }
+
   const where: any = {
     OR: [
       { history: { path: ['$[0]', 'source'], equals: 'oura' } },
-      { rawJson: { path: ['dailyReadiness'], not: Prisma.AnyNull } }
+      { rawJson: { path: ['dailyReadiness'], not: Prisma.AnyNull } },
+      { lastSource: 'oura' }
     ]
   }
 
@@ -74,19 +88,30 @@ async function handleSoftBackfill(prisma: any, options: any) {
     where.userId = user.id
   }
 
+  // Fetch all records to filter in memory (safer than Prisma JSON filter)
   const entries = await prisma.wellness.findMany({
-    where,
     orderBy: { date: 'desc' }
   })
 
   console.log(
-    chalk.gray(`Found ${entries.length} wellness records matching Oura source heuristics.`)
+    chalk.gray(`Scanned ${entries.length} records. Filtering for Oura data...`)
   )
 
   let updatedCount = 0
   for (const entry of entries) {
     const raw: any = entry.rawJson
-    if (!raw || !raw.dailyReadiness) continue
+    // Check if it looks like Oura data
+    const isOura = (raw && raw.dailyReadiness) || entry.lastSource === 'oura'
+
+    if (!isOura) continue
+
+    if (!raw || !raw.dailyReadiness) {
+      // If it's marked as Oura but missing raw data, we can't soft backfill
+      if (entry.lastSource === 'oura') {
+        console.log(chalk.yellow(`Skipping Oura record ${entry.id} (missing raw.dailyReadiness)`))
+      }
+      continue
+    }
 
     // Re-normalize with the new strict logic
     const normalized = normalizeOuraWellness(
