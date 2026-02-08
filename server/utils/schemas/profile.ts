@@ -22,6 +22,7 @@ export const profileUpdateSchema = z.object({
   state: z.string().nullable().optional(),
   country: z.string().nullable().optional(),
   timezone: z.string().nullable().optional(),
+  currencyPreference: z.string().nullable().optional(),
 
   // AI Context
   aiContext: z.string().nullable().optional(),

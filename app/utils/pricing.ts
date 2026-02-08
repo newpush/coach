@@ -1,3 +1,5 @@
+import { formatCurrencyFromUsd, type CurrencyContext } from '~/utils/currency'
+
 export type BillingInterval = 'monthly' | 'annual'
 export type PricingTier = 'free' | 'supporter' | 'pro'
 
@@ -82,6 +84,13 @@ export function formatPrice(price: number): string {
     currency: 'USD',
     minimumFractionDigits: price % 1 === 0 ? 0 : 2
   }).format(price)
+}
+
+/**
+ * Format price using a localized currency context.
+ */
+export function formatPriceLocalized(price: number, context: CurrencyContext): string {
+  return formatCurrencyFromUsd(price, context)
 }
 
 /**

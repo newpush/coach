@@ -70,7 +70,7 @@
 
           <div class="mt-4 flex items-baseline gap-1">
             <span class="text-4xl font-extrabold">{{
-              formatPrice(getPrice(plan, billingInterval))
+              formatPriceLocalized(getPrice(plan, billingInterval), currencyContext)
             }}</span>
 
             <span class="text-sm text-gray-500 dark:text-gray-400">
@@ -128,22 +128,47 @@
   import {
     PRICING_PLANS,
     calculateAnnualSavings,
-    formatPrice,
+    formatPriceLocalized,
     getPrice,
     getStripePriceId,
     type BillingInterval,
     type PricingPlan
   } from '~/utils/pricing'
 
-  const { status } = useAuth()
+  const { status, data } = useAuth()
   const userStore = useUserStore()
   const { createCheckoutSession, openCustomerPortal } = useStripe()
   const config = useRuntimeConfig()
+  const { timezone } = useFormat()
 
   const billingInterval = ref<BillingInterval>('annual')
   const loading = ref(false)
   const selectedPlan = ref<string | null>(null)
   const subscriptionsEnabled = computed(() => config.public.subscriptionsEnabled)
+
+  const browserTimezone = computed(() => {
+    if (!import.meta.client) return null
+    return Intl.DateTimeFormat().resolvedOptions().timeZone
+  })
+
+  const browserLocale = computed(() => {
+    if (!import.meta.client) return null
+    return navigator.language
+  })
+
+  const currencyContext = computed(() => ({
+    country: userStore.profile?.country,
+    preferredCurrency: userStore.profile?.currencyPreference,
+    profileTimezone: (data.value?.user as any)?.timezone || timezone.value,
+    browserTimezone: browserTimezone.value,
+    locale: browserLocale.value
+  }))
+
+  onMounted(() => {
+    if (status.value === 'authenticated' && !userStore.profile) {
+      userStore.fetchProfile()
+    }
+  })
 
   function isCurrentPlan(plan: PricingPlan): boolean {
     if (!userStore.user || status.value !== 'authenticated') return false

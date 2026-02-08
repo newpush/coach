@@ -105,7 +105,8 @@
     city: '',
     state: '',
     country: '',
-    timezone: ''
+    timezone: '',
+    currencyPreference: null
   })
 
   const sportSettings = ref<any[]>([])

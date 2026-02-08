@@ -27,7 +27,7 @@
       <h3 :class="compact ? 'text-lg' : 'text-xl'" class="font-bold">{{ plan.name }}</h3>
       <div :class="compact ? 'mt-2' : 'mt-4'" class="flex items-baseline gap-1">
         <span :class="compact ? 'text-2xl' : 'text-4xl'" class="font-extrabold">
-          {{ formatPrice(plan.monthlyPrice) }}
+          {{ formatPriceLocalized(plan.monthlyPrice, currencyContext) }}
         </span>
         <span class="text-sm text-gray-500 dark:text-gray-400"> / month </span>
       </div>
@@ -70,7 +70,7 @@
 </template>
 
 <script setup lang="ts">
-  import { formatPrice, type PricingPlan } from '~/utils/pricing'
+  import { formatPriceLocalized, type PricingPlan } from '~/utils/pricing'
 
   interface Props {
     plan: PricingPlan
@@ -90,8 +90,18 @@
   }>()
 
   const userStore = useUserStore()
+  const { data } = useAuth()
   const config = useRuntimeConfig()
   const subscriptionsEnabled = computed(() => config.public.subscriptionsEnabled)
+  const { timezone } = useFormat()
+
+  const currencyContext = computed(() => ({
+    country: userStore.profile?.country,
+    preferredCurrency: userStore.profile?.currencyPreference,
+    profileTimezone: (data.value?.user as any)?.timezone || timezone.value,
+    browserTimezone: import.meta.client ? Intl.DateTimeFormat().resolvedOptions().timeZone : null,
+    locale: import.meta.client ? navigator.language : null
+  }))
 
   const isCurrentPlan = computed(() => {
     const currentTier = userStore.user?.subscriptionTier?.toLowerCase()

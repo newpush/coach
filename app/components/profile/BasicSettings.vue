@@ -437,6 +437,43 @@
           }}</span>
         </p>
       </div>
+      <!-- Currency -->
+      <div class="group relative">
+        <div class="flex items-center gap-1 mb-1">
+          <label class="text-sm text-muted">Currency</label>
+          <button
+            class="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded hover:bg-gray-100 dark:hover:bg-gray-800"
+            @click="startEdit('currencyPreference')"
+          >
+            <UIcon name="i-heroicons-pencil" class="w-3 h-3 text-muted hover:text-primary" />
+          </button>
+        </div>
+        <div v-if="editingField === 'currencyPreference'" class="flex gap-2 w-full relative z-50">
+          <USelectMenu
+            v-model="currencyModel"
+            :items="currencyOptions"
+            option-attribute="label"
+            :search-attributes="['label', 'code']"
+            size="sm"
+            class="flex-1"
+            searchable
+            searchable-placeholder="Search currency..."
+            autofocus
+            :ui="{ content: 'w-full min-w-[var(--reka-popper-anchor-width)]' }"
+            @update:model-value="saveField"
+          />
+        </div>
+        <div v-else class="space-y-1">
+          <p class="font-medium text-lg">
+            {{
+              modelValue.currencyPreference
+                ? getCurrencyLabel(modelValue.currencyPreference)
+                : 'Auto (Based on location)'
+            }}
+          </p>
+          <p class="text-xs text-gray-500 dark:text-gray-400">In use: {{ currentCurrencyLabel }}</p>
+        </div>
+      </div>
       <!-- Timezone -->
       <div class="lg:col-span-2 group relative">
         <div class="flex items-center gap-1 mb-1">
@@ -542,6 +579,7 @@
 
 <script setup lang="ts">
   import { countries } from '~/utils/countries'
+  import { ACCEPTED_CURRENCIES, getCurrencyLabel, resolveCurrencyContext } from '~/utils/currency'
   const props = defineProps<{
     modelValue: any
     email: string
@@ -562,6 +600,33 @@
     set: (val: any) => {
       editValue.value = val?.code
     }
+  })
+
+  const currencyOptions = computed(() => [
+    { code: '', label: 'Auto (Based on location)' },
+    ...ACCEPTED_CURRENCIES
+  ])
+
+  const currencyModel = computed({
+    get: () => {
+      const current = editValue.value ? editValue.value.toString() : ''
+      return currencyOptions.value.find((c) => c.code === current)
+    },
+    set: (val: any) => {
+      editValue.value = val?.code || ''
+    }
+  })
+
+  const currentCurrencyLabel = computed(() => {
+    const resolved = resolveCurrencyContext({
+      preferredCurrency: props.modelValue.currencyPreference,
+      country: props.modelValue.country,
+      profileTimezone: props.modelValue.timezone,
+      browserTimezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      locale: typeof navigator !== 'undefined' ? navigator.language : null
+    })
+
+    return `${resolved.currency} - ${getCurrencyLabel(resolved.currency)}`
   })
 
   const countriesWithLabel = computed(() =>
