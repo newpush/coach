@@ -14,6 +14,7 @@ export const nutritionRepository = {
       offset?: number
       orderBy?: Prisma.NutritionOrderByWithRelationInput
       select?: Prisma.NutritionSelect
+      where?: Prisma.NutritionWhereInput
     } = {}
   ) {
     const where: Prisma.NutritionWhereInput = {
@@ -21,7 +22,8 @@ export const nutritionRepository = {
       date: {
         gte: options.startDate,
         lte: options.endDate
-      }
+      },
+      ...options.where
     }
 
     return prisma.nutrition.findMany({
@@ -30,6 +32,15 @@ export const nutritionRepository = {
       skip: options.offset,
       orderBy: options.orderBy || { date: 'desc' },
       select: options.select
+    })
+  },
+
+  /**
+   * Get a single nutrition entry by ID
+   */
+  async getByIdInternal(nutritionId: string) {
+    return prisma.nutrition.findUnique({
+      where: { id: nutritionId }
     })
   },
 
@@ -73,6 +84,7 @@ export const nutritionRepository = {
     options: {
       startDate?: Date
       endDate?: Date
+      where?: Prisma.NutritionWhereInput
     } = {}
   ) {
     const where: Prisma.NutritionWhereInput = {
@@ -80,7 +92,8 @@ export const nutritionRepository = {
       date: {
         gte: options.startDate,
         lte: options.endDate
-      }
+      },
+      ...options.where
     }
 
     return prisma.nutrition.count({ where })

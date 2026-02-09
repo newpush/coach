@@ -93,6 +93,7 @@ export const workoutRepository = {
       startDate?: Date
       endDate?: Date
       includeDuplicates?: boolean
+      where?: Prisma.WorkoutWhereInput
     } = {}
   ) {
     const where: Prisma.WorkoutWhereInput = {
@@ -101,7 +102,8 @@ export const workoutRepository = {
       date: {
         gte: options.startDate,
         lte: options.endDate
-      }
+      },
+      ...options.where
     }
 
     return prisma.workout.count({ where })

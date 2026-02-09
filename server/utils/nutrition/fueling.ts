@@ -6,6 +6,15 @@ export interface FuelingProfile {
   sweatRate?: number // L/hr
   preWorkoutWindow?: number // min (default 90)
   postWorkoutWindow?: number // min (default 60)
+  fuelingSensitivity?: number
+  fuelState1Trigger?: number
+  fuelState1Min?: number
+  fuelState1Max?: number
+  fuelState2Trigger?: number
+  fuelState2Min?: number
+  fuelState2Max?: number
+  fuelState3Min?: number
+  fuelState3Max?: number
 }
 
 export interface WorkoutContext {
@@ -54,12 +63,28 @@ export function calculateFuelingStrategy(
 ): SerializedFuelingPlan {
   const durationHours = (workout.durationSec || 0) / 3600
   const intensity = workout.intensityFactor || workout.workIntensity || 0.65
+  const sensitivity = profile.fuelingSensitivity || 1.0
 
   // Default Windows
   const windows: SerializedFuelingWindow[] = []
   const notes: string[] = []
 
-  // --- 1. INTRA-WORKOUT STRATEGY ---
+  // --- 1. DETERMINE FUEL STATE & DAILY BASELINE ---
+  let state = 1
+  let carbRange = { min: profile.fuelState1Min || 3.0, max: profile.fuelState1Max || 4.5 }
+
+  if (intensity > (profile.fuelState2Trigger || 0.85)) {
+    state = 3
+    carbRange = { min: profile.fuelState3Min || 8.0, max: profile.fuelState3Max || 12.0 }
+  } else if (intensity > (profile.fuelState1Trigger || 0.6)) {
+    state = 2
+    carbRange = { min: profile.fuelState2Min || 5.0, max: profile.fuelState2Max || 7.5 }
+  }
+
+  // Apply Sensitivity
+  const dailyCarbTargetGrams = profile.weight * ((carbRange.min + carbRange.max) / 2) * sensitivity
+
+  // --- 2. INTRA-WORKOUT STRATEGY ---
   let targetCarbsPerHour = 0
   const hydrationPerHour = (profile.sweatRate || 0.8) * 1000 // ml
   const sodiumPerHour = (profile.sodiumTarget || 750) * (profile.sweatRate || 0.8) // mg
@@ -68,23 +93,23 @@ export function calculateFuelingStrategy(
     targetCarbsPerHour = 0
     notes.push('TRAIN LOW Protocol: No carb intake during ride to enhance fat oxidation.')
   } else {
-    // "Fuel for the Work Required"
+    // "Fuel for the Work Required" - Intra is still based on g/hr logic, but influenced by state
     if (durationHours < 1) {
-      targetCarbsPerHour = 0 // Short rides don't strictly need carbs if fueled before
-      if (intensity > 0.9) targetCarbsPerHour = 30 // Unless it's a crit race
+      targetCarbsPerHour = 0
+      if (intensity > 0.9) targetCarbsPerHour = 45 // High intensity short
     } else if (durationHours < 2) {
-      targetCarbsPerHour = intensity > 0.8 ? 60 : 30
-    } else if (durationHours < 3) {
-      targetCarbsPerHour = intensity > 0.8 ? 90 : 60
+      targetCarbsPerHour = intensity > 0.8 ? 75 : 45
     } else {
-      targetCarbsPerHour = 90 // Long rides need max fuel
+      targetCarbsPerHour = intensity > 0.8 ? 90 : 60
     }
+
+    targetCarbsPerHour *= sensitivity
   }
 
   // Apply Gut Training Cap
   if (targetCarbsPerHour > profile.currentCarbMax) {
     notes.push(
-      `Capping carbs at ${profile.currentCarbMax}g/hr (Gut Training Limit). Goal is ${targetCarbsPerHour}g/hr.`
+      `Capping intra-ride carbs at ${profile.currentCarbMax}g/hr (Your Gut Limit). Ideal for this intensity: ${Math.round(targetCarbsPerHour)}g/hr.`
     )
     targetCarbsPerHour = profile.currentCarbMax
   }
@@ -108,22 +133,21 @@ export function calculateFuelingStrategy(
     targetFat: 0,
     targetFluid: intraFluid,
     targetSodium: intraSodium,
-    description: `Fuel for ${Math.round(durationHours * 10) / 10}h ride at ${(intensity * 100).toFixed(0)}% intensity.`,
+    description: `Fuel State ${state} (${state === 1 ? 'Eco' : state === 2 ? 'Steady' : 'Performance'}): ${Math.round(durationHours * 10) / 10}h ride.`,
     status: 'PENDING',
     supplements: extractSupplements(durationHours, intensity)
   })
 
-  // --- 2. PRE-WORKOUT ---
-  // 1-4g/kg carbs 1-4h before -> Simplified to window setting
+  // --- 3. PRE-WORKOUT ---
   const preDuration = profile.preWorkoutWindow || 90
   const preStart = new Date(workoutStart.getTime() - preDuration * 60000)
 
-  let preCarbs = profile.weight * 1.0 // 1g/kg default
+  let preCarbs = profile.weight * 1.0 * sensitivity
   if (workout.strategyOverride === 'TRAIN_LOW') {
     preCarbs = 10 // Minimal carbs
-    notes.push('Limit pre-workout carbs to <10g for Train Low effect.')
-  } else {
-    if (intensity > 0.85 || durationHours > 3) preCarbs = profile.weight * 2.0 // Load up for hard/long
+    notes.push('TRAIN LOW: Minimal pre-workout carbs (<10g) to maintain low glycogen state.')
+  } else if (state === 3 || durationHours > 3) {
+    preCarbs = profile.weight * 2.0 * sensitivity
   }
 
   windows.push({
@@ -131,24 +155,24 @@ export function calculateFuelingStrategy(
     startTime: preStart.toISOString(),
     endTime: workoutStart.toISOString(),
     targetCarbs: Math.round(preCarbs),
-    targetProtein: 20, // Moderate protein
-    targetFat: 10, // Low fat to aid digestion
-    targetFluid: 500, // Pre-load hydration
-    targetSodium: 500, // Pre-load sodium
-    description: 'Top off glycogen stores.',
+    targetProtein: 20,
+    targetFat: 10,
+    targetFluid: 500,
+    targetSodium: 500,
+    description: 'Pre-workout fueling window.',
     status: 'PENDING'
   })
 
-  // --- 3. POST-WORKOUT ---
+  // --- 4. POST-WORKOUT ---
   const postDuration = profile.postWorkoutWindow || 60
   const postEnd = new Date(workoutEnd.getTime() + postDuration * 60000)
 
-  const postCarbs = profile.weight * 1.2 // 1.2g/kg default replenish
-  let postProtein = 30 // Standard recovery
+  const postCarbs = profile.weight * 1.2 * sensitivity
+  let postProtein = 30
 
   if (workout.strategyOverride === 'TRAIN_LOW') {
-    postProtein = 40 // Increase protein to spare muscle
-    // Carbs normal replenish, or delayed? Usually immediate replenish is fine after train low unless doing "Sleep Low"
+    postProtein = 45 // Bumping protein for Train Low recovery
+    notes.push('TRAIN LOW: Increased post-workout protein to support muscle repair.')
   }
 
   windows.push({
@@ -158,25 +182,23 @@ export function calculateFuelingStrategy(
     targetCarbs: Math.round(postCarbs),
     targetProtein: postProtein,
     targetFat: 15,
-    targetFluid: 500, // Rehydration (estimate)
+    targetFluid: 750, // Rehydration
     targetSodium: 0,
-    description: 'Rapid recovery window.',
+    description: 'Post-workout recovery window.',
     status: 'PENDING'
   })
-
-  // Daily Totals (just sum of windows + base metabolic need approximation?)
-  // This is "Activity Nutrition", base need calculated separately in total day plan logic usually.
-  // simpler to return just window sums here for the "Fueling Plan" specific to workout.
 
   return {
     windows,
     dailyTotals: {
-      calories: (intraCarbs + preCarbs + postCarbs) * 4 + (postProtein + 20) * 4 + 25 * 9,
-      carbs: intraCarbs + preCarbs + postCarbs,
-      protein: postProtein + 20, // pre + post
-      fat: 25, // pre + post
-      fluid: intraFluid + 1000,
-      sodium: intraSodium + 500
+      calories: Math.round(
+        dailyCarbTargetGrams * 4 + profile.weight * 1.6 * 4 + profile.weight * 1.0 * 9
+      ),
+      carbs: Math.round(dailyCarbTargetGrams),
+      protein: Math.round(profile.weight * 1.6),
+      fat: Math.round(profile.weight * 1.0),
+      fluid: intraFluid + 2000,
+      sodium: intraSodium + 1000
     },
     notes
   }
