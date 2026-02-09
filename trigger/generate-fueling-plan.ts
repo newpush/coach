@@ -23,8 +23,9 @@ export const generateFuelingPlanTask = task({
     // 2. Check for Manual Lock
     // The 'date' string passed is ISO UTC Midnight for the calendar day
     const targetDateStart = new Date(date)
-    // Ensure it's truly midnight UTC (in case it wasn't)
     targetDateStart.setUTCHours(0, 0, 0, 0)
+    const targetDateEnd = new Date(targetDateStart)
+    targetDateEnd.setUTCHours(23, 59, 59, 999)
 
     const existingNutrition = await nutritionRepository.getByDate(userId, targetDateStart)
 
@@ -35,7 +36,21 @@ export const generateFuelingPlanTask = task({
 
     const settings = await getUserNutritionSettings(userId)
 
-    // 3. Calculate Strategy
+    // 3. Fetch ALL workouts for this day to build a complete plan
+    const allWorkouts = await prisma.plannedWorkout.findMany({
+      where: {
+        userId,
+        date: {
+          gte: targetDateStart,
+          lte: targetDateEnd
+        }
+      },
+      orderBy: { date: 'asc' }
+    })
+
+    console.log(`[GeneratePlan] Found ${allWorkouts.length} workouts for ${date}`)
+
+    // 4. Calculate Strategy
     // Map settings to profile interface expected by calculator
     const user = await prisma.user.findUnique({ where: { id: userId } })
     const profile = {
@@ -57,39 +72,89 @@ export const generateFuelingPlanTask = task({
       fuelState3Max: settings.fuelState3Max
     }
 
-    const fuelingPlan = calculateFuelingStrategy(profile, {
-      ...workout,
-      strategyOverride: workout.fuelingStrategy || undefined
-    })
+    // Generate clusters for each workout and combine
+    const combinedWindows: any[] = []
+    const combinedNotes: string[] = []
+    const dailyTotals = {
+      calories: 0,
+      carbs: 0,
+      protein: 0,
+      fat: 0,
+      fluid: 2000, // Base hydration
+      sodium: 1000 // Base sodium
+    }
 
-    // 4. Update Nutrition Record
+    for (const work of allWorkouts) {
+      // Convert HH:mm string to a Date object relative to the workout date
+      let startTimeDate: Date | null = null
+      if (work.startTime && typeof work.startTime === 'string' && work.startTime.includes(':')) {
+        const [h, m] = work.startTime.split(':').map(Number)
+        startTimeDate = new Date(work.date)
+        startTimeDate.setUTCHours(h || 0, m || 0, 0, 0)
+      } else if (work.startTime instanceof Date) {
+        startTimeDate = work.startTime
+      }
+
+      const plan = calculateFuelingStrategy(profile, {
+        ...work,
+        startTime: startTimeDate,
+        strategyOverride: work.fuelingStrategy || undefined
+      } as any)
+
+      combinedWindows.push(...plan.windows)
+      combinedNotes.push(...plan.notes)
+    }
+
+    // Deduplicate notes
+    const uniqueNotes = Array.from(new Set(combinedNotes))
+
+    // Recalculate Totals based on all windows
+    const totalCarbs = combinedWindows.reduce((sum, w) => sum + w.targetCarbs, 0)
+    const totalProtein = combinedWindows.reduce((sum, w) => sum + w.targetProtein, 0)
+    const totalFat = combinedWindows.reduce((sum, w) => sum + w.targetFat, 0)
+    const totalFluid = combinedWindows.reduce((sum, w) => sum + (w.targetFluid || 0), 0) + 2000
+    const totalSodium = combinedWindows.reduce((sum, w) => sum + (w.targetSodium || 0), 0) + 1000
+
+    const finalPlan = {
+      windows: combinedWindows,
+      notes: uniqueNotes,
+      dailyTotals: {
+        carbs: totalCarbs,
+        protein: totalProtein,
+        fat: totalFat,
+        calories: totalCarbs * 4 + totalProtein * 4 + totalFat * 9,
+        fluid: totalFluid,
+        sodium: totalSodium
+      }
+    }
+
+    // 5. Update Nutrition Record
     await nutritionRepository.upsert(
       userId,
       targetDateStart,
       {
         userId,
         date: targetDateStart,
-        fuelingPlan: fuelingPlan as any, // Cast to Json
+        fuelingPlan: finalPlan as any,
         sourcePrecedence: 'AI',
-        caloriesGoal: fuelingPlan.dailyTotals.calories,
-        carbsGoal: fuelingPlan.dailyTotals.carbs,
-        proteinGoal: fuelingPlan.dailyTotals.protein,
-        fatGoal: fuelingPlan.dailyTotals.fat
+        caloriesGoal: finalPlan.dailyTotals.calories,
+        carbsGoal: finalPlan.dailyTotals.carbs,
+        proteinGoal: finalPlan.dailyTotals.protein,
+        fatGoal: finalPlan.dailyTotals.fat
       },
       {
-        fuelingPlan: fuelingPlan as any,
+        fuelingPlan: finalPlan as any,
         sourcePrecedence: 'AI',
-        // Only update goals if not locked (checked above, but double check logic if partial)
-        caloriesGoal: fuelingPlan.dailyTotals.calories,
-        carbsGoal: fuelingPlan.dailyTotals.carbs,
-        proteinGoal: fuelingPlan.dailyTotals.protein,
-        fatGoal: fuelingPlan.dailyTotals.fat
+        caloriesGoal: finalPlan.dailyTotals.calories,
+        carbsGoal: finalPlan.dailyTotals.carbs,
+        proteinGoal: finalPlan.dailyTotals.protein,
+        fatGoal: finalPlan.dailyTotals.fat
       }
     )
 
     return {
       success: true,
-      plan: fuelingPlan
+      plan: finalPlan
     }
   }
 })
