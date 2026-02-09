@@ -73,40 +73,92 @@
       </div>
 
       <!-- Hydration Card (Intra-Workout Only) -->
-      <div
-        v-if="type === 'INTRA_WORKOUT' && (targetFluid || targetSodium)"
-        class="bg-blue-50/50 dark:bg-blue-900/10 rounded-xl p-4 border border-blue-100/50 dark:border-blue-900/30"
-      >
-        <div class="flex items-center gap-2 mb-3">
-          <UIcon name="i-heroicons-beaker" class="w-4 h-4 text-blue-500" />
-          <span class="text-[10px] font-black uppercase text-blue-600 tracking-widest"
-            >Hydration & Electrolytes</span
-          >
-        </div>
-        <div class="grid grid-cols-2 gap-4">
-          <div class="flex items-center gap-3">
-            <div
-              class="w-8 h-8 rounded-lg bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center"
-            >
-              <UIcon name="i-tabler-droplet" class="w-5 h-5 text-blue-500" />
+
+      <div v-if="type === 'INTRA_WORKOUT' && (targetFluid || targetSodium)" class="space-y-3">
+        <!-- Fueling Script -->
+
+        <div
+          v-if="targetCarbs > 0"
+          class="bg-amber-50 dark:bg-amber-950/20 rounded-xl p-4 border border-amber-100 dark:border-amber-900/50"
+        >
+          <div class="flex items-center justify-between mb-2">
+            <div class="flex items-center gap-2">
+              <UIcon
+                name="i-heroicons-document-text"
+                class="w-4 h-4 text-amber-600 dark:text-amber-400"
+              />
+
+              <span
+                class="text-[10px] font-black uppercase text-amber-600 dark:text-amber-400 tracking-widest"
+                >Intra-Workout Script</span
+              >
             </div>
-            <div>
-              <div class="text-[10px] font-bold text-gray-400 uppercase">Fluid Target</div>
-              <div class="text-sm font-black text-gray-900 dark:text-white">
-                {{ (targetFluid || 0) / 1000 }}L
+
+            <UBadge
+              v-if="strategyLabel"
+              variant="soft"
+              color="warning"
+              size="xs"
+              class="font-black text-[8px] uppercase"
+              :class="{ 'animate-pulse': fuelState === 3 }"
+            >
+              {{ strategyLabel }}
+            </UBadge>
+          </div>
+
+          <p class="text-xs font-bold text-amber-800 dark:text-amber-200">
+            Target:
+            {{
+              Math.round(
+                targetCarbs / (Math.abs(endTime.getTime() - startTime.getTime()) / 3600000)
+              )
+            }}g carbs per hour.
+
+            <span class="font-normal opacity-80">({{ getGelCountLabel(targetCarbs) }})</span>
+          </p>
+        </div>
+
+        <div
+          class="bg-blue-50/50 dark:bg-blue-900/10 rounded-xl p-4 border border-blue-100/50 dark:border-blue-900/30"
+        >
+          <div class="flex items-center gap-2 mb-3">
+            <UIcon name="i-heroicons-beaker" class="w-4 h-4 text-blue-500" />
+
+            <span class="text-[10px] font-black uppercase text-blue-600 tracking-widest"
+              >Hydration & Electrolytes</span
+            >
+          </div>
+
+          <div class="grid grid-cols-2 gap-4">
+            <div class="flex items-center gap-3">
+              <div
+                class="w-8 h-8 rounded-lg bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center"
+              >
+                <UIcon name="i-tabler-droplet" class="w-5 h-5 text-blue-500" />
+              </div>
+
+              <div>
+                <div class="text-[10px] font-bold text-gray-400 uppercase">Fluid Target</div>
+
+                <div class="text-sm font-black text-gray-900 dark:text-white">
+                  {{ (targetFluid || 0) / 1000 }}L
+                </div>
               </div>
             </div>
-          </div>
-          <div class="flex items-center gap-3">
-            <div
-              class="w-8 h-8 rounded-lg bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center"
-            >
-              <UIcon name="i-tabler-grain" class="w-5 h-5 text-blue-500" />
-            </div>
-            <div>
-              <div class="text-[10px] font-bold text-gray-400 uppercase">Sodium Target</div>
-              <div class="text-sm font-black text-gray-900 dark:text-white">
-                {{ targetSodium }}mg
+
+            <div class="flex items-center gap-3">
+              <div
+                class="w-8 h-8 rounded-lg bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center"
+              >
+                <UIcon name="i-tabler-grain" class="w-5 h-5 text-blue-500" />
+              </div>
+
+              <div>
+                <div class="text-[10px] font-bold text-gray-400 uppercase">Sodium Target</div>
+
+                <div class="text-sm font-black text-gray-900 dark:text-white">
+                  {{ targetSodium }}mg
+                </div>
               </div>
             </div>
           </div>
@@ -149,8 +201,14 @@
               <div class="text-sm font-bold text-gray-900 dark:text-white">
                 {{ item.name || item.product_name }}
               </div>
-              <div class="text-[10px] text-gray-500 font-medium uppercase">
-                {{ item.amount }}{{ item.unit || 'g' }} • {{ item.calories }} kcal
+              <div
+                class="text-[10px] text-gray-500 font-medium uppercase flex items-center gap-1.5"
+              >
+                <span v-if="getItemTime(item)" class="text-primary-500 font-bold">{{
+                  getItemTime(item)
+                }}</span>
+                <span v-if="getItemTime(item)">•</span>
+                <span>{{ item.amount }}{{ item.unit || 'g' }} • {{ item.calories }} kcal</span>
               </div>
             </div>
           </div>
@@ -184,7 +242,18 @@
     items: any[]
     supplements?: string[]
     isLocked?: boolean
+    fuelState?: number
   }>()
+
+  const strategyLabel = computed(() => {
+    if (props.type !== 'INTRA_WORKOUT') return null
+    if (props.fuelState === 3) return 'Gut Training: Active'
+    if (props.fuelState === 2) return 'Steady Fueling'
+    if (props.fuelState === 1) return 'Low Intensity'
+    // Fallback based on carbs if prop not passed
+    if (props.targetCarbs >= 80) return 'Gut Training: Active'
+    return null
+  })
 
   const formatTime = (date: Date) => {
     if (!date || isNaN(date.getTime())) return ''
@@ -229,9 +298,29 @@
   const recommendationText = computed(() => {
     if (props.targetCarbs > 80)
       return `Focus on high-glycemic carbs. Recommendation: 1 large bagel with jam and a banana.`
+
     if (props.targetCarbs > 40) return `Moderate fueling needed. Try 1 bowl of oatmeal with honey.`
+
     return `Light fueling. A piece of fruit or 1 energy gel will suffice.`
   })
+
+  function getGelCountLabel(carbs: number) {
+    const count = Math.round(carbs / 30)
+
+    if (count <= 0) return 'Water/Electrolytes only'
+
+    if (count === 1) return 'Take ~1 gel'
+
+    return `Take ~${count} gels`
+  }
+
+  function getItemTime(item: any) {
+    const time = item.logged_at || item.date || item._heuristic_time
+
+    if (!time) return null
+
+    return formatTime(new Date(time))
+  }
 
   function getSupplementIcon(supp: string) {
     const s = supp.toLowerCase()

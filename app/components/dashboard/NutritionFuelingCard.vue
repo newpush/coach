@@ -23,9 +23,40 @@
             </h3>
           </template>
         </div>
-        <UBadge v-if="strategy" color="neutral" variant="subtle" size="xs">
-          {{ strategy }}
-        </UBadge>
+        <div class="flex items-center gap-2">
+          <UButton
+            v-if="!loading"
+            :to="`/nutrition/${formatDateUTC(new Date(), 'yyyy-MM-dd')}`"
+            variant="ghost"
+            color="neutral"
+            size="xs"
+            icon="i-heroicons-arrow-right"
+            trailing
+            title="Open Journal"
+          />
+          <UButton
+            v-if="!loading"
+            :loading="generating"
+            variant="ghost"
+            color="neutral"
+            size="xs"
+            icon="i-heroicons-sparkles"
+            title="Regenerate Plan"
+            @click="handleGenerate"
+          />
+          <UButton
+            v-if="!loading"
+            to="/profile/settings?tab=nutrition"
+            variant="ghost"
+            color="neutral"
+            size="xs"
+            icon="i-heroicons-cog-6-tooth"
+            title="Nutrition Settings"
+          />
+          <UBadge v-if="strategy" color="neutral" variant="subtle" size="xs">
+            {{ strategy }}
+          </UBadge>
+        </div>
       </div>
     </template>
 
@@ -150,86 +181,39 @@
         <!-- Right Side: Timeline -->
         <div class="space-y-4">
           <div
-            class="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2 flex items-center gap-2"
+            class="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4 flex items-center gap-2"
           >
             <UIcon name="i-heroicons-clock" class="w-4 h-4" />
             Fueling Timeline
           </div>
-          <div class="space-y-3">
-            <div
-              v-for="window in sortedWindows"
-              :key="window.startTime"
-              class="relative pl-6 pb-4 border-l border-gray-200 dark:border-gray-700 last:border-0 last:pb-0"
-            >
-              <!-- Timeline Dot -->
-              <div
-                class="absolute left-[-5px] top-0 w-2.5 h-2.5 rounded-full bg-white dark:bg-gray-900 border-2"
-                :class="windowBorderClass(window)"
+          <div class="space-y-3 max-h-[400px] overflow-y-auto pl-4 pr-2 pt-4 pb-8 custom-scrollbar">
+            <template v-for="(window, index) in timeline" :key="index">
+              <!-- Physical Effort Anchor -->
+              <NutritionWorkoutEventCard
+                v-if="window.type === 'WORKOUT_EVENT'"
+                :workout="window.workout"
+                :fuel-state="getWorkoutFuelState(window.workout)"
+                class="!pb-2"
               />
 
-              <div class="flex flex-col gap-1">
-                <div class="flex items-center justify-between">
-                  <span
-                    class="text-xs font-bold uppercase tracking-wider"
-                    :class="windowTextClass(window)"
-                  >
-                    {{ formatWindowType(window.type) }}
-                  </span>
-                  <span class="text-[10px] text-gray-400 font-medium">
-                    {{ formatWindowTime(window) }}
-                  </span>
-                </div>
-
-                <div
-                  class="text-sm font-bold text-gray-900 dark:text-white flex items-center gap-3"
-                >
-                  <div class="flex items-center gap-1">
-                    <UIcon name="i-tabler-bread" class="w-3.5 h-3.5 text-yellow-500" />
-                    <span
-                      >{{ window.targetCarbs }}g
-                      <span class="font-normal text-gray-500 dark:text-gray-400 text-xs"
-                        >carbs</span
-                      ></span
-                    >
-                  </div>
-                  <div v-if="window.targetProtein > 0" class="flex items-center gap-1">
-                    <UIcon name="i-tabler-egg" class="w-3.5 h-3.5 text-blue-500" />
-                    <span
-                      >{{ window.targetProtein }}g
-                      <span class="font-normal text-gray-500 dark:text-gray-400 text-xs"
-                        >protein</span
-                      ></span
-                    >
-                  </div>
-                  <UBadge
-                    v-if="window.status === 'HIT'"
-                    color="success"
-                    variant="subtle"
-                    size="xs"
-                    class="ml-auto"
-                    >Met</UBadge
-                  >
-                </div>
-
-                <p class="text-[11px] text-gray-500 dark:text-gray-400 leading-snug">
-                  {{ window.description }}
-                </p>
-
-                <!-- Supplements -->
-                <div v-if="window.supplements?.length" class="flex flex-wrap gap-1 mt-1.5">
-                  <UBadge
-                    v-for="supp in window.supplements"
-                    :key="supp"
-                    color="primary"
-                    variant="soft"
-                    size="xs"
-                    class="text-[9px]"
-                  >
-                    {{ supp }}
-                  </UBadge>
-                </div>
-              </div>
-            </div>
+              <!-- Fueling Window -->
+              <NutritionWindowBlock
+                v-else
+                :type="window.type"
+                :title="formatTitle(window)"
+                :start-time="window.startTime"
+                :end-time="window.endTime"
+                :target-carbs="window.targetCarbs"
+                :target-protein="window.targetProtein"
+                :target-fat="window.targetFat"
+                :target-fluid="window.targetFluid"
+                :target-sodium="window.targetSodium"
+                :items="window.items"
+                :supplements="window.supplements"
+                :is-locked="false"
+                class="!pb-6"
+              />
+            </template>
           </div>
         </div>
       </div>
@@ -254,8 +238,11 @@
 </template>
 
 <script setup lang="ts">
+  import { mapNutritionToTimeline } from '~/utils/nutrition-timeline'
+
   const props = defineProps<{
     plan: any
+    workouts?: any[]
     loading?: boolean
   }>()
 
@@ -263,11 +250,56 @@
     refresh: []
   }>()
 
+  const userStore = useUserStore()
   const { formatDateUTC } = useFormat()
   const { onTaskCompleted } = useUserRunsState()
   const toast = useToast()
 
   const generating = ref(false)
+
+  const timeline = computed(() => {
+    if (!props.plan) return []
+
+    // We need current daily nutrition object to pass to mapper
+    // but we only have fuelingPlan. We can reconstruct a minimal object.
+    const nutritionRecord = {
+      date: new Date().toISOString().split('T')[0],
+      fuelingPlan: props.plan
+      // items are not easily accessible here without fetching full day
+      // but the dashboard card is mostly for strategy/targets
+    }
+
+    return mapNutritionToTimeline(nutritionRecord, props.workouts || [], {
+      preWorkoutWindow: 90, // Fallback if settings not available
+      postWorkoutWindow: 60,
+      baseProteinPerKg: 1.6,
+      baseFatPerKg: 1.0,
+      weight: userStore.profile?.weight || 75
+    })
+  })
+
+  function getWorkoutFuelState(workout: any) {
+    if (!workout) return 1
+    const intensity = workout.workIntensity || 0.65
+    if (intensity > 0.85) return 3
+    if (intensity > 0.6) return 2
+    return 1
+  }
+
+  function formatTitle(window: any) {
+    if (window.type === 'TRANSITION') return 'Transition Fueling'
+    if (window.type === 'DAILY_BASE') return 'Daily Base'
+    if (window.type === 'WORKOUT_EVENT') return window.workout?.title || 'Workout'
+
+    const typeMap: Record<string, string> = {
+      PRE_WORKOUT: 'Pre-Workout',
+      INTRA_WORKOUT: 'Intra-Workout Fueling',
+      POST_WORKOUT: 'Post-Workout Recovery'
+    }
+
+    const typeStr = typeMap[window.type] || window.type
+    return window.workoutTitle ? `${typeStr}: ${window.workoutTitle}` : typeStr
+  }
 
   onTaskCompleted('generate-fueling-plan', () => {
     generating.value = false
@@ -331,13 +363,6 @@
     return props.plan.notes?.find((n: string) => n.includes('Protocol'))?.split(':')[0] || null
   })
 
-  const sortedWindows = computed(() => {
-    if (!props.plan) return []
-    return [...(props.plan.windows || [])].sort(
-      (a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime()
-    )
-  })
-
   const tankPercentage = ref(85) // Placeholder logic for now
   const tankColorClass = computed(() => {
     if (tankPercentage.value > 70) return 'text-green-500'
@@ -356,42 +381,6 @@
     if (tankPercentage.value > 30) return 'Moderate depletion. Focus on post-workout window.'
     return 'CRITICAL: Refuel immediately to avoid metabolic crash.'
   })
-
-  function formatWindowType(type: string) {
-    return type.replace('_', ' ')
-  }
-
-  function formatWindowTime(window: any) {
-    const start = new Date(window.startTime)
-    const end = new Date(window.endTime)
-    return `${start.getHours()}:${start.getMinutes().toString().padStart(2, '0')} - ${end.getHours()}:${end.getMinutes().toString().padStart(2, '0')}`
-  }
-
-  function windowBorderClass(window: any) {
-    switch (window.type) {
-      case 'PRE_WORKOUT':
-        return 'border-blue-400'
-      case 'INTRA_WORKOUT':
-        return 'border-red-500'
-      case 'POST_WORKOUT':
-        return 'border-green-500'
-      default:
-        return 'border-gray-400'
-    }
-  }
-
-  function windowTextClass(window: any) {
-    switch (window.type) {
-      case 'PRE_WORKOUT':
-        return 'text-blue-500'
-      case 'INTRA_WORKOUT':
-        return 'text-red-500'
-      case 'POST_WORKOUT':
-        return 'text-green-600'
-      default:
-        return 'text-gray-500'
-    }
-  }
 
   function handleQuickLog(event: any) {
     const text = event.target.value
@@ -414,5 +403,18 @@
   }
   .animate-shimmer {
     animation: shimmer 2s infinite;
+  }
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 4px;
+  }
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    background: #e2e8f0;
+    border-radius: 10px;
+  }
+  .dark .custom-scrollbar::-webkit-scrollbar-thumb {
+    background: #334155;
   }
 </style>

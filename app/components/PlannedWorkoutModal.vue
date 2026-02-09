@@ -28,6 +28,10 @@
                 formatDateUTC(plannedWorkout.date, 'EEEE, MMMM d, yyyy')
               }}</span>
             </div>
+            <div v-if="plannedWorkout.startTime" class="flex justify-between">
+              <span class="text-sm text-gray-600 dark:text-gray-400">Time:</span>
+              <span class="text-sm font-medium">{{ plannedWorkout.startTime }}</span>
+            </div>
             <div v-if="plannedWorkout.durationSec" class="flex justify-between">
               <span class="text-sm text-gray-600 dark:text-gray-400">Duration:</span>
               <span class="text-sm font-medium">{{

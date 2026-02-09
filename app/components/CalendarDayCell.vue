@@ -150,10 +150,18 @@
                 activity.plannedDistance ||
                 activity.averageHr ||
                 activity.tss ||
-                activity.plannedTss
+                activity.plannedTss ||
+                activity.startTime
               "
               class="flex items-center gap-1.5 text-[10px] text-gray-500 dark:text-gray-400 mt-0.5"
             >
+              <span
+                v-if="activity.startTime"
+                class="inline-flex items-center gap-0.5 text-primary-600 dark:text-primary-400 font-medium"
+              >
+                <UIcon name="i-heroicons-clock" class="w-2.5 h-2.5" />
+                <span>{{ activity.startTime }}</span>
+              </span>
               <span class="inline-block w-10 text-left">
                 <span v-if="activity.duration || activity.plannedDuration">
                   {{ formatDuration(activity.duration || activity.plannedDuration || 0) }}
