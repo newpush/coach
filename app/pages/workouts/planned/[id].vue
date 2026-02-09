@@ -1067,10 +1067,12 @@
       })
     } catch (error: any) {
       generating.value = false
+      console.error('Error generating workout structure:', error)
       toast.add({
         title: 'Generation Failed',
         description: error.data?.message || 'Failed to generate structure',
-        color: 'error'
+        color: 'error',
+        timeout: 6000
       })
     }
   }

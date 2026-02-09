@@ -608,7 +608,7 @@
             <p class="text-gray-500 dark:text-gray-400 mt-2 mb-6 max-w-md mx-auto">
               Set your first goal to get personalized AI coaching advice and track your progress.
             </p>
-            <UButton color="primary" size="lg" icon="i-heroicons-plus" @click="showWizard = true">
+            <UButton color="primary" size="lg" icon="i-heroicons-plus" @click="openNewGoal">
               Create First Goal
             </UButton>
           </div>

@@ -51,16 +51,19 @@
 
     <div v-else class="text-center py-10 space-y-4">
       <p class="text-sm text-muted">Generate structured workouts to see zone distribution.</p>
-      <UButton
-        size="sm"
-        color="primary"
-        variant="soft"
-        icon="i-heroicons-sparkles"
-        :loading="loading"
-        @click="$emit('generate')"
-      >
-        Generate All Workouts for this Week
-      </UButton>
+      <UTooltip :text="buttonTooltip">
+        <UButton
+          size="sm"
+          color="primary"
+          variant="soft"
+          icon="i-heroicons-sparkles"
+          :loading="loading"
+          :disabled="isRestricted"
+          @click="$emit('generate')"
+        >
+          Generate All Workouts for this Week
+        </UButton>
+      </UTooltip>
     </div>
   </div>
 </template>

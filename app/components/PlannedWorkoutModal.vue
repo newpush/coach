@@ -487,8 +487,14 @@
         // For now, let's just refresh the parent
         emit('completed') // Using this to trigger refresh in parent
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error generating workout structure:', error)
+      toast.add({
+        title: 'Generation Failed',
+        description: error?.data?.message || 'Failed to generate structure',
+        color: 'error',
+        timeout: 6000
+      })
     } finally {
       generating.value = false
     }
