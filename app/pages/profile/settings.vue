@@ -61,6 +61,7 @@
               :profile="profile"
               @update:settings="(val) => (nutritionSettings = val)"
               @navigate="(tab) => (activeTab = tab)"
+              @saved="refreshProfile"
             />
           </div>
         </div>

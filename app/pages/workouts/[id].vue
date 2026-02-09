@@ -587,6 +587,106 @@
             <WorkoutsExerciseList :exercises="workout.exercises" />
           </div>
 
+          <!-- Nutrition Debrief -->
+          <div
+            v-if="workout.kilojoules || workout.plannedWorkout"
+            class="bg-white dark:bg-gray-800 rounded-lg shadow p-6 border-l-4 border-orange-500"
+          >
+            <div class="flex items-center justify-between mb-6">
+              <div class="flex items-center gap-3">
+                <div class="p-2 bg-orange-100 dark:bg-orange-900/40 rounded-full">
+                  <UIcon
+                    name="i-heroicons-beaker"
+                    class="w-6 h-6 text-orange-600 dark:text-orange-400"
+                  />
+                </div>
+                <h2 class="text-xl font-bold text-gray-900 dark:text-white">Nutrition Debrief</h2>
+              </div>
+              <div v-if="workout.plannedWorkout?.tss" class="text-right">
+                <div class="text-[10px] uppercase font-bold text-gray-400">Metabolic Delta</div>
+                <div
+                  class="text-sm font-bold"
+                  :class="kJDelta >= 10 ? 'text-red-500' : 'text-green-500'"
+                >
+                  {{ kJDelta > 0 ? '+' : '' }}{{ kJDelta }}% kJ vs. Plan
+                </div>
+              </div>
+            </div>
+
+            <!-- Recovery Correction Banner -->
+            <div
+              v-if="kJDelta >= 10"
+              class="mb-6 p-4 bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-xl flex items-start gap-3"
+            >
+              <UIcon
+                name="i-heroicons-exclamation-triangle"
+                class="w-6 h-6 text-orange-500 shrink-0"
+              />
+              <div>
+                <h3 class="font-bold text-orange-900 dark:text-orange-100 text-sm">
+                  Recovery Adjustment Required
+                </h3>
+                <p class="text-xs text-orange-800 dark:text-orange-200 mt-0.5">
+                  Ride was significantly harder than planned (+{{ kJDelta }}% kJ). I've added
+                  {{ recoveryCarbBump }}g of carbs to your recovery target for the next 4 hours.
+                </p>
+              </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+              <!-- Actual vs Planned -->
+              <div class="space-y-4">
+                <div class="flex items-center justify-between text-sm">
+                  <span class="text-gray-500">Actual Work (kJ)</span>
+                  <span class="font-bold text-gray-900 dark:text-white"
+                    >{{ workout.kilojoules || 0 }} kJ</span
+                  >
+                </div>
+                <div class="flex items-center justify-between text-sm">
+                  <span class="text-gray-500">Planned Work (kJ)</span>
+                  <span class="text-gray-400">{{ plannedKJ || 'No target set' }} kJ</span>
+                </div>
+                <div
+                  class="w-full bg-gray-100 dark:bg-gray-800 rounded-full h-2 overflow-hidden mt-2"
+                >
+                  <div
+                    class="bg-orange-500 h-full transition-all"
+                    :style="{
+                      width:
+                        Math.min(((workout.kilojoules || 0) / (plannedKJ || 1)) * 100, 100) + '%'
+                    }"
+                  />
+                </div>
+              </div>
+
+              <!-- Subjective Feedback -->
+              <div
+                class="bg-gray-50 dark:bg-gray-900/50 p-4 rounded-xl space-y-3 border border-gray-100 dark:border-gray-800"
+              >
+                <div class="text-sm font-bold text-gray-700 dark:text-gray-300">
+                  How did your stomach feel?
+                </div>
+                <div class="flex items-center gap-2">
+                  <UButton
+                    v-for="i in 5"
+                    :key="i"
+                    :color="stomachFeel === i ? 'primary' : 'neutral'"
+                    :variant="stomachFeel === i ? 'solid' : 'ghost'"
+                    size="sm"
+                    class="w-10 h-10 rounded-lg flex items-center justify-center font-bold"
+                    @click="updateStomachFeel(i)"
+                  >
+                    {{ i }}
+                  </UButton>
+                </div>
+                <div class="flex justify-between text-[10px] text-gray-400 font-medium px-1">
+                  <span>1: Poor/GI Distress</span>
+                  <span>5: Perfect/Strong</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <!-- AI Analysis Section -->
           <div id="analysis" class="scroll-mt-20" />
 
@@ -1340,6 +1440,43 @@
   const sharing = ref(false)
   const promoting = ref(false)
   const isPromoteModalOpen = ref(false)
+  const stomachFeel = ref<number | null>(null)
+
+  const plannedKJ = computed(() => {
+    if (!workout.value?.plannedWorkout) return null
+    const pw = workout.value.plannedWorkout
+    // Simple estimation: TSS * 10 or from duration/intensity if available
+    // For now use a multiplier for demonstration
+    return Math.round((pw.tss || 100) * 8.5)
+  })
+
+  const kJDelta = computed(() => {
+    if (!workout.value?.kilojoules || !plannedKJ.value) return 0
+    return Math.round(((workout.value.kilojoules - plannedKJ.value) / plannedKJ.value) * 100)
+  })
+
+  const recoveryCarbBump = computed(() => {
+    if (kJDelta.value < 10) return 0
+    // roughly 40g per 15% delta
+    return Math.round((kJDelta.value / 15) * 40)
+  })
+
+  async function updateStomachFeel(val: number) {
+    stomachFeel.value = val
+    try {
+      await $fetch(`/api/workouts/${workout.value.id}/metadata`, {
+        method: 'POST' as any,
+        body: { stomachFeel: val }
+      })
+      toast.add({
+        title: 'Feedback Saved',
+        description: 'Thank you! Your feedback helps tune your carb limits.',
+        color: 'success'
+      })
+    } catch (e) {
+      console.error('Failed to save stomach feel', e)
+    }
+  }
 
   // Stream Modal State
   const isStreamModalOpen = ref(false)

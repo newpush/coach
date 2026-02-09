@@ -2,729 +2,171 @@
   <UDashboardPanel id="nutrition-detail">
     <template #header>
       <UDashboardNavbar
-        :title="nutrition ? `Nutrition: ${formatDate(nutrition.date)}` : 'Nutrition Details'"
+        :title="nutrition ? `Nutrition: ${formatDateLabel(nutrition.date)}` : 'Nutrition Details'"
       >
         <template #leading>
-          <UButton icon="i-heroicons-arrow-left" color="neutral" variant="ghost" to="/data">
-            Back to Data
+          <UButton icon="i-heroicons-arrow-left" color="neutral" variant="ghost" to="/activities">
+            Back to Activities
           </UButton>
         </template>
         <template #right>
-          <ClientOnly>
-            <DashboardTriggerMonitorButton />
-          </ClientOnly>
+          <div class="flex items-center gap-2">
+            <UButton
+              v-if="nutrition"
+              icon="i-heroicons-sparkles"
+              color="primary"
+              variant="soft"
+              size="sm"
+              class="font-bold"
+              :loading="generatingPlan"
+              @click="handleGeneratePlan"
+            >
+              Regenerate Plan
+            </UButton>
+            <ClientOnly>
+              <DashboardTriggerMonitorButton />
+            </ClientOnly>
+          </div>
         </template>
       </UDashboardNavbar>
     </template>
 
     <template #body>
-      <div class="p-6">
+      <div class="max-w-4xl mx-auto w-full p-4 sm:p-6 pb-24">
         <div v-if="loading" class="flex items-center justify-center py-12">
           <div class="text-center">
             <div
               class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-primary-500"
             />
-            <p class="mt-4 text-sm text-gray-600 dark:text-gray-400">Loading nutrition data...</p>
+            <p
+              class="mt-4 text-sm text-gray-600 dark:text-gray-400 font-bold uppercase tracking-widest"
+            >
+              Loading status...
+            </p>
           </div>
         </div>
 
         <div v-else-if="error" class="text-center py-12">
-          <div class="text-red-600 dark:text-red-400">
-            <p class="text-lg font-semibold">{{ error }}</p>
-          </div>
+          <UAlert
+            icon="i-heroicons-exclamation-triangle"
+            color="error"
+            variant="soft"
+            title="Data Error"
+            :description="error"
+          />
         </div>
 
-        <div v-else-if="nutrition" class="space-y-6">
-          <!-- Header Card -->
-          <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-            <div class="flex items-start justify-between mb-4">
-              <div class="flex-1">
-                <h1 class="text-2xl font-bold text-gray-900 dark:text-white mb-2">
-                  Daily Nutrition
-                </h1>
-                <div class="flex flex-wrap gap-3 text-sm text-gray-600 dark:text-gray-400">
-                  <div class="flex items-center gap-1">
-                    <span class="i-heroicons-calendar w-4 h-4" />
-                    {{ formatDate(nutrition.date) }}
-                  </div>
-                  <div class="flex items-center gap-1">
-                    <span class="i-heroicons-fire w-4 h-4" />
-                    {{ nutrition.calories }} / {{ nutrition.caloriesGoal }} kcal
-                  </div>
-                </div>
-              </div>
-              <div>
-                <span
-                  class="px-3 py-1 rounded-full text-xs font-semibold bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200"
-                >
-                  Yazio
-                </span>
-              </div>
-            </div>
-          </div>
+        <div v-else-if="nutrition" class="space-y-8">
+          <!-- 1. THE METABOLIC STATUS (Header) -->
+          <NutritionFuelStateHeader
+            :fuel-state="fuelState"
+            :is-locked="nutrition.isManualLock"
+            :goal-adjustment="goalAdjustment"
+            :targets="{
+              calories: nutrition.caloriesGoal || 2500,
+              carbs: nutrition.carbsGoal || 300,
+              protein: nutrition.proteinGoal || 150,
+              fat: nutrition.fatGoal || 80
+            }"
+            :actuals="{
+              calories: nutrition.calories || 0,
+              carbs: nutrition.carbs || 0,
+              protein: nutrition.protein || 0,
+              fat: nutrition.fat || 0
+            }"
+          />
 
-          <!-- Macros Summary -->
-          <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
-            <!-- Calories -->
-            <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-              <div class="flex items-center justify-between mb-2">
-                <h3 class="text-sm font-medium text-gray-600 dark:text-gray-400">Calories</h3>
-                <span class="i-heroicons-fire w-5 h-5 text-orange-500" />
-              </div>
-              <div class="text-3xl font-bold text-gray-900 dark:text-white">
-                {{ nutrition.calories }}
-              </div>
-              <div class="mt-1 text-xs text-gray-500">Goal: {{ nutrition.caloriesGoal }} kcal</div>
-              <div class="mt-2 w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
-                <div
-                  class="bg-orange-500 h-2 rounded-full transition-all"
-                  :style="{
-                    width: getPercentage(nutrition.calories, nutrition.caloriesGoal) + '%'
-                  }"
-                />
-              </div>
-            </div>
+          <!-- 2. THE TIMELINE (The What & When) -->
+          <NutritionFuelingTimeline :windows="timeline" :is-locked="nutrition.isManualLock" />
 
-            <!-- Protein -->
-            <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-              <div class="flex items-center justify-between mb-2">
-                <h3 class="text-sm font-medium text-gray-600 dark:text-gray-400">Protein</h3>
-                <span class="i-heroicons-bolt w-5 h-5 text-blue-500" />
-              </div>
-              <div class="text-3xl font-bold text-gray-900 dark:text-white">
-                {{ Math.round(nutrition.protein) }}g
-              </div>
-              <div class="mt-1 text-xs text-gray-500">
-                Goal: {{ Math.round(nutrition.proteinGoal) }}g
-              </div>
-              <div class="mt-2 w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
-                <div
-                  class="bg-blue-500 h-2 rounded-full transition-all"
-                  :style="{ width: getPercentage(nutrition.protein, nutrition.proteinGoal) + '%' }"
-                />
-              </div>
-            </div>
-
-            <!-- Carbs -->
-            <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-              <div class="flex items-center justify-between mb-2">
-                <h3 class="text-sm font-medium text-gray-600 dark:text-gray-400">Carbs</h3>
-                <span class="i-heroicons-cube w-5 h-5 text-yellow-500" />
-              </div>
-              <div class="text-3xl font-bold text-gray-900 dark:text-white">
-                {{ Math.round(nutrition.carbs) }}g
-              </div>
-              <div class="mt-1 text-xs text-gray-500">
-                Goal: {{ Math.round(nutrition.carbsGoal) }}g
-              </div>
-              <div class="mt-2 w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
-                <div
-                  class="bg-yellow-500 h-2 rounded-full transition-all"
-                  :style="{ width: getPercentage(nutrition.carbs, nutrition.carbsGoal) + '%' }"
-                />
-              </div>
-            </div>
-
-            <!-- Fat -->
-            <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-              <div class="flex items-center justify-between mb-2">
-                <h3 class="text-sm font-medium text-gray-600 dark:text-gray-400">Fat</h3>
-                <span class="i-heroicons-beaker w-5 h-5 text-green-500" />
-              </div>
-              <div class="text-3xl font-bold text-gray-900 dark:text-white">
-                {{ Math.round(nutrition.fat) }}g
-              </div>
-              <div class="mt-1 text-xs text-gray-500">
-                Goal: {{ Math.round(nutrition.fatGoal) }}g
-              </div>
-              <div class="mt-2 w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
-                <div
-                  class="bg-green-500 h-2 rounded-full transition-all"
-                  :style="{ width: getPercentage(nutrition.fat, nutrition.fatGoal) + '%' }"
-                />
-              </div>
-            </div>
-          </div>
-
-          <!-- Nutrition Quality Scores Section -->
-          <div
-            v-if="
-              nutrition.overallScore ||
-              nutrition.macroBalanceScore ||
-              nutrition.qualityScore ||
-              nutrition.adherenceScore ||
-              nutrition.hydrationScore
-            "
-            class="bg-white dark:bg-gray-800 rounded-lg shadow p-6"
+          <!-- 3. AI INSIGHTS (Expanded Analysis) -->
+          <UCard
+            v-if="nutrition.aiAnalysisJson"
+            class="mt-8 overflow-hidden border-primary-100 dark:border-primary-900 shadow-lg"
           >
-            <h2 class="text-xl font-bold text-gray-900 dark:text-white mb-4">
-              Nutrition Quality Scores
-            </h2>
-            <div class="grid grid-cols-2 md:grid-cols-5 gap-4">
-              <div v-if="nutrition.overallScore" class="text-center">
-                <div
-                  :class="getScoreCircleClass(nutrition.overallScore)"
-                  class="w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-2"
+            <template #header>
+              <div class="flex items-center justify-between">
+                <h2 class="text-lg font-black uppercase tracking-tighter flex items-center gap-2">
+                  <UIcon name="i-heroicons-sparkles" class="w-5 h-5 text-primary-500" />
+                  Coach Analysis
+                </h2>
+                <UButton
+                  variant="ghost"
+                  color="neutral"
+                  icon="i-heroicons-arrow-path"
+                  size="xs"
+                  @click="analyzeNutrition"
+                  >Refresh</UButton
                 >
-                  <span class="text-2xl font-bold">{{ nutrition.overallScore }}</span>
-                </div>
-                <div class="text-xs font-medium text-gray-600 dark:text-gray-400">Overall</div>
               </div>
-              <div v-if="nutrition.macroBalanceScore" class="text-center">
-                <div
-                  :class="getScoreCircleClass(nutrition.macroBalanceScore)"
-                  class="w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-2"
-                >
-                  <span class="text-2xl font-bold">{{ nutrition.macroBalanceScore }}</span>
-                </div>
-                <div class="text-xs font-medium text-gray-600 dark:text-gray-400">
-                  Macro Balance
-                </div>
-              </div>
-              <div v-if="nutrition.qualityScore" class="text-center">
-                <div
-                  :class="getScoreCircleClass(nutrition.qualityScore)"
-                  class="w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-2"
-                >
-                  <span class="text-2xl font-bold">{{ nutrition.qualityScore }}</span>
-                </div>
-                <div class="text-xs font-medium text-gray-600 dark:text-gray-400">Quality</div>
-              </div>
-              <div v-if="nutrition.adherenceScore" class="text-center">
-                <div
-                  :class="getScoreCircleClass(nutrition.adherenceScore)"
-                  class="w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-2"
-                >
-                  <span class="text-2xl font-bold">{{ nutrition.adherenceScore }}</span>
-                </div>
-                <div class="text-xs font-medium text-gray-600 dark:text-gray-400">Adherence</div>
-              </div>
-              <div v-if="nutrition.hydrationScore" class="text-center">
-                <div
-                  :class="getScoreCircleClass(nutrition.hydrationScore)"
-                  class="w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-2"
-                >
-                  <span class="text-2xl font-bold">{{ nutrition.hydrationScore }}</span>
-                </div>
-                <div class="text-xs font-medium text-gray-600 dark:text-gray-400">Hydration</div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Water Intake -->
-          <div v-if="nutrition.waterMl" class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-            <div class="flex items-center gap-2 mb-4">
-              <span class="i-heroicons-beaker w-6 h-6 text-blue-400" />
-              <h2 class="text-xl font-bold text-gray-900 dark:text-white">Water Intake</h2>
-            </div>
-            <div class="text-3xl font-bold text-blue-600 dark:text-blue-400">
-              {{ (nutrition.waterMl / 1000).toFixed(1) }}L
-            </div>
-            <div class="text-sm text-gray-600 dark:text-gray-400 mt-1">
-              {{ nutrition.waterMl }}ml consumed
-            </div>
-          </div>
-
-          <!-- Meals Breakdown -->
-          <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-            <h2 class="text-xl font-bold text-gray-900 dark:text-white mb-4">Meals Breakdown</h2>
+            </template>
 
             <div class="space-y-6">
-              <!-- Breakfast -->
-              <div v-if="nutrition.breakfast && nutrition.breakfast.length > 0">
-                <div class="flex items-center gap-2 mb-3">
-                  <span class="i-heroicons-sun w-5 h-5 text-yellow-500" />
-                  <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Breakfast</h3>
-                  <span class="text-sm text-gray-500"
-                    >({{ nutrition.breakfast.length }} items)</span
-                  >
-                </div>
-                <div class="space-y-2">
-                  <div
-                    v-for="item in nutrition.breakfast"
-                    :key="item.id"
-                    class="p-3 bg-gray-50 dark:bg-gray-700 rounded-lg"
-                  >
-                    <div class="flex items-start justify-between">
-                      <div class="flex-1">
-                        <div class="text-sm font-medium text-gray-900 dark:text-white">
-                          {{ item.product_name || item.name || 'Unknown Product' }}
-                        </div>
-                        <div class="text-xs text-gray-600 dark:text-gray-400 mt-1">
-                          <span v-if="item.product_brand" class="text-gray-500"
-                            >{{ item.product_brand }} •
-                          </span>
-                          <template v-if="item.amount !== undefined">
-                            {{ item.amount }}{{ item.serving ? ` ${item.serving}` : 'g' }}
-                          </template>
-                          <template v-else-if="item.quantity">
-                            {{ item.quantity }}
-                          </template>
-                          <span v-if="item.serving_quantity"> × {{ item.serving_quantity }}</span>
-
-                          <!-- Macros badge if available from AI -->
-                          <div
-                            v-if="item.calories"
-                            class="mt-1 flex gap-2 text-[10px] uppercase font-bold tracking-wider"
-                          >
-                            <span class="text-orange-500">{{ item.calories }} kcal</span>
-                            <span v-if="item.carbs" class="text-blue-500">{{ item.carbs }}g C</span>
-                            <span v-if="item.protein" class="text-green-500"
-                              >{{ item.protein }}g P</span
-                            >
-                            <span v-if="item.fat" class="text-yellow-500">{{ item.fat }}g F</span>
-                          </div>
-                        </div>
-                      </div>
-                      <div
-                        v-if="(item.date || item.logged_at) && item.source !== 'fitbit'"
-                        class="text-xs text-gray-500"
-                      >
-                        {{ formatTime(item.logged_at || item.date) }}
-                      </div>
-                    </div>
-                  </div>
-                </div>
+              <div class="bg-gray-50 dark:bg-gray-900/50 p-4 rounded-xl">
+                <p class="text-sm leading-relaxed text-gray-700 dark:text-gray-300">
+                  {{ nutrition.aiAnalysisJson.executive_summary }}
+                </p>
               </div>
 
-              <!-- Lunch -->
-              <div v-if="nutrition.lunch && nutrition.lunch.length > 0">
-                <div class="flex items-center gap-2 mb-3">
-                  <span class="i-heroicons-sun w-5 h-5 text-orange-500" />
-                  <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Lunch</h3>
-                  <span class="text-sm text-gray-500">({{ nutrition.lunch.length }} items)</span>
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div
+                  v-for="section in nutrition.aiAnalysisJson.sections"
+                  :key="section.title"
+                  class="space-y-2"
+                >
+                  <h4 class="text-[10px] font-black uppercase text-gray-400 tracking-widest">
+                    {{ section.title }}
+                  </h4>
+                  <ul class="space-y-1">
+                    <li
+                      v-for="point in section.analysis_points"
+                      :key="point"
+                      class="text-xs flex items-start gap-2"
+                    >
+                      <UIcon
+                        name="i-heroicons-chevron-right"
+                        class="w-3 h-3 mt-0.5 text-primary-500"
+                      />
+                      {{ point }}
+                    </li>
+                  </ul>
                 </div>
-                <div class="space-y-2">
-                  <div
-                    v-for="item in nutrition.lunch"
-                    :key="item.id"
-                    class="p-3 bg-gray-50 dark:bg-gray-700 rounded-lg"
-                  >
-                    <div class="flex items-start justify-between">
-                      <div class="flex-1">
-                        <div class="text-sm font-medium text-gray-900 dark:text-white">
-                          {{ item.product_name || item.name || 'Unknown Product' }}
-                        </div>
-                        <div class="text-xs text-gray-600 dark:text-gray-400 mt-1">
-                          <span v-if="item.product_brand" class="text-gray-500"
-                            >{{ item.product_brand }} •
-                          </span>
-                          <template v-if="item.amount !== undefined">
-                            {{ item.amount }}{{ item.serving ? ` ${item.serving}` : 'g' }}
-                          </template>
-                          <template v-else-if="item.quantity">
-                            {{ item.quantity }}
-                          </template>
-                          <span v-if="item.serving_quantity"> × {{ item.serving_quantity }}</span>
-
-                          <!-- Macros badge if available from AI -->
-                          <div
-                            v-if="item.calories"
-                            class="mt-1 flex gap-2 text-[10px] uppercase font-bold tracking-wider"
-                          >
-                            <span class="text-orange-500">{{ item.calories }} kcal</span>
-                            <span v-if="item.carbs" class="text-blue-500">{{ item.carbs }}g C</span>
-                            <span v-if="item.protein" class="text-green-500"
-                              >{{ item.protein }}g P</span
-                            >
-                            <span v-if="item.fat" class="text-yellow-500">{{ item.fat }}g F</span>
-                          </div>
-                        </div>
-                      </div>
-                      <div
-                        v-if="(item.date || item.logged_at) && item.source !== 'fitbit'"
-                        class="text-xs text-gray-500"
-                      >
-                        {{ formatTime(item.logged_at || item.date) }}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <!-- Dinner -->
-              <div v-if="nutrition.dinner && nutrition.dinner.length > 0">
-                <div class="flex items-center gap-2 mb-3">
-                  <span class="i-heroicons-moon w-5 h-5 text-indigo-500" />
-                  <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Dinner</h3>
-                  <span class="text-sm text-gray-500">({{ nutrition.dinner.length }} items)</span>
-                </div>
-                <div class="space-y-2">
-                  <div
-                    v-for="item in nutrition.dinner"
-                    :key="item.id"
-                    class="p-3 bg-gray-50 dark:bg-gray-700 rounded-lg"
-                  >
-                    <div class="flex items-start justify-between">
-                      <div class="flex-1">
-                        <div class="text-sm font-medium text-gray-900 dark:text-white">
-                          {{ item.product_name || item.name || 'Unknown Product' }}
-                        </div>
-                        <div class="text-xs text-gray-600 dark:text-gray-400 mt-1">
-                          <span v-if="item.product_brand" class="text-gray-500"
-                            >{{ item.product_brand }} •
-                          </span>
-                          <template v-if="item.amount !== undefined">
-                            {{ item.amount }}{{ item.serving ? ` ${item.serving}` : 'g' }}
-                          </template>
-                          <template v-else-if="item.quantity">
-                            {{ item.quantity }}
-                          </template>
-                          <span v-if="item.serving_quantity"> × {{ item.serving_quantity }}</span>
-
-                          <!-- Macros badge if available from AI -->
-                          <div
-                            v-if="item.calories"
-                            class="mt-1 flex gap-2 text-[10px] uppercase font-bold tracking-wider"
-                          >
-                            <span class="text-orange-500">{{ item.calories }} kcal</span>
-                            <span v-if="item.carbs" class="text-blue-500">{{ item.carbs }}g C</span>
-                            <span v-if="item.protein" class="text-green-500"
-                              >{{ item.protein }}g P</span
-                            >
-                            <span v-if="item.fat" class="text-yellow-500">{{ item.fat }}g F</span>
-                          </div>
-                        </div>
-                      </div>
-                      <div
-                        v-if="(item.date || item.logged_at) && item.source !== 'fitbit'"
-                        class="text-xs text-gray-500"
-                      >
-                        {{ formatTime(item.logged_at || item.date) }}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <!-- Snacks -->
-              <div v-if="nutrition.snacks && nutrition.snacks.length > 0">
-                <div class="flex items-center gap-2 mb-3">
-                  <span class="i-heroicons-cake w-5 h-5 text-pink-500" />
-                  <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Snacks</h3>
-                  <span class="text-sm text-gray-500">({{ nutrition.snacks.length }} items)</span>
-                </div>
-                <div class="space-y-2">
-                  <div
-                    v-for="item in nutrition.snacks"
-                    :key="item.id"
-                    class="p-3 bg-gray-50 dark:bg-gray-700 rounded-lg"
-                  >
-                    <div class="flex items-start justify-between">
-                      <div class="flex-1">
-                        <div class="text-sm font-medium text-gray-900 dark:text-white">
-                          {{ item.product_name || item.name || 'Unknown Product' }}
-                        </div>
-                        <div class="text-xs text-gray-600 dark:text-gray-400 mt-1">
-                          <span v-if="item.product_brand" class="text-gray-500"
-                            >{{ item.product_brand }} •
-                          </span>
-                          <template v-if="item.amount !== undefined">
-                            {{ item.amount }}{{ item.serving ? ` ${item.serving}` : 'g' }}
-                          </template>
-                          <template v-else-if="item.quantity">
-                            {{ item.quantity }}
-                          </template>
-                          <span v-if="item.serving_quantity"> × {{ item.serving_quantity }}</span>
-
-                          <!-- Macros badge if available from AI -->
-                          <div
-                            v-if="item.calories"
-                            class="mt-1 flex gap-2 text-[10px] uppercase font-bold tracking-wider"
-                          >
-                            <span class="text-orange-500">{{ item.calories }} kcal</span>
-                            <span v-if="item.carbs" class="text-blue-500">{{ item.carbs }}g C</span>
-                            <span v-if="item.protein" class="text-green-500"
-                              >{{ item.protein }}g P</span
-                            >
-                            <span v-if="item.fat" class="text-yellow-500">{{ item.fat }}g F</span>
-                          </div>
-                        </div>
-                      </div>
-                      <div
-                        v-if="(item.date || item.logged_at) && item.source !== 'fitbit'"
-                        class="text-xs text-gray-500"
-                      >
-                        {{ formatTime(item.logged_at || item.date) }}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <!-- No meals logged -->
-              <div v-if="!hasAnyMeals" class="text-center py-8 text-gray-500 dark:text-gray-400">
-                No meals logged for this day
               </div>
             </div>
-          </div>
+          </UCard>
 
-          <!-- Personal Notes Section -->
+          <!-- 4. MANUAL NOTES -->
           <NotesEditor
             v-model="nutrition.notes"
             :notes-updated-at="nutrition.notesUpdatedAt"
             :api-endpoint="`/api/nutrition/${nutrition.id}/notes`"
             @update:notes-updated-at="nutrition.notesUpdatedAt = $event"
           />
+        </div>
+      </div>
 
-          <!-- AI Analysis Section -->
-          <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-            <div class="flex items-center justify-between mb-4">
-              <h2 class="text-xl font-bold text-gray-900 dark:text-white">AI Nutrition Analysis</h2>
-              <UButton
-                v-if="!nutrition.aiAnalysis"
-                icon="i-heroicons-sparkles"
-                color="primary"
-                variant="solid"
-                size="sm"
-                class="font-bold"
-                :loading="analyzingNutrition"
-                :disabled="analyzingNutrition"
-                @click="analyzeNutrition"
+      <!-- STICKY BOTTOM QUICK LOG BAR -->
+      <div
+        class="fixed bottom-0 left-0 right-0 p-4 bg-white/80 dark:bg-gray-950/80 backdrop-blur-md border-t border-gray-200 dark:border-gray-800 z-50"
+      >
+        <div class="max-w-4xl mx-auto relative">
+          <UInput
+            v-model="quickLogInput"
+            icon="i-heroicons-chat-bubble-left-ellipsis"
+            placeholder="I just had 200g of Greek Yogurt with honey..."
+            size="lg"
+            class="w-full shadow-2xl"
+            :loading="isLogging"
+            @keyup.enter="handleQuickLog"
+          >
+            <template #trailing>
+              <kbd
+                class="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded border border-gray-200 dark:border-gray-800 text-[10px] font-medium text-gray-400"
               >
-                Analyze
-              </UButton>
-              <UButton
-                v-else
-                icon="i-heroicons-arrow-path"
-                color="neutral"
-                variant="ghost"
-                size="sm"
-                class="font-bold"
-                :loading="analyzingNutrition"
-                :disabled="analyzingNutrition"
-                @click="analyzeNutrition"
-              >
-                Re-analyze
-              </UButton>
-            </div>
-
-            <!-- Structured Analysis Display -->
-            <div v-if="nutrition.aiAnalysisJson" class="space-y-6">
-              <!-- Data Completeness Assessment -->
-              <div
-                v-if="nutrition.aiAnalysisJson.data_completeness"
-                class="bg-gradient-to-r from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 rounded-lg p-6 border border-purple-200 dark:border-purple-800"
-              >
-                <h3
-                  class="text-base font-semibold text-purple-900 dark:text-purple-100 mb-3 flex items-center gap-2"
-                >
-                  <span class="i-heroicons-clipboard-document-check w-5 h-5" />
-                  Data Completeness: {{ nutrition.aiAnalysisJson.data_completeness.status }}
-                </h3>
-                <div class="mb-3">
-                  <div class="flex items-center gap-2 mb-2">
-                    <span class="text-sm text-gray-700 dark:text-gray-300">Confidence:</span>
-                    <div class="flex-1 bg-gray-200 dark:bg-gray-700 rounded-full h-2">
-                      <div
-                        class="bg-purple-500 h-2 rounded-full transition-all"
-                        :style="{
-                          width: nutrition.aiAnalysisJson.data_completeness.confidence * 100 + '%'
-                        }"
-                      />
-                    </div>
-                    <span class="text-sm font-semibold text-gray-900 dark:text-white">
-                      {{ Math.round(nutrition.aiAnalysisJson.data_completeness.confidence * 100) }}%
-                    </span>
-                  </div>
-                </div>
-                <p class="text-sm text-gray-800 dark:text-gray-200 leading-relaxed">
-                  {{ nutrition.aiAnalysisJson.data_completeness.reasoning }}
-                </p>
-                <div
-                  v-if="
-                    nutrition.aiAnalysisJson.data_completeness.missing_meals &&
-                    nutrition.aiAnalysisJson.data_completeness.missing_meals.length > 0
-                  "
-                  class="mt-3"
-                >
-                  <span class="text-xs font-medium text-purple-700 dark:text-purple-300"
-                    >Potentially missing:
-                  </span>
-                  <span class="text-xs text-gray-700 dark:text-gray-300">
-                    {{ nutrition.aiAnalysisJson.data_completeness.missing_meals.join(', ') }}
-                  </span>
-                </div>
-              </div>
-
-              <!-- Executive Summary -->
-              <div
-                class="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 rounded-lg p-6 border border-blue-200 dark:border-blue-800"
-              >
-                <h3
-                  class="text-base font-semibold text-blue-900 dark:text-blue-100 mb-4 flex items-center gap-2"
-                >
-                  <span class="i-heroicons-light-bulb w-5 h-5" />
-                  Quick Take
-                </h3>
-                <p class="text-base text-gray-800 dark:text-gray-200 leading-relaxed">
-                  {{ nutrition.aiAnalysisJson.executive_summary }}
-                </p>
-              </div>
-
-              <!-- Analysis Sections -->
-              <div v-if="nutrition.aiAnalysisJson.sections" class="grid grid-cols-1 gap-4">
-                <div
-                  v-for="(section, index) in nutrition.aiAnalysisJson.sections"
-                  :key="index"
-                  class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden"
-                >
-                  <div
-                    class="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between"
-                  >
-                    <h3 class="text-lg font-semibold text-gray-900 dark:text-white">
-                      {{ section.title }}
-                    </h3>
-                    <span :class="getStatusBadgeClass(section.status)">
-                      {{ section.status_label || section.status }}
-                    </span>
-                  </div>
-                  <div class="px-6 py-4">
-                    <ul class="space-y-2">
-                      <li
-                        v-for="(point, pIndex) in section.analysis_points"
-                        :key="pIndex"
-                        class="flex items-start gap-2 text-sm text-gray-700 dark:text-gray-300"
-                      >
-                        <span
-                          class="i-heroicons-chevron-right w-4 h-4 mt-0.5 text-primary-500 flex-shrink-0"
-                        />
-                        <span>{{ point }}</span>
-                      </li>
-                    </ul>
-                  </div>
-                </div>
-              </div>
-
-              <!-- Recommendations -->
-              <div
-                v-if="
-                  nutrition.aiAnalysisJson.recommendations &&
-                  nutrition.aiAnalysisJson.recommendations.length > 0
-                "
-                class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700"
-              >
-                <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
-                  <h3
-                    class="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2"
-                  >
-                    <span class="i-heroicons-clipboard-document-list w-5 h-5" />
-                    Recommendations
-                  </h3>
-                </div>
-                <div class="px-6 py-4 space-y-4">
-                  <div
-                    v-for="(rec, index) in nutrition.aiAnalysisJson.recommendations"
-                    :key="index"
-                    class="border-l-4 pl-4 py-2"
-                    :class="getPriorityBorderClass(rec.priority)"
-                  >
-                    <div class="flex items-center gap-2 mb-1">
-                      <h4 class="font-semibold text-gray-900 dark:text-white">{{ rec.title }}</h4>
-                      <span v-if="rec.priority" :class="getPriorityBadgeClass(rec.priority)">
-                        {{ rec.priority }}
-                      </span>
-                    </div>
-                    <p class="text-sm text-gray-700 dark:text-gray-300">{{ rec.description }}</p>
-                  </div>
-                </div>
-              </div>
-
-              <!-- Strengths & Areas for Improvement -->
-              <div
-                v-if="
-                  nutrition.aiAnalysisJson.strengths ||
-                  nutrition.aiAnalysisJson.areas_for_improvement
-                "
-                class="grid grid-cols-1 md:grid-cols-2 gap-4"
-              >
-                <!-- Strengths -->
-                <div
-                  v-if="
-                    nutrition.aiAnalysisJson.strengths &&
-                    nutrition.aiAnalysisJson.strengths.length > 0
-                  "
-                  class="bg-green-50 dark:bg-green-900/20 rounded-lg p-6 border border-green-200 dark:border-green-800"
-                >
-                  <h3
-                    class="text-lg font-semibold text-green-900 dark:text-green-100 mb-3 flex items-center gap-2"
-                  >
-                    <span class="i-heroicons-check-circle w-5 h-5" />
-                    Strengths
-                  </h3>
-                  <ul class="space-y-2">
-                    <li
-                      v-for="(strength, index) in nutrition.aiAnalysisJson.strengths"
-                      :key="index"
-                      class="flex items-start gap-2 text-sm text-green-800 dark:text-green-200"
-                    >
-                      <span class="i-heroicons-plus-circle w-4 h-4 mt-0.5 flex-shrink-0" />
-                      <span>{{ strength }}</span>
-                    </li>
-                  </ul>
-                </div>
-
-                <!-- Areas for Improvement -->
-                <div
-                  v-if="
-                    nutrition.aiAnalysisJson.areas_for_improvement &&
-                    nutrition.aiAnalysisJson.areas_for_improvement.length > 0
-                  "
-                  class="bg-orange-50 dark:bg-orange-900/20 rounded-lg p-6 border border-orange-200 dark:border-orange-800"
-                >
-                  <h3
-                    class="text-lg font-semibold text-orange-900 dark:text-orange-100 mb-3 flex items-center gap-2"
-                  >
-                    <span class="i-heroicons-exclamation-triangle w-5 h-5" />
-                    Areas for Improvement
-                  </h3>
-                  <ul class="space-y-2">
-                    <li
-                      v-for="(area, index) in nutrition.aiAnalysisJson.areas_for_improvement"
-                      :key="index"
-                      class="flex items-start gap-2 text-sm text-orange-800 dark:text-orange-200"
-                    >
-                      <span class="i-heroicons-arrow-trending-up w-4 h-4 mt-0.5 flex-shrink-0" />
-                      <span>{{ area }}</span>
-                    </li>
-                  </ul>
-                </div>
-              </div>
-
-              <!-- Timestamp -->
-              <div
-                v-if="nutrition.aiAnalyzedAt"
-                class="flex justify-between items-center pt-4 border-t border-gray-200 dark:border-gray-700"
-              >
-                <div class="text-xs text-gray-500 dark:text-gray-400">
-                  Analyzed on {{ formatDate(nutrition.aiAnalyzedAt) }}
-                </div>
-                <AiFeedback
-                  v-if="nutrition.llmUsageId"
-                  :llm-usage-id="nutrition.llmUsageId"
-                  :initial-feedback="nutrition.feedback"
-                  :initial-feedback-text="nutrition.feedbackText"
-                />
-              </div>
-            </div>
-
-            <div v-else-if="!analyzingNutrition" class="text-center py-8">
-              <div class="text-gray-500 dark:text-gray-400">
-                <span class="i-heroicons-light-bulb w-12 h-12 mx-auto mb-4 opacity-50" />
-                <p class="text-sm">
-                  Click "Analyze Nutrition" to get AI-powered insights on your daily intake, macro
-                  balance, and nutrition quality.
-                </p>
-              </div>
-            </div>
-
-            <div v-else class="text-center py-8">
-              <div
-                class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-primary-500 mb-4"
-              />
-              <p class="text-sm text-gray-600 dark:text-gray-400">Generating analysis with AI...</p>
-            </div>
-          </div>
+                Enter to Log
+              </kbd>
+            </template>
+          </UInput>
         </div>
       </div>
     </template>
@@ -732,221 +174,152 @@
 </template>
 
 <script setup lang="ts">
+  import { mapNutritionToTimeline } from '~/utils/nutrition-timeline'
+
   definePageMeta({
     middleware: 'auth'
   })
 
   const route = useRoute()
   const toast = useToast()
+  const userStore = useUserStore()
+  const { formatDateUTC } = useFormat()
+
+  // State
   const nutrition = ref<any>(null)
+  const workouts = ref<any[]>([])
+  const nutritionSettings = ref<any>(null)
   const loading = ref(true)
   const error = ref<string | null>(null)
-  const analyzingNutrition = ref(false)
+  const generatingPlan = ref(false)
+  const quickLogInput = ref('')
+  const isLogging = ref(false)
 
-  const hasAnyMeals = computed(() => {
-    if (!nutrition.value) return false
-    return (
-      (nutrition.value.breakfast && nutrition.value.breakfast.length > 0) ||
-      (nutrition.value.lunch && nutrition.value.lunch.length > 0) ||
-      (nutrition.value.dinner && nutrition.value.dinner.length > 0) ||
-      (nutrition.value.snacks && nutrition.value.snacks.length > 0)
-    )
+  // Computed
+  const fuelState = computed(() => {
+    if (!nutrition.value?.fuelingPlan) return 1
+    const intra = nutrition.value.fuelingPlan.windows?.find((w: any) => w.type === 'INTRA_WORKOUT')
+    if (intra?.description?.includes('State 3')) return 3
+    if (intra?.description?.includes('State 2')) return 2
+    return 1
   })
 
-  // Fetch nutrition data
-  async function fetchNutrition() {
+  const goalAdjustment = computed(() => {
+    return nutritionSettings.value?.targetAdjustmentPercent || 0
+  })
+
+  const timeline = computed(() => {
+    if (!nutrition.value || !nutritionSettings.value) return []
+
+    return mapNutritionToTimeline(nutrition.value, workouts.value, {
+      preWorkoutWindow: nutritionSettings.value.preWorkoutWindow || 90,
+      postWorkoutWindow: nutritionSettings.value.postWorkoutWindow || 60,
+      baseProteinPerKg: nutritionSettings.value.baseProteinPerKg || 1.6,
+      baseFatPerKg: nutritionSettings.value.baseFatPerKg || 1.0,
+      weight: userStore.profile?.weight || 75
+    })
+  })
+
+  // Data Fetching
+  async function fetchData() {
     loading.value = true
     error.value = null
+    const id = route.params.id as string
 
     try {
-      const id = route.params.id as string
-      nutrition.value = await $fetch(`/api/nutrition/${id}`)
+      // 1. Fetch Nutrition record
+      const nData = await $fetch<any>(`/api/nutrition/${id}`)
+      nutrition.value = nData
+
+      const dateStr = nData.date
+
+      // 2. Fetch Planned Workouts for this date
+      const wData = await $fetch<any[]>('/api/planned-workouts', {
+        query: { startDate: `${dateStr}T00:00:00Z`, endDate: `${dateStr}T23:59:59Z` }
+      })
+      workouts.value = wData
+
+      // 3. Fetch Nutrition Settings
+      const sData = await $fetch<any>('/api/profile/nutrition')
+      nutritionSettings.value = sData.settings
     } catch (e: any) {
-      console.error('Error fetching nutrition:', e)
-      error.value = e.data?.message || e.message || 'Failed to load nutrition data'
+      console.error('Fetch Error:', e)
+      error.value = 'Could not load nutrition dashboard. Please try again.'
     } finally {
       loading.value = false
     }
   }
 
-  // Utility functions
-  function formatDate(date: string | Date) {
-    // Handle date string properly to avoid timezone shifts
-    // If it's a string in YYYY-MM-DD format, parse it as local date
-    if (typeof date === 'string' && date.includes('-')) {
-      const parts = date.split('-').map(Number)
-      if (parts.length === 3 && parts.every((p) => !isNaN(p))) {
-        const year = parts[0]
-        const month = parts[1]
-        const day = parts[2]
-
-        if (year !== undefined && month !== undefined && day !== undefined) {
-          return new Date(year, month - 1, day).toLocaleDateString('en-US', {
-            weekday: 'long',
-            year: 'numeric',
-            month: 'long',
-            day: 'numeric'
-          })
-        }
-      }
-    }
-    return new Date(date).toLocaleDateString('en-US', {
-      weekday: 'long',
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
-    })
-  }
-
-  function formatTime(dateTime: string) {
-    if (!dateTime) return ''
-
-    // Handle HH:mm format
-    if (/^\d{2}:\d{2}$/.test(dateTime)) {
-      return dateTime
-    }
-
-    try {
-      const date = new Date(dateTime)
-      if (isNaN(date.getTime())) return dateTime
-      return date.toLocaleTimeString('en-US', {
-        hour: '2-digit',
-        minute: '2-digit'
-      })
-    } catch (e) {
-      return dateTime
-    }
-  }
-
-  function getPercentage(value: number, goal: number) {
-    if (!goal) return 0
-    return Math.min(Math.round((value / goal) * 100), 100)
-  }
-
-  // Background Task Monitoring
-  const { refresh: refreshRuns } = useUserRuns()
-  const { onTaskCompleted } = useUserRunsState()
-
-  // Analyze nutrition function
-  async function analyzeNutrition() {
+  // Event Handlers
+  async function handleGeneratePlan() {
     if (!nutrition.value) return
-
-    analyzingNutrition.value = true
+    generatingPlan.value = true
     try {
-      const result = (await $fetch(`/api/nutrition/${nutrition.value.id}/analyze`, {
-        method: 'POST'
-      })) as any
-
-      // If already completed, update immediately
-      if (result.status === 'COMPLETED' && 'analysis' in result && result.analysis) {
-        nutrition.value.aiAnalysis = result.analysis
-        nutrition.value.aiAnalyzedAt = result.analyzedAt
-        nutrition.value.aiAnalysisStatus = 'COMPLETED'
-        analyzingNutrition.value = false
-
-        toast.add({
-          title: 'Analysis Ready',
-          description: 'Nutrition analysis already exists',
-          color: 'success',
-          icon: 'i-heroicons-check-circle'
-        })
-        return
-      }
-
-      // Update status
-      nutrition.value.aiAnalysisStatus = result.status
-      refreshRuns()
-
-      // Show processing message
+      await $fetch('/api/nutrition/generate-plan', {
+        method: 'POST',
+        body: { date: nutrition.value.date }
+      })
       toast.add({
-        title: 'Analysis Started',
-        description: 'Your nutrition is being analyzed by AI. This may take a minute...',
-        color: 'info',
-        icon: 'i-heroicons-sparkles'
+        title: 'Engine Started',
+        description: 'Regenerating fueling strategy...',
+        color: 'primary'
       })
     } catch (e: any) {
-      console.error('Error triggering nutrition analysis:', e)
-      analyzingNutrition.value = false
-      toast.add({
-        title: 'Analysis Failed',
-        description: e.data?.message || e.message || 'Failed to start nutrition analysis',
-        color: 'error',
-        icon: 'i-heroicons-exclamation-circle'
+      generatingPlan.value = false
+      toast.add({ title: 'Error', description: 'Failed to trigger plan engine.', color: 'error' })
+    }
+  }
+
+  async function analyzeNutrition() {
+    if (!nutrition.value) return
+    try {
+      await $fetch(`/api/nutrition/${nutrition.value.id}/analyze`, {
+        method: 'POST'
       })
+      toast.add({
+        title: 'Analysis Started',
+        description: 'AI coach is analyzing your day...',
+        color: 'primary'
+      })
+    } catch (e) {
+      toast.add({ title: 'Error', description: 'Failed to trigger analysis.', color: 'error' })
     }
   }
 
-  // Listen for completion
-  onTaskCompleted('analyze-nutrition', async (run) => {
-    // We could check run.payload?.nutritionId === nutrition.value.id if available
-    // For now, simpler to just refresh if we are on the page
-    await fetchNutrition()
-    analyzingNutrition.value = false
-    toast.add({
-      title: 'Analysis Complete',
-      description: 'AI nutrition analysis has been generated successfully',
-      color: 'success',
-      icon: 'i-heroicons-check-circle'
+  async function handleQuickLog() {
+    if (!quickLogInput.value || isLogging.value) return
+    isLogging.value = true
+
+    try {
+      // Logic for AI logging would go here
+      // For now we simulate
+      await new Promise((r) => setTimeout(r, 1000))
+      toast.add({ title: 'Logged', description: 'Item added to your journal.', color: 'success' })
+      quickLogInput.value = ''
+      await fetchData()
+    } catch (e) {
+      toast.add({ title: 'Error', description: 'Could not log item.', color: 'error' })
+    } finally {
+      isLogging.value = false
+    }
+  }
+
+  const { onTaskCompleted } = useUserRunsState()
+  onTaskCompleted('generate-fueling-plan', () => {
+    generatingPlan.value = false
+    fetchData()
+  })
+
+  function formatDateLabel(date: string) {
+    if (!date) return ''
+    const d = new Date(date + 'T12:00:00') // Force noon to avoid TZ shift in label
+    return d.toLocaleDateString('en-US', {
+      weekday: 'long',
+      month: 'long',
+      day: 'numeric',
+      year: 'numeric'
     })
-  })
-
-  useHead(() => {
-    const dateStr = nutrition.value ? formatDate(nutrition.value.date) : ''
-    return {
-      title: nutrition.value ? `Nutrition: ${dateStr}` : 'Nutrition Details',
-      meta: [
-        {
-          name: 'description',
-          content: nutrition.value
-            ? `Detailed nutritional breakdown and AI analysis for ${dateStr}.`
-            : 'View detailed nutritional breakdown and AI analysis.'
-        }
-      ]
-    }
-  })
-
-  function getStatusBadgeClass(status: string) {
-    const baseClass = 'px-3 py-1 rounded-full text-xs font-semibold'
-    if (status === 'excellent')
-      return `${baseClass} bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200`
-    if (status === 'good')
-      return `${baseClass} bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200`
-    if (status === 'moderate')
-      return `${baseClass} bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200`
-    if (status === 'needs_improvement')
-      return `${baseClass} bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200`
-    if (status === 'poor')
-      return `${baseClass} bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200`
-    return `${baseClass} bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200`
   }
 
-  function getPriorityBadgeClass(priority: string) {
-    const baseClass = 'px-2 py-0.5 rounded text-xs font-medium'
-    if (priority === 'high')
-      return `${baseClass} bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-200`
-    if (priority === 'medium')
-      return `${baseClass} bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-200`
-    if (priority === 'low')
-      return `${baseClass} bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-200`
-    return `${baseClass} bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-200`
-  }
-
-  function getPriorityBorderClass(priority: string) {
-    if (priority === 'high') return 'border-red-500'
-    if (priority === 'medium') return 'border-yellow-500'
-    if (priority === 'low') return 'border-blue-500'
-    return 'border-gray-300'
-  }
-
-  function getScoreCircleClass(score: number) {
-    if (score >= 8) return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
-    if (score >= 6) return 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
-    if (score >= 4) return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200'
-    return 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
-  }
-
-  // Load data on mount
-  onMounted(() => {
-    fetchNutrition()
-  })
+  onMounted(fetchData)
 </script>

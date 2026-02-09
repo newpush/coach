@@ -269,6 +269,92 @@
             </div>
           </div>
 
+          <!-- Nutrition & Fueling Prep -->
+          <div
+            v-if="fuelingPlan"
+            class="bg-orange-50 dark:bg-orange-900/20 rounded-xl p-4 sm:p-6 border border-orange-100 dark:border-orange-800 space-y-4"
+          >
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-3">
+                <div class="p-2 bg-orange-100 dark:bg-orange-800 rounded-full flex-shrink-0">
+                  <UIcon
+                    name="i-heroicons-beaker"
+                    class="w-6 h-6 text-orange-600 dark:text-orange-300"
+                  />
+                </div>
+                <div>
+                  <h3 class="font-semibold text-lg text-orange-900 dark:text-orange-100">
+                    Nutrition & Fueling Prep
+                  </h3>
+                  <div class="text-xs text-orange-700 dark:text-orange-300">
+                    {{ fuelingPlan.notes?.[0] || 'Strategic fueling for metabolic efficiency' }}
+                  </div>
+                </div>
+              </div>
+
+              <!-- Gut Training Badge -->
+              <UBadge
+                v-if="workout?.fuelingStrategy === 'HIGH_CARB_TEST'"
+                color="primary"
+                variant="solid"
+                class="animate-pulse"
+              >
+                Gut Training Session
+              </UBadge>
+            </div>
+
+            <!-- Hydration & Sodium Grid -->
+            <div class="grid grid-cols-2 gap-4">
+              <div
+                class="bg-white/50 dark:bg-black/20 p-3 rounded-lg border border-orange-100 dark:border-orange-800"
+              >
+                <div class="text-[10px] uppercase font-bold text-orange-600 dark:text-orange-400">
+                  Target Fluid
+                </div>
+                <div class="text-xl font-bold text-orange-900 dark:text-orange-100">
+                  {{ (intraWindow?.targetFluid / 1000).toFixed(1) }} L
+                </div>
+              </div>
+              <div
+                class="bg-white/50 dark:bg-black/20 p-3 rounded-lg border border-orange-100 dark:border-orange-800"
+              >
+                <div class="text-[10px] uppercase font-bold text-orange-600 dark:text-orange-400">
+                  Target Sodium
+                </div>
+                <div class="text-xl font-bold text-orange-900 dark:text-orange-100">
+                  {{ intraWindow?.targetSodium }} mg
+                </div>
+              </div>
+            </div>
+
+            <!-- Intra-Workout Script -->
+            <div v-if="intraWindow?.targetCarbs > 0" class="space-y-2">
+              <div
+                class="text-xs font-bold text-orange-700 dark:text-orange-300 uppercase tracking-wider flex items-center gap-1"
+              >
+                <UIcon name="i-heroicons-list-bullet" class="w-4 h-4" />
+                Intra-Workout Script (Total {{ intraWindow.targetCarbs }}g Carbs)
+              </div>
+              <div
+                class="bg-white/50 dark:bg-black/20 rounded-lg p-3 text-sm text-orange-900 dark:text-orange-100 italic"
+              >
+                {{ intraWindow.description }}
+              </div>
+
+              <!-- Supplement Checklist -->
+              <div v-if="intraWindow.supplements?.length" class="flex flex-wrap gap-2 pt-1">
+                <div
+                  v-for="supp in intraWindow.supplements"
+                  :key="supp"
+                  class="flex items-center gap-1.5 px-2 py-1 bg-orange-100 dark:bg-orange-800/50 rounded text-xs font-medium text-orange-700 dark:text-orange-200"
+                >
+                  <UIcon name="i-heroicons-plus-circle" class="w-3.5 h-3.5" />
+                  {{ supp }}
+                </div>
+              </div>
+            </div>
+          </div>
+
           <div
             v-if="workout.structuredWorkout?.coachInstructions"
             class="bg-blue-50 dark:bg-blue-900/20 rounded-xl p-4 sm:p-6 border border-blue-100 dark:border-blue-800"
@@ -665,6 +751,12 @@
   const llmUsageId = ref<string | undefined>(undefined)
   const initialFeedback = ref<string | null>(null)
   const initialFeedbackText = ref<string | null>(null)
+  const dayNutrition = ref<any>(null)
+
+  const fuelingPlan = computed(() => dayNutrition.value?.fuelingPlan)
+  const intraWindow = computed(() =>
+    fuelingPlan.value?.windows?.find((w: any) => w.type === 'INTRA_WORKOUT')
+  )
 
   // Background Task Monitoring
   const { refresh: refreshRuns } = useUserRuns()
@@ -956,6 +1048,19 @@
       llmUsageId.value = data.llmUsageId
       initialFeedback.value = data.initialFeedback
       initialFeedbackText.value = data.initialFeedbackText
+
+      // Fetch nutrition for the workout date
+      if (workout.value?.date) {
+        try {
+          const dateStr = formatDateUTC(new Date(workout.value.date), 'yyyy-MM-dd')
+          const nData = await $fetch<any>(`/api/nutrition/${dateStr}`)
+          if (nData) {
+            dayNutrition.value = nData
+          }
+        } catch (e) {
+          console.error('Failed to fetch nutrition for workout date', e)
+        }
+      }
 
       // Init form
       if (workout.value) {
