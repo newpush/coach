@@ -1,9 +1,7 @@
 <template>
   <UDashboardPanel id="nutrition-detail">
     <template #header>
-      <UDashboardNavbar
-        :title="nutrition ? `Nutrition: ${formatDateLabel(nutrition.date)}` : 'Nutrition Details'"
-      >
+      <UDashboardNavbar>
         <template #leading>
           <UButton icon="i-heroicons-arrow-left" color="neutral" variant="ghost" to="/activities">
             Back to Activities
@@ -57,6 +55,23 @@
         </div>
 
         <div v-else-if="nutrition" class="space-y-8">
+          <!-- 0. THE DATE HEADER -->
+          <UCard class="border-primary-100 dark:border-primary-900 shadow-sm">
+            <div class="flex items-center gap-4">
+              <div class="p-3 bg-primary-50 dark:bg-primary-950/20 rounded-xl">
+                <UIcon name="i-heroicons-calendar-days" class="w-8 h-8 text-primary-500" />
+              </div>
+              <div>
+                <h1 class="text-2xl font-black tracking-tight text-gray-900 dark:text-white">
+                  {{ formatDateLabel(nutrition.date) }}
+                </h1>
+                <p class="text-sm text-gray-500 font-bold uppercase tracking-widest">
+                  Daily Fueling Strategy
+                </p>
+              </div>
+            </div>
+          </UCard>
+
           <!-- 1. THE METABOLIC STATUS (Header) -->
           <NutritionFuelStateHeader
             :fuel-state="fuelState"

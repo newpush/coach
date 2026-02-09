@@ -315,11 +315,33 @@
   }
 
   function getItemTime(item: any) {
-    const time = item.logged_at || item.date || item._heuristic_time
+    const timeVal = item.logged_at || item.date || item._heuristic_time
+    if (!timeVal) return null
 
-    if (!time) return null
+    let date: Date
+    if (typeof timeVal === 'string' && /^\d{2}:\d{2}$/.test(timeVal)) {
+      // Handle HH:mm - use a dummy date just to extract the time
+      date = new Date(`1970-01-01T${timeVal}:00Z`)
+    } else {
+      // Handle YYYY-MM-DD HH:mm:ss by replacing space with T
+      const normalized = typeof timeVal === 'string' ? timeVal.replace(' ', 'T') : timeVal
+      date = new Date(normalized)
+    }
 
-    return formatTime(new Date(time))
+    if (isNaN(date.getTime())) return null
+
+    // If it's exactly midnight, it might be just a date without time info
+    // Only show if we explicitly have a time string or heuristic time
+    if (
+      date.getUTCHours() === 0 &&
+      date.getUTCMinutes() === 0 &&
+      !item.logged_at &&
+      !item._heuristic_time
+    ) {
+      return null
+    }
+
+    return formatTime(date)
   }
 
   function getSupplementIcon(supp: string) {

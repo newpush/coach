@@ -301,36 +301,48 @@
     <div
       v-if="dayNutrition"
       class="mt-auto pt-2 border-t border-gray-200 dark:border-gray-700 text-[10px] text-gray-500 dark:text-gray-500 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors rounded-b"
-      title="View nutrition details"
+      :title="dayNutrition.isEstimate ? 'View estimated fueling plan' : 'View nutrition details'"
       @click.stop="$emit('nutrition-click', date)"
     >
       <div class="grid grid-cols-2 gap-x-2 gap-y-0.5">
-        <div v-if="dayNutrition.calories != null" class="flex items-center gap-1">
-          <UIcon name="i-tabler-flame" class="w-3 h-3 text-orange-500" />
+        <div v-if="dayNutrition.caloriesGoal != null" class="flex items-center gap-1">
+          <UIcon name="i-tabler-flame" class="w-3 h-3" :class="getNutritionClass('calories')" />
           <span class="font-medium" :class="getNutritionClass('calories')">
-            {{ dayNutrition.calories
-            }}{{ dayNutrition.caloriesGoal ? `/${dayNutrition.caloriesGoal}` : '' }}
+            {{
+              dayNutrition.isEstimate
+                ? dayNutrition.caloriesGoal
+                : `${dayNutrition.calories ?? 0}/${dayNutrition.caloriesGoal}`
+            }}
           </span>
         </div>
-        <div v-if="dayNutrition.protein != null" class="flex items-center gap-1">
-          <UIcon name="i-tabler-egg" class="w-3 h-3 text-blue-500" />
+        <div v-if="dayNutrition.proteinGoal != null" class="flex items-center gap-1">
+          <UIcon name="i-tabler-egg" class="w-3 h-3" :class="getNutritionClass('protein')" />
           <span class="font-medium" :class="getNutritionClass('protein')">
-            {{ Math.round(dayNutrition.protein)
-            }}{{ dayNutrition.proteinGoal ? `/${Math.round(dayNutrition.proteinGoal)}` : '' }}g
+            {{
+              dayNutrition.isEstimate
+                ? Math.round(dayNutrition.proteinGoal)
+                : `${Math.round(dayNutrition.protein ?? 0)}/${Math.round(dayNutrition.proteinGoal)}`
+            }}g
           </span>
         </div>
-        <div v-if="dayNutrition.carbs != null" class="flex items-center gap-1">
-          <UIcon name="i-tabler-bread" class="w-3 h-3 text-yellow-500" />
+        <div v-if="dayNutrition.carbsGoal != null" class="flex items-center gap-1">
+          <UIcon name="i-tabler-bread" class="w-3 h-3" :class="getNutritionClass('carbs')" />
           <span class="font-medium" :class="getNutritionClass('carbs')">
-            {{ Math.round(dayNutrition.carbs)
-            }}{{ dayNutrition.carbsGoal ? `/${Math.round(dayNutrition.carbsGoal)}` : '' }}g
+            {{
+              dayNutrition.isEstimate
+                ? Math.round(dayNutrition.carbsGoal)
+                : `${Math.round(dayNutrition.carbs ?? 0)}/${Math.round(dayNutrition.carbsGoal)}`
+            }}g
           </span>
         </div>
-        <div v-if="dayNutrition.fat != null" class="flex items-center gap-1">
-          <UIcon name="i-tabler-droplet" class="w-3 h-3 text-green-500" />
+        <div v-if="dayNutrition.fatGoal != null" class="flex items-center gap-1">
+          <UIcon name="i-tabler-droplet" class="w-3 h-3" :class="getNutritionClass('fat')" />
           <span class="font-medium" :class="getNutritionClass('fat')">
-            {{ Math.round(dayNutrition.fat)
-            }}{{ dayNutrition.fatGoal ? `/${Math.round(dayNutrition.fatGoal)}` : '' }}g
+            {{
+              dayNutrition.isEstimate
+                ? Math.round(dayNutrition.fatGoal)
+                : `${Math.round(dayNutrition.fat ?? 0)}/${Math.round(dayNutrition.fatGoal)}`
+            }}g
           </span>
         </div>
       </div>
@@ -530,14 +542,14 @@
 
   const isNutritionCompliant = computed(() => {
     const nutrition = dayNutrition.value as any
-    if (!nutrition) return false
+    if (!nutrition || nutrition.isEstimate) return false
     const score = nutrition.overallScore || 0
     return score >= 85
   })
 
   const isNutritionNonCompliant = computed(() => {
     const nutrition = dayNutrition.value as any
-    if (!nutrition) return false
+    if (!nutrition || nutrition.isEstimate) return false
     const score = nutrition.overallScore
     return score !== null && score < 70
   })
@@ -585,12 +597,24 @@
     const nutrition = dayNutrition.value as any
     if (!nutrition) return ''
 
-    const actual = nutrition[metric]
+    // Force gray for all future dates to be subtle
+    const todayStr = formatDateUTC(getUserLocalDate(), 'yyyy-MM-dd')
+    const dateStr = formatDateUTC(props.date, 'yyyy-MM-dd')
+    if (dateStr > todayStr) {
+      return 'text-gray-400 dark:text-gray-500'
+    }
+
+    // For estimates on today or past (unlikely but safe), use primary color
+    if (nutrition.isEstimate) {
+      return 'text-primary-500'
+    }
+
+    const actual = nutrition[metric] ?? 0
     const goal = nutrition[`${metric}Goal` as keyof typeof nutrition]
 
-    if (actual == null || goal == null) return ''
+    if (goal == null) return ''
 
-    const percentage = (actual as number) / (goal as number)
+    const percentage = actual / (goal as number)
 
     // Within 90-110% of goal is good (green)
     if (percentage >= 0.9 && percentage <= 1.1) {
