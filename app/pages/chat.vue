@@ -194,7 +194,7 @@
   }
 
   async function loadChat() {
-    await loadRooms()
+    await loadRooms(false)
 
     // Check for context from query params
     const workoutId = route.query.workoutId as string
@@ -223,6 +223,25 @@
 
       // Clear query params
       router.replace({ query: {} })
+    } else {
+      // No context provided - check if we should continue last chat or start new
+      if (rooms.value.length > 0 && rooms.value[0]) {
+        const lastRoom = rooms.value[0]
+        const lastActivity = lastRoom.index // Timestamp in ms
+        const now = Date.now()
+        const timeSinceLastActivity = now - lastActivity
+        const FIFTEEN_MINUTES = 15 * 60 * 1000
+
+        // If last message/room update was > 15 mins ago, start fresh
+        if (timeSinceLastActivity > FIFTEEN_MINUTES) {
+          await createNewChat()
+        } else {
+          await selectRoom(lastRoom.roomId)
+        }
+      } else {
+        // Fallback if no rooms exist (API usually creates one, but just in case)
+        await createNewChat()
+      }
     }
   }
 

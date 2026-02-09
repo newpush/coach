@@ -3,6 +3,7 @@
   import ChatToolCall from '~/components/ChatToolCall.vue'
   import ChatChart from '~/components/ChatChart.vue'
   import ChatToolApproval from '~/components/chat/ChatToolApproval.vue'
+  import ChatWelcomeTips from '~/components/chat/ChatWelcomeTips.vue'
 
   const props = defineProps<{
     messages: any[]
@@ -105,6 +106,8 @@
           </div>
         </div>
       </div>
+
+      <ChatWelcomeTips v-else-if="filteredMessages.length === 0" />
 
       <div v-else class="h-full flex flex-col">
         <UChatMessages :messages="filteredMessages" :status="status">
