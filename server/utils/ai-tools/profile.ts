@@ -160,6 +160,10 @@ export const profileTools = (userId: string, timezone: string) => ({
         const results = await sportSettingsRepository.upsertSettings(userId, [payload])
         const updated = results[0]
 
+        if (!updated) {
+          return { error: 'Failed to update sport settings: no result returned' }
+        }
+
         return {
           success: true,
           message: `Sport profile "${updated.name}" updated successfully.`,

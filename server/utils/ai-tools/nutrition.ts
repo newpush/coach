@@ -1,6 +1,7 @@
 import { tool } from 'ai'
 import { z } from 'zod'
-import { prisma } from '../../utils/db'
+import { nutritionRepository } from '../repositories/nutritionRepository'
+import { plannedWorkoutRepository } from '../repositories/plannedWorkoutRepository'
 import {
   getStartOfDayUTC,
   getEndOfDayUTC,
@@ -67,15 +68,9 @@ export const nutritionTools = (userId: string, timezone: string) => ({
         end = getEndOfDayUTC(timezone, localStartDate)
       }
 
-      const nutritionEntries = await prisma.nutrition.findMany({
-        where: {
-          userId,
-          date: {
-            gte: start,
-            lte: end
-          }
-        },
-        orderBy: { date: 'desc' },
+      const nutritionEntries = await nutritionRepository.getForUser(userId, {
+        startDate: start,
+        endDate: end,
         select: {
           id: true,
           date: true,
@@ -165,33 +160,21 @@ export const nutritionTools = (userId: string, timezone: string) => ({
       const dateUtc = getUserLocalDate(timezone, localDate)
 
       // Get existing record or create new
-      let nutrition = await prisma.nutrition.findUnique({
-        where: {
-          userId_date: {
-            userId,
-            date: dateUtc
-          }
-        }
-      })
+      let nutrition = await nutritionRepository.getByDate(userId, dateUtc)
 
       if (!nutrition) {
-        nutrition = await prisma.nutrition.create({
-          data: {
-            userId,
-            date: dateUtc,
-            [meal_type]: items
-          }
+        nutrition = await nutritionRepository.create({
+          userId,
+          date: dateUtc,
+          [meal_type]: items
         })
       } else {
         // Append items to existing meal
         const currentItems = (nutrition[meal_type] as any[]) || []
         const updatedItems = [...currentItems, ...items]
 
-        nutrition = await prisma.nutrition.update({
-          where: { id: nutrition.id },
-          data: {
-            [meal_type]: updatedItems
-          }
+        nutrition = await nutritionRepository.update(nutrition.id, {
+          [meal_type]: updatedItems
         })
       }
 
@@ -199,16 +182,13 @@ export const nutritionTools = (userId: string, timezone: string) => ({
       const totals = recalculateDailyTotals(nutrition)
 
       // Update totals in DB
-      const updatedNutrition = await prisma.nutrition.update({
-        where: { id: nutrition.id },
-        data: {
-          calories: totals.calories,
-          protein: totals.protein,
-          carbs: totals.carbs,
-          fat: totals.fat,
-          fiber: totals.fiber,
-          sugar: totals.sugar
-        }
+      const updatedNutrition = await nutritionRepository.update(nutrition.id, {
+        calories: totals.calories,
+        protein: totals.protein,
+        carbs: totals.carbs,
+        fat: totals.fat,
+        fiber: totals.fiber,
+        sugar: totals.sugar
       })
 
       try {
@@ -265,14 +245,7 @@ export const nutritionTools = (userId: string, timezone: string) => ({
       )
       const dateUtc = getUserLocalDate(timezone, localDate)
 
-      let nutrition = await prisma.nutrition.findUnique({
-        where: {
-          userId_date: {
-            userId,
-            date: dateUtc
-          }
-        }
-      })
+      let nutrition = await nutritionRepository.getByDate(userId, dateUtc)
 
       if (!nutrition) {
         return { message: 'No nutrition log found for this date.' }
@@ -302,27 +275,21 @@ export const nutritionTools = (userId: string, timezone: string) => ({
       }
 
       // Update meal items
-      nutrition = await prisma.nutrition.update({
-        where: { id: nutrition.id },
-        data: {
-          [meal_type]: updatedItems
-        }
+      nutrition = await nutritionRepository.update(nutrition.id, {
+        [meal_type]: updatedItems
       })
 
       // Recalculate totals
       const totals = recalculateDailyTotals(nutrition)
 
       // Update totals in DB
-      const updatedNutrition = await prisma.nutrition.update({
-        where: { id: nutrition.id },
-        data: {
-          calories: totals.calories,
-          protein: totals.protein,
-          carbs: totals.carbs,
-          fat: totals.fat,
-          fiber: totals.fiber,
-          sugar: totals.sugar
-        }
+      const updatedNutrition = await nutritionRepository.update(nutrition.id, {
+        calories: totals.calories,
+        protein: totals.protein,
+        carbs: totals.carbs,
+        fat: totals.fat,
+        fiber: totals.fiber,
+        sugar: totals.sugar
       })
 
       try {
@@ -367,22 +334,17 @@ export const nutritionTools = (userId: string, timezone: string) => ({
 
       const dateUtc = getStartOfDayUTC(timezone, targetDate)
 
-      const nutrition = await prisma.nutrition.findUnique({
-        where: { userId_date: { userId, date: dateUtc } },
-        select: {
-          fuelingPlan: true,
-          caloriesGoal: true,
-          carbsGoal: true,
-          proteinGoal: true,
-          fatGoal: true
-        }
-      })
+      const nutrition = await nutritionRepository.getByDate(userId, dateUtc)
 
       if (!nutrition || !nutrition.fuelingPlan) {
         // Fallback: Check for planned workout to see if we *should* have one
-        const workout = await prisma.plannedWorkout.findFirst({
-          where: { userId, date: dateUtc }
-        })
+        const workout = await plannedWorkoutRepository
+          .list(userId, {
+            startDate: dateUtc,
+            endDate: dateUtc,
+            limit: 1
+          })
+          .then((list) => list[0])
 
         if (workout) {
           return {

@@ -90,15 +90,15 @@ export const availabilityTools = (userId: string) => ({
         // Sync legacy booleans for backward compatibility
         if (slots) {
           updateData.morning = slots.some((s) => {
-            const hour = parseInt((s.startTime || '0').split(':')[0])
+            const hour = parseInt((s.startTime || '0').split(':')[0] || '0')
             return hour < 12
           })
           updateData.afternoon = slots.some((s) => {
-            const hour = parseInt((s.startTime || '0').split(':')[0])
+            const hour = parseInt((s.startTime || '0').split(':')[0] || '0')
             return hour >= 12 && hour < 17
           })
           updateData.evening = slots.some((s) => {
-            const hour = parseInt((s.startTime || '0').split(':')[0])
+            const hour = parseInt((s.startTime || '0').split(':')[0] || '0')
             return hour >= 17
           })
           updateData.gymAccess = slots.some((s) => s.gymAccess)
