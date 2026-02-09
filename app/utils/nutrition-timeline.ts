@@ -260,14 +260,28 @@ export function mapNutritionToTimeline(
     }
   })
 
-  allLoggedItems.forEach((item) => {
-    const itemTime = item.logged_at ? new Date(item.logged_at) : null
+  const dateStr = nutritionRecord.date.split('T')[0]
 
-    if (itemTime) {
+  allLoggedItems.forEach((item) => {
+    let itemTime: Date | null = null
+    const timeVal = item.logged_at || item.date
+
+    if (timeVal) {
+      // Handle "HH:mm" format
+      if (typeof timeVal === 'string' && /^\d{2}:\d{2}$/.test(timeVal)) {
+        itemTime = new Date(`${dateStr}T${timeVal}:00Z`)
+      } else {
+        // Handle "YYYY-MM-DD HH:mm:ss" by replacing space with T
+        const normalized = typeof timeVal === 'string' ? timeVal.replace(' ', 'T') : timeVal
+        itemTime = new Date(normalized)
+      }
+    }
+
+    if (itemTime && !isNaN(itemTime.getTime())) {
       const window = finalTimeline.find(
-        (w) => w.type !== 'WORKOUT_EVENT' && itemTime >= w.startTime && itemTime < w.endTime
+        (w) => w.type !== 'WORKOUT_EVENT' && itemTime! >= w.startTime && itemTime! < w.endTime
       )
-      if (window) window.items.push(item)
+      if (window) window.items.push({ ...item, _heuristic_time: itemTime.toISOString() })
     } else {
       // Heuristic for items without timestamps
       if (item.meal === 'breakfast') {

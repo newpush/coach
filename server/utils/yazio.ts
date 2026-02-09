@@ -120,6 +120,7 @@ export function normalizeYazioData(
     // Add calculated nutrients to the item
     const enrichedItem = {
       ...item,
+      logged_at: item.date, // Preserve Yazio's original timestamp
       calories: calories,
       protein: protein,
       carbs: carbs,
@@ -152,6 +153,7 @@ export function normalizeYazioData(
     const transformedItem = {
       id: item.id,
       date: item.date,
+      logged_at: item.date, // Preserve Yazio's original timestamp
       type: item.type,
       daytime: item.daytime,
       product_name: item.name, // Already has the name!
