@@ -57,9 +57,34 @@ export default defineEventHandler(async (event) => {
     })
   }
 
-  const nutrition = await nutritionRepository.getById(id, (session.user as any).id)
+  let nutrition: any = null
+
+  // Check if ID is a date string (YYYY-MM-DD)
+  if (/^\d{4}-\d{2}-\d{2}$/.test(id)) {
+    const date = new Date(`${id}T00:00:00Z`)
+    if (!isNaN(date.getTime())) {
+      nutrition = await nutritionRepository.getByDate((session.user as any).id, date)
+    }
+  }
+
+  // Fallback to searching by UUID if not found by date or if not a date string
+  if (!nutrition) {
+    nutrition = await nutritionRepository.getById(id, (session.user as any).id)
+  }
 
   if (!nutrition) {
+    // If it was a date lookup, return a skeleton instead of 404
+    if (/^\d{4}-\d{2}-\d{2}$/.test(id)) {
+      return {
+        date: id,
+        calories: 0,
+        protein: 0,
+        carbs: 0,
+        fat: 0,
+        aiAnalysisStatus: 'NOT_STARTED'
+      }
+    }
+
     throw createError({
       statusCode: 404,
       message: 'Nutrition entry not found'
