@@ -1,5 +1,5 @@
 import { task } from '@trigger.dev/sdk/v3'
-import { getStartOfDayUTC } from '../server/utils/date'
+import { getUserLocalDate, getUserTimezone } from '../server/utils/date'
 import { nutritionRepository } from '../server/utils/repositories/nutritionRepository'
 import { workoutRepository } from '../server/utils/repositories/workoutRepository'
 import type {
@@ -48,7 +48,8 @@ export const adjustFuelingPostWorkoutTask = task({
     console.log(`Workout was harder! Triggering recovery boost.`)
 
     // 2. Fetch Nutrition Plan
-    const date = getStartOfDayUTC(workout.date)
+    const timezone = await getUserTimezone(userId)
+    const date = getUserLocalDate(timezone, workout.date)
     const nutrition = await nutritionRepository.getByDate(userId, date)
 
     if (!nutrition || !nutrition.fuelingPlan) {

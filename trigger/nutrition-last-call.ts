@@ -1,6 +1,6 @@
 import { schedules } from '@trigger.dev/sdk/v3'
 import { prisma } from '../server/utils/db'
-import { getStartOfDayUTC } from '../server/utils/date'
+import { getUserLocalDate, getUserTimezone } from '../server/utils/date'
 import { nutritionRepository } from '../server/utils/repositories/nutritionRepository'
 import type { SerializedFuelingPlan } from '../server/utils/nutrition/fueling'
 
@@ -43,7 +43,8 @@ export const nutritionLastCallTask = schedules.task({
       const userId = workout.userId
 
       // 2. Fetch Nutrition Plan
-      const dayStart = getStartOfDayUTC(workout.date)
+      const timezone = await getUserTimezone(userId)
+      const dayStart = getUserLocalDate(timezone, workout.date)
       const nutrition = await nutritionRepository.getByDate(userId, dayStart)
 
       if (!nutrition || !nutrition.fuelingPlan) {

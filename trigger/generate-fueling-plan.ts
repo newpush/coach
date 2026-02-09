@@ -21,9 +21,10 @@ export const generateFuelingPlanTask = task({
     }
 
     // 2. Check for Manual Lock
-    // Need timezone to get correct start of day
-    const timezone = await getUserTimezone(userId)
-    const targetDateStart = getStartOfDayUTC(timezone, new Date(date))
+    // The 'date' string passed is ISO UTC Midnight for the calendar day
+    const targetDateStart = new Date(date)
+    // Ensure it's truly midnight UTC (in case it wasn't)
+    targetDateStart.setUTCHours(0, 0, 0, 0)
 
     const existingNutrition = await nutritionRepository.getByDate(userId, targetDateStart)
 
