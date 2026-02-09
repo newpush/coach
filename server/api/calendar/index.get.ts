@@ -6,6 +6,12 @@ import {
   getStartOfDayUTC,
   getEndOfDayUTC
 } from '../../utils/date'
+import { nutritionRepository } from '../../utils/repositories/nutritionRepository'
+import { wellnessRepository } from '../../utils/repositories/wellnessRepository'
+import { calendarNoteRepository } from '../../utils/repositories/calendarNoteRepository'
+import { workoutRepository } from '../../utils/repositories/workoutRepository'
+import { calculateFuelingStrategy } from '../../utils/nutrition/fueling'
+import { getUserNutritionSettings } from '../../utils/nutrition/settings'
 
 defineRouteMeta({
   openAPI: {
@@ -84,7 +90,11 @@ export default defineEventHandler(async (event) => {
   const userId = (session.user as any).id
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { timezone: true }
+    select: {
+      timezone: true,
+      weight: true,
+      ftp: true
+    }
   })
   const timezone = user?.timezone ?? 'UTC'
   const today = getUserLocalDate(timezone)
@@ -124,7 +134,8 @@ export default defineEventHandler(async (event) => {
       carbsGoal: n.carbsGoal,
       fatGoal: n.fatGoal,
       fuelingPlan: n.fuelingPlan,
-      overallScore: n.overallScore
+      overallScore: n.overallScore,
+      isManualLock: n.isManualLock
     })
   }
 
@@ -198,6 +209,86 @@ export default defineEventHandler(async (event) => {
     },
     orderBy: { date: 'asc' }
   })
+
+  // PROACTIVE NUTRITION ESTIMATION
+  // If we have planned workouts for a day, we prefer the dynamic estimate
+  // over static defaults, unless the user has manually locked the day.
+  const nutritionSettings = await getUserNutritionSettings(userId)
+  const profile = {
+    weight: user?.weight || 75,
+    ftp: user?.ftp || 250,
+    currentCarbMax: nutritionSettings.currentCarbMax,
+    sodiumTarget: nutritionSettings.sodiumTarget,
+    sweatRate: nutritionSettings.sweatRate || 0.8,
+    preWorkoutWindow: nutritionSettings.preWorkoutWindow,
+    postWorkoutWindow: nutritionSettings.postWorkoutWindow,
+    fuelingSensitivity: nutritionSettings.fuelingSensitivity,
+    fuelState1Trigger: nutritionSettings.fuelState1Trigger,
+    fuelState1Min: nutritionSettings.fuelState1Min,
+    fuelState1Max: nutritionSettings.fuelState1Max,
+    fuelState2Trigger: nutritionSettings.fuelState2Trigger,
+    fuelState2Min: nutritionSettings.fuelState2Min,
+    fuelState2Max: nutritionSettings.fuelState2Max,
+    fuelState3Min: nutritionSettings.fuelState3Min,
+    fuelState3Max: nutritionSettings.fuelState3Max
+  }
+
+  // Group planned workouts by date to see which days need estimates
+  const plannedByDate = new Map<string, any[]>()
+  for (const p of plannedWorkouts) {
+    const dateKey = p.date.toISOString().split('T')[0]
+    if (!plannedByDate.has(dateKey)) {
+      plannedByDate.set(dateKey, [])
+    }
+    plannedByDate.get(dateKey)!.push(p)
+  }
+
+  for (const [dateKey, workouts] of plannedByDate.entries()) {
+    const existing = nutritionByDate.get(dateKey)
+
+    // Override if:
+    // 1. No record exists
+    // 2. Record exists but has no fueling plan AND is not manually locked
+    if (!existing || (!existing.fuelingPlan && !existing.isManualLock)) {
+      // Estimate fueling strategy for this day based on planned workouts
+      // We'll use the first workout for simplicity in this preview estimation
+      const primaryWorkout = workouts[0]
+      if (primaryWorkout) {
+        // Convert HH:mm string to a Date object relative to the workout date
+        let startTimeDate: Date | null = null
+        if (
+          primaryWorkout.startTime &&
+          typeof primaryWorkout.startTime === 'string' &&
+          primaryWorkout.startTime.includes(':')
+        ) {
+          const [h, m] = primaryWorkout.startTime.split(':').map(Number)
+          startTimeDate = new Date(primaryWorkout.date)
+          startTimeDate.setUTCHours(h || 10, m || 0, 0, 0)
+        }
+
+        const estimate = calculateFuelingStrategy(profile, {
+          ...primaryWorkout,
+          startTime: startTimeDate,
+          strategyOverride: primaryWorkout.fuelingStrategy || undefined
+        } as any)
+
+        nutritionByDate.set(dateKey, {
+          calories: existing?.calories ?? 0,
+          protein: existing?.protein ?? 0,
+          carbs: existing?.carbs ?? 0,
+          fat: existing?.fat ?? 0,
+          caloriesGoal: estimate.dailyTotals.calories,
+          proteinGoal: estimate.dailyTotals.protein,
+          carbsGoal: estimate.dailyTotals.carbs,
+          fatGoal: estimate.dailyTotals.fat,
+          fuelingPlan: estimate,
+          isEstimate: !existing, // Full estimate if no record existed
+          isEstimateGoal: !!existing, // Estimated goal for an existing record
+          overallScore: existing?.overallScore
+        })
+      }
+    }
+  }
 
   // Fetch calendar notes (timestamped)
   const calendarNotes = await calendarNoteRepository.getForUser(userId, {
