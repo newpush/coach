@@ -1,7 +1,7 @@
 import { prisma } from '../db'
 import type { QuotaOperation } from './registry'
 import { QUOTA_REGISTRY, mapOperationToQuota } from './registry'
-import { SubscriptionTier, User } from '@prisma/client'
+import { SubscriptionTier, type User } from '@prisma/client'
 
 export interface QuotaStatus {
   allowed: boolean
@@ -108,8 +108,9 @@ export async function checkQuota(userId: string, operation: string): Promise<Quo
  */
 function parseIntervalToMs(interval: string): number {
   const parts = interval.split(' ')
-  const value = parseInt(parts[0])
-  const unit = parts[1].toLowerCase()
+  if (parts.length < 2) return 0
+  const value = parseInt(parts[0] || '0')
+  const unit = (parts[1] || '').toLowerCase()
 
   if (unit.includes('hour')) return value * 60 * 60 * 1000
   if (unit.includes('day')) return value * 24 * 60 * 60 * 1000

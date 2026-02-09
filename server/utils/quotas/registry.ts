@@ -50,12 +50,7 @@ export const QUOTA_REGISTRY: Record<
     unified_report_generation: { limit: 20, window: '30 days', enforcement: 'MEASURE' },
     nutrition_analysis: { limit: 100, window: '7 days', enforcement: 'MEASURE' },
     generate_structured_workout: { limit: 100, window: '7 days', enforcement: 'MEASURE' }
-  },
-  CONTRIBUTOR: {
-    chat: { limit: 1000, window: '1 hour', enforcement: 'MEASURE' },
-    workout_analysis: { limit: 1000, window: '1 hour', enforcement: 'MEASURE' }
-  },
-  NONE: {}
+  }
 }
 
 /**
