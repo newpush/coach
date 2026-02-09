@@ -18,10 +18,10 @@
         />
         <UButton
           icon="i-heroicons-arrow-path"
-          color="gray"
+          color="neutral"
           variant="ghost"
           :loading="pending"
-          @click="refresh"
+          @click="() => refresh()"
         />
       </div>
     </div>
@@ -111,7 +111,7 @@
         </div>
         <!-- Pagination -->
         <div
-          v-if="reports?.totalPages > 1"
+          v-if="(reports?.totalPages ?? 0) > 1"
           class="px-6 py-4 border-t border-gray-200 dark:border-gray-700 flex justify-end"
         >
           <UPagination v-model="page" :page-count="limit" :total="reports?.count || 0" />
@@ -244,15 +244,15 @@
   function getStatusColor(status: string) {
     switch (status) {
       case 'OPEN':
-        return 'red'
+        return 'error'
       case 'IN_PROGRESS':
-        return 'orange'
+        return 'warning'
       case 'RESOLVED':
-        return 'green'
+        return 'success'
       case 'CLOSED':
-        return 'gray'
+        return 'neutral'
       default:
-        return 'gray'
+        return 'neutral'
     }
   }
 
@@ -270,11 +270,11 @@
         body: { status: selectedReport.value.status }
       })
 
-      toast.add({ title: 'Status updated' })
+      toast.add({ title: 'Status updated', color: 'success' })
       refresh()
     } catch (error) {
       console.error(error)
-      toast.add({ title: 'Failed to update status', color: 'red' })
+      toast.add({ title: 'Failed to update status', color: 'error' })
     }
   }
 </script>

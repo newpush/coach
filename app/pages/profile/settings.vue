@@ -58,7 +58,9 @@
             <ProfileNutritionSettings
               v-if="activeTab === 'nutrition'"
               :settings="nutritionSettings"
+              :profile="profile"
               @update:settings="(val) => (nutritionSettings = val)"
+              @navigate="(tab) => (activeTab = tab)"
             />
           </div>
         </div>

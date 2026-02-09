@@ -335,12 +335,12 @@
                   <span
                     class="px-2 py-1 rounded text-xs font-semibold"
                     :class="
-                      stats?.systemStatus?.nearLimitUsers > 0
+                      (stats?.systemStatus?.nearLimitUsers ?? 0) > 0
                         ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200'
                         : 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
                     "
                   >
-                    {{ stats?.systemStatus?.nearLimitUsers }} near limit
+                    {{ stats?.systemStatus?.nearLimitUsers ?? 0 }} near limit
                   </span>
                   <UIcon
                     name="i-lucide-chevron-right"

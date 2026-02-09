@@ -222,7 +222,7 @@
                   Total Input Tokens
                 </div>
                 <div class="text-2xl font-bold font-mono">
-                  {{ stats?.tokens?.prompt?.toLocaleString() ?? '0' }}
+                  {{ stats?.totals?.tokens?.prompt?.toLocaleString() ?? '0' }}
                 </div>
               </div>
             </UCard>
@@ -232,13 +232,15 @@
                   Cached Tokens
                 </div>
                 <div class="text-2xl font-bold font-mono">
-                  {{ stats?.tokens?.cached?.toLocaleString() || '0' }}
+                  {{ stats?.totals?.tokens?.cached?.toLocaleString() || '0' }}
                 </div>
                 <div class="text-xs text-gray-500 mt-1">
                   {{
-                    (((stats?.tokens?.cached || 0) / (stats?.tokens?.prompt || 1)) * 100).toFixed(
-                      1
-                    )
+                    (
+                      ((stats?.totals?.tokens?.cached || 0) /
+                        (stats?.totals?.tokens?.prompt || 1)) *
+                      100
+                    ).toFixed(1)
                   }}% Overall Savings
                 </div>
               </div>
@@ -250,7 +252,9 @@
                 </div>
                 <div class="text-2xl font-bold font-mono">
                   {{
-                    ((stats?.tokens?.prompt || 0) - (stats?.tokens?.cached || 0)).toLocaleString()
+                    (
+                      (stats?.totals?.tokens?.prompt || 0) - (stats?.totals?.tokens?.cached || 0)
+                    ).toLocaleString()
                   }}
                 </div>
               </div>

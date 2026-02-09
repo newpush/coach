@@ -77,7 +77,7 @@
                       group.tier === 'PRO'
                         ? 'primary'
                         : group.tier === 'SUPPORTER'
-                          ? 'indigo'
+                          ? 'info'
                           : 'neutral'
                     "
                     variant="soft"

@@ -1072,7 +1072,7 @@
         title: 'Generation Failed',
         description: error.data?.message || 'Failed to generate structure',
         color: 'error',
-        timeout: 6000
+        duration: 6000
       })
     }
   }

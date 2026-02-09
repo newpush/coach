@@ -417,12 +417,11 @@
           <USelectMenu
             v-model="countryModel"
             :items="countriesWithLabel"
-            option-attribute="label"
-            :search-attributes="['name', 'code']"
+            label-key="label"
+            :filter-fields="['name', 'code']"
             size="sm"
             class="flex-1"
-            searchable
-            searchable-placeholder="Search country..."
+            :search-input="{ placeholder: 'Search country...' }"
             autofocus
             :ui="{ content: 'w-full min-w-[var(--reka-popper-anchor-width)]' }"
             @update:model-value="saveField"
@@ -454,7 +453,6 @@
             :items="timezones"
             size="sm"
             class="flex-1"
-            searchable
             placeholder="Select timezone"
             :ui="{ content: 'w-full min-w-[var(--reka-popper-anchor-width)]' }"
           />

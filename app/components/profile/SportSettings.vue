@@ -139,7 +139,6 @@
                   :items="availableSports"
                   multiple
                   placeholder="Choose sports..."
-                  searchable
                   class="w-full"
                   :ui="{ content: 'w-full min-w-[var(--reka-popper-anchor-width)]' }"
                 />
@@ -714,7 +713,6 @@
                   :items="availableSports"
                   multiple
                   placeholder="Choose sports..."
-                  searchable
                   class="w-full"
                   :ui="{ content: 'w-full min-w-[var(--reka-popper-anchor-width)]' }"
                 />

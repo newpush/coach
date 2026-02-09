@@ -44,6 +44,23 @@
               <span class="text-sm text-gray-600 dark:text-gray-400">TSS:</span>
               <span class="text-sm font-medium">{{ Math.round(plannedWorkout.tss) }}</span>
             </div>
+            <div
+              class="flex justify-between items-center pt-2 mt-2 border-t border-gray-100 dark:border-gray-700"
+            >
+              <span class="text-sm text-gray-600 dark:text-gray-400">Fueling Strategy:</span>
+              <USelectMenu
+                v-model="fuelingStrategy"
+                :items="fuelingStrategies"
+                value-key="value"
+                size="xs"
+                variant="none"
+                class="min-w-[120px] text-right"
+                :ui="{
+                  base: 'text-primary-600 dark:text-primary-400 font-bold hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md px-2 py-1 transition-colors'
+                }"
+                :loading="updatingStrategy"
+              />
+            </div>
           </div>
         </div>
 
@@ -447,7 +464,46 @@
   const availableWorkouts = ref<any[]>([])
   const loadingWorkouts = ref(false)
   const generating = ref(false)
+  const updatingStrategy = ref(false)
   const showManualEntry = ref(false)
+
+  const fuelingStrategies = [
+    { label: 'Standard', value: 'STANDARD' },
+    { label: 'Train Low', value: 'TRAIN_LOW' },
+    { label: 'High Carb', value: 'HIGH_CARB' }
+  ]
+
+  const fuelingStrategy = computed({
+    get: () => props.plannedWorkout?.fuelingStrategy || 'STANDARD',
+    set: async (val) => {
+      if (!props.plannedWorkout || val === props.plannedWorkout.fuelingStrategy) return
+
+      updatingStrategy.value = true
+      try {
+        await $fetch(`/api/planned-workouts/${props.plannedWorkout.id}`, {
+          method: 'PATCH',
+          body: { fuelingStrategy: val }
+        })
+
+        toast.add({
+          title: 'Strategy Updated',
+          description: `Fueling set to ${val.replace('_', ' ')}. AI will regenerate your plan.`,
+          color: 'success'
+        })
+
+        emit('completed') // Trigger refresh
+      } catch (error: any) {
+        toast.add({
+          title: 'Update Failed',
+          description: error?.data?.message || 'Failed to update strategy',
+          color: 'error'
+        })
+      } finally {
+        updatingStrategy.value = false
+      }
+    }
+  })
+
   const showDeleteConfirm = ref(false)
   const showMarkCompleteConfirm = ref(false)
 
@@ -493,7 +549,7 @@
         title: 'Generation Failed',
         description: error?.data?.message || 'Failed to generate structure',
         color: 'error',
-        timeout: 6000
+        duration: 6000
       })
     } finally {
       generating.value = false

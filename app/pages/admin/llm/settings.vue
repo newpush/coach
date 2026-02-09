@@ -15,7 +15,7 @@
           color="neutral"
           variant="outline"
           :loading="pending"
-          @click="refresh"
+          @click="() => refresh()"
         />
       </div>
     </div>
@@ -213,7 +213,7 @@
                             v-if="override.thinkingBudget !== null"
                             size="xs"
                             variant="subtle"
-                            color="blue"
+                            color="info"
                           >
                             {{
                               override.thinkingBudget === 0
@@ -225,7 +225,7 @@
                             v-else-if="override.thinkingLevel"
                             size="xs"
                             variant="subtle"
-                            color="blue"
+                            color="info"
                           >
                             Level: {{ override.thinkingLevel }}
                           </UBadge>
@@ -236,7 +236,7 @@
                             v-if="override.maxSteps"
                             size="xs"
                             variant="subtle"
-                            color="orange"
+                            color="warning"
                           >
                             {{ override.maxSteps }} steps
                           </UBadge>
@@ -442,7 +442,7 @@
 
   async function onFamilyChange(level: any) {
     const familyModels = getModelsForFamily(level.model)
-    if (familyModels.length > 0) {
+    if (familyModels.length > 0 && familyModels[0]) {
       level.modelId = familyModels[0].value
     }
     await nextTick()
@@ -455,7 +455,7 @@
       return
     }
     const familyModels = getModelsForFamily(overrideState.model)
-    if (familyModels.length > 0) {
+    if (familyModels.length > 0 && familyModels[0]) {
       overrideState.modelId = familyModels[0].value
     }
     await nextTick()
@@ -628,7 +628,7 @@
   function getLevelColor(level: string) {
     switch (level) {
       case 'experimental':
-        return 'blue'
+        return 'info'
       case 'pro':
         return 'primary'
       case 'flash':

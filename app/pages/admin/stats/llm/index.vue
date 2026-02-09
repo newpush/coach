@@ -593,7 +593,7 @@
                   Total Tokens
                 </div>
                 <div class="text-2xl font-bold font-mono">
-                  {{ stats?.tokens?.total?.toLocaleString() ?? '0' }}
+                  {{ stats?.totals?.tokens?.total?.toLocaleString() ?? '0' }}
                 </div>
               </div>
             </UCard>
@@ -603,11 +603,14 @@
                   Prompt Tokens
                 </div>
                 <div class="text-2xl font-bold font-mono">
-                  {{ stats?.tokens?.prompt?.toLocaleString() ?? '0' }}
+                  {{ stats?.totals?.tokens?.prompt?.toLocaleString() ?? '0' }}
                 </div>
                 <div class="text-xs text-gray-500 mt-1">
                   {{
-                    (((stats?.tokens?.prompt || 0) / (stats?.tokens?.total || 1)) * 100).toFixed(0)
+                    (
+                      ((stats?.totals?.tokens?.prompt || 0) / (stats?.totals?.tokens?.total || 1)) *
+                      100
+                    ).toFixed(0)
                   }}% of total
                 </div>
               </div>
@@ -623,13 +626,15 @@
                   Cached Tokens <UIcon name="i-lucide-external-link" class="w-3 h-3" />
                 </div>
                 <div class="text-2xl font-bold font-mono text-emerald-600 dark:text-emerald-400">
-                  {{ stats?.tokens?.cached?.toLocaleString() || '0' }}
+                  {{ stats?.totals?.tokens?.cached?.toLocaleString() || '0' }}
                 </div>
                 <div class="text-xs text-gray-500 mt-1">
                   {{
-                    (((stats?.tokens?.cached || 0) / (stats?.tokens?.prompt || 1)) * 100).toFixed(
-                      0
-                    )
+                    (
+                      ((stats?.totals?.tokens?.cached || 0) /
+                        (stats?.totals?.tokens?.prompt || 1)) *
+                      100
+                    ).toFixed(0)
                   }}% of input
                 </div>
               </div>
@@ -640,12 +645,13 @@
                   Completion Tokens
                 </div>
                 <div class="text-2xl font-bold font-mono">
-                  {{ stats?.tokens?.completion?.toLocaleString() ?? '0' }}
+                  {{ stats?.totals?.tokens?.completion?.toLocaleString() ?? '0' }}
                 </div>
                 <div class="text-xs text-gray-500 mt-1">
                   {{
                     (
-                      ((stats?.tokens?.completion || 0) / (stats?.tokens?.total || 1)) *
+                      ((stats?.totals?.tokens?.completion || 0) /
+                        (stats?.totals?.tokens?.total || 1)) *
                       100
                     ).toFixed(0)
                   }}% of total

@@ -72,6 +72,8 @@
   const props = defineProps<{
     workouts: any[]
     loading?: boolean
+    buttonTooltip?: string
+    isRestricted?: boolean
   }>()
 
   const emit = defineEmits(['generate'])
