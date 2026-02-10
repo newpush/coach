@@ -57,18 +57,32 @@
         <div v-else-if="nutrition" class="space-y-8">
           <!-- 0. THE DATE HEADER -->
           <UCard class="border-primary-100 dark:border-primary-900 shadow-sm">
-            <div class="flex items-center gap-4">
-              <div class="p-3 bg-primary-50 dark:bg-primary-950/20 rounded-xl">
-                <UIcon name="i-heroicons-calendar-days" class="w-8 h-8 text-primary-500" />
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-4">
+                <UButton
+                  icon="i-heroicons-chevron-left"
+                  color="neutral"
+                  variant="ghost"
+                  @click="navigateDate(-1)"
+                />
+                <div class="p-3 bg-primary-50 dark:bg-primary-950/20 rounded-xl">
+                  <UIcon name="i-heroicons-calendar-days" class="w-8 h-8 text-primary-500" />
+                </div>
+                <div>
+                  <h1 class="text-2xl font-black tracking-tight text-gray-900 dark:text-white">
+                    {{ formatDateLabel(nutrition?.date || (route.params.id as string)) }}
+                  </h1>
+                  <p class="text-sm text-gray-500 font-bold uppercase tracking-widest">
+                    Daily Fueling Strategy
+                  </p>
+                </div>
               </div>
-              <div>
-                <h1 class="text-2xl font-black tracking-tight text-gray-900 dark:text-white">
-                  {{ formatDateLabel(nutrition.date) }}
-                </h1>
-                <p class="text-sm text-gray-500 font-bold uppercase tracking-widest">
-                  Daily Fueling Strategy
-                </p>
-              </div>
+              <UButton
+                icon="i-heroicons-chevron-right"
+                color="neutral"
+                variant="ghost"
+                @click="navigateDate(1)"
+              />
             </div>
           </UCard>
 
@@ -77,6 +91,8 @@
             :fuel-state="fuelState"
             :is-locked="nutrition.isManualLock"
             :goal-adjustment="goalAdjustment"
+            :settings="nutritionSettings"
+            :weight="userStore.profile?.weight || 75"
             :targets="{
               calories: nutrition.caloriesGoal || 2500,
               carbs: nutrition.carbsGoal || 300,
@@ -92,7 +108,34 @@
           />
 
           <!-- 2. THE TIMELINE (The What & When) -->
-          <NutritionFuelingTimeline :windows="timeline" :is-locked="nutrition.isManualLock" />
+          <div class="space-y-4">
+            <div class="flex items-center justify-between">
+              <h2 class="text-base font-black uppercase tracking-widest text-gray-400">
+                Fueling Timeline
+              </h2>
+              <div class="flex items-center gap-4">
+                <span class="text-[10px] font-bold text-gray-400 uppercase tracking-tighter"
+                  >{{ timeline.length }} Active Windows</span
+                >
+                <UButton
+                  icon="i-heroicons-sparkles"
+                  color="primary"
+                  variant="ghost"
+                  size="xs"
+                  @click="openAiModal()"
+                >
+                  Log with AI
+                </UButton>
+              </div>
+            </div>
+            <NutritionFuelingTimeline
+              :windows="timeline"
+              :is-locked="nutrition.isManualLock"
+              @add="handleAddItem"
+              @add-ai="handleAddItemAi"
+              @edit="handleEditItem"
+            />
+          </div>
 
           <!-- 3. AI INSIGHTS (Expanded Analysis) -->
           <UCard
@@ -158,6 +201,19 @@
             @update:notes-updated-at="nutrition.notesUpdatedAt = $event"
           />
         </div>
+
+        <NutritionFoodItemModal
+          ref="itemModal"
+          :nutrition-id="nutrition?.id"
+          :date="nutrition?.date || (route.params.id as string)"
+          @updated="fetchData"
+        />
+        <NutritionFoodAiModal
+          ref="aiModal"
+          :nutrition-id="nutrition?.id"
+          :date="nutrition?.date || (route.params.id as string)"
+          @updated="fetchData"
+        />
       </div>
     </template>
   </UDashboardPanel>
@@ -165,6 +221,7 @@
 
 <script setup lang="ts">
   import { mapNutritionToTimeline } from '~/utils/nutrition-timeline'
+  import { addDays, format } from 'date-fns'
 
   definePageMeta({
     middleware: 'auth'
@@ -185,6 +242,9 @@
   const quickLogInput = ref('')
   const isLogging = ref(false)
 
+  const itemModal = ref<any>(null)
+  const aiModal = ref<any>(null)
+
   // Computed
   const fuelState = computed(() => {
     if (!nutrition.value?.fuelingPlan) return 1
@@ -201,38 +261,49 @@
   const timeline = computed(() => {
     if (!nutrition.value || !nutritionSettings.value) return []
 
-    console.log('[NutritionDashboard] Computing timeline with:', {
-      nutritionDate: nutrition.value.date,
+    try {
+      console.log('[NutritionDashboard] Computing timeline with:', {
+        nutritionDate: nutrition.value.date,
 
-      workoutCount: workouts.value.length,
+        workoutCount: workouts.value.length,
 
-      hasFuelingPlan: !!nutrition.value.fuelingPlan
-    })
+        hasFuelingPlan: !!nutrition.value.fuelingPlan,
 
-    const result = mapNutritionToTimeline(
-      nutrition.value,
+        timezone: (useFormat() as any).timezone.value
+      })
 
-      workouts.value,
+      const result = mapNutritionToTimeline(
+        nutrition.value,
 
-      {
-        preWorkoutWindow: nutritionSettings.value.preWorkoutWindow || 90,
+        workouts.value,
 
-        postWorkoutWindow: nutritionSettings.value.postWorkoutWindow || 60,
+        {
+          preWorkoutWindow: nutritionSettings.value.preWorkoutWindow || 90,
 
-        baseProteinPerKg: nutritionSettings.value.baseProteinPerKg || 1.6,
+          postWorkoutWindow: nutritionSettings.value.postWorkoutWindow || 60,
 
-        baseFatPerKg: nutritionSettings.value.baseFatPerKg || 1.0,
+          baseProteinPerKg: nutritionSettings.value.baseProteinPerKg || 1.6,
 
-        weight: userStore.profile?.weight || 75
-      }
-    )
+          baseFatPerKg: nutritionSettings.value.baseFatPerKg || 1.0,
 
-    console.log(
-      '[NutritionDashboard] Timeline generated:',
-      result.map((w) => ({ type: w.type, start: w.startTime, items: w.items.length }))
-    )
+          weight: userStore.profile?.weight || 75,
 
-    return result
+          mealPattern: nutritionSettings.value.mealPattern,
+
+          timezone: (useFormat() as any).timezone.value
+        }
+      )
+
+      console.log(
+        '[NutritionDashboard] Timeline generated:',
+        result.map((w) => ({ type: w.type, start: w.startTime, items: w.items.length }))
+      )
+
+      return result
+    } catch (e) {
+      console.error('[NutritionDashboard] Timeline computation failed:', e)
+      return []
+    }
   })
 
   // Data Fetching
@@ -269,9 +340,13 @@
 
       // 3. Fetch Nutrition Settings
 
+      console.log('[NutritionDashboard] Fetching nutrition settings...')
+
       const sData = await $fetch<any>('/api/profile/nutrition')
 
       nutritionSettings.value = sData.settings
+
+      console.log('[NutritionDashboard] Data fetching complete')
     } catch (e: any) {
       console.error('Fetch Error:', e)
 
@@ -335,6 +410,46 @@
     }
   }
 
+  function handleAddItem(event: { type: string; meals?: string[] }) {
+    // Map window type to meal type if possible
+    let mealType = 'snacks'
+    if (event.meals && event.meals.length > 0) {
+      const firstMeal = event.meals[0]?.toLowerCase()
+      if (['breakfast', 'lunch', 'dinner', 'snacks'].includes(firstMeal!)) {
+        mealType = firstMeal!
+      }
+    } else if (event.type === 'PRE_WORKOUT') {
+      mealType = 'breakfast'
+    } else if (event.type === 'POST_WORKOUT') {
+      mealType = 'lunch'
+    }
+
+    itemModal.value?.open('add', { mealType })
+  }
+
+  function handleAddItemAi(event: { type: string; meals?: string[] }) {
+    let mealType = 'snacks'
+    if (event.meals && event.meals.length > 0) {
+      const firstMeal = event.meals[0]?.toLowerCase()
+      if (['breakfast', 'lunch', 'dinner', 'snacks'].includes(firstMeal!)) {
+        mealType = firstMeal!
+      }
+    } else if (event.type === 'PRE_WORKOUT') {
+      mealType = 'breakfast'
+    } else if (event.type === 'POST_WORKOUT') {
+      mealType = 'lunch'
+    }
+    aiModal.value?.open(mealType)
+  }
+
+  function handleEditItem(item: any) {
+    itemModal.value?.open('edit', item)
+  }
+
+  function openAiModal(mealType: string = 'snacks') {
+    aiModal.value?.open(mealType)
+  }
+
   const { onTaskCompleted } = useUserRunsState()
   onTaskCompleted('generate-fueling-plan', () => {
     generatingPlan.value = false
@@ -351,6 +466,28 @@
       year: 'numeric'
     })
   }
+
+  function navigateDate(days: number) {
+    const currentId = route.params.id as string
+    let baseDateStr = currentId
+
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(currentId) && nutrition.value?.date) {
+      baseDateStr = nutrition.value.date
+    }
+
+    // If we still don't have a date string, fallback to today
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(baseDateStr)) {
+      baseDateStr = format(new Date(), 'yyyy-MM-dd')
+    }
+
+    const baseDate = new Date(baseDateStr + 'T12:00:00')
+    const targetDate = addDays(baseDate, days)
+    const dateStr = format(targetDate, 'yyyy-MM-dd')
+
+    navigateTo(`/nutrition/${dateStr}`)
+  }
+
+  watch(() => route.params.id, fetchData)
 
   onMounted(fetchData)
 </script>

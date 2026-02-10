@@ -150,41 +150,100 @@
 
           <!-- Daily Totals -->
           <div
-            class="pt-6 border-t border-gray-100 dark:border-gray-800 grid grid-cols-3 gap-4 text-center"
+            class="pt-6 border-t border-gray-100 dark:border-gray-800 grid grid-cols-2 sm:grid-cols-3 gap-3 text-center"
           >
             <div
-              class="bg-gray-50 dark:bg-gray-900/50 p-3 rounded-xl border border-gray-100 dark:border-gray-800"
+              class="bg-gray-50 dark:bg-gray-900/50 p-2.5 rounded-xl border border-gray-100 dark:border-gray-800 cursor-pointer hover:border-primary-300 transition-colors group"
+              @click="showMacroExplain('Calories')"
+            >
+              <div class="flex items-center justify-center gap-1 mb-1">
+                <UIcon name="i-tabler-flame" class="w-3.5 h-3.5 text-orange-500" />
+                <div class="text-[10px] uppercase font-bold text-gray-400">Calories</div>
+              </div>
+              <div class="text-lg font-bold text-gray-900 dark:text-white leading-tight">
+                {{ Math.round(nutrition.calories || 0)
+                }}<span class="text-[10px] text-gray-400 font-medium"
+                  >/{{ Math.round(nutrition.caloriesGoal || 0) }}</span
+                >
+              </div>
+            </div>
+            <div
+              class="bg-gray-50 dark:bg-gray-900/50 p-2.5 rounded-xl border border-gray-100 dark:border-gray-800 cursor-pointer hover:border-primary-300 transition-colors group"
+              @click="showMacroExplain('Carbs')"
             >
               <div class="flex items-center justify-center gap-1 mb-1">
                 <UIcon name="i-tabler-bread" class="w-3.5 h-3.5 text-yellow-500" />
                 <div class="text-[10px] uppercase font-bold text-gray-400">Carbs</div>
               </div>
-              <div class="text-lg font-bold text-gray-900 dark:text-white">
-                {{ nutrition.carbsGoal || 0 }}g
+              <div class="text-lg font-bold text-gray-900 dark:text-white leading-tight">
+                {{ Math.round(nutrition.carbs || 0)
+                }}<span class="text-[10px] text-gray-400 font-medium"
+                  >/{{ Math.round(nutrition.carbsGoal || 0) }}g</span
+                >
               </div>
             </div>
             <div
-              class="bg-gray-50 dark:bg-gray-900/50 p-3 rounded-xl border border-gray-100 dark:border-gray-800"
+              class="bg-gray-50 dark:bg-gray-900/50 p-2.5 rounded-xl border border-gray-100 dark:border-gray-800 cursor-pointer hover:border-primary-300 transition-colors group"
+              @click="showMacroExplain('Protein')"
             >
               <div class="flex items-center justify-center gap-1 mb-1">
                 <UIcon name="i-tabler-egg" class="w-3.5 h-3.5 text-blue-500" />
                 <div class="text-[10px] uppercase font-bold text-gray-400">Protein</div>
               </div>
-              <div class="text-lg font-bold text-gray-900 dark:text-white">
-                {{ nutrition.proteinGoal || 0 }}g
+              <div class="text-lg font-bold text-gray-900 dark:text-white leading-tight">
+                {{ Math.round(nutrition.protein || 0)
+                }}<span class="text-[10px] text-gray-400 font-medium"
+                  >/{{ Math.round(nutrition.proteinGoal || 0) }}g</span
+                >
               </div>
             </div>
             <div
-              class="bg-gray-50 dark:bg-gray-900/50 p-3 rounded-xl border border-gray-100 dark:border-gray-800"
+              class="bg-gray-50 dark:bg-gray-900/50 p-2.5 rounded-xl border border-gray-100 dark:border-gray-800 cursor-pointer hover:border-primary-300 transition-colors group"
+              @click="showMacroExplain('Fat')"
+            >
+              <div class="flex items-center justify-center gap-1 mb-1">
+                <UIcon name="i-tabler-droplet" class="w-3.5 h-3.5 text-green-500" />
+                <div class="text-[10px] uppercase font-bold text-gray-400">Fat</div>
+              </div>
+              <div class="text-lg font-bold text-gray-900 dark:text-white leading-tight">
+                {{ Math.round(nutrition.fat || 0)
+                }}<span class="text-[10px] text-gray-400 font-medium"
+                  >/{{ Math.round(nutrition.fatGoal || 0) }}g</span
+                >
+              </div>
+            </div>
+            <div
+              class="bg-gray-50 dark:bg-gray-900/50 p-2.5 rounded-xl border border-gray-100 dark:border-gray-800"
             >
               <div class="flex items-center justify-center gap-1 mb-1">
                 <UIcon name="i-tabler-droplet" class="w-3.5 h-3.5 text-blue-400" />
                 <div class="text-[10px] uppercase font-bold text-gray-400">Hydration</div>
               </div>
-              <div class="text-lg font-bold text-gray-900 dark:text-white">
-                {{ ((nutrition.fuelingPlan?.dailyTotals?.fluid || 2000) / 1000).toFixed(1) }}L
+              <div class="text-lg font-bold text-gray-900 dark:text-white leading-tight">
+                {{ ((nutrition.waterMl || 0) / 1000).toFixed(1)
+                }}<span class="text-[10px] text-gray-400 font-medium"
+                  >/{{
+                    ((nutrition.fuelingPlan?.dailyTotals?.fluid || 2000) / 1000).toFixed(1)
+                  }}L</span
+                >
               </div>
             </div>
+          </div>
+
+          <!-- Link to Details -->
+          <div class="pt-4 border-t border-gray-100 dark:border-gray-800">
+            <UButton
+              :to="`/nutrition/${nutrition.date || formatDateUTC(new Date(), 'yyyy-MM-dd')}`"
+              variant="soft"
+              color="primary"
+              block
+              size="sm"
+              icon="i-heroicons-arrow-right"
+              trailing
+              class="font-black uppercase tracking-widest text-[10px]"
+            >
+              Full Nutrition Overview
+            </UButton>
           </div>
         </div>
 
@@ -220,8 +279,12 @@
                 :target-sodium="window.targetSodium"
                 :items="window.items"
                 :supplements="window.supplements"
+                :meals="window.meals"
                 :is-locked="false"
                 class="!pb-6"
+                @add="handleAddItem"
+                @add-ai="handleAddItemAi"
+                @edit="handleEditItem"
               />
             </template>
           </div>
@@ -237,6 +300,31 @@
     :advice="tankAdvice"
     :breakdown="glycogenState.breakdown"
   />
+
+  <NutritionMacroExplainModal
+    v-if="selectedMacro"
+    v-model="isMacroExplainOpen"
+    :label="selectedMacro.label"
+    :actual="selectedMacro.actual"
+    :target="selectedMacro.target"
+    :unit="selectedMacro.unit"
+    :fuel-state="fuelState"
+    :settings="settings"
+    :weight="weight"
+  />
+
+  <NutritionFoodItemModal
+    ref="itemModal"
+    :nutrition-id="nutrition?.id"
+    :date="nutrition?.date || formatDateUTC(new Date(), 'yyyy-MM-dd')"
+    @updated="emit('refresh')"
+  />
+  <NutritionFoodAiModal
+    ref="aiModal"
+    :nutrition-id="nutrition?.id"
+    :date="nutrition?.date || formatDateUTC(new Date(), 'yyyy-MM-dd')"
+    @updated="emit('refresh')"
+  />
 </template>
 
 <script setup lang="ts">
@@ -246,6 +334,8 @@
   const props = defineProps<{
     nutrition: any
     workouts?: any[]
+    settings?: any
+    weight?: number
     loading?: boolean
   }>()
 
@@ -260,18 +350,87 @@
 
   const generating = ref(false)
   const showExplainModal = ref(false)
+  const isMacroExplainOpen = ref(false)
+  const selectedMacro = ref<any>(null)
+
+  const itemModal = ref<any>(null)
+  const aiModal = ref<any>(null)
+
+  function handleAddItem(event: { type: string; meals?: string[] }) {
+    let mealType = 'snacks'
+    if (event.meals && event.meals.length > 0) {
+      const firstMeal = event.meals[0]?.toLowerCase()
+      if (['breakfast', 'lunch', 'dinner', 'snacks'].includes(firstMeal!)) {
+        mealType = firstMeal!
+      }
+    } else if (event.type === 'PRE_WORKOUT') {
+      mealType = 'breakfast'
+    } else if (event.type === 'POST_WORKOUT') {
+      mealType = 'lunch'
+    }
+    itemModal.value?.open('add', { mealType })
+  }
+
+  function handleAddItemAi(event: { type: string; meals?: string[] }) {
+    let mealType = 'snacks'
+    if (event.meals && event.meals.length > 0) {
+      const firstMeal = event.meals[0]?.toLowerCase()
+      if (['breakfast', 'lunch', 'dinner', 'snacks'].includes(firstMeal!)) {
+        mealType = firstMeal!
+      }
+    } else if (event.type === 'PRE_WORKOUT') {
+      mealType = 'breakfast'
+    } else if (event.type === 'POST_WORKOUT') {
+      mealType = 'lunch'
+    }
+    aiModal.value?.open(mealType)
+  }
+
+  function handleEditItem(item: any) {
+    itemModal.value?.open('edit', item)
+  }
+
+  function showMacroExplain(label: string) {
+    let actual = 0
+    let target = 0
+    let unit = 'g'
+
+    if (label === 'Calories') {
+      actual = props.nutrition.calories || 0
+      target = props.nutrition.caloriesGoal || 2500
+      unit = 'kcal'
+    } else if (label === 'Carbs') {
+      actual = props.nutrition.carbs || 0
+      target = props.nutrition.carbsGoal || 0
+      unit = 'g'
+    } else if (label === 'Protein') {
+      actual = props.nutrition.protein || 0
+      target = props.nutrition.proteinGoal || 0
+      unit = 'g'
+    } else if (label === 'Fat') {
+      actual = props.nutrition.fat || 0
+      target = props.nutrition.fatGoal || 0
+      unit = 'g'
+    }
+
+    selectedMacro.value = { label, actual, target, unit }
+    isMacroExplainOpen.value = true
+  }
 
   const plan = computed(() => props.nutrition?.fuelingPlan)
 
   const timeline = computed(() => {
     if (!props.nutrition || !plan.value) return []
+    const { timezone } = useFormat()
 
     return mapNutritionToTimeline(props.nutrition, props.workouts || [], {
-      preWorkoutWindow: 90, // Fallback if settings not available
-      postWorkoutWindow: 60,
-      baseProteinPerKg: 1.6,
-      baseFatPerKg: 1.0,
-      weight: userStore.profile?.weight || 75
+      preWorkoutWindow: props.settings?.preWorkoutWindow || 90,
+      postWorkoutWindow: props.settings?.postWorkoutWindow || 60,
+      baseProteinPerKg: props.settings?.baseProteinPerKg || 1.6,
+      baseFatPerKg: props.settings?.baseFatPerKg || 1.0,
+      weight: props.weight || 75,
+      mealPattern: props.settings?.mealPattern,
+      timezone: timezone.value
     })
   })
 

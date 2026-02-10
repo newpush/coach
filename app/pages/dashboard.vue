@@ -118,6 +118,8 @@
             <DashboardNutritionFuelingCard
               :nutrition="todayNutrition"
               :workouts="todayWorkouts"
+              :settings="nutritionSettings"
+              :weight="userStore.profile?.weight || 75"
               :loading="loadingNutrition"
               @refresh="fetchTodayNutrition"
             />
@@ -368,6 +370,7 @@
   const loadingUpcoming = ref(false)
   const isLoading = ref(true)
   const todayNutrition = ref<any>(null)
+  const nutritionSettings = ref<any>(null)
   const loadingNutrition = ref(false)
 
   const missingFields = computed(() => userStore.profile?.missingFields || [])
@@ -376,14 +379,16 @@
     loadingNutrition.value = true
     try {
       const dateStr = formatDateUTC(getUserLocalDate(), 'yyyy-MM-dd')
-      const [nData, wData] = await Promise.all([
+      const [nData, wData, sData] = await Promise.all([
         $fetch<any>(`/api/nutrition/${dateStr}`),
         $fetch<any[]>('/api/planned-workouts', {
           query: { startDate: `${dateStr}T00:00:00Z`, endDate: `${dateStr}T23:59:59Z` }
-        })
+        }),
+        $fetch<any>('/api/profile/nutrition')
       ])
       todayNutrition.value = nData
       todayWorkouts.value = wData
+      nutritionSettings.value = sData.settings
     } catch (error: any) {
       if (error.statusCode !== 404) {
         console.error('Failed to fetch today nutrition:', error)
