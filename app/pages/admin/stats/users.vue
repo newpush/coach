@@ -71,7 +71,7 @@
 
         <template v-else>
           <!-- Top Level Cards -->
-          <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
             <UCard>
               <div class="text-center">
                 <div class="text-xs font-bold text-gray-500 uppercase tracking-widest mb-1">
@@ -96,6 +96,19 @@
             <UCard>
               <div class="text-center">
                 <div
+                  class="flex items-center justify-center gap-1 text-xs font-bold text-indigo-500 uppercase tracking-widest mb-1"
+                >
+                  Recurring
+                  <UTooltip text="Users with LLM activity on 3+ distinct days in the last 7 days">
+                    <UIcon name="i-lucide-info" class="w-3.5 h-3.5 text-gray-400" />
+                  </UTooltip>
+                </div>
+                <div class="text-3xl font-bold">{{ stats?.activity.recurringUsers }}</div>
+              </div>
+            </UCard>
+            <UCard>
+              <div class="text-center">
+                <div
                   class="flex items-center justify-center gap-1 text-xs font-bold text-red-500 uppercase tracking-widest mb-1"
                 >
                   Inactive
@@ -111,7 +124,7 @@
                 <div
                   class="flex items-center justify-center gap-1 text-xs font-bold text-blue-500 uppercase tracking-widest mb-1"
                 >
-                  Retention Rate
+                  Retention
                   <UTooltip
                     text="Percentage of total users who are active (logged a workout in the last 30 days)"
                   >
@@ -126,17 +139,17 @@
           </div>
 
           <!-- Daily Charts -->
-          <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <UCard>
               <template #header>
                 <div class="flex justify-between items-center">
                   <h2 class="text-lg font-bold uppercase tracking-tight text-purple-500">
-                    New Users Per Day
+                    New Users
                   </h2>
                   <span class="text-xs text-gray-500">Last 30 Days</span>
                 </div>
               </template>
-              <div class="h-64">
+              <div class="h-48">
                 <div v-if="stats" class="flex items-end justify-between h-full pt-4 gap-1">
                   <div
                     v-for="day in stats.activity.usersByDay"
@@ -160,12 +173,12 @@
               <template #header>
                 <div class="flex justify-between items-center">
                   <h2 class="text-lg font-bold uppercase tracking-tight text-amber-500">
-                    Active Users Per Day
+                    Active Users
                   </h2>
                   <span class="text-xs text-gray-500">Last 30 Days</span>
                 </div>
               </template>
-              <div class="h-64">
+              <div class="h-48">
                 <div v-if="stats" class="flex items-end justify-between h-full pt-4 gap-1">
                   <div
                     v-for="day in stats.activity.activeUsersByDay"
@@ -179,6 +192,35 @@
                       class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block bg-gray-900 text-white text-xs rounded px-2 py-1 whitespace-nowrap z-10"
                     >
                       {{ day.date }}: {{ day.count }} active
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </UCard>
+
+            <UCard>
+              <template #header>
+                <div class="flex justify-between items-center">
+                  <h2 class="text-lg font-bold uppercase tracking-tight text-emerald-500">
+                    Daily Check-ins
+                  </h2>
+                  <span class="text-xs text-gray-500">Last 30 Days</span>
+                </div>
+              </template>
+              <div class="h-48">
+                <div v-if="stats" class="flex items-end justify-between h-full pt-4 gap-1">
+                  <div
+                    v-for="day in stats.activity.dailyCheckinsByDay"
+                    :key="day.date"
+                    class="group relative flex-1 bg-emerald-500 rounded-t transition-all hover:bg-emerald-600"
+                    :style="{
+                      height: `${(day.count / (Math.max(...stats.activity.dailyCheckinsByDay.map((d: any) => d.count)) || 1)) * 100}%`
+                    }"
+                  >
+                    <div
+                      class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block bg-gray-900 text-white text-xs rounded px-2 py-1 whitespace-nowrap z-10"
+                    >
+                      {{ day.date }}: {{ day.count }} check-ins
                     </div>
                   </div>
                 </div>

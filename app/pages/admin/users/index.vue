@@ -157,7 +157,7 @@
                     <th
                       class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
                     >
-                      Admin
+                      LLM Spending
                     </th>
                     <th
                       class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
@@ -218,18 +218,8 @@
                       </div>
                     </td>
                     <td class="px-6 py-4 whitespace-nowrap">
-                      <div class="text-xs space-y-1">
-                        <div>
-                          <span class="font-bold">{{ user.llmUsage?.count || 0 }}</span> calls
-                        </div>
-                        <div class="text-emerald-600 dark:text-emerald-400 font-medium">
-                          {{
-                            new Intl.NumberFormat('en-US', {
-                              style: 'currency',
-                              currency: 'USD'
-                            }).format(user.llmUsage?.cost || 0)
-                          }}
-                        </div>
+                      <div class="text-xs">
+                        <span class="font-bold">{{ user.llmUsage?.count || 0 }}</span> calls
                       </div>
                     </td>
                     <td
@@ -237,13 +227,15 @@
                     >
                       {{ new Date(user.createdAt).toLocaleDateString() }}
                     </td>
-                    <td class="px-6 py-4 whitespace-nowrap">
-                      <span
-                        v-if="user.isAdmin"
-                        class="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200 uppercase"
-                        >Yes</span
-                      >
-                      <span v-else class="text-xs text-gray-400">No</span>
+                    <td
+                      class="px-6 py-4 whitespace-nowrap text-sm font-medium text-emerald-600 dark:text-emerald-400"
+                    >
+                      {{
+                        new Intl.NumberFormat('en-US', {
+                          style: 'currency',
+                          currency: 'USD'
+                        }).format(user.llmUsage?.cost || 0)
+                      }}
                     </td>
                     <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                       <div class="flex justify-end gap-2">
