@@ -68,6 +68,8 @@ model User {
   recoverySensitivity                String?                      @default("MEDIUM")
   lastLoginAt                        DateTime?
   lastLoginIp                        String?
+  registrationIp                     String?
+  registrationCountry                String?
   stripeCustomerId                   String?                      @unique
   stripeSubscriptionId               String?                      @unique
   subscriptionPeriodEnd              DateTime?
