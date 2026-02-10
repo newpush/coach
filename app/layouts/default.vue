@@ -239,22 +239,6 @@
           }
         },
         {
-          label: 'Authorized Apps',
-          icon: 'i-lucide-shield-check',
-          to: '/settings/authorized-apps',
-          onSelect: () => {
-            open.value = false
-          }
-        },
-        {
-          label: 'Coaching',
-          icon: 'i-lucide-users',
-          to: '/settings/coaching',
-          onSelect: () => {
-            open.value = false
-          }
-        },
-        {
           label: 'Changelog',
           icon: 'i-lucide-list',
           to: '/settings/changelog',
