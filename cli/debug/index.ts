@@ -15,7 +15,6 @@ import findAnyCommand from './find-any'
 import plannedCommand from './planned'
 import goalsCommand from './goals'
 import intervalsTypesCommand from './intervals-types'
-import { intervalsIngestCommand, intervalsSearchCommand } from './intervals-ingest'
 import calendarNotesCommand from './calendar-notes'
 import verifyLazyProfileCommand from './verify-lazy-profile'
 import deduplicateCommand from './deduplicate'
@@ -48,8 +47,6 @@ debugCommand.addCommand(findAnyCommand)
 debugCommand.addCommand(plannedCommand)
 debugCommand.addCommand(goalsCommand)
 debugCommand.addCommand(intervalsTypesCommand)
-debugCommand.addCommand(intervalsIngestCommand)
-debugCommand.addCommand(intervalsSearchCommand)
 debugCommand.addCommand(calendarNotesCommand)
 debugCommand.addCommand(verifyLazyProfileCommand)
 debugCommand.addCommand(deduplicateCommand)
