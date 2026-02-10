@@ -323,6 +323,97 @@ locationCommand
   })
 
 locationCommand
+  .command('backfill-registration')
+  .description('Backfill registrationIp and registrationCountry based on the first audit log')
+  .option('--prod', 'Use production database')
+  .option('--update', 'Update user registration info if found')
+  .option('--limit <number>', 'Limit number of users to process', '50')
+  .action(async (options) => {
+    const { prisma, pool } = await getPrisma(options.prod)
+    const limit = parseInt(options.limit)
+
+    try {
+      const users = await prisma.user.findMany({
+        where: {
+          registrationIp: null
+        },
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          createdAt: true
+        },
+        take: limit,
+        orderBy: { createdAt: 'desc' }
+      })
+
+      if (users.length === 0) {
+        console.log(chalk.green('No users missing registration info.'))
+        return
+      }
+
+      console.log(chalk.blue(`Processing ${users.length} users missing registration info:`))
+
+      for (const user of users) {
+        process.stdout.write(chalk.gray(`- ${user.email}: `))
+
+        // Find the absolute first audit log with an IP
+        const firstAudit = await prisma.auditLog.findFirst({
+          where: {
+            userId: user.id,
+            ipAddress: { not: null, not: 'unknown' }
+          },
+          orderBy: { createdAt: 'asc' },
+          select: { ipAddress: true, createdAt: true }
+        })
+
+        if (!firstAudit) {
+          console.log(chalk.yellow('No IP found in audit logs.'))
+          continue
+        }
+
+        const ip = firstAudit.ipAddress!
+        const geo = geoip.lookup(ip)
+
+        if (geo) {
+          const country = geo.country
+          console.log(chalk.green(`${ip} -> ${country}`))
+
+          if (options.update) {
+            await prisma.user.update({
+              where: { id: user.id },
+              data: {
+                registrationIp: ip,
+                registrationCountry: country
+              }
+            })
+          }
+        } else {
+          console.log(chalk.yellow(`${ip} -> GeoIP failed`))
+          if (options.update) {
+            await prisma.user.update({
+              where: { id: user.id },
+              data: {
+                registrationIp: ip
+              }
+            })
+          }
+        }
+      }
+
+      console.log(chalk.blue('\nBackfill complete.'))
+      if (!options.update) {
+        console.log(chalk.cyan('Note: This was a dry run. Use --update to apply changes.'))
+      }
+    } catch (e: any) {
+      console.error(chalk.red('Error:'), e.message)
+    } finally {
+      await prisma.$disconnect()
+      await pool.end()
+    }
+  })
+
+locationCommand
   .command('list-recent')
   .description('List the last 50 users with their IP and location info using GeoIP')
   .option('--prod', 'Use production database')
@@ -340,6 +431,8 @@ locationCommand
           country: true,
           city: true,
           lastLoginIp: true,
+          registrationIp: true,
+          registrationCountry: true,
           createdAt: true
         }
       })
@@ -384,8 +477,8 @@ locationCommand
           email: user.email,
           name: user.name || 'N/A',
           stored_country: user.country || 'N/A',
-          stored_city: user.city || 'N/A',
-          ip: ip || 'None',
+          reg_ip: user.registrationIp || 'N/A',
+          reg_country: user.registrationCountry || 'N/A',
           geoip_location: geoInfo,
           joined: user.createdAt.toISOString().split('T')[0]
         })
