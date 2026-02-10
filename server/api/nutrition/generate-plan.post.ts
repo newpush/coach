@@ -81,19 +81,12 @@ export default defineEventHandler(async (event) => {
 
   const trainingWorkout = plannedWorkouts.find((w) => w.type !== 'Rest')
 
-  if (!trainingWorkout) {
-    return {
-      success: false,
-      message: `No training workout found for ${normalizedDate.toISOString().split('T')[0]}. Fueling plans are only generated for active training days.`
-    }
-  }
-
-  // 2. Trigger the task
+  // 2. Trigger the task (even if no workout, to get baseline)
   const { tasks } = await import('@trigger.dev/sdk/v3')
   const handle = await tasks.trigger(
     'generate-fueling-plan',
     {
-      plannedWorkoutId: trainingWorkout.id,
+      plannedWorkoutId: trainingWorkout?.id,
       userId,
       date: normalizedDate.toISOString()
     },
@@ -105,7 +98,9 @@ export default defineEventHandler(async (event) => {
 
   return {
     success: true,
-    message: 'Fueling plan generation started.',
+    message: trainingWorkout
+      ? 'Fueling plan generation started.'
+      : 'Rest day baseline calculation started.',
     runId: handle.id
   }
 })

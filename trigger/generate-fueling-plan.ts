@@ -2,29 +2,15 @@ import { task } from '@trigger.dev/sdk/v3'
 import { prisma } from '../server/utils/db'
 import { calculateFuelingStrategy } from '../server/utils/nutrition/fueling'
 import { getUserNutritionSettings } from '../server/utils/nutrition/settings'
-import {
-  getStartOfDayUTC,
-  getUserTimezone,
-  buildZonedDateTimeFromUtcDate
-} from '../server/utils/date'
+import { getUserTimezone, buildZonedDateTimeFromUtcDate } from '../server/utils/date'
 import { nutritionRepository } from '../server/utils/repositories/nutritionRepository'
 
 export const generateFuelingPlanTask = task({
   id: 'generate-fueling-plan',
-  run: async (payload: { plannedWorkoutId: string; userId: string; date: string }) => {
-    const { plannedWorkoutId, userId, date } = payload
+  run: async (payload: { plannedWorkoutId?: string; userId: string; date: string }) => {
+    const { userId, date } = payload
 
-    // 1. Fetch Planned Workout & Settings
-    const workout = await prisma.plannedWorkout.findUnique({
-      where: { id: plannedWorkoutId }
-    })
-
-    if (!workout) {
-      console.log(`Planned Workout ${plannedWorkoutId} not found. Skipping.`)
-      return
-    }
-
-    // 2. Check for Manual Lock
+    // 1. Check for Manual Lock
     // The 'date' string passed is ISO UTC Midnight for the calendar day
     const targetDateStart = new Date(date)
     targetDateStart.setUTCHours(0, 0, 0, 0)
@@ -41,7 +27,7 @@ export const generateFuelingPlanTask = task({
     const settings = await getUserNutritionSettings(userId)
     const timezone = await getUserTimezone(userId)
 
-    // 3. Fetch ALL workouts for this day to build a complete plan
+    // 2. Fetch ALL workouts for this day to build a complete plan
     const allWorkouts = await prisma.plannedWorkout.findMany({
       where: {
         userId,
@@ -53,6 +39,30 @@ export const generateFuelingPlanTask = task({
       orderBy: { date: 'asc' }
     })
 
+    console.log(`[GeneratePlan] Found ${allWorkouts.length} workouts for ${date}`)
+
+    // 3. Calculate Strategy
+    // Map settings to profile interface expected by calculator
+    const user = await prisma.user.findUnique({ where: { id: userId } })
+    const profile = {
+      weight: user?.weight || 75,
+      ftp: user?.ftp || 250,
+      currentCarbMax: settings.currentCarbMax,
+      sodiumTarget: settings.sodiumTarget,
+      sweatRate: settings.sweatRate || 0.8,
+      preWorkoutWindow: settings.preWorkoutWindow,
+      postWorkoutWindow: settings.postWorkoutWindow,
+      fuelingSensitivity: settings.fuelingSensitivity,
+      fuelState1Trigger: settings.fuelState1Trigger,
+      fuelState1Min: settings.fuelState1Min,
+      fuelState1Max: settings.fuelState1Max,
+      fuelState2Trigger: settings.fuelState2Trigger,
+      fuelState2Min: settings.fuelState2Min,
+      fuelState2Max: settings.fuelState2Max,
+      fuelState3Min: settings.fuelState3Min,
+      fuelState3Max: settings.fuelState3Max
+    }
+
     // Generate clusters for each workout and combine
     const combinedWindows: any[] = []
     const combinedNotes: string[] = []
@@ -63,7 +73,22 @@ export const generateFuelingPlanTask = task({
     let totalFluid = 2000 // Base hydration
     let totalSodium = 1000 // Base sodium
 
-    for (const work of allWorkouts) {
+    // If NO workouts exist, we still need to calculate a baseline (Rest Day)
+    const workoutsToProcess =
+      allWorkouts.length > 0
+        ? allWorkouts
+        : [
+            {
+              id: 'rest-virtual',
+              title: 'Rest Day',
+              durationSec: 0,
+              type: 'Rest',
+              date: targetDateStart,
+              fuelingStrategy: 'STANDARD'
+            }
+          ]
+
+    for (const work of workoutsToProcess as any[]) {
       // Convert HH:mm string to a Date object relative to the workout date
       let startTimeDate: Date | null = null
       if (work.startTime && typeof work.startTime === 'string' && work.startTime.includes(':')) {
@@ -109,7 +134,7 @@ export const generateFuelingPlanTask = task({
       }
     }
 
-    // 5. Update Nutrition Record
+    // 4. Update Nutrition Record
     await nutritionRepository.upsert(
       userId,
       targetDateStart,
