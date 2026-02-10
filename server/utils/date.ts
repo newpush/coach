@@ -143,8 +143,8 @@ export function buildZonedDateTimeFromUtcDate(
 
   if (time && time.includes(':')) {
     const [h, m] = time.split(':').map(Number)
-    if (Number.isFinite(h)) hour = h
-    if (Number.isFinite(m)) minute = m
+    if (typeof h === 'number' && Number.isFinite(h)) hour = h
+    if (typeof m === 'number' && Number.isFinite(m)) minute = m
   }
 
   const dateStr = formatDateUTC(date, 'yyyy-MM-dd')
