@@ -31,35 +31,7 @@ export default defineEventHandler(async (event) => {
   const timezone = await getUserTimezone(userId)
   const today = getUserLocalDate(timezone)
 
-  // Scope: Future and today's workouts belonging to this plan
-  const planScope = {
-    date: { gte: today },
-    trainingWeek: {
-      block: {
-        trainingPlanId: planId
-      }
-    },
-    completed: false
-  }
-
-  // A. Unlink User-Managed Workouts (preserve them)
-  await prisma.plannedWorkout.updateMany({
-    where: {
-      ...planScope,
-      managedBy: 'USER'
-    },
-    data: {
-      trainingWeekId: null
-    }
-  })
-
-  // B. Delete AI-Managed Workouts
-  const deleted = await prisma.plannedWorkout.deleteMany({
-    where: {
-      ...planScope,
-      managedBy: 'COACH_WATTS' // or not 'USER'
-    }
-  })
+  const deleted = await trainingPlanRepository.cleanupWorkouts(userId, planId, today)
 
   return {
     success: true,

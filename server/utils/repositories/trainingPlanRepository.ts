@@ -89,5 +89,37 @@ export const trainingPlanRepository = {
         status: 'ARCHIVED'
       }
     })
+  },
+
+  async cleanupWorkouts(userId: string, planId: string, minDate: Date) {
+    const planScope = {
+      userId,
+      date: { gte: minDate },
+      trainingWeek: {
+        block: {
+          trainingPlanId: planId
+        }
+      },
+      completed: false
+    }
+
+    // A. Unlink User-Managed Workouts (preserve them)
+    await prisma.plannedWorkout.updateMany({
+      where: {
+        ...planScope,
+        managedBy: 'USER'
+      },
+      data: {
+        trainingWeekId: null
+      }
+    })
+
+    // B. Delete AI-Managed Workouts
+    return prisma.plannedWorkout.deleteMany({
+      where: {
+        ...planScope,
+        managedBy: { not: 'USER' }
+      }
+    })
   }
 }

@@ -53,7 +53,14 @@ export default defineEventHandler(async (event) => {
 
   const anchorWorkoutIds = body?.anchorWorkoutIds || []
 
-  // 1. Archive existing active plans
+  // 1. Archive existing active plans and cleanup their workouts
+  const activePlans = await trainingPlanRepository.list(userId, { status: 'ACTIVE' })
+  const plansToArchive = activePlans.filter((p) => p.id !== planId)
+
+  for (const p of plansToArchive) {
+    await trainingPlanRepository.cleanupWorkouts(userId, p.id, startDate)
+  }
+
   await trainingPlanRepository.archiveAllExcept(userId, planId)
 
   // 2. Handle Template vs Draft

@@ -176,8 +176,9 @@
               <UButton
                 color="primary"
                 @click="
-                  () => {
+                  async () => {
                     isArchiveModalOpen = false
+                    await abandonActivePlan()
                     openWizard()
                   }
                 "
@@ -277,6 +278,25 @@
 
   function openWizard() {
     showWizard.value = true
+  }
+
+  async function abandonActivePlan() {
+    if (!activePlan.value?.id) return
+
+    try {
+      await $fetch(`/api/plans/${activePlan.value.id}/abandon`, {
+        method: 'POST'
+      })
+      // Clear local state
+      data.value.plan = null
+    } catch (error) {
+      console.error('Failed to abandon plan:', error)
+      toast.add({
+        title: 'Error',
+        description: 'Failed to archive current plan.',
+        color: 'error'
+      })
+    }
   }
 
   function startNewPlan() {
