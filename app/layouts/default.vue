@@ -239,14 +239,6 @@
           }
         },
         {
-          label: 'Changelog',
-          icon: 'i-lucide-list',
-          to: '/settings/changelog',
-          onSelect: () => {
-            open.value = false
-          }
-        },
-        {
           label: 'Developer',
           icon: 'i-lucide-code-2',
           to: '/settings/developer',
