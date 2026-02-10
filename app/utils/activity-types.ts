@@ -14,21 +14,21 @@ export const WORKOUT_ICONS: Record<string, string> = {
   Walk: 'i-tabler-walk',
   Hike: 'i-tabler-mountain',
   Yoga: 'i-tabler-yoga',
-  Rowing: 'i-tabler-rowing',
-  AlpineSki: 'i-tabler-skiing',
-  NordicSki: 'i-tabler-skiing',
+  Rowing: 'i-lucide-waves',
+  AlpineSki: 'i-lucide-snowflake',
+  NordicSki: 'i-lucide-snowflake',
   Snowboard: 'i-tabler-snowboarding',
   Elliptical: 'i-tabler-activity',
   StairStepper: 'i-tabler-stairs',
   RockClimbing: 'i-tabler-mountain',
-  StandUpPaddling: 'i-tabler-sailboat', // Closest?
-  Kayaking: 'i-tabler-sailboat',
-  Surfing: 'i-tabler-wave-surfing', // Check if exists, else generic
+  StandUpPaddling: 'i-lucide-ship',
+  Kayaking: 'i-lucide-ship',
+  Surfing: 'i-lucide-waves',
   Crossfit: 'i-tabler-barbell',
   HIIT: 'i-tabler-flame',
-  BoxFitness: 'i-tabler-boxing', // Or generic
-  Kickboxing: 'i-tabler-boxing', // Or generic
-  MartialArts: 'i-tabler-karate', // Or generic
+  BoxFitness: 'i-tabler-boxing-glove',
+  Kickboxing: 'i-tabler-boxing-glove',
+  MartialArts: 'i-tabler-karate',
   Golf: 'i-tabler-golf',
   Tennis: 'i-tabler-ball-tennis',
   Squash: 'i-tabler-ball-tennis',
@@ -40,15 +40,15 @@ export const WORKOUT_ICONS: Record<string, string> = {
   Baseball: 'i-tabler-ball-baseball',
   Volleyball: 'i-tabler-ball-volleyball',
   IceSkate: 'i-tabler-ice-skating',
-  InlineSkate: 'i-tabler-skateboarding', // Close enough?
+  InlineSkate: 'i-tabler-skateboarding',
   Skateboarding: 'i-tabler-skateboarding',
-  Commute: 'i-tabler-bus', // Or bike/walk icon
+  Commute: 'i-tabler-bus',
   Gardening: 'i-tabler-seeding',
   Sauna: 'i-tabler-bath',
   IceBath: 'i-tabler-snowflake',
   Massage: 'i-tabler-massage',
   Recovery: 'i-tabler-heartbeat',
-  Meditation: 'i-tabler-meditation', // If using separate type
+  Meditation: 'i-lucide-leaf',
   Pilates: 'i-tabler-stretching'
 }
 
