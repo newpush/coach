@@ -1,5 +1,5 @@
 <template>
-  <div class="relative pl-8 pb-4">
+  <div class="relative pl-8 pb-4 border-l-2 border-gray-100 dark:border-gray-800 last:border-0">
     <!-- Anchor Icon -->
     <div
       class="absolute left-[-11px] top-0 w-5 h-5 rounded-full border-2 border-primary-500 bg-primary-500 z-10 flex items-center justify-center shadow-lg">
@@ -8,16 +8,16 @@
 
     <!-- Workout Block -->
     <div
-      class="bg-gray-900 rounded-xl p-4 sm:p-5 border border-gray-800 shadow-2xl relative overflow-hidden group cursor-pointer hover:border-primary-500/50 transition-colors"
+      class="bg-white dark:bg-gray-900 rounded-xl p-4 sm:p-5 border border-gray-200 dark:border-gray-800 shadow-xl dark:shadow-2xl relative overflow-hidden group cursor-pointer hover:border-primary-500/50 transition-colors"
       @click="navigateTo(`/workouts/planned/${workout.id}`)">
       <!-- Animated background effect -->
-      <div class="absolute inset-0 bg-gradient-to-br from-primary-500/10 to-transparent opacity-50" />
+      <div class="absolute inset-0 bg-gradient-to-br from-primary-500/10 to-transparent opacity-50 dark:opacity-50" />
 
       <div class="relative flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div class="space-y-1">
           <div class="flex items-center gap-2 flex-wrap">
             <h3
-              class="text-base font-black text-white uppercase tracking-tight group-hover:text-primary-400 transition-colors">
+              class="text-base font-black text-gray-900 dark:text-white uppercase tracking-tight group-hover:text-primary-500 dark:group-hover:text-primary-400 transition-colors">
               {{ workout.title }}
             </h3>
             <UBadge v-if="strategyLabel" variant="soft" color="primary" size="xs"
@@ -26,7 +26,7 @@
             </UBadge>
           </div>
 
-          <div class="flex items-center gap-3 text-xs font-bold text-gray-400 uppercase tracking-widest">
+          <div class="flex items-center gap-3 text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest">
             <div class="flex items-center gap-1">
               <UIcon name="i-tabler-clock" class="w-3.5 h-3.5" />
               <span>{{ formatDuration(workout.durationSec) }}</span>
@@ -44,20 +44,20 @@
 
         <div class="flex items-center gap-2">
           <div v-if="startTime"
-            class="px-3 py-1.5 bg-gray-800 rounded-lg border border-gray-700 text-center min-w-[70px]">
-            <div class="text-[8px] font-black text-gray-500 uppercase leading-none mb-1">
+            class="px-3 py-1.5 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-100 dark:border-gray-700 text-center min-w-[70px]">
+            <div class="text-[8px] font-black text-gray-400 dark:text-gray-500 uppercase leading-none mb-1">
               Start
             </div>
-            <div class="text-[10px] font-bold text-white uppercase leading-none">
+            <div class="text-[10px] font-bold text-gray-900 dark:text-white uppercase leading-none">
               {{ formatTime(startTime) }}
             </div>
           </div>
 
-          <div class="px-3 py-1.5 bg-gray-800 rounded-lg border border-gray-700 text-center min-w-[70px]">
-            <div class="text-[8px] font-black text-gray-500 uppercase leading-none mb-1">
+          <div class="px-3 py-1.5 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-100 dark:border-gray-700 text-center min-w-[70px]">
+            <div class="text-[8px] font-black text-gray-400 dark:text-gray-500 uppercase leading-none mb-1">
               Status
             </div>
-            <div class="text-[10px] font-bold text-primary-400 uppercase leading-none">Planned</div>
+            <div class="text-[10px] font-bold text-primary-600 dark:text-primary-400 uppercase leading-none">Planned</div>
           </div>
         </div>
       </div>
