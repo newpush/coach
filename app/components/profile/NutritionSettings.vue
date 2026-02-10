@@ -163,7 +163,7 @@
               :min="adjustmentRange.min"
               :max="adjustmentRange.max"
               :step="adjustmentRange.step"
-              :color="localSettings.goalProfile === 'LOSE' ? 'orange' : 'success'"
+              :color="localSettings.goalProfile === 'LOSE' ? 'warning' : 'success'"
             />
             <p class="text-xs text-gray-500 mt-2">
               {{
