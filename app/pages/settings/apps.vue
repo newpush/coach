@@ -22,29 +22,132 @@
       variant="soft"
       :description="fitbitRateLimitMessage"
     />
-    <SettingsConnectedApps
-      :intervals-connected="intervalsConnected"
-      :intervals-ingest-workouts="intervalsIngestWorkouts"
-      :whoop-connected="whoopConnected"
-      :whoop-ingest-workouts="whoopIngestWorkouts"
-      :oura-connected="ouraConnected"
-      :oura-ingest-workouts="ouraIngestWorkouts"
-      :withings-connected="withingsConnected"
-      :yazio-connected="yazioConnected"
-      :fitbit-connected="fitbitConnected"
-      :strava-connected="stravaConnected"
-      :hevy-connected="hevyConnected"
-      :polar-connected="polarConnected"
-      :polar-ingest-workouts="polarIngestWorkouts"
-      :telegram-connected="telegramConnected"
-      :syncing-providers="syncingProviders"
-      :intervals-settings="intervalsSettings"
-      @disconnect="disconnectIntegration"
-      @sync="syncIntegration"
-      @sync-profile="syncProfile"
-      @connect-telegram="connectTelegram"
-      @update-setting="updateIntegrationSetting"
-    />
+      <SettingsConnectedApps
+        :intervals-connected="intervalsConnected"
+        :intervals-ingest-workouts="intervalsIngestWorkouts"
+        :whoop-connected="whoopConnected"
+        :whoop-ingest-workouts="whoopIngestWorkouts"
+        :oura-connected="ouraConnected"
+        :oura-ingest-workouts="ouraIngestWorkouts"
+        :withings-connected="withingsConnected"
+        :yazio-connected="yazioConnected"
+        :fitbit-connected="fitbitConnected"
+        :strava-connected="stravaConnected"
+        :hevy-connected="hevyConnected"
+        :polar-connected="polarConnected"
+        :polar-ingest-workouts="polarIngestWorkouts"
+        :telegram-connected="telegramConnected"
+        :syncing-providers="syncingProviders"
+        :intervals-settings="intervalsSettings"
+        @disconnect="disconnectIntegration"
+        @sync="syncIntegration"
+        @sync-profile="syncProfile"
+        @connect-telegram="connectTelegram"
+        @update-setting="updateIntegrationSetting"
+      />
+
+      <USeparator class="my-8" />
+
+      <div>
+        <div>
+          <h2 class="text-2xl font-bold">Authorized Applications</h2>
+          <p class="text-neutral-500">
+            Third-party applications that have access to your Coach Watts account.
+          </p>
+        </div>
+
+        <div v-if="pendingConsents" class="space-y-4 mt-6">
+          <USkeleton v-for="i in 2" :key="i" class="h-24 w-full" />
+        </div>
+
+        <div
+          v-else-if="consents && consents.length === 0"
+          class="py-12 text-center border-2 border-dashed border-gray-200 dark:border-gray-800 rounded-xl mt-6"
+        >
+          <UIcon
+            name="i-heroicons-shield-check"
+            class="w-12 h-12 text-gray-300 dark:text-gray-700 mx-auto mb-3"
+          />
+          <p class="text-sm text-gray-500 dark:text-gray-400 font-medium">
+            You haven't authorized any applications yet.
+          </p>
+        </div>
+
+        <div v-else class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
+          <UCard v-for="consent in consents" :key="consent.id">
+            <div class="flex items-center justify-between gap-4">
+              <div class="flex items-center gap-4">
+                <UAvatar
+                  :src="consent.app.logoUrl || undefined"
+                  :alt="consent.app.name"
+                  size="lg"
+                  icon="i-heroicons-cube"
+                />
+                <div class="min-w-0">
+                  <h3 class="font-bold text-gray-900 dark:text-white truncate">
+                    {{ consent.app.name }}
+                  </h3>
+                  <p class="text-xs text-gray-500 dark:text-gray-400 mt-1 font-medium">
+                    Authorized on {{ formatDate(consent.createdAt) }}
+                  </p>
+                </div>
+              </div>
+              <UButton
+                label="Revoke"
+                color="error"
+                variant="ghost"
+                icon="i-heroicons-trash"
+                size="xs"
+                class="font-bold flex-shrink-0"
+                @click="confirmRevoke(consent)"
+              />
+            </div>
+
+            <USeparator class="my-4" />
+
+            <div>
+              <p
+                class="text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest mb-2"
+              >
+                Permissions:
+              </p>
+              <div class="flex flex-wrap gap-1.5">
+                <UBadge
+                  v-for="scope in consent.scopes"
+                  :key="scope"
+                  color="neutral"
+                  variant="subtle"
+                  size="xs"
+                  class="font-medium"
+                >
+                  {{ formatScope(scope) }}
+                </UBadge>
+              </div>
+            </div>
+          </UCard>
+        </div>
+      </div>
+
+    <!-- Revoke Confirmation Modal -->
+    <UModal v-model:open="isRevokeModalOpen" title="Revoke Access">
+      <template #body>
+        <p class="text-sm text-gray-600 dark:text-gray-400 font-medium">
+          Are you sure you want to revoke access for <strong>{{ selectedConsent?.app.name }}</strong
+          >? The application will no longer be able to access your data.
+        </p>
+      </template>
+      <template #footer>
+        <div class="flex justify-end gap-3">
+          <UButton
+            label="Cancel"
+            color="neutral"
+            variant="ghost"
+            @click="isRevokeModalOpen = false"
+          />
+          <UButton label="Revoke Access" color="error" :loading="revoking" @click="revokeAccess" />
+        </div>
+      </template>
+    </UModal>
   </div>
 </template>
 
@@ -165,6 +268,61 @@
   )
 
   const syncingProviders = ref(new Set<string>())
+
+  // Authorized Apps Logic
+  const {
+    data: consents,
+    pending: pendingConsents,
+    refresh: refreshConsents
+  } = await useFetch<any[]>('/api/oauth/consents', {
+    lazy: true,
+    server: false
+  })
+
+  const isRevokeModalOpen = ref(false)
+  const revoking = ref(false)
+  const selectedConsent = ref<any>(null)
+
+  function confirmRevoke(consent: any) {
+    selectedConsent.value = consent
+    isRevokeModalOpen.value = true
+  }
+
+  async function revokeAccess() {
+    if (!selectedConsent.value) return
+
+    revoking.value = true
+    try {
+      await $fetch(`/api/oauth/consents/${selectedConsent.value.app.id}`, {
+        method: 'DELETE'
+      })
+      toast.add({ title: 'Success', description: 'Access revoked successfully', color: 'success' })
+      isRevokeModalOpen.value = false
+      refreshConsents()
+    } catch (error: any) {
+      toast.add({
+        title: 'Error',
+        description: error.data?.message || 'Failed to revoke access',
+        color: 'error'
+      })
+    } finally {
+      revoking.value = false
+    }
+  }
+
+  function formatDate(date: string) {
+    return new Date(date).toLocaleDateString(undefined, {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric'
+    })
+  }
+
+  function formatScope(scope: string) {
+    if (scope === 'offline_access') return 'Offline Access'
+    const parts = scope.split(':')
+    return parts.map((p) => p.charAt(0).toUpperCase() + p.slice(1)).join(' ')
+  }
 
   const connectTelegram = async () => {
     try {
