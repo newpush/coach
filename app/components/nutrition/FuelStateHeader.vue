@@ -45,7 +45,7 @@
             :color="goalAdjustment < 0 ? 'error' : 'success'"
             class="font-black"
           >
-            {{ goalAdjustment > 0 ? '+' : '' }}{{ goalAdjustment }} kcal
+            {{ goalAdjustment > 0 ? '+' : '' }}{{ goalAdjustment }}%
           </UBadge>
         </div>
       </div>
@@ -56,7 +56,8 @@
       <div
         v-for="macro in macros"
         :key="macro.label"
-        class="bg-white dark:bg-gray-900 p-4 rounded-xl border border-gray-100 dark:border-gray-800 shadow-sm overflow-hidden relative group"
+        class="bg-white dark:bg-gray-900 p-4 rounded-xl border border-gray-100 dark:border-gray-800 shadow-sm overflow-hidden relative group cursor-pointer hover:border-primary-300 dark:hover:border-primary-700 transition-colors"
+        @click="showMacroExplain(macro)"
       >
         <div class="flex items-center justify-between mb-3">
           <div class="flex items-center gap-2">
@@ -90,10 +91,22 @@
 
         <!-- Hover indicator -->
         <div
-          class="absolute bottom-0 left-0 h-0.5 bg-gray-200 dark:bg-gray-700 w-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"
+          class="absolute bottom-0 left-0 h-0.5 bg-primary-500 w-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"
         />
       </div>
     </div>
+
+    <NutritionMacroExplainModal
+      v-if="selectedMacro"
+      v-model="isExplainOpen"
+      :label="selectedMacro.label"
+      :actual="selectedMacro.actual"
+      :target="selectedMacro.target"
+      :unit="selectedMacro.unit"
+      :fuel-state="fuelState"
+      :settings="settings"
+      :weight="weight"
+    />
   </div>
 </template>
 
@@ -103,6 +116,8 @@
       fuelState: number
       isLocked?: boolean
       goalAdjustment?: number
+      settings: any
+      weight: number
       targets: {
         calories: number
         carbs: number
@@ -121,6 +136,14 @@
       goalAdjustment: 0
     }
   )
+
+  const isExplainOpen = ref(false)
+  const selectedMacro = ref<any>(null)
+
+  function showMacroExplain(macro: any) {
+    selectedMacro.value = macro
+    isExplainOpen.value = true
+  }
 
   const stateLabel = computed(() => {
     switch (props.fuelState) {

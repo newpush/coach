@@ -26,6 +26,24 @@
               <UIcon name="i-heroicons-check-badge" class="w-3 h-3" />
               Hit
             </div>
+            <div v-if="!isLocked" class="flex items-center gap-1 ml-1">
+              <UButton
+                icon="i-heroicons-plus-circle"
+                variant="ghost"
+                color="neutral"
+                size="xs"
+                class="opacity-40 hover:opacity-100 transition-opacity"
+                @click="$emit('add', { type, meals })"
+              />
+              <UButton
+                icon="i-heroicons-sparkles"
+                variant="ghost"
+                color="primary"
+                size="xs"
+                class="opacity-40 hover:opacity-100 transition-opacity"
+                @click="$emit('addAi', { type, meals })"
+              />
+            </div>
           </div>
           <p class="text-[10px] font-bold text-gray-400 uppercase tracking-tighter">
             {{ formatTime(startTime) }} — {{ formatTime(endTime) }}
@@ -211,9 +229,9 @@
       <!-- Logged Items -->
       <div v-if="items.length > 0" class="space-y-2">
         <div
-          v-for="item in items"
-          :key="item.id"
-          class="flex items-center justify-between p-3 bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 shadow-sm"
+          v-for="(item, idx) in items"
+          :key="item.id || `item-${idx}`"
+          class="group flex items-center justify-between p-3 bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 shadow-sm"
         >
           <div class="flex items-center gap-3">
             <div
@@ -248,6 +266,15 @@
                 >{{ item.protein }}g P</span
               >
             </div>
+            <UButton
+              v-if="!isLocked"
+              icon="i-heroicons-pencil-square"
+              variant="ghost"
+              color="neutral"
+              size="xs"
+              class="opacity-0 group-hover:opacity-100 transition-opacity"
+              @click="$emit('edit', item)"
+            />
           </div>
         </div>
       </div>
@@ -268,9 +295,12 @@
     targetSodium?: number
     items: any[]
     supplements?: string[]
+    meals?: string[]
     isLocked?: boolean
     fuelState?: number
   }>()
+
+  defineEmits(['add', 'addAi', 'edit'])
 
   const strategyLabel = computed(() => {
     if (props.type !== 'INTRA_WORKOUT') return null
@@ -306,7 +336,8 @@
 
   const formatTime = (date: Date) => {
     if (!date || isNaN(date.getTime())) return ''
-    return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })
+    const { formatDate } = useFormat()
+    return formatDate(date, 'HH:mm')
   }
 
   const windowIcon = computed(() => {
@@ -364,13 +395,15 @@
   }
 
   function getItemTime(item: any) {
+    const { getUserDateFromLocal } = useFormat()
     const timeVal = item.logged_at || item.date || item._heuristic_time
     if (!timeVal) return null
 
     let date: Date
     if (typeof timeVal === 'string' && /^\d{2}:\d{2}$/.test(timeVal)) {
-      // Handle HH:mm - use a dummy date just to extract the time
-      date = new Date(`1970-01-01T${timeVal}:00Z`)
+      // Use the nutrition date from context if available, otherwise fallback to today
+      const dateStr = (item.date || new Date().toISOString()).split('T')[0]
+      date = getUserDateFromLocal(dateStr, `${timeVal}:00`)
     } else {
       // Handle YYYY-MM-DD HH:mm:ss by replacing space with T
       const normalized = typeof timeVal === 'string' ? timeVal.replace(' ', 'T') : timeVal
@@ -379,7 +412,7 @@
 
     if (isNaN(date.getTime())) return null
 
-    // If it's exactly midnight, it might be just a date without time info
+    // If it's exactly midnight UTC, it might be just a date without time info
     // Only show if we explicitly have a time string or heuristic time
     if (
       date.getUTCHours() === 0 &&

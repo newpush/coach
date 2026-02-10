@@ -1,4 +1,5 @@
 import { addMinutes, startOfDay, endOfDay } from 'date-fns'
+import { fromZonedTime } from 'date-fns-tz'
 
 export type WindowType =
   | 'PRE_WORKOUT'
@@ -35,6 +36,7 @@ export interface FuelingTimelineWindow {
   workout?: any // The full PlannedWorkout object
   fuelState?: number
   supplements?: string[]
+  meals?: string[]
 }
 
 export interface TimelineOptions {
@@ -43,6 +45,8 @@ export interface TimelineOptions {
   baseProteinPerKg: number
   baseFatPerKg: number
   weight: number
+  mealPattern?: { name: string; time: string }[]
+  timezone: string
 }
 
 function getWorkoutDate(workout: any): number {
@@ -86,12 +90,20 @@ export function mapNutritionToTimeline(
 
   console.log('[TimelineUtil] Mapping started', {
     workoutCount: trainingWorkouts.length,
-    hasPlan: !!nutritionRecord.fuelingPlan
+    hasPlan: !!nutritionRecord.fuelingPlan,
+    date: nutritionRecord.date,
+    timezone: options.timezone
   })
 
-  const dayStart = startOfDay(new Date(nutritionRecord.date))
-  const dayEnd = endOfDay(new Date(nutritionRecord.date))
+  const dateStr = nutritionRecord.date.split('T')[0]
+  const dayStart = fromZonedTime(`${dateStr}T00:00:00`, options.timezone)
+  const dayEnd = fromZonedTime(`${dateStr}T23:59:59`, options.timezone)
   const fuelingPlan = nutritionRecord.fuelingPlan
+
+  console.log('[TimelineUtil] Day boundaries:', {
+    dayStart: dayStart.toISOString(),
+    dayEnd: dayEnd.toISOString()
+  })
 
   let baseTimeline: FuelingTimelineWindow[] = []
 
@@ -236,6 +248,19 @@ export function mapNutritionToTimeline(
 
   timelineWithEvents.forEach((window) => {
     if (window.startTime > lastTime) {
+      // Find meals from pattern that fall in this gap
+      const gapMeals = (options.mealPattern || []).filter((m) => {
+        try {
+          const mTime = fromZonedTime(`${dateStr}T${m.time}:00`, options.timezone)
+          return mTime >= lastTime && mTime < window.startTime
+        } catch (e) {
+          return false
+        }
+      })
+
+      const description =
+        gapMeals.length > 0 ? gapMeals.map((m) => m.name).join(' & ') : 'Daily baseline'
+
       finalTimeline.push({
         type: 'DAILY_BASE',
         startTime: lastTime,
@@ -243,8 +268,9 @@ export function mapNutritionToTimeline(
         targetCarbs: 0,
         targetProtein: 0,
         targetFat: 0,
-        description: 'Daily baseline',
-        items: []
+        description,
+        items: [],
+        meals: gapMeals.map((m) => m.name)
       })
     }
     finalTimeline.push(window)
@@ -252,6 +278,18 @@ export function mapNutritionToTimeline(
   })
 
   if (lastTime < dayEnd) {
+    const gapMeals = (options.mealPattern || []).filter((m) => {
+      try {
+        const mTime = fromZonedTime(`${dateStr}T${m.time}:00`, options.timezone)
+        return mTime >= lastTime && mTime < dayEnd
+      } catch (e) {
+        return false
+      }
+    })
+
+    const description =
+      gapMeals.length > 0 ? gapMeals.map((m) => m.name).join(' & ') : 'Daily baseline'
+
     finalTimeline.push({
       type: 'DAILY_BASE',
       startTime: lastTime,
@@ -259,8 +297,9 @@ export function mapNutritionToTimeline(
       targetCarbs: 0,
       targetProtein: 0,
       targetFat: 0,
-      description: 'Daily baseline',
-      items: []
+      description,
+      items: [],
+      meals: gapMeals.map((m) => m.name)
     })
   }
 
@@ -273,20 +312,22 @@ export function mapNutritionToTimeline(
     }
   })
 
-  const dateStr = nutritionRecord.date.split('T')[0]
-
   allLoggedItems.forEach((item) => {
     let itemTime: Date | null = null
     const timeVal = item.logged_at || item.date
 
     if (timeVal) {
-      // Handle "HH:mm" format
-      if (typeof timeVal === 'string' && /^\d{2}:\d{2}$/.test(timeVal)) {
-        itemTime = new Date(`${dateStr}T${timeVal}:00Z`)
-      } else {
-        // Handle "YYYY-MM-DD HH:mm:ss" by replacing space with T
-        const normalized = typeof timeVal === 'string' ? timeVal.replace(' ', 'T') : timeVal
-        itemTime = new Date(normalized)
+      try {
+        // Handle "HH:mm" format
+        if (typeof timeVal === 'string' && /^\d{2}:\d{2}$/.test(timeVal)) {
+          itemTime = fromZonedTime(`${dateStr}T${timeVal}:00`, options.timezone)
+        } else {
+          // Handle "YYYY-MM-DD HH:mm:ss" by replacing space with T
+          const normalized = typeof timeVal === 'string' ? timeVal.replace(' ', 'T') : timeVal
+          itemTime = new Date(normalized)
+        }
+      } catch (e) {
+        console.error('[TimelineUtil] Error parsing item time:', timeVal, e)
       }
     }
 
