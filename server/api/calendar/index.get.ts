@@ -397,11 +397,12 @@ export default defineEventHandler(async (event) => {
     workoutDate.setUTCHours(0, 0, 0, 0)
 
     // Check if missed (in past and not completed)
+    // Note: Rest days are never considered "missed" as resting is the objective
     const planDate = new Date(p.date)
     planDate.setUTCHours(0, 0, 0, 0)
 
     if (!p.completed && planDate < today) {
-      status = 'missed'
+      status = p.type === 'Rest' ? 'completed_plan' : 'missed'
     }
 
     const dateKey = p.date.toISOString().split('T')[0]
