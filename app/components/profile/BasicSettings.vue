@@ -3,7 +3,7 @@
     <!-- Personal Information Card -->
     <UCard>
       <template #header>
-        <div class="flex items-center justify-between">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <h3 class="text-lg font-medium leading-6 text-gray-900 dark:text-white">
               Personal Information
@@ -12,15 +12,18 @@
               Your basic identity and contact details.
             </p>
           </div>
-          <UButton
-            icon="i-heroicons-arrow-path"
-            size="sm"
-            variant="soft"
-            color="primary"
-            :loading="autodetecting"
-            label="Auto-detect from Apps"
-            @click="autodetectProfile"
-          />
+          <div class="flex shrink-0">
+            <UButton
+              icon="i-heroicons-arrow-path"
+              size="sm"
+              variant="soft"
+              color="primary"
+              :loading="autodetecting"
+              label="Auto-detect from Apps"
+              class="w-full sm:w-auto justify-center"
+              @click="autodetectProfile"
+            />
+          </div>
         </div>
       </template>
 

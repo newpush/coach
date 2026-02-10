@@ -2,7 +2,7 @@
   <div class="space-y-6 animate-fade-in">
     <UCard :ui="{ body: 'p-0 sm:p-0' }">
       <template #header>
-        <div class="flex items-center justify-between">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <h3 class="text-lg font-medium leading-6 text-gray-900 dark:text-white">
               Configure Sports
@@ -11,7 +11,7 @@
               Manage thresholds and zones for specific activity types.
             </p>
           </div>
-          <div class="flex gap-2">
+          <div class="flex gap-2 shrink-0">
             <UButton
               icon="i-heroicons-arrow-path"
               size="sm"
@@ -19,6 +19,7 @@
               color="primary"
               :loading="autodetecting"
               label="Auto-detect"
+              class="flex-1 sm:flex-none justify-center"
               @click="autodetectProfile"
             />
             <UButton
@@ -27,6 +28,7 @@
               variant="soft"
               color="primary"
               label="Add Sport"
+              class="flex-1 sm:flex-none justify-center"
               @click="openAddModal"
             />
           </div>
