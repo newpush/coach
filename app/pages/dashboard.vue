@@ -116,7 +116,7 @@
           <!-- Row 2: Daily Fueling (Full width if enabled) -->
           <div v-if="userStore.profile?.nutritionTrackingEnabled">
             <DashboardNutritionFuelingCard
-              :plan="todayNutrition?.fuelingPlan"
+              :nutrition="todayNutrition"
               :workouts="todayWorkouts"
               :loading="loadingNutrition"
               @refresh="fetchTodayNutrition"

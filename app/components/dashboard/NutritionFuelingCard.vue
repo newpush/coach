@@ -9,7 +9,7 @@
           </template>
           <template v-else>
             <div
-              v-if="plan"
+              v-if="nutrition"
               class="w-3 h-3 rounded-full"
               :class="{
                 'bg-blue-500': fuelState === 1,
@@ -19,7 +19,7 @@
             />
             <UIcon v-else name="i-heroicons-beaker" class="w-4 h-4 text-gray-400" />
             <h3 class="font-bold text-gray-900 dark:text-white text-sm tracking-tight uppercase">
-              Daily Fueling: {{ plan ? stateLabel : 'No Plan' }}
+              Daily Fueling: {{ nutrition ? stateLabel : 'No Plan' }}
             </h3>
           </template>
         </div>
@@ -86,7 +86,7 @@
 
     <!-- Empty State -->
     <div
-      v-else-if="!plan"
+      v-else-if="!nutrition"
       class="p-6 text-center flex flex-col items-center justify-center h-full min-h-[200px] space-y-3"
     >
       <UIcon name="i-heroicons-calendar-slash" class="w-10 h-10 text-gray-300 dark:text-gray-600" />
@@ -114,13 +114,19 @@
         <!-- Left Side: Tank & Info -->
         <div class="space-y-6">
           <!-- Fuel Tank Visualization -->
-          <div class="space-y-2">
+          <div class="space-y-2 group cursor-pointer" @click="showExplainModal = true">
             <div class="flex justify-between text-xs font-bold uppercase tracking-wider">
-              <span class="text-gray-500">Glycogen "Fuel Tank"</span>
+              <span class="text-gray-500 flex items-center gap-1">
+                Glycogen "Fuel Tank"
+                <UIcon
+                  name="i-heroicons-information-circle"
+                  class="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity"
+                />
+              </span>
               <span :class="tankColorClass">{{ tankPercentage }}%</span>
             </div>
             <div
-              class="h-6 w-full bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden border border-gray-200 dark:border-gray-700"
+              class="h-6 w-full bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden border border-gray-200 dark:border-gray-700 ring-primary-500/0 group-hover:ring-2 transition-all duration-300"
             >
               <div
                 class="h-full transition-all duration-1000 relative"
@@ -133,8 +139,12 @@
                 />
               </div>
             </div>
-            <p class="text-xs text-gray-500 italic">
+            <p class="text-xs text-gray-500 italic flex justify-between items-center">
               {{ tankAdvice }}
+              <span
+                class="text-[9px] font-black uppercase text-primary-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                >Show Breakdown</span
+              >
             </p>
           </div>
 
@@ -150,7 +160,7 @@
                 <div class="text-[10px] uppercase font-bold text-gray-400">Carbs</div>
               </div>
               <div class="text-lg font-bold text-gray-900 dark:text-white">
-                {{ plan.dailyTotals.carbs }}g
+                {{ nutrition.carbsGoal || 0 }}g
               </div>
             </div>
             <div
@@ -161,7 +171,7 @@
                 <div class="text-[10px] uppercase font-bold text-gray-400">Protein</div>
               </div>
               <div class="text-lg font-bold text-gray-900 dark:text-white">
-                {{ plan.dailyTotals.protein }}g
+                {{ nutrition.proteinGoal || 0 }}g
               </div>
             </div>
             <div
@@ -172,7 +182,7 @@
                 <div class="text-[10px] uppercase font-bold text-gray-400">Hydration</div>
               </div>
               <div class="text-lg font-bold text-gray-900 dark:text-white">
-                {{ (plan.dailyTotals.fluid / 1000).toFixed(1) }}L
+                {{ ((nutrition.fuelingPlan?.dailyTotals?.fluid || 2000) / 1000).toFixed(1) }}L
               </div>
             </div>
           </div>
@@ -219,13 +229,22 @@
       </div>
     </div>
   </UCard>
+
+  <DashboardGlycogenExplainModal
+    v-model="showExplainModal"
+    :percentage="tankPercentage"
+    :state="glycogenState.state"
+    :advice="tankAdvice"
+    :breakdown="glycogenState.breakdown"
+  />
 </template>
 
 <script setup lang="ts">
   import { mapNutritionToTimeline } from '~/utils/nutrition-timeline'
+  import { calculateGlycogenState } from '~/utils/nutrition-logic'
 
   const props = defineProps<{
-    plan: any
+    nutrition: any
     workouts?: any[]
     loading?: boolean
   }>()
@@ -240,26 +259,51 @@
   const toast = useToast()
 
   const generating = ref(false)
+  const showExplainModal = ref(false)
+
+  const plan = computed(() => props.nutrition?.fuelingPlan)
 
   const timeline = computed(() => {
-    if (!props.plan) return []
+    if (!props.nutrition || !plan.value) return []
 
-    // We need current daily nutrition object to pass to mapper
-    // but we only have fuelingPlan. We can reconstruct a minimal object.
-    const nutritionRecord = {
-      date: new Date().toISOString().split('T')[0],
-      fuelingPlan: props.plan
-      // items are not easily accessible here without fetching full day
-      // but the dashboard card is mostly for strategy/targets
-    }
-
-    return mapNutritionToTimeline(nutritionRecord, props.workouts || [], {
+    return mapNutritionToTimeline(props.nutrition, props.workouts || [], {
       preWorkoutWindow: 90, // Fallback if settings not available
       postWorkoutWindow: 60,
       baseProteinPerKg: 1.6,
       baseFatPerKg: 1.0,
       weight: userStore.profile?.weight || 75
     })
+  })
+
+  const glycogenState = computed(() => {
+    if (!props.nutrition) {
+      return {
+        percentage: 85,
+        advice: 'Loading...',
+        state: 1,
+        breakdown: {
+          midnightBaseline: 80,
+          replenishment: { value: 5, actualCarbs: 0, targetCarbs: 300 },
+          depletion: []
+        }
+      }
+    }
+    return calculateGlycogenState(props.nutrition, props.workouts || [])
+  })
+
+  const tankPercentage = computed(() => glycogenState.value.percentage)
+  const tankAdvice = computed(() => glycogenState.value.advice)
+
+  const tankColorClass = computed(() => {
+    if (tankPercentage.value > 70) return 'text-green-500'
+    if (tankPercentage.value > 30) return 'text-orange-500'
+    return 'text-red-500 font-bold animate-pulse'
+  })
+
+  const tankBarClass = computed(() => {
+    if (tankPercentage.value > 70) return 'bg-green-500'
+    if (tankPercentage.value > 30) return 'bg-orange-500'
+    return 'bg-red-500'
   })
 
   function getWorkoutFuelState(workout: any) {
@@ -322,8 +366,8 @@
   }
 
   const fuelState = computed(() => {
-    if (!props.plan) return 1
-    const intraWindow = props.plan.windows?.find((w: any) => w.type === 'INTRA_WORKOUT')
+    if (!plan.value) return 1
+    const intraWindow = plan.value.windows?.find((w: any) => w.type === 'INTRA_WORKOUT')
     if (intraWindow?.description?.includes('Fuel State 3')) return 3
     if (intraWindow?.description?.includes('Fuel State 2')) return 2
     if (intraWindow?.description?.includes('Fuel State 1')) return 1
@@ -331,7 +375,7 @@
   })
 
   const stateLabel = computed(() => {
-    if (!props.plan) return 'No Plan'
+    if (!plan.value) return 'No Plan'
     switch (fuelState.value) {
       case 3:
         return 'Performance (High Demand)'
@@ -343,27 +387,8 @@
   })
 
   const strategy = computed(() => {
-    if (!props.plan) return null
-    return props.plan.notes?.find((n: string) => n.includes('Protocol'))?.split(':')[0] || null
-  })
-
-  const tankPercentage = ref(85) // Placeholder logic for now
-  const tankColorClass = computed(() => {
-    if (tankPercentage.value > 70) return 'text-green-500'
-    if (tankPercentage.value > 30) return 'text-orange-500'
-    return 'text-red-500 font-bold animate-pulse'
-  })
-
-  const tankBarClass = computed(() => {
-    if (tankPercentage.value > 70) return 'bg-green-500'
-    if (tankPercentage.value > 30) return 'bg-orange-500'
-    return 'bg-red-500'
-  })
-
-  const tankAdvice = computed(() => {
-    if (tankPercentage.value > 70) return 'Energy levels high. Ready for intensity.'
-    if (tankPercentage.value > 30) return 'Moderate depletion. Focus on post-workout window.'
-    return 'CRITICAL: Refuel immediately to avoid metabolic crash.'
+    if (!plan.value) return null
+    return plan.value.notes?.find((n: string) => n.includes('Protocol'))?.split(':')[0] || null
   })
 </script>
 
