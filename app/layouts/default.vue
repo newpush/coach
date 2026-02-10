@@ -218,14 +218,6 @@
             open.value = false
           }
         },
-        {
-          label: 'Training Schedule',
-          icon: 'i-lucide-calendar-clock',
-          to: '/settings/availability',
-          onSelect: () => {
-            open.value = false
-          }
-        },
         ...(config.public.stripePublishableKey
           ? [
               {

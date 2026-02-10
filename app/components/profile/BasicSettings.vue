@@ -1,478 +1,211 @@
 <template>
-  <div class="space-y-8 animate-fade-in">
-    <div class="flex justify-end">
-      <UButton
-        icon="i-heroicons-arrow-path"
-        size="sm"
-        variant="soft"
-        color="primary"
-        :loading="autodetecting"
-        @click="autodetectProfile"
-      >
-        Auto-detect from Apps
-      </UButton>
-    </div>
-
-    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-      <!-- Name -->
-      <div class="group relative">
-        <div class="flex items-center gap-1 mb-1">
-          <label class="text-sm text-muted">Name</label>
-          <button
-            class="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded hover:bg-gray-100 dark:hover:bg-gray-800"
-            @click="startEdit('name')"
-          >
-            <UIcon name="i-heroicons-pencil" class="w-3 h-3 text-muted hover:text-primary" />
-          </button>
-        </div>
-        <div v-if="editingField === 'name'" class="flex gap-2">
-          <UInput
-            v-model="editValue"
-            size="sm"
-            class="w-full"
-            autofocus
-            @keyup.enter="saveField"
-            @keyup.esc="cancelEdit"
-          />
-          <UButton size="xs" color="primary" variant="solid" label="Save" @click="saveField" />
+  <div class="space-y-6 animate-fade-in">
+    <!-- Personal Information Card -->
+    <UCard>
+      <template #header>
+        <div class="flex items-center justify-between">
+          <div>
+            <h3 class="text-lg font-medium leading-6 text-gray-900 dark:text-white">
+              Personal Information
+            </h3>
+            <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+              Your basic identity and contact details.
+            </p>
+          </div>
           <UButton
-            size="xs"
-            color="neutral"
-            variant="ghost"
-            icon="i-heroicons-x-mark"
-            @click="cancelEdit"
+            icon="i-heroicons-arrow-path"
+            size="sm"
+            variant="soft"
+            color="primary"
+            :loading="autodetecting"
+            label="Auto-detect from Apps"
+            @click="autodetectProfile"
           />
         </div>
-        <p v-else class="font-medium text-lg">{{ modelValue.name }}</p>
-      </div>
+      </template>
 
-      <!-- Language -->
-      <div class="group relative">
-        <div class="flex items-center gap-1 mb-1">
-          <label class="text-sm text-muted">Language</label>
-          <button
-            class="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded hover:bg-gray-100 dark:hover:bg-gray-800"
-            @click="startEdit('language')"
-          >
-            <UIcon name="i-heroicons-pencil" class="w-3 h-3 text-muted hover:text-primary" />
-          </button>
-        </div>
-        <div v-if="editingField === 'language'" class="flex gap-2 w-full relative z-50">
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <UFormField label="Name" name="name">
+          <UInput v-model="localProfile.name" placeholder="Your Name" class="w-full" />
+        </UFormField>
+
+        <UFormField label="Email Address" name="email" help="Email cannot be changed here.">
+          <UInput :model-value="email" disabled class="w-full bg-gray-50 dark:bg-gray-800" />
+        </UFormField>
+
+        <UFormField label="Sex" name="sex">
           <USelectMenu
-            v-model="editValue"
-            :items="['English', 'Spanish', 'French', 'German']"
-            size="sm"
-            class="flex-1"
-            :search-input="false"
-            :ui="{ content: 'w-full min-w-[var(--reka-popper-anchor-width)]' }"
-            @update:model-value="saveField"
-          />
-        </div>
-        <p v-else class="font-medium text-lg">{{ modelValue.language }}</p>
-      </div>
-
-      <!-- Weight -->
-      <div class="group relative">
-        <div class="flex items-center gap-1 mb-1">
-          <label class="text-sm text-muted">Weight</label>
-          <button
-            class="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded hover:bg-gray-100 dark:hover:bg-gray-800"
-            @click="startEdit('weight')"
-          >
-            <UIcon name="i-heroicons-pencil" class="w-3 h-3 text-muted hover:text-primary" />
-          </button>
-        </div>
-        <div v-if="editingField === 'weight'" class="flex gap-2">
-          <UInput
-            v-model="editValue"
-            type="number"
-            size="sm"
-            class="w-full"
-            autofocus
-            @keyup.enter="saveField"
-            @keyup.esc="cancelEdit"
-          />
-          <UButton size="xs" color="primary" variant="solid" label="Save" @click="saveField" />
-          <UButton
-            size="xs"
-            color="neutral"
-            variant="ghost"
-            icon="i-heroicons-x-mark"
-            @click="cancelEdit"
-          />
-        </div>
-        <p v-else class="font-medium text-lg">
-          {{
-            typeof modelValue.weight === 'number' ? modelValue.weight.toFixed(2) : modelValue.weight
-          }}
-        </p>
-      </div>
-
-      <!-- Weight Units -->
-      <div class="group relative">
-        <div class="flex items-center gap-1 mb-1">
-          <label class="text-sm text-muted">Units</label>
-          <button
-            class="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded hover:bg-gray-100 dark:hover:bg-gray-800"
-            @click="startEdit('weightUnits')"
-          >
-            <UIcon name="i-heroicons-pencil" class="w-3 h-3 text-muted hover:text-primary" />
-          </button>
-        </div>
-        <div v-if="editingField === 'weightUnits'" class="flex gap-2 w-full relative z-50">
-          <USelectMenu
-            v-model="editValue"
-            :items="['Kilograms', 'Pounds']"
-            size="sm"
-            class="flex-1"
-            :search-input="false"
-            :ui="{ content: 'w-full min-w-[var(--reka-popper-anchor-width)]' }"
-            @update:model-value="saveField"
-          />
-        </div>
-        <p v-else class="font-medium text-lg">{{ modelValue.weightUnits }}</p>
-      </div>
-
-      <!-- Height -->
-      <div class="group relative">
-        <div class="flex items-center gap-1 mb-1">
-          <label class="text-sm text-muted">Height</label>
-          <button
-            class="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded hover:bg-gray-100 dark:hover:bg-gray-800"
-            @click="startEdit('height')"
-          >
-            <UIcon name="i-heroicons-pencil" class="w-3 h-3 text-muted hover:text-primary" />
-          </button>
-        </div>
-        <div v-if="editingField === 'height'" class="flex gap-2">
-          <UInput
-            v-model="editValue"
-            type="number"
-            size="sm"
-            class="w-full"
-            autofocus
-            @keyup.enter="saveField"
-            @keyup.esc="cancelEdit"
-          />
-          <UButton size="xs" color="primary" variant="solid" label="Save" @click="saveField" />
-          <UButton
-            size="xs"
-            color="neutral"
-            variant="ghost"
-            icon="i-heroicons-x-mark"
-            @click="cancelEdit"
-          />
-        </div>
-        <p v-else class="font-medium text-lg">{{ modelValue.height }}</p>
-      </div>
-
-      <!-- Height Units -->
-      <div class="group relative">
-        <div class="flex items-center gap-1 mb-1">
-          <label class="text-sm text-muted">Units</label>
-          <button
-            class="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded hover:bg-gray-100 dark:hover:bg-gray-800"
-            @click="startEdit('heightUnits')"
-          >
-            <UIcon name="i-heroicons-pencil" class="w-3 h-3 text-muted hover:text-primary" />
-          </button>
-        </div>
-        <div v-if="editingField === 'heightUnits'" class="flex gap-2 w-full relative z-50">
-          <USelectMenu
-            v-model="editValue"
-            :items="['cm', 'ft/in']"
-            size="sm"
-            class="flex-1"
-            :search-input="false"
-            :ui="{ content: 'w-full min-w-[var(--reka-popper-anchor-width)]' }"
-            @update:model-value="saveField"
-          />
-        </div>
-        <p v-else class="font-medium text-lg">{{ modelValue.heightUnits }}</p>
-      </div>
-
-      <!-- Distance -->
-      <div class="group relative">
-        <div class="flex items-center gap-1 mb-1">
-          <label class="text-sm text-muted">Distance</label>
-          <button
-            class="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded hover:bg-gray-100 dark:hover:bg-gray-800"
-            @click="startEdit('distanceUnits')"
-          >
-            <UIcon name="i-heroicons-pencil" class="w-3 h-3 text-muted hover:text-primary" />
-          </button>
-        </div>
-        <div v-if="editingField === 'distanceUnits'" class="flex gap-2 w-full relative z-50">
-          <USelectMenu
-            v-model="editValue"
-            :items="['Kilometers', 'Miles']"
-            size="sm"
-            class="flex-1"
-            :search-input="false"
-            :ui="{ content: 'w-full min-w-[var(--reka-popper-anchor-width)]' }"
-            @update:model-value="saveField"
-          />
-        </div>
-        <p v-else class="font-medium text-lg">{{ modelValue.distanceUnits }}</p>
-      </div>
-
-      <!-- Temperature -->
-      <div class="group relative">
-        <div class="flex items-center gap-1 mb-1">
-          <label class="text-sm text-muted">Temperature</label>
-          <button
-            class="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded hover:bg-gray-100 dark:hover:bg-gray-800"
-            @click="startEdit('temperatureUnits')"
-          >
-            <UIcon name="i-heroicons-pencil" class="w-3 h-3 text-muted hover:text-primary" />
-          </button>
-        </div>
-        <div v-if="editingField === 'temperatureUnits'" class="flex gap-2 w-full relative z-50">
-          <USelectMenu
-            v-model="editValue"
-            :items="['Celsius', 'Fahrenheit']"
-            size="sm"
-            class="flex-1"
-            :search-input="false"
-            :ui="{ content: 'w-full min-w-[var(--reka-popper-anchor-width)]' }"
-            @update:model-value="saveField"
-          />
-        </div>
-        <p v-else class="font-medium text-lg">{{ modelValue.temperatureUnits }}</p>
-      </div>
-    </div>
-
-    <!-- Email (Full Row) -->
-    <div class="group relative mt-6">
-      <div class="flex items-center gap-1 mb-1">
-        <label class="text-sm text-muted">Email Address</label>
-      </div>
-      <p class="font-medium text-lg">{{ email }}</p>
-    </div>
-
-    <!-- Row 2 -->
-    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mt-6">
-      <!-- Visibility -->
-      <div class="group relative">
-        <div class="flex items-center gap-1 mb-1">
-          <label class="text-sm text-muted">Visibility</label>
-          <button
-            class="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded hover:bg-gray-100 dark:hover:bg-gray-800"
-            @click="startEdit('visibility')"
-          >
-            <UIcon name="i-heroicons-pencil" class="w-3 h-3 text-muted hover:text-primary" />
-          </button>
-        </div>
-        <div v-if="editingField === 'visibility'" class="flex gap-2 w-full relative z-50">
-          <USelectMenu
-            v-model="editValue"
-            :items="['Private', 'Public', 'Followers Only']"
-            size="sm"
-            class="flex-1"
-            :search-input="false"
-            :ui="{ content: 'w-full min-w-[var(--reka-popper-anchor-width)]' }"
-            @update:model-value="saveField"
-          />
-        </div>
-        <p v-else class="font-medium text-lg">{{ modelValue.visibility }}</p>
-      </div>
-
-      <!-- Sex -->
-      <div class="group relative">
-        <div class="flex items-center gap-1 mb-1">
-          <label class="text-sm text-muted">Sex</label>
-          <button
-            class="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded hover:bg-gray-100 dark:hover:bg-gray-800"
-            @click="startEdit('sex')"
-          >
-            <UIcon name="i-heroicons-pencil" class="w-3 h-3 text-muted hover:text-primary" />
-          </button>
-        </div>
-        <div v-if="editingField === 'sex'" class="flex gap-2 w-full relative z-50">
-          <USelectMenu
-            v-model="editValue"
+            v-model="localProfile.sex"
             :items="['Male', 'Female', 'Other']"
-            size="sm"
-            class="flex-1"
-            :search-input="false"
+            class="w-full"
             :ui="{ content: 'w-full min-w-[var(--reka-popper-anchor-width)]' }"
-            @update:model-value="saveField"
           />
-        </div>
-        <p v-else class="font-medium text-lg">{{ modelValue.sex }}</p>
-      </div>
+        </UFormField>
 
-      <!-- DOB -->
-      <div class="group relative">
-        <div class="flex items-center gap-1 mb-1">
-          <label class="text-sm text-muted">Date of Birth</label>
-          <button
-            class="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded hover:bg-gray-100 dark:hover:bg-gray-800"
-            @click="startEdit('dob')"
-          >
-            <UIcon name="i-heroicons-pencil" class="w-3 h-3 text-muted hover:text-primary" />
-          </button>
-        </div>
-        <div v-if="editingField === 'dob'" class="flex gap-2">
+        <UFormField label="Date of Birth" name="dob">
           <UInput
-            :model-value="editValue ? formatUserDate(editValue, timezone, 'yyyy-MM-dd') : ''"
+            v-model="dobValue"
             type="date"
-            size="sm"
             class="w-full"
-            autofocus
-            @update:model-value="(val) => (editValue = val)"
-            @keyup.enter="saveField"
-            @keyup.esc="cancelEdit"
+            @update:model-value="(val) => (localProfile.dob = val)"
           />
-          <UButton size="xs" color="primary" variant="solid" label="Save" @click="saveField" />
-          <UButton
-            size="xs"
-            color="neutral"
-            variant="ghost"
-            icon="i-heroicons-x-mark"
-            @click="cancelEdit"
-          />
-        </div>
-        <p v-else class="font-medium text-lg">
-          {{ modelValue.dob ? formatUserDate(modelValue.dob, timezone, 'MMM d, yyyy') : 'Not set' }}
+        </UFormField>
+      </div>
+    </UCard>
+
+    <!-- Body Metrics Card -->
+    <UCard>
+      <template #header>
+        <h3 class="text-lg font-medium leading-6 text-gray-900 dark:text-white">Body Metrics</h3>
+        <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+          Used for BMR calculation and power/weight performance metrics.
         </p>
-      </div>
+      </template>
 
-      <!-- City -->
-      <div class="group relative">
-        <div class="flex items-center gap-1 mb-1">
-          <label class="text-sm text-muted">City</label>
-          <button
-            class="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded hover:bg-gray-100 dark:hover:bg-gray-800"
-            @click="startEdit('city')"
-          >
-            <UIcon name="i-heroicons-pencil" class="w-3 h-3 text-muted hover:text-primary" />
-          </button>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div class="grid grid-cols-3 gap-4">
+          <UFormField label="Weight" name="weight" class="col-span-2">
+            <UInput v-model.number="localProfile.weight" type="number" step="0.1" class="w-full">
+              <template #trailing>
+                <span class="text-gray-500 dark:text-gray-400 text-xs">{{
+                  localProfile.weightUnits === 'Pounds' ? 'lbs' : 'kg'
+                }}</span>
+              </template>
+            </UInput>
+          </UFormField>
+          <UFormField label="Units" name="weightUnits">
+            <USelectMenu
+              v-model="localProfile.weightUnits"
+              :items="['Kilograms', 'Pounds']"
+              class="w-full"
+              :ui="{ content: 'w-full min-w-[var(--reka-popper-anchor-width)]' }"
+            />
+          </UFormField>
         </div>
-        <div v-if="editingField === 'city'" class="flex gap-2">
-          <UInput
-            v-model="editValue"
-            size="sm"
+
+        <div class="grid grid-cols-3 gap-4">
+          <UFormField label="Height" name="height" class="col-span-2">
+            <UInput v-model.number="localProfile.height" type="number" class="w-full">
+              <template #trailing>
+                <span class="text-gray-500 dark:text-gray-400 text-xs">{{
+                  localProfile.heightUnits
+                }}</span>
+              </template>
+            </UInput>
+          </UFormField>
+          <UFormField label="Units" name="heightUnits">
+            <USelectMenu
+              v-model="localProfile.heightUnits"
+              :items="['cm', 'ft/in']"
+              class="w-full"
+              :ui="{ content: 'w-full min-w-[var(--reka-popper-anchor-width)]' }"
+            />
+          </UFormField>
+        </div>
+      </div>
+    </UCard>
+
+    <!-- Localization & Preferences Card -->
+    <UCard>
+      <template #header>
+        <h3 class="text-lg font-medium leading-6 text-gray-900 dark:text-white">
+          Localization & Preferences
+        </h3>
+        <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+          Regional settings and measurement units.
+        </p>
+      </template>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <UFormField label="Language" name="language">
+          <USelectMenu
+            v-model="localProfile.language"
+            :items="['English', 'Spanish', 'French', 'German']"
             class="w-full"
-            autofocus
-            @keyup.enter="saveField"
-            @keyup.esc="cancelEdit"
+            :ui="{ content: 'w-full min-w-[var(--reka-popper-anchor-width)]' }"
           />
-          <UButton size="xs" color="primary" variant="solid" label="Save" @click="saveField" />
-          <UButton
-            size="xs"
-            color="neutral"
-            variant="ghost"
-            icon="i-heroicons-x-mark"
-            @click="cancelEdit"
-          />
-        </div>
-        <p v-else class="font-medium text-lg">{{ modelValue.city }}</p>
-      </div>
+        </UFormField>
 
-      <!-- State -->
-      <div class="group relative">
-        <div class="flex items-center gap-1 mb-1">
-          <label class="text-sm text-muted">State/Province</label>
-          <button
-            class="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded hover:bg-gray-100 dark:hover:bg-gray-800"
-            @click="startEdit('state')"
-          >
-            <UIcon name="i-heroicons-pencil" class="w-3 h-3 text-muted hover:text-primary" />
-          </button>
-        </div>
-        <div v-if="editingField === 'state'" class="flex gap-2">
-          <UInput
-            v-model="editValue"
-            size="sm"
+        <UFormField label="Timezone" name="timezone">
+          <USelectMenu
+            v-model="localProfile.timezone"
+            :items="timezones"
             class="w-full"
-            autofocus
-            @keyup.enter="saveField"
-            @keyup.esc="cancelEdit"
+            placeholder="Select timezone"
+            :ui="{ content: 'w-full min-w-[var(--reka-popper-anchor-width)]' }"
           />
-          <UButton size="xs" color="primary" variant="solid" label="Save" @click="saveField" />
-          <UButton
-            size="xs"
-            color="neutral"
-            variant="ghost"
-            icon="i-heroicons-x-mark"
-            @click="cancelEdit"
-          />
-        </div>
-        <p v-else class="font-medium text-lg">{{ modelValue.state }}</p>
-      </div>
+        </UFormField>
 
-      <!-- Country -->
-      <div class="group relative">
-        <div class="flex items-center gap-1 mb-1">
-          <label class="text-sm text-muted">Country</label>
-          <button
-            class="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded hover:bg-gray-100 dark:hover:bg-gray-800"
-            @click="startEdit('country')"
-          >
-            <UIcon name="i-heroicons-pencil" class="w-3 h-3 text-muted hover:text-primary" />
-          </button>
-        </div>
-        <div v-if="editingField === 'country'" class="flex gap-2 w-full relative z-50">
+        <UFormField label="Distance Units" name="distanceUnits">
+          <USelectMenu
+            v-model="localProfile.distanceUnits"
+            :items="['Kilometers', 'Miles']"
+            class="w-full"
+            :ui="{ content: 'w-full min-w-[var(--reka-popper-anchor-width)]' }"
+          />
+        </UFormField>
+
+        <UFormField label="Temperature Units" name="temperatureUnits">
+          <USelectMenu
+            v-model="localProfile.temperatureUnits"
+            :items="['Celsius', 'Fahrenheit']"
+            class="w-full"
+            :ui="{ content: 'w-full min-w-[var(--reka-popper-anchor-width)]' }"
+          />
+        </UFormField>
+      </div>
+    </UCard>
+
+    <!-- Location Card -->
+    <UCard>
+      <template #header>
+        <h3 class="text-lg font-medium leading-6 text-gray-900 dark:text-white">Location</h3>
+        <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+          Used for weather forecasts and regional insights.
+        </p>
+      </template>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <UFormField label="City" name="city">
+          <UInput v-model="localProfile.city" placeholder="e.g. London" class="w-full" />
+        </UFormField>
+
+        <UFormField label="State/Province" name="state">
+          <UInput v-model="localProfile.state" placeholder="e.g. Ontario" class="w-full" />
+        </UFormField>
+
+        <UFormField label="Country" name="country">
           <USelectMenu
             v-model="countryModel"
             :items="countriesWithLabel"
             label-key="label"
             :filter-fields="['name', 'code']"
-            size="sm"
-            class="flex-1"
+            class="w-full"
             :search-input="{ placeholder: 'Search country...' }"
-            autofocus
             :ui="{ content: 'w-full min-w-[var(--reka-popper-anchor-width)]' }"
-            @update:model-value="saveField"
           />
-        </div>
-        <p v-else class="font-medium text-lg flex items-center gap-2">
-          <span v-if="countries.find((c) => c.code === modelValue.country)">{{
-            countries.find((c) => c.code === modelValue.country)?.flag
-          }}</span>
-          <span>{{
-            countries.find((c) => c.code === modelValue.country)?.name || modelValue.country
-          }}</span>
-        </p>
-      </div>
-      <!-- Timezone -->
-      <div class="lg:col-span-2 group relative">
-        <div class="flex items-center gap-1 mb-1">
-          <label class="text-sm text-muted">Timezone</label>
-          <button
-            class="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded hover:bg-gray-100 dark:hover:bg-gray-800"
-            @click="startEdit('timezone')"
-          >
-            <UIcon name="i-heroicons-pencil" class="w-3 h-3 text-muted hover:text-primary" />
-          </button>
-        </div>
-        <div v-if="editingField === 'timezone'" class="flex gap-2 w-full relative z-50">
+        </UFormField>
+
+        <UFormField label="Profile Visibility" name="visibility">
           <USelectMenu
-            v-model="editValue"
-            :items="timezones"
-            size="sm"
-            class="flex-1"
-            placeholder="Select timezone"
+            v-model="localProfile.visibility"
+            :items="['Private', 'Public', 'Followers Only']"
+            class="w-full"
             :ui="{ content: 'w-full min-w-[var(--reka-popper-anchor-width)]' }"
           />
-          <UButton
-            size="xs"
-            color="primary"
-            variant="ghost"
-            icon="i-heroicons-check"
-            @click="saveField"
-          />
-          <UButton
-            size="xs"
-            color="neutral"
-            variant="ghost"
-            icon="i-heroicons-x-mark"
-            @click="cancelEdit"
-          />
-        </div>
-        <p v-else class="font-medium text-lg">{{ modelValue.timezone }}</p>
+        </UFormField>
       </div>
+    </UCard>
+
+    <!-- Save Button -->
+    <div class="flex justify-end pt-4">
+      <UButton
+        label="Save Profile Settings"
+        color="primary"
+        size="lg"
+        :loading="loading"
+        @click="saveProfile"
+      />
     </div>
 
     <!-- Autodetect Confirmation Modal -->
@@ -505,7 +238,6 @@
               </div>
             </div>
 
-            <!-- Detailed Sport Settings List -->
             <div v-if="key === 'sportSettings' && Array.isArray(value)" class="pl-4 space-y-2">
               <div
                 v-for="sport in value"
@@ -540,25 +272,38 @@
 
 <script setup lang="ts">
   import { countries } from '~/utils/countries'
+
   const props = defineProps<{
     modelValue: any
     email: string
+    loading?: boolean
   }>()
 
   const emit = defineEmits(['update:modelValue', 'autodetect'])
   const { formatUserDate, timezone } = useFormat()
 
-  const editingField = ref<string | null>(null)
-  const editValue = ref<any>(null)
+  const localProfile = ref({ ...props.modelValue })
+  const dobValue = ref(
+    props.modelValue.dob ? formatUserDate(props.modelValue.dob, timezone.value, 'yyyy-MM-dd') : ''
+  )
+
+  watch(
+    () => props.modelValue,
+    (newVal) => {
+      localProfile.value = { ...newVal }
+      dobValue.value = newVal.dob ? formatUserDate(newVal.dob, timezone.value, 'yyyy-MM-dd') : ''
+    },
+    { deep: true }
+  )
 
   const timezones = Intl.supportedValuesOf('timeZone')
   const autodetecting = ref(false)
   const toast = useToast()
 
   const countryModel = computed({
-    get: () => countriesWithLabel.value.find((c) => c.code === editValue.value),
+    get: () => countriesWithLabel.value.find((c) => c.code === localProfile.value.country),
     set: (val: any) => {
-      editValue.value = val?.code
+      localProfile.value.country = val?.code
     }
   })
 
@@ -569,7 +314,6 @@
     }))
   )
 
-  // Confirmation Modal State
   const showConfirmModal = ref(false)
   const pendingDiffs = ref<any>({})
   const pendingDetectedProfile = ref<any>({})
@@ -589,11 +333,9 @@
       })
 
       if (response.success && response.diff && Object.keys(response.diff).length > 0) {
-        // Filter out restingHr, ftp, maxHr, and lthr from diffs as they're handled via wellness data or sport settings
         const { restingHr, ftp, maxHr, lthr, ...otherDiffs } = response.diff
         pendingDiffs.value = otherDiffs
 
-        // Also filter from detected profile to avoid merging deprecated fields back
         const { restingHr: _r, ftp: _f, maxHr: _m, lthr: _l, ...otherDetected } = response.detected
         pendingDetectedProfile.value = otherDetected
 
@@ -625,21 +367,11 @@
   }
 
   function confirmAutodetect() {
-    // Merge pending diffs into modelValue
-    const newProfile = { ...props.modelValue, ...pendingDiffs.value }
-
-    // Emit updates to parent
-    emit('update:modelValue', newProfile)
-
-    // Emit event for parent to handle other updates (like zones)
+    Object.assign(localProfile.value, pendingDiffs.value)
+    if (pendingDiffs.value.dob) {
+      dobValue.value = formatUserDate(pendingDiffs.value.dob, timezone.value, 'yyyy-MM-dd')
+    }
     emit('autodetect', pendingDetectedProfile.value)
-
-    toast.add({
-      title: 'Profile Updated',
-      description: `Updated ${Object.keys(pendingDiffs.value).length} fields from connected apps.`,
-      color: 'success'
-    })
-
     showConfirmModal.value = false
   }
 
@@ -669,38 +401,8 @@
     return value
   }
 
-  function startEdit(field: string) {
-    editingField.value = field
-    editValue.value = props.modelValue[field]
-  }
-
-  // Watch for changes to editValue
-  // watch(editValue, (newVal) => {
-  //   console.log('editValue changed to:', newVal)
-  // })
-
-  function saveField() {
-    if (editingField.value) {
-      let newValue = editValue.value === '' ? null : editValue.value
-
-      // Coerce numeric fields
-      const numericFields = ['weight', 'height']
-      if (numericFields.includes(editingField.value) && newValue !== null) {
-        const num = Number(newValue)
-        newValue = isNaN(num) ? null : num
-      }
-
-      emit('update:modelValue', {
-        ...props.modelValue,
-        [editingField.value]: newValue
-      })
-      editingField.value = null
-    }
-  }
-
-  function cancelEdit() {
-    editingField.value = null
-    editValue.value = null
+  function saveProfile() {
+    emit('update:modelValue', { ...localProfile.value })
   }
 </script>
 
