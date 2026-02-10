@@ -6,64 +6,81 @@
           <UDashboardSidebarCollapse />
         </template>
       </UDashboardNavbar>
+
+      <UDashboardToolbar>
+        <div class="flex gap-2 overflow-x-auto pb-1 w-full no-scrollbar">
+          <UButton
+            v-for="tab in tabs"
+            :key="tab.id"
+            :variant="activeTab === tab.id ? 'solid' : 'ghost'"
+            :color="activeTab === tab.id ? 'primary' : 'neutral'"
+            class="whitespace-nowrap"
+            @click="activeTab = tab.id"
+          >
+            <UIcon :name="tab.icon" class="w-4 h-4 mr-2" />
+            {{ tab.label }}
+          </UButton>
+        </div>
+      </UDashboardToolbar>
     </template>
 
     <template #body>
-      <div class="flex-1 flex flex-col overflow-hidden">
-        <!-- Tabs -->
-        <div class="border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 z-10">
-          <div class="px-6 flex gap-6">
-            <button
-              v-for="tab in tabs"
-              :key="tab.id"
-              class="relative py-4 text-sm font-medium transition-colors"
-              :class="
-                activeTab === tab.id
-                  ? 'text-primary'
-                  : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
-              "
-              @click="activeTab = tab.id"
-            >
-              <div class="flex items-center gap-2">
-                <UIcon :name="tab.icon" class="w-4 h-4" />
-                {{ tab.label }}
-              </div>
-              <div
-                v-if="activeTab === tab.id"
-                class="absolute bottom-0 left-0 right-0 h-0.5 bg-primary rounded-t-full"
-              />
-            </button>
-          </div>
-        </div>
+      <div class="flex-1 overflow-y-auto p-4 sm:p-6">
+        <div class="max-w-4xl mx-auto space-y-8">
+          <ProfileBasicSettings
+            v-if="activeTab === 'basic'"
+            :model-value="profile"
+            :email="user?.email || ''"
+            :loading="savingProfile"
+            @update:model-value="handleProfileUpdate"
+            @autodetect="handleAutodetect"
+          />
 
-        <!-- Scrollable Content -->
-        <div class="flex-1 overflow-y-auto p-6">
-          <div class="max-w-4xl mx-auto space-y-8">
-            <ProfileBasicSettings
-              v-if="activeTab === 'basic'"
-              :model-value="profile"
-              :email="user?.email || ''"
-              @update:model-value="handleProfileUpdate"
-              @autodetect="handleAutodetect"
-            />
+          <template v-if="activeTab === 'availability'">
+            <div class="space-y-4">
+              <UCard>
+                <template #header>
+                  <h3 class="text-lg font-medium leading-6 text-gray-900 dark:text-white">
+                    Training Schedule
+                  </h3>
+                  <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                    Define your weekly rhythm to help the AI Coach plan your workouts effectively.
+                  </p>
+                </template>
 
-            <ProfileSportSettings
-              v-if="activeTab === 'sports'"
-              :settings="sportSettings"
-              :profile="profile"
-              @update:settings="updateSportSettings"
-              @autodetect="handleAutodetect"
-            />
+                <SettingsAvailabilitySettings
+                  v-if="availability"
+                  :initial-availability="availability"
+                  :loading="savingAvailability"
+                  @save="handleAvailabilitySave"
+                />
+                <div v-else class="space-y-4">
+                  <div
+                    v-for="i in 7"
+                    :key="i"
+                    class="h-48 w-full bg-neutral-50 dark:bg-neutral-900/50 rounded-2xl border border-neutral-200 dark:border-neutral-800 animate-pulse"
+                  />
+                </div>
+              </UCard>
+            </div>
+          </template>
 
-            <ProfileNutritionSettings
-              v-if="activeTab === 'nutrition'"
-              :settings="nutritionSettings"
-              :profile="profile"
-              @update:settings="(val) => (nutritionSettings = val)"
-              @navigate="(tab) => (activeTab = tab)"
-              @saved="refreshProfile"
-            />
-          </div>
+          <ProfileSportSettings
+            v-if="activeTab === 'sports'"
+            :settings="sportSettings"
+            :profile="profile"
+            @update:settings="updateSportSettings"
+            @autodetect="handleAutodetect"
+          />
+
+          <ProfileNutritionSettings
+            v-if="activeTab === 'nutrition'"
+            :settings="nutritionSettings"
+            :profile="profile"
+            @update:settings="(val) => (nutritionSettings = val)"
+            @navigate="(tab) => (activeTab = tab)"
+            @saved="refreshProfile"
+          />
         </div>
       </div>
     </template>
@@ -86,6 +103,7 @@
   const tabs = [
     { id: 'basic', label: 'Basic Settings', icon: 'i-heroicons-user-circle' },
     { id: 'sports', label: 'Sport Settings', icon: 'i-heroicons-trophy' },
+    { id: 'availability', label: 'Availability', icon: 'i-lucide-calendar-clock' },
     { id: 'nutrition', label: 'Nutrition', icon: 'i-heroicons-fire' }
   ]
 
@@ -123,6 +141,35 @@
 
   const sportSettings = ref<any[]>([])
   const nutritionSettings = ref<any>(null)
+  const savingProfile = ref(false)
+
+  // Availability Logic
+  const { data: availability, refresh: refreshAvailability } = await useFetch('/api/availability')
+  const savingAvailability = ref(false)
+
+  async function handleAvailabilitySave(updatedAvailability: any[]) {
+    savingAvailability.value = true
+    try {
+      await $fetch('/api/availability', {
+        method: 'POST',
+        body: { availability: updatedAvailability }
+      })
+      toast.add({
+        title: 'Schedule Saved',
+        description: 'Your training availability has been updated',
+        color: 'success'
+      })
+      await refreshAvailability()
+    } catch (error: any) {
+      toast.add({
+        title: 'Error',
+        description: error.data?.message || 'Failed to save availability',
+        color: 'error'
+      })
+    } finally {
+      savingAvailability.value = false
+    }
+  }
 
   // Fetch profile data
   const { data: profileData, refresh: refreshProfile } = await useFetch('/api/profile', {
@@ -137,6 +184,7 @@
   async function handleProfileUpdate(newProfile: any) {
     // Use Object.assign to update the existing reactive object
     Object.assign(profile.value, newProfile)
+    savingProfile.value = true
 
     try {
       await $fetch('/api/profile', {
@@ -168,6 +216,8 @@
         description: validationErrors ? `Invalid input: ${validationErrors}` : errorMessage,
         color: 'error'
       })
+    } finally {
+      savingProfile.value = false
     }
   }
 
