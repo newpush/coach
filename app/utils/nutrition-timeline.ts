@@ -46,21 +46,31 @@ export interface TimelineOptions {
 }
 
 function getWorkoutDate(workout: any): number {
+  const d = new Date(workout.date)
+  let h = 10
+  let m = 0
+
   if (workout.startTime) {
     // If startTime is HH:mm string
     if (typeof workout.startTime === 'string' && workout.startTime.includes(':')) {
-      const [h, m] = workout.startTime.split(':').map(Number)
-      const d = new Date(workout.date)
-      d.setHours(h || 0, m || 0, 0, 0)
-      return d.getTime()
+      const [sh, sm] = workout.startTime.split(':').map(Number)
+      h = sh || 0
+      m = sm || 0
+    } else if (
+      workout.startTime instanceof Date ||
+      (typeof workout.startTime === 'string' && workout.startTime.includes('T'))
+    ) {
+      // If it's already a full date
+      return new Date(workout.startTime).getTime()
     }
-    // If it's already a full date
-    return new Date(workout.startTime).getTime()
   }
-  // Default to 10am UTC for consistency with calculator
-  const d = new Date(workout.date)
-  d.setHours(10, 0, 0, 0)
-  return d.getTime()
+
+  // Use UTC components of the base date to ensure we stay on the intended calendar day
+  // then apply h:m as local time to get the correct UTC timestamp for the browser's zone
+  const year = d.getUTCFullYear()
+  const month = d.getUTCMonth()
+  const day = d.getUTCDate()
+  return new Date(year, month, day, h, m, 0, 0).getTime()
 }
 
 /**
@@ -170,21 +180,21 @@ export function mapNutritionToTimeline(
       })
     })
 
-    if (rawWindows.length > 0) {
+    if (rawWindows.length > 0 && rawWindows[0]) {
       rawWindows.sort((a, b) => a.startTime.getTime() - b.startTime.getTime())
-      let current: FuelingTimelineWindow = { ...rawWindows[0] }
+      let current: FuelingTimelineWindow = { ...rawWindows[0] } as FuelingTimelineWindow
       const merged: FuelingTimelineWindow[] = []
       for (let i = 1; i < rawWindows.length; i++) {
         const next = rawWindows[i]
-        if (next.startTime < current.endTime) {
+        if (next && next.startTime < current.endTime) {
           current.endTime = new Date(Math.max(current.endTime.getTime(), next.endTime.getTime()))
           current.targetCarbs = (current.targetCarbs || 0) + (next.targetCarbs || 0)
           current.targetProtein = (current.targetProtein || 0) + (next.targetProtein || 0)
           current.type = 'TRANSITION'
           current.description = `Transition window`
-        } else {
+        } else if (next) {
           merged.push({ ...current })
-          current = { ...next }
+          current = { ...next } as FuelingTimelineWindow
         }
       }
       merged.push({ ...current })
