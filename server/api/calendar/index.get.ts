@@ -4,7 +4,8 @@ import {
   getUserLocalDate,
   getUserTimezone,
   getStartOfDayUTC,
-  getEndOfDayUTC
+  getEndOfDayUTC,
+  buildZonedDateTimeFromUtcDate
 } from '../../utils/date'
 import { nutritionRepository } from '../../utils/repositories/nutritionRepository'
 import { wellnessRepository } from '../../utils/repositories/wellnessRepository'
@@ -261,9 +262,13 @@ export default defineEventHandler(async (event) => {
           typeof primaryWorkout.startTime === 'string' &&
           primaryWorkout.startTime.includes(':')
         ) {
-          const [h, m] = primaryWorkout.startTime.split(':').map(Number)
-          startTimeDate = new Date(primaryWorkout.date)
-          startTimeDate.setUTCHours(h || 10, m || 0, 0, 0)
+          startTimeDate = buildZonedDateTimeFromUtcDate(
+            primaryWorkout.date,
+            primaryWorkout.startTime,
+            timezone,
+            10,
+            0
+          )
         }
 
         const estimate = calculateFuelingStrategy(profile, {

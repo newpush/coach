@@ -2,7 +2,11 @@ import { task } from '@trigger.dev/sdk/v3'
 import { prisma } from '../server/utils/db'
 import { calculateFuelingStrategy } from '../server/utils/nutrition/fueling'
 import { getUserNutritionSettings } from '../server/utils/nutrition/settings'
-import { getStartOfDayUTC, getUserTimezone } from '../server/utils/date'
+import {
+  getStartOfDayUTC,
+  getUserTimezone,
+  buildZonedDateTimeFromUtcDate
+} from '../server/utils/date'
 import { nutritionRepository } from '../server/utils/repositories/nutritionRepository'
 
 export const generateFuelingPlanTask = task({
@@ -35,6 +39,7 @@ export const generateFuelingPlanTask = task({
     }
 
     const settings = await getUserNutritionSettings(userId)
+    const timezone = await getUserTimezone(userId)
 
     // 3. Fetch ALL workouts for this day to build a complete plan
     const allWorkouts = await prisma.plannedWorkout.findMany({
@@ -88,9 +93,7 @@ export const generateFuelingPlanTask = task({
       // Convert HH:mm string to a Date object relative to the workout date
       let startTimeDate: Date | null = null
       if (work.startTime && typeof work.startTime === 'string' && work.startTime.includes(':')) {
-        const [h, m] = work.startTime.split(':').map(Number)
-        startTimeDate = new Date(work.date)
-        startTimeDate.setUTCHours(h || 0, m || 0, 0, 0)
+        startTimeDate = buildZonedDateTimeFromUtcDate(work.date, work.startTime, timezone, 10, 0)
       } else if (work.startTime instanceof Date) {
         startTimeDate = work.startTime
       }

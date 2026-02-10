@@ -128,6 +128,38 @@ export function formatDateUTC(date: Date, formatStr: string = 'yyyy-MM-dd'): str
 }
 
 /**
+ * Build a UTC Date from a stored UTC-midnight date and a local HH:mm time.
+ * This preserves the user's intended local clock time across timezones.
+ */
+export function buildZonedDateTimeFromUtcDate(
+  date: Date,
+  time: string | null | undefined,
+  timezone: string,
+  fallbackHour: number = 10,
+  fallbackMinute: number = 0
+): Date {
+  let hour = fallbackHour
+  let minute = fallbackMinute
+
+  if (time && time.includes(':')) {
+    const [h, m] = time.split(':').map(Number)
+    if (Number.isFinite(h)) hour = h
+    if (Number.isFinite(m)) minute = m
+  }
+
+  const dateStr = formatDateUTC(date, 'yyyy-MM-dd')
+  const hh = String(hour).padStart(2, '0')
+  const mm = String(minute).padStart(2, '0')
+  const localDate = new Date(`${dateStr}T${hh}:${mm}:00`)
+
+  try {
+    return fromZonedTime(localDate, timezone)
+  } catch (e) {
+    return localDate
+  }
+}
+
+/**
  * Get the user's current local date as a Date object set to UTC midnight.
  * This is useful for querying Prisma @db.Date columns.
  */

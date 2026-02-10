@@ -4,6 +4,7 @@ import { nutritionRepository } from '../../utils/repositories/nutritionRepositor
 import { getUserNutritionSettings } from '../../utils/nutrition/settings'
 import { calculateFuelingStrategy } from '../../utils/nutrition/fueling'
 import { plannedWorkoutRepository } from '../../utils/repositories/plannedWorkoutRepository'
+import { buildZonedDateTimeFromUtcDate, getUserTimezone } from '../../utils/date'
 
 defineRouteMeta({
   openAPI: {
@@ -99,15 +100,20 @@ export default defineEventHandler(async (event) => {
         const settings = await getUserNutritionSettings(userId)
 
         // Convert HH:mm string to a Date object relative to the workout date
+        const timezone = await getUserTimezone(userId)
         let startTimeDate: Date | null = null
         if (
           workout.startTime &&
           typeof workout.startTime === 'string' &&
           workout.startTime.includes(':')
         ) {
-          const [h, m] = workout.startTime.split(':').map(Number)
-          startTimeDate = new Date(workout.date)
-          startTimeDate.setUTCHours(h || 10, m || 0, 0, 0)
+          startTimeDate = buildZonedDateTimeFromUtcDate(
+            workout.date,
+            workout.startTime,
+            timezone,
+            10,
+            0
+          )
         }
 
         const estimate = calculateFuelingStrategy(

@@ -51,7 +51,7 @@ function getWorkoutDate(workout: any): number {
     if (typeof workout.startTime === 'string' && workout.startTime.includes(':')) {
       const [h, m] = workout.startTime.split(':').map(Number)
       const d = new Date(workout.date)
-      d.setUTCHours(h || 0, m || 0, 0, 0)
+      d.setHours(h || 0, m || 0, 0, 0)
       return d.getTime()
     }
     // If it's already a full date
@@ -59,7 +59,7 @@ function getWorkoutDate(workout: any): number {
   }
   // Default to 10am UTC for consistency with calculator
   const d = new Date(workout.date)
-  d.setUTCHours(10, 0, 0, 0)
+  d.setHours(10, 0, 0, 0)
   return d.getTime()
 }
 
