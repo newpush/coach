@@ -173,3 +173,27 @@ export function getUserLocalDate(timezone: string = 'UTC', date: Date = new Date
     return new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()))
   }
 }
+
+/**
+ * Convert a calendar date string (YYYY-MM-DD) to a UTC timestamp
+ * representing the start of that day in the user's timezone.
+ */
+export function getStartOfLocalDateUTC(timezone: string, dateStr: string): Date {
+  try {
+    return fromZonedTime(`${dateStr}T00:00:00`, timezone)
+  } catch (e) {
+    return new Date(`${dateStr}T00:00:00Z`)
+  }
+}
+
+/**
+ * Convert a calendar date string (YYYY-MM-DD) to a UTC timestamp
+ * representing the end of that day in the user's timezone.
+ */
+export function getEndOfLocalDateUTC(timezone: string, dateStr: string): Date {
+  try {
+    return fromZonedTime(`${dateStr}T23:59:59.999`, timezone)
+  } catch (e) {
+    return new Date(`${dateStr}T23:59:59.999Z`)
+  }
+}
