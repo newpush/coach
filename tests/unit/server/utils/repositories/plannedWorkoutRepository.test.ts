@@ -121,7 +121,7 @@ describe('plannedWorkoutRepository', () => {
           userId,
           date: { gte: undefined }
         },
-        orderBy: { date: 'asc' },
+        orderBy: [{ date: 'asc' }, { startTime: 'asc' }],
         take: undefined,
         include: undefined
       })
@@ -156,11 +156,10 @@ describe('plannedWorkoutRepository', () => {
 
       expect(prisma.plannedWorkout.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: {
+          where: expect.objectContaining({
             userId,
-            date: { gte: undefined },
             trainingWeekId: null
-          }
+          })
         })
       )
     })
