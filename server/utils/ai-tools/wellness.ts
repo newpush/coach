@@ -1,7 +1,14 @@
 import { tool } from 'ai'
 import { z } from 'zod'
 import { prisma } from '../../utils/db'
-import { getStartOfDayUTC, getEndOfDayUTC, formatUserDate, formatDateUTC } from '../../utils/date'
+import {
+  getStartOfDayUTC,
+  getEndOfDayUTC,
+  formatUserDate,
+  formatDateUTC,
+  getStartOfLocalDateUTC,
+  getEndOfLocalDateUTC
+} from '../../utils/date'
 
 export const wellnessTools = (userId: string, timezone: string) => ({
   get_wellness_metrics: tool({
@@ -15,25 +22,13 @@ export const wellnessTools = (userId: string, timezone: string) => ({
         .describe('End date in ISO format (YYYY-MM-DD). If not provided, defaults to start_date')
     }),
     execute: async ({ start_date, end_date }) => {
-      const startParts = start_date.split('-')
-      const localStartDate = new Date(
-        parseInt(startParts[0]!),
-        parseInt(startParts[1]!) - 1,
-        parseInt(startParts[2]!)
-      )
-      const start = getStartOfDayUTC(timezone, localStartDate)
+      const start = getStartOfLocalDateUTC(timezone, start_date)
 
       let end: Date
       if (end_date) {
-        const endParts = end_date.split('-')
-        const localEndDate = new Date(
-          parseInt(endParts[0]!),
-          parseInt(endParts[1]!) - 1,
-          parseInt(endParts[2]!)
-        )
-        end = getEndOfDayUTC(timezone, localEndDate)
+        end = getEndOfLocalDateUTC(timezone, end_date)
       } else {
-        end = getEndOfDayUTC(timezone, localStartDate)
+        end = getEndOfLocalDateUTC(timezone, start_date)
       }
 
       const wellness = await prisma.wellness.findMany({

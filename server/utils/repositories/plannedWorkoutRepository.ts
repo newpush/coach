@@ -64,7 +64,9 @@ export const plannedWorkoutRepository = {
       endDate?: Date
       limit?: number
       independentOnly?: boolean
-      orderBy?: Prisma.PlannedWorkoutOrderByWithRelationInput
+      orderBy?:
+        | Prisma.PlannedWorkoutOrderByWithRelationInput
+        | Prisma.PlannedWorkoutOrderByWithRelationInput[]
       include?: Prisma.PlannedWorkoutInclude
       where?: Prisma.PlannedWorkoutWhereInput
     } = {}
@@ -91,7 +93,7 @@ export const plannedWorkoutRepository = {
 
     return prisma.plannedWorkout.findMany({
       where,
-      orderBy: options.orderBy || { date: 'asc' },
+      orderBy: options.orderBy || [{ date: 'asc' }, { startTime: 'asc' }],
       take: options.limit,
       include: options.include
     })

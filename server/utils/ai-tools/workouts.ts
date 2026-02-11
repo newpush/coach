@@ -5,6 +5,7 @@ import { workoutRepository } from '../repositories/workoutRepository'
 import {
   getStartOfDaysAgoUTC,
   formatUserDate,
+  formatDateUTC,
   getStartOfDayUTC,
   getEndOfDayUTC
 } from '../../utils/date'
@@ -75,11 +76,9 @@ export const workoutTools = (userId: string, timezone: string) => ({
       if (date) {
         const parts = date.split('-')
         if (parts.length === 3) {
-          // Create local date from parts (Month is 0-indexed)
+          // Create UTC date from parts (Month is 0-indexed)
           const localDate = new Date(
-            parseInt(parts[0]!),
-            parseInt(parts[1]!) - 1,
-            parseInt(parts[2]!)
+            Date.UTC(parseInt(parts[0]!), parseInt(parts[1]!) - 1, parseInt(parts[2]!))
           )
 
           where.date = {
@@ -134,7 +133,7 @@ export const workoutTools = (userId: string, timezone: string) => ({
         return {
           ...planned,
           isPlanned: true,
-          date: formatUserDate(planned.date, timezone)
+          date: formatDateUTC(planned.date)
         }
       }
 

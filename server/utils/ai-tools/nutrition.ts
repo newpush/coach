@@ -7,7 +7,9 @@ import {
   getEndOfDayUTC,
   formatUserDate,
   formatDateUTC,
-  getUserLocalDate
+  getUserLocalDate,
+  getStartOfLocalDateUTC,
+  getEndOfLocalDateUTC
 } from '../../utils/date'
 
 // Helper to calculate totals from all meals
@@ -47,25 +49,13 @@ export const nutritionTools = (userId: string, timezone: string) => ({
         .describe('End date in ISO format (YYYY-MM-DD). If not provided, defaults to start_date')
     }),
     execute: async ({ start_date, end_date }) => {
-      const startParts = start_date.split('-')
-      const localStartDate = new Date(
-        parseInt(startParts[0]!),
-        parseInt(startParts[1]!) - 1,
-        parseInt(startParts[2]!)
-      )
-      const start = getStartOfDayUTC(timezone, localStartDate)
+      const start = getStartOfLocalDateUTC(timezone, start_date)
 
       let end: Date
       if (end_date) {
-        const endParts = end_date.split('-')
-        const localEndDate = new Date(
-          parseInt(endParts[0]!),
-          parseInt(endParts[1]!) - 1,
-          parseInt(endParts[2]!)
-        )
-        end = getEndOfDayUTC(timezone, localEndDate)
+        end = getEndOfLocalDateUTC(timezone, end_date)
       } else {
-        end = getEndOfDayUTC(timezone, localStartDate)
+        end = getEndOfLocalDateUTC(timezone, start_date)
       }
 
       const nutritionEntries = await nutritionRepository.getForUser(userId, {
@@ -151,13 +141,7 @@ export const nutritionTools = (userId: string, timezone: string) => ({
       )
     }),
     execute: async ({ date, meal_type, items }) => {
-      const dateParts = date.split('-')
-      const localDate = new Date(
-        parseInt(dateParts[0]!),
-        parseInt(dateParts[1]!) - 1,
-        parseInt(dateParts[2]!)
-      )
-      const dateUtc = getUserLocalDate(timezone, localDate)
+      const dateUtc = getStartOfLocalDateUTC(timezone, date)
 
       // Add IDs to items if they don't have them
       const itemsWithIds = items.map((item) => ({
@@ -243,13 +227,7 @@ export const nutritionTools = (userId: string, timezone: string) => ({
         )
     }),
     execute: async ({ date, meal_type, item_name }) => {
-      const dateParts = date.split('-')
-      const localDate = new Date(
-        parseInt(dateParts[0]!),
-        parseInt(dateParts[1]!) - 1,
-        parseInt(dateParts[2]!)
-      )
-      const dateUtc = getUserLocalDate(timezone, localDate)
+      const dateUtc = getStartOfLocalDateUTC(timezone, date)
 
       let nutrition = await nutritionRepository.getByDate(userId, dateUtc)
 
@@ -336,9 +314,12 @@ export const nutritionTools = (userId: string, timezone: string) => ({
       date: z.string().optional().describe('Date in ISO format (YYYY-MM-DD). Defaults to today.')
     }),
     execute: async ({ date }) => {
-      const targetDate = date ? new Date(date) : new Date()
-
-      const dateUtc = getStartOfDayUTC(timezone, targetDate)
+      let dateUtc: Date
+      if (date) {
+        dateUtc = getStartOfLocalDateUTC(timezone, date)
+      } else {
+        dateUtc = getStartOfDayUTC(timezone, new Date())
+      }
 
       const nutrition = await nutritionRepository.getByDate(userId, dateUtc)
 

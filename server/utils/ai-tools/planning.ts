@@ -18,8 +18,8 @@ import {
   getUserLocalDate,
   formatUserDate,
   formatDateUTC,
-  getStartOfDayUTC,
-  getEndOfDayUTC
+  getStartOfLocalDateUTC,
+  getEndOfLocalDateUTC
 } from '../../utils/date'
 
 export const planningTools = (userId: string, timezone: string) => ({
@@ -33,22 +33,14 @@ export const planningTools = (userId: string, timezone: string) => ({
     execute: async ({ start_date, end_date, limit }) => {
       let start: Date
       if (start_date) {
-        const parts = start_date.split('-')
-        start = getStartOfDayUTC(
-          timezone,
-          new Date(parseInt(parts[0]!), parseInt(parts[1]!) - 1, parseInt(parts[2]!))
-        )
+        start = getStartOfLocalDateUTC(timezone, start_date)
       } else {
         start = new Date(getUserLocalDate(timezone)) // Defaults to today user time
       }
 
       let end: Date | undefined
       if (end_date) {
-        const parts = end_date.split('-')
-        end = getEndOfDayUTC(
-          timezone,
-          new Date(parseInt(parts[0]!), parseInt(parts[1]!) - 1, parseInt(parts[2]!))
-        )
+        end = getEndOfLocalDateUTC(timezone, end_date)
       }
 
       const workouts = await plannedWorkoutRepository.list(userId, {
@@ -84,20 +76,12 @@ export const planningTools = (userId: string, timezone: string) => ({
     execute: async ({ query, type, start_date, end_date }) => {
       let start: Date | undefined
       if (start_date) {
-        const parts = start_date.split('-')
-        start = getStartOfDayUTC(
-          timezone,
-          new Date(parseInt(parts[0]!), parseInt(parts[1]!) - 1, parseInt(parts[2]!))
-        )
+        start = getStartOfLocalDateUTC(timezone, start_date)
       }
 
       let end: Date | undefined
       if (end_date) {
-        const parts = end_date.split('-')
-        end = getEndOfDayUTC(
-          timezone,
-          new Date(parseInt(parts[0]!), parseInt(parts[1]!) - 1, parseInt(parts[2]!))
-        )
+        end = getEndOfLocalDateUTC(timezone, end_date)
       }
 
       const where: any = {
