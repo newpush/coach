@@ -1,9 +1,13 @@
 import { task } from '@trigger.dev/sdk/v3'
 import { prisma } from '../server/utils/db'
-import { calculateFuelingStrategy } from '../server/utils/nutrition/fueling'
+import {
+  calculateFuelingStrategy,
+  calculateDailyCalorieBreakdown
+} from '../server/utils/nutrition/fueling'
 import { getUserNutritionSettings } from '../server/utils/nutrition/settings'
 import { getUserTimezone, buildZonedDateTimeFromUtcDate } from '../server/utils/date'
 import { nutritionRepository } from '../server/utils/repositories/nutritionRepository'
+import { mergeFuelingWindows } from '../app/utils/merging-nutrition'
 
 export const generateFuelingPlanTask = task({
   id: 'generate-fueling-plan',
@@ -11,7 +15,6 @@ export const generateFuelingPlanTask = task({
     const { userId, date } = payload
 
     // 1. Check for Manual Lock
-    // The 'date' string passed is ISO UTC Midnight for the calendar day
     const targetDateStart = new Date(date)
     targetDateStart.setUTCHours(0, 0, 0, 0)
     const targetDateEnd = new Date(targetDateStart)
@@ -27,7 +30,7 @@ export const generateFuelingPlanTask = task({
     const settings = await getUserNutritionSettings(userId)
     const timezone = await getUserTimezone(userId)
 
-    // 2. Fetch ALL workouts for this day to build a complete plan
+    // 2. Fetch ALL workouts for this day
     const allWorkouts = await prisma.plannedWorkout.findMany({
       where: {
         userId,
@@ -41,8 +44,7 @@ export const generateFuelingPlanTask = task({
 
     console.log(`[GeneratePlan] Found ${allWorkouts.length} workouts for ${date}`)
 
-    // 3. Calculate Strategy
-    // Map settings to profile interface expected by calculator
+    // 3. Prepare Profile
     const user = await prisma.user.findUnique({ where: { id: userId } })
     const profile = {
       weight: user?.weight || 75,
@@ -60,77 +62,91 @@ export const generateFuelingPlanTask = task({
       fuelState2Min: settings.fuelState2Min,
       fuelState2Max: settings.fuelState2Max,
       fuelState3Min: settings.fuelState3Min,
-      fuelState3Max: settings.fuelState3Max
+      fuelState3Max: settings.fuelState3Max,
+      bmr: settings.bmr ?? 1600,
+      activityLevel: settings.activityLevel || 'ACTIVE',
+      targetAdjustmentPercent: settings.targetAdjustmentPercent ?? 0
     }
 
-    // Generate clusters for each workout and combine
+    // 4. Generate clusters for each workout and combine
     const combinedWindows: any[] = []
     const combinedNotes: string[] = []
+    const contexts: any[] = []
 
+    // If NO workouts exist, use baseline cluster
+    if (allWorkouts.length === 0) {
+      contexts.push({
+        id: 'rest-virtual',
+        title: 'Rest Day',
+        durationSec: 0,
+        type: 'Rest',
+        date: targetDateStart,
+        durationHours: 0,
+        intensity: 0,
+        strategyOverride: 'STANDARD'
+      })
+    } else {
+      for (const work of allWorkouts) {
+        let startTimeDate: Date | null = null
+        if (work.startTime && typeof work.startTime === 'string' && work.startTime.includes(':')) {
+          startTimeDate = buildZonedDateTimeFromUtcDate(work.date, work.startTime, timezone, 10, 0)
+        } else if ((work.startTime as any) instanceof Date) {
+          startTimeDate = work.startTime as any as Date
+        }
+
+        contexts.push({
+          ...work,
+          startTime: startTimeDate,
+          durationHours: (work.durationSec || 0) / 3600,
+          intensity: work.workIntensity || 0.5,
+          strategyOverride: work.fuelingStrategy || undefined
+        })
+      }
+    }
+
+    // Aggregate Macros baseline (taking the max requirement among workouts for base carb sizing)
     let maxDailyCarbs = 0
     let maxDailyProtein = 0
     let maxDailyFat = 0
-    let totalFluid = 2000 // Base hydration
-    let totalSodium = 1000 // Base sodium
+    let totalFluid = 2000
+    let totalSodium = 1000
 
-    // If NO workouts exist, we still need to calculate a baseline (Rest Day)
-    const workoutsToProcess =
-      allWorkouts.length > 0
-        ? allWorkouts
-        : [
-            {
-              id: 'rest-virtual',
-              title: 'Rest Day',
-              durationSec: 0,
-              type: 'Rest',
-              date: targetDateStart,
-              fuelingStrategy: 'STANDARD'
-            }
-          ]
-
-    for (const work of workoutsToProcess as any[]) {
-      // Convert HH:mm string to a Date object relative to the workout date
-      let startTimeDate: Date | null = null
-      if (work.startTime && typeof work.startTime === 'string' && work.startTime.includes(':')) {
-        startTimeDate = buildZonedDateTimeFromUtcDate(work.date, work.startTime, timezone, 10, 0)
-      } else if (work.startTime instanceof Date) {
-        startTimeDate = work.startTime
-      }
-
-      const plan = calculateFuelingStrategy(profile, {
-        ...work,
-        startTime: startTimeDate,
-        strategyOverride: work.fuelingStrategy || undefined
-      } as any)
-
+    for (const ctx of contexts) {
+      const plan = calculateFuelingStrategy(profile, ctx)
       combinedWindows.push(...plan.windows)
       combinedNotes.push(...plan.notes)
 
-      // Use the highest daily target among all workouts (intensity-based baseline)
       if (plan.dailyTotals.carbs > maxDailyCarbs) {
         maxDailyCarbs = plan.dailyTotals.carbs
         maxDailyProtein = plan.dailyTotals.protein
         maxDailyFat = plan.dailyTotals.fat
       }
 
-      // Add extra intra-workout hydration/sodium
       totalFluid += plan.dailyTotals.fluid - 2000
       totalSodium += plan.dailyTotals.sodium - 1000
     }
 
-    // Deduplicate notes
+    // New Calorie Aggregate Logic
+    const breakdown = calculateDailyCalorieBreakdown(profile, contexts)
+
+    // Merge overlapping windows
+    const mergedWindows = mergeFuelingWindows(combinedWindows)
     const uniqueNotes = Array.from(new Set(combinedNotes))
 
     const finalPlan = {
-      windows: combinedWindows,
+      windows: mergedWindows,
       notes: uniqueNotes,
       dailyTotals: {
         carbs: maxDailyCarbs,
         protein: maxDailyProtein,
         fat: maxDailyFat,
-        calories: maxDailyCarbs * 4 + maxDailyProtein * 4 + maxDailyFat * 9,
+        calories: breakdown.totalTarget,
         fluid: totalFluid,
-        sodium: totalSodium
+        sodium: totalSodium,
+        baseCalories: breakdown.baseCalories,
+        activityCalories: breakdown.activityCalories,
+        adjustmentCalories: breakdown.adjustmentCalories,
+        workoutCalories: breakdown.workouts.map((w) => ({ title: w.title, calories: w.calories }))
       }
     }
 
