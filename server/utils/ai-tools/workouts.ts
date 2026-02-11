@@ -77,13 +77,10 @@ export const workoutTools = (userId: string, timezone: string) => ({
         const parts = date.split('-')
         if (parts.length === 3) {
           // Create UTC date from parts (Month is 0-indexed)
-          const localDate = new Date(
-            Date.UTC(parseInt(parts[0]!), parseInt(parts[1]!) - 1, parseInt(parts[2]!))
-          )
-
+          const start = new Date(`${date}T00:00:00Z`)
           where.date = {
-            gte: getStartOfDayUTC(timezone, localDate),
-            lte: getEndOfDayUTC(timezone, localDate)
+            gte: start,
+            lte: start
           }
         }
       }

@@ -31,17 +31,8 @@ export const planningTools = (userId: string, timezone: string) => ({
       limit: z.number().optional().default(20)
     }),
     execute: async ({ start_date, end_date, limit }) => {
-      let start: Date
-      if (start_date) {
-        start = getStartOfLocalDateUTC(timezone, start_date)
-      } else {
-        start = new Date(getUserLocalDate(timezone)) // Defaults to today user time
-      }
-
-      let end: Date | undefined
-      if (end_date) {
-        end = getEndOfLocalDateUTC(timezone, end_date)
-      }
+      const start = start_date ? new Date(`${start_date}T00:00:00Z`) : getUserLocalDate(timezone)
+      const end = end_date ? new Date(`${end_date}T00:00:00Z`) : undefined
 
       const workouts = await plannedWorkoutRepository.list(userId, {
         startDate: start,
@@ -74,15 +65,8 @@ export const planningTools = (userId: string, timezone: string) => ({
       end_date: z.string().optional().describe('YYYY-MM-DD')
     }),
     execute: async ({ query, type, start_date, end_date }) => {
-      let start: Date | undefined
-      if (start_date) {
-        start = getStartOfLocalDateUTC(timezone, start_date)
-      }
-
-      let end: Date | undefined
-      if (end_date) {
-        end = getEndOfLocalDateUTC(timezone, end_date)
-      }
+      const start = start_date ? new Date(`${start_date}T00:00:00Z`) : undefined
+      const end = end_date ? new Date(`${end_date}T00:00:00Z`) : undefined
 
       const where: any = {
         OR: [
@@ -214,7 +198,7 @@ export const planningTools = (userId: string, timezone: string) => ({
       // Create a PlannedWorkout, not a Workout
       const workout = await plannedWorkoutRepository.create({
         userId,
-        date: new Date(args.date),
+        date: new Date(`${args.date}T00:00:00Z`),
         startTime: args.time_of_day,
         title: args.title,
         description: args.description || args.intensity,
@@ -276,7 +260,7 @@ export const planningTools = (userId: string, timezone: string) => ({
           select: { date: true }
         })
         if (existing) {
-          data.date = new Date(args.date)
+          data.date = new Date(`${args.date}T00:00:00Z`)
         }
       }
 

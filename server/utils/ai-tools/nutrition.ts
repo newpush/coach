@@ -49,14 +49,8 @@ export const nutritionTools = (userId: string, timezone: string) => ({
         .describe('End date in ISO format (YYYY-MM-DD). If not provided, defaults to start_date')
     }),
     execute: async ({ start_date, end_date }) => {
-      const start = getStartOfLocalDateUTC(timezone, start_date)
-
-      let end: Date
-      if (end_date) {
-        end = getEndOfLocalDateUTC(timezone, end_date)
-      } else {
-        end = getEndOfLocalDateUTC(timezone, start_date)
-      }
+      const start = new Date(`${start_date}T00:00:00Z`)
+      const end = end_date ? new Date(`${end_date}T00:00:00Z`) : start
 
       const nutritionEntries = await nutritionRepository.getForUser(userId, {
         startDate: start,
@@ -141,13 +135,23 @@ export const nutritionTools = (userId: string, timezone: string) => ({
       )
     }),
     execute: async ({ date, meal_type, items }) => {
-      const dateUtc = getStartOfLocalDateUTC(timezone, date)
+      const dateUtc = new Date(`${date}T00:00:00Z`)
 
-      // Add IDs to items if they don't have them
-      const itemsWithIds = items.map((item) => ({
-        id: crypto.randomUUID(),
-        ...item
-      }))
+      // Add IDs to items and normalize logged_at if it's a full date string
+      const itemsWithIds = items.map((item) => {
+        let normalizedLoggedAt = item.logged_at
+        if (normalizedLoggedAt && normalizedLoggedAt.includes('T')) {
+          // If it's a full ISO string, ensure the date part matches the intended date
+          const timePart = normalizedLoggedAt.split('T')[1]
+          normalizedLoggedAt = `${date}T${timePart}`
+        }
+
+        return {
+          id: crypto.randomUUID(),
+          ...item,
+          logged_at: normalizedLoggedAt
+        }
+      })
 
       // Get existing record or create new
       let nutrition = await nutritionRepository.getByDate(userId, dateUtc)
@@ -227,7 +231,7 @@ export const nutritionTools = (userId: string, timezone: string) => ({
         )
     }),
     execute: async ({ date, meal_type, item_name }) => {
-      const dateUtc = getStartOfLocalDateUTC(timezone, date)
+      const dateUtc = new Date(`${date}T00:00:00Z`)
 
       let nutrition = await nutritionRepository.getByDate(userId, dateUtc)
 
@@ -316,9 +320,9 @@ export const nutritionTools = (userId: string, timezone: string) => ({
     execute: async ({ date }) => {
       let dateUtc: Date
       if (date) {
-        dateUtc = getStartOfLocalDateUTC(timezone, date)
+        dateUtc = new Date(`${date}T00:00:00Z`)
       } else {
-        dateUtc = getStartOfDayUTC(timezone, new Date())
+        dateUtc = getUserLocalDate(timezone) // This already returns UTC midnight
       }
 
       const nutrition = await nutritionRepository.getByDate(userId, dateUtc)

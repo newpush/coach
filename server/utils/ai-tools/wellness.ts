@@ -22,14 +22,8 @@ export const wellnessTools = (userId: string, timezone: string) => ({
         .describe('End date in ISO format (YYYY-MM-DD). If not provided, defaults to start_date')
     }),
     execute: async ({ start_date, end_date }) => {
-      const start = getStartOfLocalDateUTC(timezone, start_date)
-
-      let end: Date
-      if (end_date) {
-        end = getEndOfLocalDateUTC(timezone, end_date)
-      } else {
-        end = getEndOfLocalDateUTC(timezone, start_date)
-      }
+      const start = new Date(`${start_date}T00:00:00Z`)
+      const end = end_date ? new Date(`${end_date}T00:00:00Z`) : start
 
       const wellness = await prisma.wellness.findMany({
         where: {
