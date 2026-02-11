@@ -422,8 +422,9 @@ export async function updateIntervalsPlannedWorkout(
 
     eventData.description = combinedDescription
 
-    // Don't send duration/tss if we have workout structure, let Intervals calculate it
-    // Unless specifically requested? Usually safer to let Intervals calc it.
+    // Send duration and tss if provided, even with structure
+    if (data.durationSec) eventData.duration = data.durationSec
+    if (data.tss) eventData.tss = data.tss
   } else {
     // Legacy path if just updating metadata
     if (data.durationSec) eventData.duration = data.durationSec

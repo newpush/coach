@@ -307,14 +307,14 @@ export const WorkoutConverter = {
   toIntervalsICU(workout: WorkoutData): string {
     const lines: string[] = []
 
-    // Add description as a preamble if available
-    if (workout.description) {
-      lines.push(workout.description.trim())
-      lines.push('') // Add empty line to separate description from steps
-    }
-
     // Handle Strength Exercises
     if (workout.exercises && workout.exercises.length > 0) {
+      // Add description as a preamble if available
+      if (workout.description) {
+        lines.push(workout.description.trim())
+        lines.push('') // Add empty line to separate description from steps
+      }
+
       workout.exercises.forEach((ex) => {
         // Line 1: Name (Bold)
         lines.push(`- **${ex.name}**`)
@@ -406,12 +406,11 @@ export const WorkoutConverter = {
       // Format power, heart rate, or pace
       let intensityStr = ''
 
-      // Don't show intensity for Rest
-      if (step.type !== 'Rest') {
-        const hasPower = !!(power.value || power.range)
-        const hasHr = !!(step.heartRate && (step.heartRate.value || step.heartRate.range))
-        const hasPace = !!(step.pace && (step.pace.value || step.pace.range))
+      const hasPower = !!(power.value || power.range)
+      const hasHr = !!(step.heartRate && (step.heartRate.value || step.heartRate.range))
+      const hasPace = !!(step.pace && (step.pace.value || step.pace.range))
 
+      if (hasPower || hasHr || hasPace) {
         const intensities: string[] = []
 
         // Power
@@ -452,15 +451,17 @@ export const WorkoutConverter = {
 
         if (intensities.length > 0) {
           intensityStr = intensities.join(' ')
-        } else {
-          // Default fallback
-          intensityStr = prioritizeHr ? '50% LTHR' : '50%'
         }
+      }
+
+      // Default fallback for Active steps without targets
+      if (!intensityStr && step.type !== 'Rest') {
+        intensityStr = prioritizeHr ? '50% LTHR' : '50%'
       }
 
       // Cadence (optional)
       let cadenceStr = ''
-      if (step.cadence && step.type !== 'Rest') {
+      if (step.cadence) {
         cadenceStr = ` ${step.cadence}rpm`
       }
 
@@ -488,11 +489,9 @@ export const WorkoutConverter = {
       if (distanceStr) line += ` ${distanceStr}`
       if (durationStr) line += ` ${durationStr}`
 
-      // Only add intensity and cadence for non-rest steps
-      if (step.type !== 'Rest') {
-        if (intensityStr) line += ` ${intensityStr}`
-        if (cadenceStr) line += ` ${cadenceStr}`
-      }
+      // Add intensity and cadence if available (even for Rest if targets exist)
+      if (intensityStr) line += ` ${intensityStr}`
+      if (cadenceStr) line += ` ${cadenceStr}`
 
       lines.push(line.trim().replace(/\s+/g, ' '))
     })
