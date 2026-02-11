@@ -476,7 +476,7 @@ export const generateStructuredWorkoutTask = task({
 
       const workoutDoc = WorkoutConverter.toIntervalsICU(workoutData)
 
-      await syncPlannedWorkoutToIntervals(
+      const syncResult = await syncPlannedWorkoutToIntervals(
         'UPDATE',
         {
           id: updatedWorkout.id,
@@ -492,6 +492,24 @@ export const generateStructuredWorkoutTask = task({
         },
         workout.userId
       )
+
+      if (syncResult.synced) {
+        await (prisma as any).plannedWorkout.update({
+          where: { id: plannedWorkoutId },
+          data: {
+            syncStatus: 'SYNCED',
+            lastSyncedAt: new Date(),
+            syncError: null
+          }
+        })
+      } else {
+        await (prisma as any).plannedWorkout.update({
+          where: { id: plannedWorkoutId },
+          data: {
+            syncError: syncResult.error || 'Failed to sync structured intervals'
+          }
+        })
+      }
     }
 
     return { success: true, plannedWorkoutId }
