@@ -48,7 +48,7 @@ export default defineEventHandler(async (event) => {
 
   const workouts = await plannedWorkoutRepository.list(userId, {
     where: { date: today },
-    orderBy: { tss: 'desc' } // Hardest first
+    orderBy: [{ startTime: 'asc' }, { tss: 'desc' }]
   })
 
   return workouts

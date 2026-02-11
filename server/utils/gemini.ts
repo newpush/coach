@@ -764,9 +764,7 @@ export function buildWorkoutSummary(workouts: any[], timezone?: string): string 
 export function buildMetricsSummary(metrics: any[], timezone?: string): string {
   return metrics
     .map((m) => {
-      const dateStr = timezone
-        ? formatUserDate(m.date, timezone, 'MMM d, yyyy')
-        : m.date.toISOString().split('T')[0]
+      const dateStr = formatDateUTC(m.date, 'MMM d, yyyy')
 
       const parts = [`**${dateStr}**:`]
 

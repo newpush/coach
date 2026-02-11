@@ -364,13 +364,12 @@ export async function buildAthleteContext(userId: string): Promise<{
 
       if (daysToTarget) {
         athleteContext += `- **Timeline**: ${daysToTarget} days remaining`
-        if (goal.targetDate)
-          athleteContext += ` (Target: ${formatUserDate(goal.targetDate, userTimezone)})`
+        if (goal.targetDate) athleteContext += ` (Target: ${formatDateUTC(goal.targetDate)})`
         athleteContext += '\n'
       }
 
       if (goal.eventDate) {
-        athleteContext += `- **Event**: ${goal.eventType || 'race'} on ${formatUserDate(goal.eventDate, userTimezone)} (${daysToEvent} days away)\n`
+        athleteContext += `- **Event**: ${goal.eventType || 'race'} on ${formatDateUTC(goal.eventDate)} (${daysToEvent} days away)\n`
       }
 
       if (goal.aiContext) {
@@ -483,7 +482,7 @@ export async function buildAthleteContext(userId: string): Promise<{
   // Current Training Plan
   if (currentPlan) {
     athleteContext += `\n### Current Training Plan\n`
-    athleteContext += `- **Week**: ${formatUserDate(currentPlan.weekStartDate, userTimezone)} - ${formatUserDate(currentPlan.weekEndDate, userTimezone)}\n`
+    athleteContext += `- **Week**: ${formatDateUTC(currentPlan.weekStartDate)} - ${formatDateUTC(currentPlan.weekEndDate)}\n`
     athleteContext += `- **Status**: ${currentPlan.status}\n`
     if (currentPlan.totalTSS)
       athleteContext += `- **Weekly TSS Target**: ${Math.round(currentPlan.totalTSS)}\n`
@@ -588,7 +587,7 @@ export async function buildAthleteContext(userId: string): Promise<{
 
   // Stabilize date for caching (Day precision only)
   const todayDateForContext = getUserLocalDate(userTimezone)
-  const todayStr = formatUserDate(todayDateForContext, userTimezone, 'EEEE, MMMM d, yyyy')
+  const todayStr = formatDateUTC(todayDateForContext, 'EEEE, MMMM d, yyyy')
 
   // Calculate upcoming days for relative date understanding
   const getNextDays = (count: number) => {

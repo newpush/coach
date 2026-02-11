@@ -1,5 +1,5 @@
 import { prisma } from './db'
-import { formatUserDate } from './date'
+import { formatUserDate, formatDateUTC } from './date'
 import { sportSettingsRepository } from './repositories/sportSettingsRepository'
 
 /**
@@ -294,8 +294,9 @@ export async function calculateLoadTrends(
   const trendMap = new Map<string, LoadTrend>()
 
   for (const w of wellness) {
-    // Wellness dates are already day-aligned (stored as UTC midnight), but best to be consistent
-    const dateKey = formatUserDate(w.date, timezone)
+    // Wellness dates are already day-aligned (stored as UTC midnight),
+    // so we use formatDateUTC to avoid shifting them.
+    const dateKey = formatDateUTC(w.date)
     trendMap.set(dateKey, {
       date: w.date,
       ctl: w.ctl,
@@ -305,6 +306,8 @@ export async function calculateLoadTrends(
   }
 
   for (const w of workouts) {
+    // Workouts are timestamps, so we use formatUserDate to align them
+    // to the user's local day.
     const dateKey = formatUserDate(w.date, timezone)
     trendMap.set(dateKey, {
       date: w.date,
