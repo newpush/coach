@@ -2,6 +2,7 @@ import { getServerSession } from '../../../utils/session'
 import { nutritionRepository } from '../../../utils/repositories/nutritionRepository'
 import { z } from 'zod'
 import { metabolicService } from '../../../utils/services/metabolicService'
+import { MEAL_LINKED_WATER_ML } from '../../../utils/nutrition/hydration'
 
 const ItemSchema = z.object({
   id: z.string().optional(),
@@ -70,7 +71,6 @@ export default defineEventHandler(async (event) => {
   const mealsList = ['breakfast', 'lunch', 'dinner', 'snacks']
   const currentItems = (nutrition[mealType] as any[]) || []
   let updatedItems = [...currentItems]
-  const originalMealType = mealType
 
   if (action === 'add') {
     if (!item) throw createError({ statusCode: 400, message: 'Item is required for add' })
@@ -145,7 +145,10 @@ export default defineEventHandler(async (event) => {
 
   // Update record
   const updatedNutrition = await nutritionRepository.update(nutrition.id, {
-    [mealType]: updatedItems
+    [mealType]: updatedItems,
+    ...(action === 'add'
+      ? { waterMl: Math.max(0, (nutrition.waterMl || 0) + MEAL_LINKED_WATER_ML) }
+      : {})
   })
 
   // Recalculate totals

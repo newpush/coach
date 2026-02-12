@@ -5,6 +5,11 @@ import { z } from 'zod'
 import { getProfileForItem } from '../../../utils/nutrition-domain/absorption'
 import { getUserTimezone, formatUserTime, getStartOfLocalDateUTC } from '../../../utils/date'
 import { metabolicService } from '../../../utils/services/metabolicService'
+import {
+  extractFluidIntakeMl,
+  INTRA_WORKOUT_TARGET_ML_PER_HOUR,
+  MEAL_LINKED_WATER_ML
+} from '../../../utils/nutrition/hydration'
 
 const LogSchema = z.object({
   query: z.string(),
@@ -31,6 +36,14 @@ const FoodItemSchema = z.object({
         .string()
         .optional()
         .describe('Human readable quantity (e.g. "1 bowl", "a handful")'),
+      entryType: z
+        .enum(['FOOD', 'HYDRATION'])
+        .optional()
+        .describe('Use HYDRATION for water/coffee/tea/electrolyte logs that are fluid-first'),
+      waterMl: z
+        .number()
+        .optional()
+        .describe('Fluid intake in ml for hydration logs (convert oz/L to ml)'),
       mealType: z
         .enum(['breakfast', 'lunch', 'dinner', 'snacks'])
         .optional()
@@ -93,7 +106,9 @@ export default defineEventHandler(async (event) => {
        - 'BALANCED' for complex carbs (oats, pasta, rice, potato, bars).
        - 'DENSE' for items high in protein/fat/fiber (meat, nuts, avocado, whole grains).
        - 'HYPER_LOAD' for very large, high-calorie meals (pizza, Thanksgiving dinner, big pasta party).
-    7. Return a JSON object with an 'items' array matching the schema.
+    7. Detect hydration entries (water, coffee, tea, sports drink, bottles, oz/ml/L) and mark them as entryType='HYDRATION' with waterMl in milliliters.
+    8. Keep hydration entries separate from food logs. Only return mealType for FOOD entries.
+    9. Return a JSON object with an 'items' array matching the schema.
   `
 
   const result = await generateStructuredAnalysis<any>(prompt, FoodItemSchema, 'flash', {
@@ -101,14 +116,24 @@ export default defineEventHandler(async (event) => {
     operation: 'LOG_NUTRITION_AI'
   })
 
-  if (!result.items || result.items.length === 0) {
+  const parsedItems = Array.isArray(result.items) ? result.items : []
+  const inferredFluidMl = extractFluidIntakeMl(query)
+  if (parsedItems.length === 0 && inferredFluidMl <= 0) {
     return { success: false, message: 'Could not parse any food items from your query.' }
   }
 
   // Group items by target date
-  const itemsByDate: Record<string, any[]> = {}
+  const itemsByDate: Record<
+    string,
+    {
+      items: any[]
+      mealTypes: Set<string>
+      hydrationMl: number
+      hydrationLoggedAt: string | null
+    }
+  > = {}
 
-  result.items.forEach((item: any) => {
+  parsedItems.forEach((item: any) => {
     let targetDateStr = dateStr
     let normalizedLoggedAt = item.logged_at
 
@@ -131,7 +156,24 @@ export default defineEventHandler(async (event) => {
     }
 
     if (!itemsByDate[targetDateStr]) {
-      itemsByDate[targetDateStr] = []
+      itemsByDate[targetDateStr] = {
+        items: [],
+        mealTypes: new Set<string>(),
+        hydrationMl: 0,
+        hydrationLoggedAt: null
+      }
+    }
+
+    const isHydrationItem =
+      item.entryType === 'HYDRATION' ||
+      (Number(item.waterMl || 0) > 0 && Number(item.carbs || 0) === 0)
+
+    if (isHydrationItem) {
+      itemsByDate[targetDateStr]!.hydrationMl += Math.round(Number(item.waterMl || 0))
+      if (typeof normalizedLoggedAt === 'string') {
+        itemsByDate[targetDateStr]!.hydrationLoggedAt = normalizedLoggedAt
+      }
+      return
     }
 
     // Ensure absorptionType is set
@@ -141,14 +183,29 @@ export default defineEventHandler(async (event) => {
       absorptionType: item.absorptionType || getProfileForItem(item.name).id
     }
 
-    itemsByDate[targetDateStr]!.push(processedItem)
+    itemsByDate[targetDateStr]!.items.push(processedItem)
+    itemsByDate[targetDateStr]!.mealTypes.add(item.mealType || mealType || 'snacks')
   })
 
   const addedItems: any[] = []
+  const hydrationUpdates: any[] = []
+
+  if (inferredFluidMl > 0) {
+    if (!itemsByDate[dateStr]) {
+      itemsByDate[dateStr] = {
+        items: [],
+        mealTypes: new Set<string>(),
+        hydrationMl: 0,
+        hydrationLoggedAt: null
+      }
+    }
+    itemsByDate[dateStr]!.hydrationMl = Math.max(itemsByDate[dateStr]!.hydrationMl, inferredFluidMl)
+  }
 
   // Process each date group
-  for (const [targetDateStr, items] of Object.entries(itemsByDate)) {
+  for (const [targetDateStr, grouped] of Object.entries(itemsByDate)) {
     const targetDate = new Date(`${targetDateStr}T00:00:00Z`)
+    const items = grouped.items
 
     // Get or create record for this date
     let targetNutrition = await nutritionRepository.getByDate(userId, targetDate)
@@ -167,7 +224,8 @@ export default defineEventHandler(async (event) => {
       targetNutrition = await nutritionRepository.create({
         userId,
         date: targetDate,
-        ...meals
+        ...meals,
+        waterMl: 0
       })
     } else {
       // Update existing
@@ -187,6 +245,54 @@ export default defineEventHandler(async (event) => {
       })
 
       targetNutrition = await nutritionRepository.update(targetNutrition.id, updates)
+    }
+
+    const mealLinkedBonusMl = grouped.mealTypes.size * MEAL_LINKED_WATER_ML
+    const fluidToAddMl = Math.max(0, Math.round(grouped.hydrationMl + mealLinkedBonusMl))
+    if (fluidToAddMl > 0) {
+      targetNutrition = await nutritionRepository.update(targetNutrition.id, {
+        waterMl: Math.max(0, (targetNutrition.waterMl || 0) + fluidToAddMl)
+      })
+
+      let intraWorkout: any = null
+      const loggedAt = grouped.hydrationLoggedAt ? new Date(grouped.hydrationLoggedAt) : new Date()
+      const planResult = await metabolicService.calculateFuelingPlanForDate(userId, targetDate, {
+        persist: false
+      })
+      const intraWindow = (planResult.plan as any)?.windows?.find((window: any) => {
+        if (window.type !== 'INTRA_WORKOUT') return false
+        const start = new Date(window.startTime)
+        const end = new Date(window.endTime)
+        return loggedAt >= start && loggedAt <= end
+      })
+
+      if (intraWindow) {
+        const start = new Date(intraWindow.startTime)
+        const end = new Date(intraWindow.endTime)
+        const elapsedHours = Math.max(
+          0,
+          Math.min(
+            (loggedAt.getTime() - start.getTime()) / 3600000,
+            (end.getTime() - start.getTime()) / 3600000
+          )
+        )
+        const targetByNowMl = Math.round(elapsedHours * INTRA_WORKOUT_TARGET_ML_PER_HOUR)
+        intraWorkout = {
+          type: 'INTRA_WORKOUT',
+          targetByNowMl,
+          loggedMl: fluidToAddMl,
+          completionPercent:
+            targetByNowMl > 0 ? Math.round((fluidToAddMl / targetByNowMl) * 100) : 100
+        }
+      }
+
+      hydrationUpdates.push({
+        date: targetDateStr,
+        fluidMl: fluidToAddMl,
+        mealLinkedBonusMl,
+        inferredFluidMl: grouped.hydrationMl,
+        intraWorkout
+      })
     }
 
     // Recalculate totals for this record
@@ -229,5 +335,5 @@ export default defineEventHandler(async (event) => {
     addedItems.push(...items)
   }
 
-  return { success: true, itemsAdded: addedItems }
+  return { success: true, itemsAdded: addedItems, hydration: hydrationUpdates }
 })

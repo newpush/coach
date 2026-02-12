@@ -248,7 +248,7 @@ export default defineEventHandler(async (event) => {
     ftp: user?.ftp || 250,
     currentCarbMax: nutritionSettings.currentCarbMax,
     sodiumTarget: nutritionSettings.sodiumTarget,
-    sweatRate: nutritionSettings.sweatRate || 0.8,
+    sweatRate: nutritionSettings.sweatRate ?? undefined,
     preWorkoutWindow: nutritionSettings.preWorkoutWindow,
     postWorkoutWindow: nutritionSettings.postWorkoutWindow,
     fuelingSensitivity: nutritionSettings.fuelingSensitivity,

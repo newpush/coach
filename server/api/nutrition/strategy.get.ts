@@ -4,6 +4,11 @@ import { getUserTimezone, getUserLocalDate, formatDateUTC } from '../../utils/da
 import { prisma } from '../../utils/db'
 import { getUserNutritionSettings } from '../../utils/nutrition/settings'
 import { calculateFuelingStrategy } from '../../utils/nutrition/fueling'
+import {
+  getHydrationRingStatus,
+  HYDRATION_DEBT_FLUSH_THRESHOLD_ML,
+  HYDRATION_DEBT_NUDGE_THRESHOLD_ML
+} from '../../utils/nutrition/hydration'
 
 defineRouteMeta({
   openAPI: {
@@ -98,13 +103,22 @@ export default defineEventHandler(async (event) => {
       summary += ` Focus on metabolic efficiency and steady endurance.`
     }
 
-    if (hydrationDebt > 1000) {
+    if (hydrationDebt > HYDRATION_DEBT_NUDGE_THRESHOLD_ML) {
+      summary +=
+        ' High fluid debt detected. Add 500ml of water to your next two meals to normalize.'
+    } else if (hydrationDebt > 1000) {
       summary += ` WARNING: You are carrying a significant fluid debt of ${Math.round(hydrationDebt)}ml. Prioritize rehydration today.`
     }
 
     return {
       success: true,
       hydrationDebt: Math.round(hydrationDebt),
+      hydrationStatus: getHydrationRingStatus(Math.round(hydrationDebt)),
+      showHydrationFlushPrompt: hydrationDebt >= HYDRATION_DEBT_FLUSH_THRESHOLD_ML,
+      hydrationFlushPrompt:
+        hydrationDebt >= HYDRATION_DEBT_FLUSH_THRESHOLD_ML
+          ? 'Your hydration debt is high. Have you been drinking water without logging? Tap to reset to zero.'
+          : null,
       fuelingMatrix,
       summary
     }
