@@ -182,9 +182,7 @@ export const metabolicService = {
     )
 
     const currentPoint =
-      [...points]
-        .reverse()
-        .find((p) => p.timestamp <= now.getTime()) || points[0]
+      [...points].reverse().find((p) => p.timestamp <= now.getTime()) || points[0]
 
     const computedPlan = dayNutrition?.fuelingPlan
       ? { plan: dayNutrition.fuelingPlan as any }
@@ -205,7 +203,9 @@ export const metabolicService = {
     const meals = ['breakfast', 'lunch', 'dinner', 'snacks'] as const
     const loggedItems = meals.flatMap((meal) => {
       const mealItems =
-        dayNutrition && Array.isArray((dayNutrition as any)[meal]) ? (dayNutrition as any)[meal] : []
+        dayNutrition && Array.isArray((dayNutrition as any)[meal])
+          ? (dayNutrition as any)[meal]
+          : []
       return mealItems.map((item: any) => {
         const timeVal = item.logged_at || item.date
         let at: Date | null = null
@@ -242,7 +242,8 @@ export const metabolicService = {
       const minutesToStart = Math.round(
         (new Date(activeOrNext.startTime).getTime() - now.getTime()) / 60000
       )
-      const inWindow = minutesToStart <= 0 && new Date(activeOrNext.endTime).getTime() > now.getTime()
+      const inWindow =
+        minutesToStart <= 0 && new Date(activeOrNext.endTime).getTime() > now.getTime()
 
       let absorptionType: 'RAPID' | 'FAST' | 'BALANCED' | 'DENSE' | 'HYPER_LOAD' = 'DENSE'
       if (inWindow || minutesToStart <= 30) absorptionType = 'RAPID'
@@ -547,13 +548,9 @@ export const metabolicService = {
       if (lastPoint) {
         currentStartingGlycogen = lastPoint.level
         currentStartingFluid = lastPoint.fluidDeficit
-        console.log(
-          `[MetabolicChain] Day ${dateStr} ended at ${lastPoint.level.toFixed(1)}% glycogen`
-        )
       } else {
         currentStartingGlycogen = 85
         currentStartingFluid = 0
-        console.log(`[MetabolicChain] Day ${dateStr} had no points, defaulting to 85%`)
       }
     }
 
