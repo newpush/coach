@@ -51,20 +51,32 @@ export interface TimelineOptions {
 }
 
 export function getWorkoutDate(workout: any, timezone: string): number {
+  const d = new Date(workout.date)
+  if (isNaN(d.getTime())) {
+    return 0
+  }
+
+  // If it's a completed workout, it usually has a precise timestamp in 'date'
+  // We should trust it unless it's strictly midnight UTC (which implies a date-only field)
+  const isCompleted =
+    workout.source === 'completed' ||
+    workout.source === 'intervals' ||
+    workout.status === 'completed'
+  const hasTime = d.getUTCHours() !== 0 || d.getUTCMinutes() !== 0 || d.getUTCSeconds() !== 0
+
+  if (isCompleted && hasTime) {
+    return d.getTime()
+  }
+
   if (workout.startTime) {
     if (
       workout.startTime instanceof Date ||
       (typeof workout.startTime === 'string' && workout.startTime.includes('T'))
     ) {
       // If it's already a full date, return it
-      const d = new Date(workout.startTime)
-      if (!isNaN(d.getTime())) return d.getTime()
+      const sd = new Date(workout.startTime)
+      if (!isNaN(sd.getTime())) return sd.getTime()
     }
-  }
-
-  const d = new Date(workout.date)
-  if (isNaN(d.getTime())) {
-    return 0 // Or some fallback
   }
 
   let h = 10
@@ -163,8 +175,11 @@ export function mapNutritionToTimeline(
     const rawWindows: FuelingTimelineWindow[] = []
     trainingWorkouts.forEach((workout) => {
       const workoutStart = new Date(getWorkoutDate(workout, options.timezone))
-      const durationMin = (workout.durationSec || 3600) / 60
+      const durationSec = workout.durationSec || workout.duration || workout.plannedDuration || 3600
+      const durationMin = durationSec / 60
       const workoutEnd = addMinutes(workoutStart, durationMin)
+
+      const intensity = workout.workIntensity || workout.intensity || workout.intensityFactor || 0.7
 
       rawWindows.push({
         type: 'PRE_WORKOUT',
@@ -184,7 +199,7 @@ export function mapNutritionToTimeline(
         type: 'INTRA_WORKOUT',
         startTime: workoutStart,
         endTime: workoutEnd,
-        targetCarbs: Math.round((workout.workIntensity > 0.8 ? 90 : 60) * (durationMin / 60)),
+        targetCarbs: Math.round((intensity > 0.8 ? 90 : 60) * (durationMin / 60)),
         targetProtein: 0,
         targetFat: 0,
         targetFluid: Math.round(800 * (durationMin / 60)),
@@ -338,14 +353,53 @@ export function mapNutritionToTimeline(
     })
   }
 
-  // 5. Slot logged items
+  // 5. Slot logged items (Actual + Synthetic)
   const meals = ['breakfast', 'lunch', 'dinner', 'snacks']
   const allLoggedItems: any[] = []
+
+  // Actual logs
   meals.forEach((meal) => {
     if (Array.isArray(nutritionRecord[meal])) {
-      allLoggedItems.push(...nutritionRecord[meal].map((item: any) => ({ ...item, meal })))
+      allLoggedItems.push(
+        ...nutritionRecord[meal].map((item: any) => ({ ...item, meal, isSynthetic: false }))
+      )
     }
   })
+
+  // Synthetic logs from simulation (to show on timeline)
+  // We need the synthetic meals that the simulation logic generated.
+  // Since mapNutritionToTimeline doesn't have settings/timezone/logic access easily,
+  // we re-run a lightweight version of the heuristic if no fuelingPlan is available.
+
+  if (fuelingPlan?.windows && allLoggedItems.length === 0) {
+    fuelingPlan.windows.forEach((w: any) => {
+      if (w.targetCarbs > 0) {
+        allLoggedItems.push({
+          name: `Synthetic ${w.type}`,
+          carbs: w.targetCarbs,
+          logged_at: w.startTime,
+          isSynthetic: true
+        })
+      }
+    })
+  } else if (allLoggedItems.length === 0 && nutritionRecord.carbsGoal > 0) {
+    const pattern =
+      options.mealPattern && options.mealPattern.length > 0
+        ? options.mealPattern
+        : [
+            { name: 'Breakfast', time: '08:00' },
+            { name: 'Lunch', time: '13:00' },
+            { name: 'Dinner', time: '19:00' }
+          ]
+    pattern.forEach((p: any) => {
+      allLoggedItems.push({
+        name: `Synthetic ${p.name}`,
+        carbs: Math.round(nutritionRecord.carbsGoal / pattern.length),
+        logged_at: fromZonedTime(`${dateStr}T${p.time}:00`, options.timezone).toISOString(),
+        isSynthetic: true
+      })
+    })
+  }
 
   allLoggedItems.forEach((item) => {
     let itemTime: Date | null = null

@@ -1,13 +1,13 @@
-import { differenceInMinutes, startOfDay, endOfDay } from 'date-fns'
-import { fromZonedTime, toZonedTime, format } from 'date-fns-tz'
-import { getWorkoutDate } from './nutrition-timeline'
+import { differenceInMinutes } from 'date-fns'
+import { fromZonedTime, format } from 'date-fns-tz'
+import { getWorkoutDate } from './workout'
 import {
   getProfileForItem,
   getAbsorbedInInterval,
   ABSORPTION_PROFILES,
   type AbsorptionType,
   type AbsorptionProfile
-} from './nutrition-absorption'
+} from './absorption'
 
 export interface GlycogenBreakdown {
   midnightBaseline: number

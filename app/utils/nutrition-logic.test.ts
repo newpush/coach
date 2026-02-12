@@ -101,4 +101,32 @@ describe('calculateEnergyTimeline', () => {
     // Expect a major drop for high intensity
     expect(beforeWorkout!.level - afterWorkout!.level).toBeGreaterThan(25)
   })
+
+  it('should show the impact of a ghost meal (Metabolic Ghost)', () => {
+    const ghostMeal = {
+      totalCarbs: 50,
+      totalKcal: 200,
+      profile: {
+        id: 'RAPID' as any,
+        label: 'Rapid',
+        delay: 5,
+        peak: 15,
+        duration: 45,
+        k: 2
+      },
+      time: new Date('2026-02-10T14:00:00Z')
+    }
+
+    const baselinePoints = calculateEnergyTimeline(mockNutrition, [], mockSettings, 'UTC')
+    const ghostPoints = calculateEnergyTimeline(mockNutrition, [], mockSettings, 'UTC', ghostMeal)
+
+    const atMeal = baselinePoints.find((p) => p.time === '14:00')
+    const baselinePeak = baselinePoints.find((p) => p.time === '14:45')
+    const ghostPeak = ghostPoints.find((p) => p.time === '14:45')
+
+    console.log('[TestDebug] Baseline level at 14:45:', baselinePeak?.level)
+    console.log('[TestDebug] Ghost level at 14:45:', ghostPeak?.level)
+
+    expect(ghostPeak!.level).toBeGreaterThan(baselinePeak!.level)
+  })
 })
