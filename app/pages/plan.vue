@@ -27,6 +27,17 @@
               variant="outline"
               size="sm"
               class="font-bold"
+              icon="i-heroicons-bookmark"
+              @click="navigateTo('/plans')"
+            >
+              <span class="hidden sm:inline">My Plans</span>
+            </UButton>
+            <UButton
+              v-if="activePlan"
+              color="neutral"
+              variant="outline"
+              size="sm"
+              class="font-bold"
               icon="i-heroicons-plus"
               @click="startNewPlan"
             >

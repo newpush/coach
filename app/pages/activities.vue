@@ -22,27 +22,15 @@
               <span class="hidden sm:inline">Upload</span>
             </UButton>
 
-            <UButton
-              icon="i-heroicons-document-duplicate"
-              color="neutral"
-              variant="outline"
-              size="sm"
-              class="font-bold"
-              @click="showDeduplicateModal = true"
-            >
-              <span class="hidden sm:inline">Deduplicate</span>
-            </UButton>
-
-            <UButton
-              icon="i-heroicons-trash"
-              color="neutral"
-              variant="outline"
-              size="sm"
-              class="font-bold"
-              @click="showBulkDeleteModal = true"
-            >
-              <span class="hidden sm:inline">Manage</span>
-            </UButton>
+            <!-- Secondary Actions Dropdown -->
+            <UDropdownMenu :items="activityMenuItems">
+              <UButton
+                icon="i-heroicons-ellipsis-vertical"
+                color="neutral"
+                variant="outline"
+                size="sm"
+              />
+            </UDropdownMenu>
 
             <UButton
               icon="i-heroicons-arrow-path"
@@ -147,6 +135,16 @@
                 :disabled="columnMenuItems.length === 0"
               />
             </UDropdownMenu>
+
+            <UButton
+              v-if="viewMode === 'calendar'"
+              icon="i-heroicons-cog-6-tooth"
+              color="neutral"
+              variant="ghost"
+              size="sm"
+              class="font-bold"
+              @click="showCalendarSettingsModal = true"
+            />
 
             <!-- View Switcher -->
             <div class="flex items-center bg-gray-100 dark:bg-gray-800 rounded-lg p-1">
@@ -318,12 +316,27 @@
                   :streams="streamsMap"
                   :user-zones="userZones"
                   :all-sport-settings="allSportSettings"
+                  :settings="calendarSettings"
                   @activity-click="openActivity"
                   @wellness-click="openWellnessModal"
                   @nutrition-click="openNutrition"
                   @merge-activity="onMergeActivity"
                   @link-activity="onLinkActivity"
                   @reschedule-activity="onRescheduleActivity"
+                />
+
+                <!-- Metabolic Horizon Wave -->
+                <div
+                  v-if="calendarSettings.showMetabolicWave"
+                  class="col-span-8 bg-gray-50 dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700"
+                >
+                  <CalendarMetabolicWave :week="week" :week-index="weekIdx" />
+                </div>
+
+                <!-- Week Spacer -->
+                <div
+                  v-if="calendarSettings.showWeekSeparator"
+                  class="col-span-8 h-4 bg-transparent"
                 />
               </template>
             </div>
@@ -840,6 +853,8 @@
       </div>
     </template>
   </UModal>
+
+  <CalendarSettingsModal v-model:open="showCalendarSettingsModal" />
 </template>
 
 <script setup lang="ts">
@@ -852,6 +867,8 @@
   import MiniWorkoutChart from '~/components/workouts/MiniWorkoutChart.vue'
   import DeduplicateModal from '~/components/activities/DeduplicateModal.vue'
   import BulkDeleteModal from '~/components/workouts/BulkDeleteModal.vue'
+  import CalendarMetabolicWave from '~/components/activities/CalendarMetabolicWave.vue'
+  import CalendarSettingsModal from '~/components/activities/CalendarSettingsModal.vue'
   import { getDefaultSportSettings, getPreferredMetric } from '~/utils/sportSettings'
 
   definePageMeta({
@@ -861,6 +878,25 @@
 
   const integrationStore = useIntegrationStore()
   const userStore = useUserStore()
+
+  const defaultCalendarSettings = {
+    showMetabolicWave: false,
+    showFuelState: true,
+    showWeekSeparator: true,
+    alignActivitiesByTime: false,
+    showWellness: true,
+    showNutrition: true,
+    showTrainingStress: true
+  }
+
+  const calendarSettings = computed(() => {
+    return {
+      ...defaultCalendarSettings,
+      ...(userStore.user?.dashboardSettings?.activityCalendar || {})
+    }
+  })
+
+  const showCalendarSettingsModal = ref(false)
   const { formatDate, formatDateUTC, formatDateTime, getUserLocalDate } = useFormat()
   const { onTaskCompleted } = useUserRunsState()
 
@@ -905,6 +941,28 @@
   const linkPlanned = ref<CalendarActivity | null>(null)
   const linkCompleted = ref<CalendarActivity | null>(null)
   const isLinking = ref(false)
+
+  const activityMenuItems = computed(() => {
+    const items = []
+
+    items.push({
+      label: 'Deduplicate',
+      icon: 'i-heroicons-document-duplicate',
+      onSelect: () => {
+        showDeduplicateModal.value = true
+      }
+    })
+
+    items.push({
+      label: 'Manage',
+      icon: 'i-heroicons-trash',
+      onSelect: () => {
+        showBulkDeleteModal.value = true
+      }
+    })
+
+    return [items]
+  })
 
   const currentDate = ref(getUserLocalDate())
   const viewMode = ref<'calendar' | 'list'>('calendar')

@@ -381,13 +381,21 @@
       const dateStr = formatDateUTC(getUserLocalDate(), 'yyyy-MM-dd')
       const [nData, wData, sData] = await Promise.all([
         $fetch<any>(`/api/nutrition/${dateStr}`),
-        $fetch<any[]>('/api/planned-workouts', {
-          query: { startDate: `${dateStr}T00:00:00Z`, endDate: `${dateStr}T23:59:59Z` }
+        $fetch<any[]>('/api/calendar', {
+          query: { startDate: dateStr, endDate: dateStr }
         }),
         $fetch<any>('/api/profile/nutrition')
       ])
       todayNutrition.value = nData
-      todayWorkouts.value = wData
+
+      // Filter out non-training items like wellness/nutrition placeholders and notes
+      todayWorkouts.value = (wData || []).filter(
+        (a) =>
+          (a.source === 'completed' || a.source === 'planned') &&
+          a.type !== 'Rest' &&
+          a.type !== 'Note'
+      )
+
       nutritionSettings.value = sData.settings
     } catch (error: any) {
       if (error.statusCode !== 404) {

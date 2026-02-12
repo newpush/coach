@@ -108,6 +108,67 @@
             }"
           />
 
+          <!-- 1.5 LIVE ENERGY CHART -->
+          <div
+            class="bg-white dark:bg-gray-900/50 rounded-xl border border-gray-100 dark:border-gray-800 p-4"
+          >
+            <div class="flex items-center justify-between mb-4">
+              <div class="flex items-center gap-1.5">
+                <h4
+                  class="text-[10px] font-black uppercase text-gray-400 tracking-widest flex items-center gap-1.5"
+                >
+                  <UIcon name="i-heroicons-bolt" class="w-3.5 h-3.5 text-primary-500" />
+                  Live Energy Availability
+                </h4>
+              </div>
+              <UTabs
+                v-model="energyViewIdx"
+                :items="[
+                  { label: '%', value: '0' },
+                  { label: 'kcal', value: '1' },
+                  { label: 'carbs', value: '2' }
+                ]"
+                size="xs"
+                class="w-32"
+              />
+            </div>
+            <NutritionLiveEnergyChart
+              :points="energyPoints"
+              :ghost-points="ghostPoints"
+              :view-mode="energyViewMode"
+            />
+
+            <!-- Legend/Status -->
+            <div
+              class="flex items-center justify-between text-[9px] font-bold uppercase tracking-widest text-gray-400 px-1 mt-4"
+            >
+              <div class="flex gap-3">
+                <span class="flex items-center gap-1"
+                  ><span class="w-1.5 h-1.5 rounded-full bg-primary-500"></span> Actual</span
+                >
+                <span class="flex items-center gap-1"
+                  ><span
+                    class="w-1.5 h-1.5 rounded-full border border-primary-500 border-dashed"
+                  ></span>
+                  Predicted</span
+                >
+                <span v-if="ghostPoints.length > 0" class="flex items-center gap-1">
+                  <span class="w-1.5 h-1.5 border border-purple-400 border-dashed"></span> Ghost
+                  (Rec)
+                </span>
+              </div>
+              <div class="flex gap-3">
+                <span class="flex items-center gap-1">
+                  <UIcon name="i-tabler-tools-kitchen-2" class="w-3 h-3 text-green-500" />
+                  Meal
+                </span>
+                <span class="flex items-center gap-1">
+                  <UIcon name="i-tabler-bike" class="w-3 h-3 text-red-500" /> Workout
+                </span>
+              </div>
+            </div>
+          </div>
+
           <!-- 2. THE TIMELINE (The What & When) -->
           <div class="space-y-4">
             <div class="flex items-center justify-between">
@@ -222,6 +283,8 @@
 
 <script setup lang="ts">
   import { mapNutritionToTimeline } from '~/utils/nutrition-timeline'
+  import { calculateGlycogenState, calculateEnergyTimeline } from '~/utils/nutrition-logic'
+  import { ABSORPTION_PROFILES, type AbsorptionType } from '~/utils/nutrition-absorption'
   import { addDays, format } from 'date-fns'
 
   definePageMeta({
@@ -246,6 +309,13 @@
   const itemModal = ref<any>(null)
   const aiModal = ref<any>(null)
 
+  const energyViewIdx = ref('0') // '0': %, '1': kcal, '2': carbs
+  const energyViewMode = computed(() => {
+    if (energyViewIdx.value === '0') return 'percent'
+    if (energyViewIdx.value === '1') return 'kcal'
+    return 'carbs'
+  })
+
   // Computed
   const fuelState = computed(() => {
     if (!nutrition.value?.fuelingPlan) return 1
@@ -257,6 +327,81 @@
 
   const goalAdjustment = computed(() => {
     return nutritionSettings.value?.targetAdjustmentPercent || 0
+  })
+
+  const energyPoints = computed(() => {
+    // Priority: Server-provided points (consistent with metabolic chain)
+    if (nutrition.value?.energyPoints && nutrition.value.energyPoints.length > 0) {
+      return nutrition.value.energyPoints
+    }
+
+    if (!nutrition.value || !nutritionSettings.value) return []
+
+    const { timezone } = useFormat()
+
+    return calculateEnergyTimeline(
+      nutrition.value,
+      workouts.value,
+      nutritionSettings.value,
+      timezone.value,
+      undefined,
+      {
+        startingGlycogenPercentage: nutrition.value.startingGlycogen,
+        startingFluidDeficit: nutrition.value.startingFluid
+      }
+    )
+  })
+
+  const ghostPoints = computed(() => {
+    // Recommendation-based ghost line logic
+
+    const recommendationStore = useRecommendationStore()
+
+    const recDate = recommendationStore.todayRecommendation?.date
+
+    const viewingDate = nutrition.value?.date
+
+    // Simple check if recommendation applies to viewing day
+
+    if (!recommendationStore.todayRecommendation?.analysisJson?.meal_recommendation) return []
+
+    if (recDate && viewingDate && recDate.split('T')[0] !== viewingDate.split('T')[0]) return []
+
+    const mealRec = recommendationStore.todayRecommendation.analysisJson.meal_recommendation
+
+    const { timezone } = useFormat()
+
+    const now = new Date()
+
+    const ghostTime = new Date(now.getTime() + 15 * 60000)
+
+    return calculateEnergyTimeline(
+      nutrition.value,
+
+      workouts.value,
+
+      nutritionSettings.value,
+
+      timezone.value,
+
+      {
+        totalCarbs: mealRec.carbs || 30,
+
+        totalKcal: (mealRec.carbs || 30) * 4,
+
+        profile:
+          ABSORPTION_PROFILES[mealRec.absorptionType as AbsorptionType] ||
+          ABSORPTION_PROFILES.BALANCED,
+
+        time: ghostTime
+      },
+
+      {
+        startingGlycogenPercentage: nutrition.value.startingGlycogen,
+
+        startingFluidDeficit: nutrition.value.startingFluid
+      }
+    )
   })
 
   const timeline = computed(() => {
@@ -318,26 +463,30 @@
 
     try {
       // 1. Fetch Nutrition record
-
       console.log('[NutritionDashboard] Fetching nutrition for:', id)
-
-      const nData = await $fetch<any>(`/api/nutrition/${id}`)
+      const nData = await $fetch<any>(`/api/nutrition/${id}`, {
+        query: { currentTime: new Date().toISOString() }
+      })
 
       nutrition.value = nData
 
       const dateStr = nData.date
 
-      // 2. Fetch Planned Workouts for this date
-
-      console.log('[NutritionDashboard] Fetching workouts for date:', dateStr)
-
-      const wData = await $fetch<any[]>('/api/planned-workouts', {
-        query: { startDate: `${dateStr}T00:00:00Z`, endDate: `${dateStr}T23:59:59Z` }
+      // 2. Fetch all training activities for this date
+      console.log('[NutritionDashboard] Fetching activities for date:', dateStr)
+      const wData = await $fetch<any[]>('/api/calendar', {
+        query: { startDate: dateStr, endDate: dateStr }
       })
 
-      workouts.value = wData
+      // Filter out non-training items like wellness/nutrition placeholders and notes from the workouts array
+      workouts.value = (wData || []).filter(
+        (a) =>
+          (a.source === 'completed' || a.source === 'planned') &&
+          a.type !== 'Rest' &&
+          a.type !== 'Note'
+      )
 
-      console.log(`[NutritionDashboard] Received ${wData.length} workouts`)
+      console.log(`[NutritionDashboard] Received ${workouts.value.length} training activities`)
 
       // 3. Fetch Nutrition Settings
 
@@ -362,18 +511,24 @@
     if (!nutrition.value) return
     generatingPlan.value = true
     try {
-      await $fetch('/api/nutrition/generate-plan', {
+      const response = await $fetch<any>('/api/nutrition/generate-plan', {
         method: 'POST',
         body: { date: nutrition.value.date }
       })
       toast.add({
-        title: 'Engine Started',
-        description: 'Regenerating fueling strategy...',
+        title: 'Plan Updated',
+        description: response?.message || 'Fueling strategy regenerated in real time.',
         color: 'primary'
       })
+      await fetchData()
     } catch (e: any) {
+      toast.add({
+        title: 'Error',
+        description: e?.data?.message || 'Failed to regenerate fueling strategy.',
+        color: 'error'
+      })
+    } finally {
       generatingPlan.value = false
-      toast.add({ title: 'Error', description: 'Failed to trigger plan engine.', color: 'error' })
     }
   }
 
@@ -450,12 +605,6 @@
   function openAiModal(mealType: string = 'snacks') {
     aiModal.value?.open(mealType)
   }
-
-  const { onTaskCompleted } = useUserRunsState()
-  onTaskCompleted('generate-fueling-plan', () => {
-    generatingPlan.value = false
-    fetchData()
-  })
 
   function formatDateLabel(date: string) {
     if (!date) return ''
