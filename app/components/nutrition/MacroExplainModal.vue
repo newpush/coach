@@ -131,12 +131,16 @@
     const w = props.weight || 75
 
     if (props.label === 'Carbs') {
-      const base =
-        props.fuelState === 3
-          ? (s.fuelState3Min + s.fuelState3Max) / 2
-          : props.fuelState === 2
-            ? (s.fuelState2Min + s.fuelState2Max) / 2
-            : (s.fuelState1Min + s.fuelState1Max) / 2
+      const adjustmentMultiplier = 1 + (s.targetAdjustmentPercent || 0) / 100
+
+      // Calculate the "Reverse Base" that led to this target
+      // This ensures the numbers in the breakdown always lead to the 'target' shown
+      const sensitivity = s.fuelingSensitivity || 1.0
+      const weight = props.weight || 75
+
+      // target = weight * base * sensitivity * adjustment
+      // base = target / (weight * sensitivity * adjustment)
+      const base = props.target / (weight * sensitivity * adjustmentMultiplier)
 
       items.push({
         label: 'Metabolic Baseline',
@@ -155,6 +159,13 @@
           value: `${s.targetAdjustmentPercent > 0 ? '+' : ''}${s.targetAdjustmentPercent}%`
         })
       }
+
+      const finalGkg = props.target / weight
+      items.push({
+        label: 'Final Target Intensity',
+        description: 'Resulting grams per kilogram after all multipliers.',
+        value: `${finalGkg.toFixed(2)} g/kg`
+      })
     } else if (props.label === 'Protein') {
       items.push({
         label: 'Muscle Maintenance',

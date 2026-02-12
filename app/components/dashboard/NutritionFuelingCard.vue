@@ -741,11 +741,23 @@
   }
 
   const fuelState = computed(() => {
+    // Priority 1: Plan totals (Newest implementation)
+    if (props.nutrition?.fuelingPlan?.dailyTotals?.fuelState) {
+      return props.nutrition.fuelingPlan.dailyTotals.fuelState
+    }
+    // Priority 2: Nutrition record 'state' column (DB source)
+    if (props.nutrition?.state) {
+      return props.nutrition.state
+    }
+
     if (!plan.value) return 1
-    const intraWindow = plan.value.windows?.find((w: any) => w.type === 'INTRA_WORKOUT')
-    if (intraWindow?.description?.includes('Fuel State 3')) return 3
-    if (intraWindow?.description?.includes('Fuel State 2')) return 2
-    if (intraWindow?.description?.includes('Fuel State 1')) return 1
+
+    // Priority 3: Scan ALL windows (handles merged TRANSITION windows)
+    const allDescriptions = plan.value.windows?.map((w: any) => w.description || '').join(' ') || ''
+    if (allDescriptions.includes('Fuel State 3')) return 3
+    if (allDescriptions.includes('Fuel State 2')) return 2
+    if (allDescriptions.includes('Fuel State 1')) return 1
+
     return 1
   })
 
