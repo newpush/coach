@@ -47,7 +47,7 @@ export default defineEventHandler(async (event) => {
             // It's a HH:mm string, anchor it to the record's date
             const [h, m] = timeVal.split(':').map(Number)
             loggedAt = new Date(record.date)
-            loggedAt.setUTCHours(h, m, 0, 0)
+            loggedAt.setUTCHours(h || 0, m || 0, 0, 0)
           } else if (timeVal) {
             loggedAt = new Date(timeVal)
           }

@@ -28,10 +28,10 @@ describe('mergeFuelingWindows', () => {
 
     const merged = mergeFuelingWindows(windows as any)
     expect(merged.length).toBe(1)
-    expect(merged[0].type).toBe('PRE_WORKOUT')
-    expect(merged[0].targetCarbs).toBe(200)
-    expect(new Date(merged[0].startTime).toISOString()).toBe('2026-02-11T06:30:00.000Z')
-    expect(new Date(merged[0].endTime).toISOString()).toBe('2026-02-11T09:00:00.000Z')
+    expect(merged[0]!.type).toBe('PRE_WORKOUT')
+    expect(merged[0]!.targetCarbs).toBe(200)
+    expect(new Date(merged[0]!.startTime).toISOString()).toBe('2026-02-11T06:30:00.000Z')
+    expect(new Date(merged[0]!.endTime).toISOString()).toBe('2026-02-11T09:00:00.000Z')
   })
 
   it('should create a TRANSITION window when POST and next PRE overlap', () => {
@@ -58,8 +58,8 @@ describe('mergeFuelingWindows', () => {
 
     const merged = mergeFuelingWindows(windows as any)
     expect(merged.length).toBe(1)
-    expect(merged[0].type).toBe('TRANSITION')
-    expect(merged[0].targetCarbs).toBe(180)
+    expect(merged[0]!.type).toBe('TRANSITION')
+    expect(merged[0]!.targetCarbs).toBe(180)
   })
 
   it('should not merge windows far apart', () => {
