@@ -765,8 +765,10 @@ export const metabolicService = {
 
       // Add DAILY_BASE slots from pattern
       const pattern =
-        settings.mealPattern && settings.mealPattern.length > 0
-          ? settings.mealPattern
+        settings.mealPattern &&
+        Array.isArray(settings.mealPattern) &&
+        settings.mealPattern.length > 0
+          ? (settings.mealPattern as any[])
           : [
               { name: 'Breakfast', time: '08:00' },
               { name: 'Lunch', time: '13:00' },

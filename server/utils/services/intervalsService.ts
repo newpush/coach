@@ -758,27 +758,29 @@ export const IntervalsService = {
         const newPrimary = scoredDuplicates[0]
         const remainingDuplicates = scoredDuplicates.slice(1)
 
-        // 1. Promote the best duplicate
-        await tx.workout.update({
-          where: { id: newPrimary.id },
-          data: {
-            isDuplicate: false,
-            duplicateOf: null,
-            // If the old primary was linked to a planned workout, transfer the link
-            plannedWorkoutId: newPrimary.plannedWorkoutId || workoutToDelete.plannedWorkoutId
-          }
-        })
-
-        // 2. Update all OTHER duplicates to point to the new primary
-        if (remainingDuplicates.length > 0) {
-          await tx.workout.updateMany({
-            where: {
-              id: { in: remainingDuplicates.map((d) => d.id) }
-            },
+        if (newPrimary) {
+          // 1. Promote the best duplicate
+          await tx.workout.update({
+            where: { id: newPrimary.id },
             data: {
-              duplicateOf: newPrimary.id
+              isDuplicate: false,
+              duplicateOf: null,
+              // If the old primary was linked to a planned workout, transfer the link
+              plannedWorkoutId: newPrimary.plannedWorkoutId || workoutToDelete.plannedWorkoutId
             }
           })
+
+          // 2. Update all OTHER duplicates to point to the new primary
+          if (remainingDuplicates.length > 0) {
+            await tx.workout.updateMany({
+              where: {
+                id: { in: remainingDuplicates.map((d) => d.id) }
+              },
+              data: {
+                duplicateOf: newPrimary.id
+              }
+            })
+          }
         }
       }
 
