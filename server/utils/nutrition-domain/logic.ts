@@ -8,6 +8,13 @@ import {
   type AbsorptionType,
   type AbsorptionProfile
 } from './absorption'
+import {
+  NO_EXERCISE_DEBT_DECAY_ML_PER_HOUR,
+  PASSIVE_REHYDRATION_END_HOUR,
+  PASSIVE_REHYDRATION_ML_PER_HOUR,
+  PASSIVE_REHYDRATION_START_HOUR
+} from '../nutrition/hydration'
+import { extractWorkoutTemperatureC, getEstimatedSweatRateLph } from '../nutrition/sweat-rate'
 
 export interface GlycogenBreakdown {
   midnightBaseline: number
@@ -491,16 +498,30 @@ export function calculateEnergyTimeline(
       const durationSec = w.durationSec || w.duration || w.plannedDuration || 3600
       const durationMin = durationSec / 60
       const intensity = w.workIntensity || w.intensityFactor || w.intensity || 0.7
+      const sweatRateLph =
+        settings.sweatRate && settings.sweatRate > 0
+          ? settings.sweatRate
+          : getEstimatedSweatRateLph({
+              intensity,
+              temperatureC: extractWorkoutTemperatureC(w),
+              fallback: 0.8
+            })
 
       return {
         start,
         end: new Date(start.getTime() + durationMin * 60000),
         drainGramsPerInterval: getGramsPerMin(intensity) * INTERVAL,
         drainKcalPerInterval: ((getGramsPerMin(intensity) * 4) / 0.8) * INTERVAL,
-        drainFluidPerInterval: (settings.sweatRate || 0.8) * 1000 * (INTERVAL / 60),
+        drainFluidPerInterval: sweatRateLph * 1000 * (INTERVAL / 60),
         title: w.title
       }
     })
+
+  const manualFluidHours = new Set(
+    finalMeals
+      .filter((meal) => !meal.isSynthetic && (meal.totalFluid || 0) > 0)
+      .map((meal) => format(meal.time, 'yyyy-MM-dd-HH', { timeZone: timezone }))
+  )
 
   for (let i = 0; i <= TOTAL_POINTS; i++) {
     const currentTime = new Date(dayStart.getTime() + i * INTERVAL * 60000)
@@ -578,6 +599,10 @@ export function calculateEnergyTimeline(
       let intervalGramsIn = 0
       let intervalKcalIn = 0
       let intervalFluidIn = 0
+      const hourKey = format(currentTime, 'yyyy-MM-dd-HH', { timeZone: timezone })
+      const localHour = parseInt(format(currentTime, 'H', { timeZone: timezone }), 10)
+      const isPassiveWindow =
+        localHour >= PASSIVE_REHYDRATION_START_HOUR && localHour < PASSIVE_REHYDRATION_END_HOUR
 
       finalMeals.forEach((meal) => {
         const minsSince = (currentTime.getTime() - meal.time.getTime()) / 60000
@@ -602,7 +627,15 @@ export function calculateEnergyTimeline(
       currentGrams += cappedGramsIn
       cumulativeKcalDelta += intervalKcalIn
       cumulativeCarbDelta += cappedGramsIn
+
+      if (isPassiveWindow && !manualFluidHours.has(hourKey)) {
+        intervalFluidIn += PASSIVE_REHYDRATION_ML_PER_HOUR * (INTERVAL / 60)
+      }
       currentFluidDeficit -= intervalFluidIn
+      if (workoutEvents.length === 0) {
+        currentFluidDeficit -= NO_EXERCISE_DEBT_DECAY_ML_PER_HOUR * (INTERVAL / 60)
+      }
+      currentFluidDeficit = Math.max(0, currentFluidDeficit)
 
       currentGrams = Math.max(0, Math.min(C_cap, currentGrams))
     }
