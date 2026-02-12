@@ -198,7 +198,16 @@ export const recommendTodayActivityTask = task({
     ] = await Promise.all([
       // Today's planned workouts (Fetch ALL to handle multi-session days)
       prisma.plannedWorkout.findMany({
-        where: { userId, date: today },
+        where: {
+          userId,
+          date: today,
+          completed: {
+            not: true
+          },
+          completedWorkouts: {
+            none: {}
+          }
+        },
         orderBy: { tss: 'desc' } // Prioritize hardest workout
       }),
 
@@ -253,6 +262,12 @@ export const recommendTodayActivityTask = task({
       prisma.plannedWorkout.findMany({
         where: {
           userId,
+          completed: {
+            not: true
+          },
+          completedWorkouts: {
+            none: {}
+          },
           date: {
             gt: today,
             lte: new Date(today.getTime() + 14 * 24 * 60 * 60 * 1000)

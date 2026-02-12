@@ -19,7 +19,23 @@ export default defineEventHandler(async (event) => {
       where: { userId, date: today, status: 'COMPLETED' },
       orderBy: { createdAt: 'desc' }
     })
-    const mealRec = (latestRec?.analysisJson as any)?.meal_recommendation
+    const mealRecCandidate = (latestRec?.analysisJson as any)?.meal_recommendation
+    const nextWindowType = context.nextFuelingWindow?.type as string | undefined
+    const recWindowType = mealRecCandidate?.windowType as string | undefined
+    const recommendationText = `${mealRecCandidate?.timing || ''} ${mealRecCandidate?.reasoning || ''}`
+    const looksLikePreWorkout = /before\s+your\s+(ride|workout)|pre-?workout|head out/i.test(
+      recommendationText
+    )
+    const windowMismatch = !!(recWindowType && nextWindowType && recWindowType !== nextWindowType)
+    const staleMealRec =
+      // No remaining workout-linked window to fuel, but recommendation is still pre-workout.
+      (!nextWindowType && looksLikePreWorkout) ||
+      // Next actionable target is recovery/base, not a pre-ride window.
+      ((nextWindowType === 'POST_WORKOUT' || nextWindowType === 'DAILY_BASE') &&
+        looksLikePreWorkout) ||
+      // If model provided explicit window binding, enforce it.
+      windowMismatch
+    const mealRec = staleMealRec ? null : mealRecCandidate
 
     // 3. Get Recent Activity (History) - last 3 items
     // We look back at the last 2 days to find the 3 most recent logged items
