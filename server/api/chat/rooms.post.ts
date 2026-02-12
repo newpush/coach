@@ -40,6 +40,7 @@ export default defineEventHandler(async (event) => {
     data: {
       name: 'New Chat', // Could be dynamic or user-provided
       avatar: '/media/logo.webp',
+      lastMessageAt: new Date(),
       users: {
         create: [{ userId: userId }]
       }

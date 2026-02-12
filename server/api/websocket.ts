@@ -180,6 +180,12 @@ async function handleChatMessage(
       }
     })
 
+    // Update room activity for sorting
+    await prisma.chatRoom.update({
+      where: { id: roomId },
+      data: { lastMessageAt: new Date() }
+    })
+
     // Notify client that message was saved
     peer.send(
       JSON.stringify({
@@ -297,6 +303,12 @@ async function handleChatMessage(
             senderId: 'ai_agent',
             seen: {}
           }
+        })
+
+        // Update room activity for sorting
+        await prisma.chatRoom.update({
+          where: { id: roomId },
+          data: { lastMessageAt: new Date() }
         })
 
         // 9. Extract Charts & Metadata

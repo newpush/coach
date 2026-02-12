@@ -111,6 +111,12 @@ export default defineEventHandler(async (event) => {
           metadata
         }
       })
+
+      // Update room activity for sorting
+      await prisma.chatRoom.update({
+        where: { id: roomId },
+        data: { lastMessageAt: new Date() }
+      })
     } catch (err: any) {
       if (err.code !== 'P2002') {
         console.error('[Chat] Message save failed:', err)
@@ -317,6 +323,11 @@ export default defineEventHandler(async (event) => {
         try {
           aiMessage = await prisma.chatMessage.create({
             data: { content: text || ' ', roomId, senderId: 'ai_agent', seen: {} }
+          })
+          // Update room activity for sorting
+          await prisma.chatRoom.update({
+            where: { id: roomId },
+            data: { lastMessageAt: new Date() }
           })
         } catch (dbErr) {
           console.error('[Chat API] Failed to save AI message:', dbErr)

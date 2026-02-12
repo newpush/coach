@@ -72,6 +72,13 @@ export class ChatService {
           metadata: data.metadata
         }
       })
+
+      // Update room activity for sorting
+      await prisma.chatRoom.update({
+        where: { id: data.roomId },
+        data: { lastMessageAt: new Date() }
+      })
+
       return message
     } catch (err: any) {
       if (err.code === 'P2002') return null // Duplicate ignored
@@ -80,7 +87,7 @@ export class ChatService {
   }
 
   async saveAiMessage(data: { roomId: string; content: string; metadata?: any }) {
-    return await prisma.chatMessage.create({
+    const message = await prisma.chatMessage.create({
       data: {
         content: data.content || ' ',
         roomId: data.roomId,
@@ -89,6 +96,14 @@ export class ChatService {
         metadata: data.metadata
       }
     })
+
+    // Update room activity for sorting
+    await prisma.chatRoom.update({
+      where: { id: data.roomId },
+      data: { lastMessageAt: new Date() }
+    })
+
+    return message
   }
 
   async updateMessageMetadata(messageId: string, metadata: any) {

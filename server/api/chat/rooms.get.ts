@@ -40,6 +40,7 @@ export default defineEventHandler(async (event) => {
   const userId = (session.user as any).id
 
   // Find existing rooms for the user
+  // Optimization: Sort in DB using lastMessageAt and use select for minimal data
   let rooms = await prisma.chatRoom.findMany({
     where: {
       deletedAt: null,
@@ -49,17 +50,25 @@ export default defineEventHandler(async (event) => {
         }
       }
     },
-    include: {
-      users: {
-        include: {
-          user: true
-        }
-      },
+    orderBy: {
+      lastMessageAt: 'desc'
+    },
+    select: {
+      id: true,
+      name: true,
+      avatar: true,
+      createdAt: true,
+      lastMessageAt: true,
       messages: {
         orderBy: {
           createdAt: 'desc'
         },
-        take: 1
+        take: 1,
+        select: {
+          content: true,
+          senderId: true,
+          createdAt: true
+        }
       }
     }
   })
@@ -69,18 +78,25 @@ export default defineEventHandler(async (event) => {
     const aiRoom = await prisma.chatRoom.create({
       data: {
         name: 'Coach Watts',
-        avatar: '/media/logo.webp', // Assuming a logo exists
+        avatar: '/media/logo.webp',
+        lastMessageAt: new Date(),
         users: {
           create: [{ userId: userId }]
         }
       },
-      include: {
-        users: {
-          include: {
-            user: true
+      select: {
+        id: true,
+        name: true,
+        avatar: true,
+        createdAt: true,
+        lastMessageAt: true,
+        messages: {
+          select: {
+            content: true,
+            senderId: true,
+            createdAt: true
           }
-        },
-        messages: true
+        }
       }
     })
     rooms = [aiRoom]
@@ -88,26 +104,49 @@ export default defineEventHandler(async (event) => {
 
   // Migration cutoff date: January 22, 2026
   const MIGRATION_CUTOFF = new Date('2026-01-22T00:00:00Z')
+  const userImage = session.user?.image || null
+
+  // Common users list to avoid repeated object creation
+  const commonUsers = [
+    {
+      _id: userId,
+      username: 'Me',
+      avatar: userImage,
+      status: {
+        state: 'online',
+        lastChanged: 'today'
+      }
+    },
+    {
+      _id: 'ai_agent',
+      username: 'Coach Watts',
+      avatar: '/media/logo.webp',
+      status: {
+        state: 'online',
+        lastChanged: 'always'
+      }
+    }
+  ]
 
   // Format for vue-advanced-chat
-  const formattedRooms = rooms.map((room) => {
+  return rooms.map((room) => {
     const lastMessage = room.messages[0]
-    const isReadOnly = new Date(room.createdAt) < MIGRATION_CUTOFF
+    const createdAtDate = new Date(room.createdAt)
+    const isReadOnly = createdAtDate < MIGRATION_CUTOFF
+    const activityDate = room.lastMessageAt ? new Date(room.lastMessageAt) : createdAtDate
 
     return {
       roomId: room.id,
       roomName: room.name,
       avatar: room.avatar,
-      unreadCount: 0, // TODO: Implement unread count logic
+      unreadCount: 0,
       isReadOnly,
-      index: lastMessage
-        ? new Date(lastMessage.createdAt).getTime()
-        : new Date(room.createdAt).getTime(),
+      index: activityDate.getTime(),
       lastMessage: lastMessage
         ? {
             content: lastMessage.content,
             senderId: lastMessage.senderId,
-            username: lastMessage.senderId === 'ai_agent' ? 'Coach Watts' : 'Me', // Simplified
+            username: lastMessage.senderId === 'ai_agent' ? 'Coach Watts' : 'Me',
             timestamp: new Date(lastMessage.createdAt).toLocaleTimeString([], {
               hour: '2-digit',
               minute: '2-digit'
@@ -118,30 +157,8 @@ export default defineEventHandler(async (event) => {
             new: false
           }
         : null,
-      users: [
-        {
-          _id: userId,
-          username: 'Me',
-          avatar: session.user?.image || null,
-          status: {
-            state: 'online',
-            lastChanged: 'today'
-          }
-        },
-        {
-          _id: 'ai_agent',
-          username: 'Coach Watts',
-          avatar: '/media/logo.webp',
-          status: {
-            state: 'online',
-            lastChanged: 'always'
-          }
-        }
-      ],
+      users: commonUsers,
       typingUsers: []
     }
   })
-
-  // Sort rooms by index (last message timestamp) in descending order (newest first)
-  return formattedRooms.sort((a, b) => b.index - a.index)
 })
