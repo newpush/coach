@@ -1,3 +1,5 @@
+import { extractWorkoutTemperatureC, getEstimatedSweatRateLph } from './sweat-rate'
+
 export interface FuelingProfile {
   weight: number // kg
   ftp: number // watts
@@ -45,6 +47,8 @@ export interface WorkoutContext {
   startTime?: Date | null
   strategyOverride?: string // e.g. 'TRAIN_LOW', 'HIGH_CARB'
   date: Date
+  avgTemp?: number | null
+  rawJson?: any
 }
 
 export interface SerializedFuelingWindow {
@@ -142,8 +146,17 @@ export function calculateFuelingStrategy(
 
   // --- 2. INTRA-WORKOUT STRATEGY ---
   let targetCarbsPerHour = 0
-  const hydrationPerHour = (profile.sweatRate || 0.8) * 1000 // ml
-  const sodiumPerHour = (profile.sodiumTarget || 750) * (profile.sweatRate || 0.8) // mg
+  const workoutTempC = extractWorkoutTemperatureC(workout)
+  const effectiveSweatRate =
+    profile.sweatRate && profile.sweatRate > 0
+      ? profile.sweatRate
+      : getEstimatedSweatRateLph({
+          intensity,
+          temperatureC: workoutTempC,
+          fallback: 0.8
+        })
+  const hydrationPerHour = effectiveSweatRate * 1000 // ml
+  const sodiumPerHour = (profile.sodiumTarget || 750) * effectiveSweatRate // mg
 
   if (workout.strategyOverride === 'TRAIN_LOW') {
     targetCarbsPerHour = 0
@@ -172,6 +185,13 @@ export function calculateFuelingStrategy(
       `Capping intra-ride carbs at ${effectiveCap}g/hr. Ideal for this intensity: ${Math.round(targetCarbsPerHour)}g/hr.`
     )
     targetCarbsPerHour = effectiveCap
+  }
+
+  if (!profile.sweatRate) {
+    const tempLabel = workoutTempC == null ? 'default temp' : `${Math.round(workoutTempC)}C`
+    notes.push(
+      `Estimated sweat rate ${effectiveSweatRate.toFixed(2)}L/hr from intensity ${Math.round(intensity * 100)}% and ${tempLabel}.`
+    )
   }
 
   // Apply Goal Adjustment to Intra-Workout as well
