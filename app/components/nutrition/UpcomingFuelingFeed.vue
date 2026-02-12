@@ -58,7 +58,6 @@
             :id="`window-${window.dateKey}`"
             :key="idx"
             class="group hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors"
-            :class="{ 'bg-primary-50/30 dark:bg-primary-900/10': isSelected(window.dateKey) }"
           >
             <td class="px-4 py-4 whitespace-nowrap">
               <div class="flex flex-col">
@@ -146,7 +145,6 @@
 
   const props = defineProps<{
     windows: any[]
-    selectedDate?: string | null
   }>()
 
   defineEmits(['export-grocery', 'suggest'])
@@ -156,10 +154,6 @@
     // Actually, filtering by day might be better if user clicks a day
     return props.windows
   })
-
-  function isSelected(dateKey: string) {
-    return props.selectedDate === dateKey
-  }
 
   function formatTime(dateStr: string) {
     return format(new Date(dateStr), 'HH:mm')
@@ -183,19 +177,6 @@
         return 'text-gray-500'
     }
   }
-
-  // Scroll into view logic
-  watch(
-    () => props.selectedDate,
-    (newDate) => {
-      if (newDate) {
-        const el = document.getElementById(`window-${newDate}`)
-        if (el) {
-          el.scrollIntoView({ behavior: 'smooth', block: 'center' })
-        }
-      }
-    }
-  )
 </script>
 
 <style scoped>

@@ -1,16 +1,13 @@
 <template>
   <div class="grid grid-cols-7 gap-2">
-    <div
+    <NuxtLink
       v-for="day in days"
       :key="day.date"
+      :to="`/nutrition/${day.date}`"
       class="flex flex-col items-center p-2 rounded-lg border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 transition-all hover:bg-gray-50 dark:hover:bg-gray-800/50 cursor-pointer"
-      :class="[
-        isToday(day.date) ? 'ring-2 ring-primary-500' : '',
-        isSelected(day.date) ? 'border-primary-500 bg-primary-50/50 dark:bg-primary-900/10' : ''
-      ]"
+      :class="[isToday(day.date) ? 'ring-2 ring-primary-500' : '']"
       @mouseenter="$emit('hover-day', day.date)"
       @mouseleave="$emit('hover-day', null)"
-      @click="$emit('select-day', day.date)"
     >
       <span class="text-xs font-medium text-gray-500 uppercase">{{ formatDay(day.date) }}</span>
       <span class="text-sm font-bold my-1 text-gray-900 dark:text-white">{{
@@ -33,7 +30,7 @@
       <span class="text-xs font-medium mt-1 text-gray-600 dark:text-gray-400"
         >{{ day.carbsTarget }}g</span
       >
-    </div>
+    </NuxtLink>
   </div>
 </template>
 
@@ -48,10 +45,9 @@
       carbsTarget: number
       isRest: boolean
     }>
-    selectedDate?: string | null
   }>()
 
-  defineEmits(['hover-day', 'select-day'])
+  defineEmits(['hover-day'])
 
   function formatDay(dateStr: string) {
     return format(parseISO(dateStr), 'EEE')
@@ -63,10 +59,6 @@
 
   function isToday(dateStr: string) {
     return isTodayFns(parseISO(dateStr))
-  }
-
-  function isSelected(dateStr: string) {
-    return props.selectedDate === dateStr
   }
 
   function getStateIcon(state: number) {

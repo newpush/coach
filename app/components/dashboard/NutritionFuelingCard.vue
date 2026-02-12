@@ -233,7 +233,7 @@
 
           <!-- Meal Recommendation Section -->
           <div
-            v-if="recommendationStore.todayRecommendation?.analysisJson?.meal_recommendation"
+            v-if="mealRecommendation"
             class="bg-purple-50 dark:bg-purple-900/10 border border-purple-100 dark:border-purple-800/30 rounded-xl p-4"
           >
             <div class="flex items-center gap-2 mb-2">
@@ -246,25 +246,17 @@
             </div>
             <div class="space-y-1">
               <p class="text-sm font-bold text-gray-900 dark:text-white">
-                {{ recommendationStore.todayRecommendation.analysisJson.meal_recommendation.item }}
+                {{ mealRecommendation.item }}
               </p>
               <div class="flex items-center gap-3">
                 <UBadge color="primary" variant="subtle" size="xs">
-                  {{
-                    recommendationStore.todayRecommendation.analysisJson.meal_recommendation.carbs
-                  }}g Carbs
+                  {{ mealRecommendation.carbs }}g Carbs
                 </UBadge>
                 <UBadge color="neutral" variant="subtle" size="xs">
-                  {{
-                    recommendationStore.todayRecommendation.analysisJson.meal_recommendation
-                      .absorptionType
-                  }}
+                  {{ mealRecommendation.absorptionType }}
                 </UBadge>
                 <span class="text-[10px] text-gray-500 font-medium uppercase tracking-tight">
-                  Timing:
-                  {{
-                    recommendationStore.todayRecommendation.analysisJson.meal_recommendation.timing
-                  }}
+                  Timing: {{ mealRecommendation.timing }}
                 </span>
               </div>
               <p class="text-xs text-gray-500 italic mt-2 leading-relaxed">
@@ -536,9 +528,33 @@
   }
 
   const plan = computed(() => props.nutrition?.fuelingPlan)
-  const mealRecommendation = computed(
+  const rawMealRecommendation = computed(
     () => recommendationStore.todayRecommendation?.analysisJson?.meal_recommendation
   )
+
+  const hasUpcomingPlannedWorkout = computed(() =>
+    (props.workouts || []).some((workout: any) => {
+      if (workout.source !== 'planned') return false
+      return workout.status !== 'completed_plan' && workout.status !== 'missed'
+    })
+  )
+
+  const mealRecommendation = computed(() => {
+    const candidate = rawMealRecommendation.value
+    if (!candidate) return null
+
+    const recommendationText = `${candidate.timing || ''} ${candidate.reasoning || ''}`
+    const looksLikePreWorkout = /before\s+your\s+(ride|workout)|pre-?workout|head out/i.test(
+      recommendationText
+    )
+
+    // Hide stale pre-workout advice once today's planned session is no longer actionable.
+    if (!hasUpcomingPlannedWorkout.value && looksLikePreWorkout) {
+      return null
+    }
+
+    return candidate
+  })
 
   const energyPoints = computed(() => {
     // Priority: Server-provided points (consistent with metabolic chain)
@@ -566,7 +582,7 @@
   // Metabolic Ghost Line Calculation
 
   const ghostPoints = computed(() => {
-    const mealRec = recommendationStore.todayRecommendation?.analysisJson?.meal_recommendation
+    const mealRec = mealRecommendation.value
 
     if (!mealRec || !props.nutrition || !props.settings) return []
 
