@@ -1,6 +1,7 @@
 import { getServerSession } from '../../../utils/session'
 import { nutritionRepository } from '../../../utils/repositories/nutritionRepository'
 import { z } from 'zod'
+import { metabolicService } from '../../../utils/services/metabolicService'
 
 const ItemSchema = z.object({
   id: z.string().optional(),
@@ -176,6 +177,15 @@ export default defineEventHandler(async (event) => {
     fiber,
     sugar
   })
+
+  // REACTIVE: Trigger fueling plan update for the entry date
+  try {
+    await metabolicService.calculateFuelingPlanForDate(userId, updatedNutrition.date, {
+      persist: true
+    })
+  } catch (err) {
+    console.error('[NutritionItemsPatch] Failed to trigger regeneration:', err)
+  }
 
   return { success: true, mealType, items: updatedItems }
 })

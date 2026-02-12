@@ -1,5 +1,6 @@
 import { getServerSession } from '../../../utils/session'
 import { prisma } from '../../../utils/db'
+import { metabolicService } from '../../../utils/services/metabolicService'
 
 defineRouteMeta({
   openAPI: {
@@ -37,6 +38,7 @@ export default defineEventHandler(async (event) => {
     })
   }
 
+  const userId = (session.user as any).id
   const workoutId = getRouterParam(event, 'id')
   if (!workoutId) {
     throw createError({ statusCode: 400, message: 'Workout ID is required' })
@@ -46,7 +48,7 @@ export default defineEventHandler(async (event) => {
   const workout = await prisma.workout.findUnique({
     where: {
       id: workoutId,
-      userId: (session.user as any).id
+      userId: userId
     }
   })
 
@@ -90,6 +92,13 @@ export default defineEventHandler(async (event) => {
         })
       }
     })
+
+    // REACTIVE: Trigger fueling plan update for the workout date
+    try {
+      await metabolicService.calculateFuelingPlanForDate(userId, workout.date, { persist: true })
+    } catch (err) {
+      console.error('[WorkoutUnlink] Failed to trigger regeneration:', err)
+    }
 
     return { success: true }
   } catch (error) {

@@ -1,6 +1,8 @@
 import { getServerSession } from '../../utils/session'
 import { syncPlannedWorkoutToIntervals } from '../../utils/intervals-sync'
 import { plannedWorkoutRepository } from '../../utils/repositories/plannedWorkoutRepository'
+import { metabolicService } from '../../utils/services/metabolicService'
+import { getUserLocalDate, getUserTimezone } from '../../utils/date'
 
 defineRouteMeta({
   openAPI: {
@@ -121,7 +123,14 @@ export default defineEventHandler(async (event) => {
       ...(importPlannedWorkouts && { syncStatus: 'PENDING' })
     })
 
-    // Fueling plan is generated on demand in real-time by nutrition endpoints.
+    // REACTIVE: Automatically trigger fueling plan regeneration for the workout date
+    try {
+      // If date was changed, use new date, otherwise use workout date
+      const targetDate = forcedDate || updated.date
+      await metabolicService.calculateFuelingPlanForDate(userId, targetDate, { persist: true })
+    } catch (err) {
+      console.error('[PlannedWorkoutUpdate] Failed to trigger regeneration:', err)
+    }
 
     // Determine if it's a local-only workout that needs CREATE instead of UPDATE
     const isLocal =

@@ -4,6 +4,7 @@ import { generateStructuredAnalysis } from '../../../utils/gemini'
 import { z } from 'zod'
 import { getProfileForItem } from '../../../utils/nutrition-domain/absorption'
 import { getUserTimezone, formatUserTime, getStartOfLocalDateUTC } from '../../../utils/date'
+import { metabolicService } from '../../../utils/services/metabolicService'
 
 const LogSchema = z.object({
   query: z.string(),
@@ -217,6 +218,13 @@ export default defineEventHandler(async (event) => {
       fiber,
       sugar
     })
+
+    // REACTIVE: Trigger fueling plan update for the log date
+    try {
+      await metabolicService.calculateFuelingPlanForDate(userId, targetDate, { persist: true })
+    } catch (err) {
+      console.error('[NutritionLog] Failed to trigger regeneration:', err)
+    }
 
     addedItems.push(...items)
   }

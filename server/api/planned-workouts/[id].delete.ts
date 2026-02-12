@@ -2,6 +2,7 @@ import { getServerSession } from '../../utils/session'
 import { prisma } from '../../utils/db'
 import { deleteIntervalsPlannedWorkout } from '../../utils/intervals'
 import { plannedWorkoutRepository } from '../../utils/repositories/plannedWorkoutRepository'
+import { metabolicService } from '../../utils/services/metabolicService'
 
 defineRouteMeta({
   openAPI: {
@@ -91,6 +92,13 @@ export default defineEventHandler(async (event) => {
 
     // Delete the workout from our database
     await plannedWorkoutRepository.delete(workoutId, userId)
+
+    // REACTIVE: Trigger fueling plan update for the workout date
+    try {
+      await metabolicService.calculateFuelingPlanForDate(userId, workout.date, { persist: true })
+    } catch (err) {
+      console.error('[PlannedWorkoutDelete] Failed to trigger regeneration:', err)
+    }
 
     return {
       success: true,

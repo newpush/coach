@@ -2,6 +2,7 @@ import { getServerSession } from '../../utils/session'
 import { prisma } from '../../utils/db'
 import { createIntervalsPlannedWorkout } from '../../utils/intervals'
 import { plannedWorkoutRepository } from '../../utils/repositories/plannedWorkoutRepository'
+import { metabolicService } from '../../utils/services/metabolicService'
 
 defineRouteMeta({
   openAPI: {
@@ -129,7 +130,12 @@ export default defineEventHandler(async (event) => {
       rawJson: intervalsWorkout || {}
     })
 
-    // Fueling plan is now generated on demand in real-time by nutrition endpoints.
+    // REACTIVE: Automatically trigger fueling plan regeneration for the workout date
+    try {
+      await metabolicService.calculateFuelingPlanForDate(userId, forcedDate, { persist: true })
+    } catch (err) {
+      console.error('[PlannedWorkoutCreate] Failed to trigger regeneration:', err)
+    }
 
     return {
       success: true,

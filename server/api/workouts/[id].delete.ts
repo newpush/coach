@@ -1,5 +1,6 @@
 import { getServerSession } from '../../utils/session'
 import { prisma } from '../../utils/db'
+import { metabolicService } from '../../utils/services/metabolicService'
 
 defineRouteMeta({
   openAPI: {
@@ -44,6 +45,7 @@ export default defineEventHandler(async (event) => {
     })
   }
 
+  const userId = (session.user as any).id
   const id = getRouterParam(event, 'id')
 
   if (!id) {
@@ -57,7 +59,7 @@ export default defineEventHandler(async (event) => {
   const workout = await prisma.workout.findFirst({
     where: {
       id,
-      userId: (session.user as any).id
+      userId: userId
     }
   })
 
@@ -90,6 +92,13 @@ export default defineEventHandler(async (event) => {
     await prisma.workout.delete({
       where: { id }
     })
+
+    // REACTIVE: Trigger fueling plan update for the workout date
+    try {
+      await metabolicService.calculateFuelingPlanForDate(userId, workout.date, { persist: true })
+    } catch (err) {
+      console.error('[WorkoutDelete] Failed to trigger regeneration:', err)
+    }
 
     return { success: true }
   } catch (error) {
