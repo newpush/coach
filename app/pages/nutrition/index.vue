@@ -97,7 +97,7 @@
               </div>
             </UCard>
 
-            <UCard :ui="{ rounded: 'rounded-none sm:rounded-lg', shadow: 'shadow-none sm:shadow' }">
+            <UCard :ui="{ root: 'rounded-none sm:rounded-lg shadow-none sm:shadow' }">
               <template #header>
                 <h3 class="text-base font-semibold leading-6 text-gray-900 dark:text-white">
                   Weekly Fueling Periodization
@@ -129,7 +129,7 @@
             <UCard
               color="primary"
               variant="subtle"
-              :ui="{ rounded: 'rounded-none sm:rounded-lg', shadow: 'shadow-none sm:shadow' }"
+              :ui="{ root: 'rounded-none sm:rounded-lg shadow-none sm:shadow' }"
             >
               <template #header>
                 <div class="flex items-center gap-2">
@@ -151,7 +151,7 @@
             </UCard>
 
             <!-- Hydration Debt Card -->
-            <UCard :ui="{ rounded: 'rounded-none sm:rounded-lg', shadow: 'shadow-none sm:shadow' }">
+            <UCard :ui="{ root: 'rounded-none sm:rounded-lg shadow-none sm:shadow' }">
               <template #header>
                 <div class="flex items-center gap-2">
                   <UIcon name="i-lucide-droplets" class="size-5 text-blue-500" />

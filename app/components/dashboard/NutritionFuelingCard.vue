@@ -678,7 +678,7 @@
     const liveTank = tankPercentage.value
     const replaced = raw.replace(
       /(tank\s*now[^0-9]{0,20})(\d{1,3})%/i,
-      (_m, p1) => `${p1}${liveTank}%`
+      (_m: string, p1: string) => `${p1}${liveTank}%`
     )
 
     if (replaced !== raw) return replaced

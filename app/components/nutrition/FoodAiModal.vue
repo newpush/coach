@@ -71,6 +71,7 @@
     initialContext?: {
       targetCarbs?: number
       windowType?: string
+      item?: string | null
     } | null
   }>()
 

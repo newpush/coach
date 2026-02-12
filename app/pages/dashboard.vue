@@ -397,12 +397,11 @@
 
       // Filter out non-training items like wellness/nutrition placeholders and notes
       todayWorkouts.value = (wData || []).filter(
-        (a) =>
+        (a: any) =>
           (a.source === 'completed' || a.source === 'planned') &&
           a.type !== 'Rest' &&
           a.type !== 'Note'
       )
-
       nutritionSettings.value = sData.settings
     } catch (error: any) {
       if (error.statusCode !== 404) {
