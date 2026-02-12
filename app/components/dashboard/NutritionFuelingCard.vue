@@ -255,9 +255,7 @@
                 </span>
               </div>
               <p class="text-xs text-gray-500 italic mt-2 leading-relaxed">
-                {{
-                  recommendationStore.todayRecommendation.analysisJson.meal_recommendation.reasoning
-                }}
+                {{ mealRecommendationReasoning }}
               </p>
             </div>
           </div>
@@ -525,6 +523,9 @@
   }
 
   const plan = computed(() => props.nutrition?.fuelingPlan)
+  const mealRecommendation = computed(
+    () => recommendationStore.todayRecommendation?.analysisJson?.meal_recommendation
+  )
 
   const energyPoints = computed(() => {
     // Priority: Server-provided points (consistent with metabolic chain)
@@ -656,6 +657,21 @@
 
   const tankPercentage = computed(() => glycogenState.value.percentage)
   const tankAdvice = computed(() => glycogenState.value.advice)
+
+  const mealRecommendationReasoning = computed(() => {
+    const raw = mealRecommendation.value?.reasoning || ''
+    if (!raw) return ''
+
+    const liveTank = tankPercentage.value
+    const replaced = raw.replace(
+      /(tank\s*now[^0-9]{0,20})(\d{1,3})%/i,
+      (_m, p1) => `${p1}${liveTank}%`
+    )
+
+    if (replaced !== raw) return replaced
+
+    return `${raw} (Live tank now: ${liveTank}%).`
+  })
 
   const tankColorClass = computed(() => {
     if (tankPercentage.value > 70) return 'text-green-500'

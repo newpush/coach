@@ -13,6 +13,7 @@ import { calculateProjectedPMC, getCurrentFitnessSummary } from '../server/utils
 import { analyzeWellness } from '../server/utils/services/wellness-analysis'
 import { getCheckinHistoryContext } from '../server/utils/services/checkin-service'
 import { getUserAiSettings } from '../server/utils/ai-user-settings'
+import { metabolicService } from '../server/utils/services/metabolicService'
 import { generateAthleteProfileTask } from './generate-athlete-profile'
 import { userReportsQueue } from './queues'
 import {
@@ -192,7 +193,8 @@ export const recommendTodayActivityTask = task({
       currentFitness,
       focusedRecommendations,
       sportSettings,
-      todayAvailability
+      todayAvailability,
+      mealTargetContext
     ] = await Promise.all([
       // Today's planned workouts (Fetch ALL to handle multi-session days)
       prisma.plannedWorkout.findMany({
@@ -305,7 +307,10 @@ export const recommendTodayActivityTask = task({
       sportSettingsRepository.getByUserId(userId),
 
       // Today's Training Availability
-      availabilityRepository.getForDay(userId, today.getDay())
+      availabilityRepository.getForDay(userId, today.getDay()),
+
+      // Canonical metabolic meal target context (same engine as nutrition charts)
+      metabolicService.getMealTargetContext(userId, today, new Date())
     ])
 
     // Identify primary workout for linking (DB only allows 1:1) and logic fallback
@@ -561,6 +566,25 @@ ${analysis.recommendations ? 'Recommendations:\n' + analysis.recommendations.map
 `
     }
 
+    // Build canonical metabolic meal-target context
+    const mealTargetContextText = mealTargetContext
+      ? `
+CANONICAL METABOLIC MEAL TARGET CONTEXT (Use this as nutrition source of truth):
+- Tank Now: ${mealTargetContext.currentTank.percentage}% (State ${mealTargetContext.currentTank.state})
+- Tank Advice: ${mealTargetContext.currentTank.advice}
+${
+  mealTargetContext.nextFuelingWindow
+    ? `- Next/Active Window: ${mealTargetContext.nextFuelingWindow.type} | ${mealTargetContext.nextFuelingWindow.targetCarbs}g target, ${mealTargetContext.nextFuelingWindow.actualCarbs}g logged, ${mealTargetContext.nextFuelingWindow.unmetCarbs}g remaining`
+    : '- Next/Active Window: none'
+}
+${
+  mealTargetContext.suggestedIntakeNow
+    ? `- Suggested Intake Now: ${mealTargetContext.suggestedIntakeNow.carbs}g (${mealTargetContext.suggestedIntakeNow.absorptionType}) - ${mealTargetContext.suggestedIntakeNow.timing}`
+    : '- Suggested Intake Now: none needed'
+}
+`
+      : ''
+
     // Build focused recommendations context
     let focusedRecsContext = ''
     if (focusedRecommendations && focusedRecommendations.length > 0) {
@@ -657,6 +681,7 @@ ${enrichedTodayMetric.spO2 ? `- SpO2: ${enrichedTodayMetric.spO2}%` : ''}
 }
 
 ${wellnessAnalysisContext}
+${mealTargetContextText}
 
 ${checkinsSummary}
 
@@ -715,14 +740,18 @@ DECISION CRITERIA:
 
 **MEAL RECOMMENDATION LOGIC**:
 When the user has a workout today, provide a \`meal_recommendation\` based on:
-1. **The Time Gap**: Time between NOW and the next workout.
-2. **The Tank Level**: Current "Live Energy" availability (if mentioned in reasoning/context).
+1. **Canonical Meal Target Context Above**: This is the primary source of truth.
+2. **The Time Gap**: Time between NOW and the next workout.
+3. **The Tank Level**: Current "Live Energy" availability.
+4. **Unmet Window Carbs**: Prefer closing remaining carbs in the next/active window.
 3. **The Match**:
    - **Gap < 30m + Low Tank**: Recommend **RAPID** profile (Gel/Exogenous glucose).
    - **Gap 30-60m**: Recommend **FAST** profile (Fruit/White bread).
    - **Gap 60-120m**: Recommend **BALANCED** profile (Oats/Pasta).
    - **Recovery/Daily Base**: Recommend **DENSE** profile (Mixed meal with protein/fat).
    - **Pre-State 3 Night Before**: Recommend **HYPER_LOAD** (Large pasta meal).
+
+If "Suggested Intake Now" is present in canonical context, keep your meal recommendation close to that target (within +/-10g carbs) unless you provide explicit safety rationale.
 
 Absorption Profile Matrix for your guidance:
 - RAPID: Liquid/Gel, Start 5m, Peak 15m.

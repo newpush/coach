@@ -167,6 +167,115 @@ export const metabolicService = {
   },
 
   /**
+   * Canonical meal-target context for recommendation systems.
+   * Derives "what to eat now" from the same metabolic timeline and fueling windows.
+   */
+  async getMealTargetContext(userId: string, date: Date, now: Date = new Date()) {
+    const timezone = await getUserTimezone(userId)
+    const state = await this.getMetabolicState(userId, date)
+    const { points, dayNutrition, liveStatus } = await this.getDailyTimeline(
+      userId,
+      date,
+      state.startingGlycogen,
+      state.startingFluid,
+      now
+    )
+
+    const currentPoint =
+      [...points]
+        .reverse()
+        .find((p) => p.timestamp <= now.getTime()) || points[0]
+
+    const computedPlan = dayNutrition?.fuelingPlan
+      ? { plan: dayNutrition.fuelingPlan as any }
+      : await this.calculateFuelingPlanForDate(userId, date, { persist: false })
+    const plan = computedPlan.plan as any
+
+    const windows = Array.isArray(plan?.windows)
+      ? [...plan.windows]
+          .map((w: any) => ({
+            ...w,
+            start: new Date(w.startTime),
+            end: new Date(w.endTime)
+          }))
+          .filter((w: any) => !isNaN(w.start.getTime()) && !isNaN(w.end.getTime()))
+          .sort((a: any, b: any) => a.start.getTime() - b.start.getTime())
+      : []
+
+    const meals = ['breakfast', 'lunch', 'dinner', 'snacks'] as const
+    const loggedItems = meals.flatMap((meal) => {
+      const mealItems =
+        dayNutrition && Array.isArray((dayNutrition as any)[meal]) ? (dayNutrition as any)[meal] : []
+      return mealItems.map((item: any) => {
+        const timeVal = item.logged_at || item.date
+        let at: Date | null = null
+        if (typeof timeVal === 'string' && /^\d{1,2}:\d{2}$/.test(timeVal)) {
+          at = buildZonedDateTimeFromUtcDate(date, timeVal, timezone)
+        } else if (timeVal) {
+          const d = new Date(timeVal)
+          if (!isNaN(d.getTime())) at = d
+        }
+        return { ...item, at }
+      })
+    })
+
+    const windowProgress = windows.map((w: any) => {
+      const actualCarbs = loggedItems
+        .filter((i: any) => i.at && i.at >= w.start && i.at <= w.end)
+        .reduce((sum: number, i: any) => sum + (i.carbs || 0), 0)
+      const targetCarbs = w.targetCarbs || 0
+      return {
+        type: w.type,
+        startTime: w.start.toISOString(),
+        endTime: w.end.toISOString(),
+        workoutTitle: w.workoutTitle,
+        targetCarbs,
+        actualCarbs,
+        unmetCarbs: Math.max(0, targetCarbs - actualCarbs)
+      }
+    })
+
+    const activeOrNext = windowProgress.find((w) => new Date(w.endTime).getTime() >= now.getTime())
+
+    let suggestedIntakeNow: any = null
+    if (activeOrNext && activeOrNext.unmetCarbs > 0) {
+      const minutesToStart = Math.round(
+        (new Date(activeOrNext.startTime).getTime() - now.getTime()) / 60000
+      )
+      const inWindow = minutesToStart <= 0 && new Date(activeOrNext.endTime).getTime() > now.getTime()
+
+      let absorptionType: 'RAPID' | 'FAST' | 'BALANCED' | 'DENSE' | 'HYPER_LOAD' = 'DENSE'
+      if (inWindow || minutesToStart <= 30) absorptionType = 'RAPID'
+      else if (minutesToStart <= 60) absorptionType = 'FAST'
+      else if (minutesToStart <= 120) absorptionType = 'BALANCED'
+
+      const carbCap = inWindow ? 30 : minutesToStart <= 60 ? 45 : minutesToStart <= 120 ? 60 : 80
+      const carbs = Math.max(10, Math.round(Math.min(activeOrNext.unmetCarbs, carbCap)))
+
+      suggestedIntakeNow = {
+        carbs,
+        absorptionType,
+        timing: inWindow ? 'Now (in fueling window)' : `In ~${Math.max(0, minutesToStart)} min`,
+        basedOnWindowType: activeOrNext.type
+      }
+    }
+
+    return {
+      timezone,
+      dateKey: formatDateUTC(date),
+      currentTank: {
+        percentage: liveStatus.percentage,
+        state: liveStatus.state,
+        advice: liveStatus.advice,
+        pointLevel: currentPoint?.level ?? liveStatus.percentage
+      },
+      nextFuelingWindow: activeOrNext || null,
+      windowProgress,
+      suggestedIntakeNow
+    }
+  },
+
+  /**
    * Ensures that the metabolic state (starting glycogen/fluid) is calculated for a given date.
    * If missing, it recursively (up to 7 days) finalizes previous days.
    */

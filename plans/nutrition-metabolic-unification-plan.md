@@ -148,6 +148,31 @@ Acceptance:
 - No timezone-dependent day mismatch between activity calendar wave and nutrition day chart.
 - Both charts are sourced from the same service computation path and DTO shape.
 
+## F. Synthetic Meal and Recommendation Alignment
+
+1. Introduce canonical meal-target context in service layer:
+   - `metabolicService.getMealTargetContext(userId, date, now)`
+   - Includes tank level, next/active fueling window, unmet carbs, and suggested intake now.
+2. Feed recommendation generation from canonical context:
+   - `trigger/recommend-today-activity.ts` must include this context in prompt.
+   - `meal_recommendation` should align with computed unmet window carbs and timing.
+3. Keep recommendation and chart logic on one engine:
+   - No separate meal-target heuristics outside metabolic service.
+4. Add validation checks:
+   - Recommendation carbs within target tolerance unless explicit override reason.
+
+Acceptance:
+
+- `meal_recommendation` remains consistent with timeline/fueling windows shown in nutrition UI.
+- Recommendation logic uses canonical metabolic context instead of implicit assumptions.
+- Drift between suggested meal targets and chart windows is measurable and near-zero.
+
+Status:
+
+- [x] Added `getMealTargetContext(...)` to metabolic service.
+- [x] Wired recommendation trigger prompt to use canonical meal-target context.
+- [ ] Enforce hard validation (programmatic post-check) on recommendation output tolerance.
+
 ## Migration Plan
 
 ## Phase 0: Guardrails
