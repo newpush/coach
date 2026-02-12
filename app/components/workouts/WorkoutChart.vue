@@ -1,9 +1,6 @@
 <template>
   <div class="workout-chart-container">
-    <div
-      v-if="!workout || !workout.steps || workout.steps.length === 0"
-      class="text-center py-8 text-muted text-sm"
-    >
+    <div v-if="normalizedSteps.length === 0" class="text-center py-8 text-muted text-sm">
       No structured workout data available.
     </div>
 
@@ -42,14 +39,14 @@
             <!-- Power bars -->
             <div class="absolute inset-0 flex items-end gap-0.5">
               <UTooltip
-                v-for="(step, index) in workout.steps"
+                v-for="(step, index) in normalizedSteps"
                 :key="index"
                 :popper="{ placement: 'top' }"
                 :style="getStepContainerStyle(step)"
                 class="relative flex items-end h-full"
               >
                 <template #text>
-                  <div class="font-semibold">{{ step.name }}</div>
+                  <div class="font-semibold">{{ getStepName(step) }}</div>
                   <div class="text-[10px] opacity-80 mt-1">
                     {{ formatDuration(step.durationSeconds || step.duration || 0) }} @
                     <span v-if="step.power?.range">
@@ -124,7 +121,7 @@
         <h4 class="text-sm font-semibold text-muted">Workout Steps</h4>
         <div class="space-y-1">
           <div
-            v-for="(step, index) in workout.steps"
+            v-for="(step, index) in normalizedSteps"
             :key="index"
             class="rounded hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors p-2"
           >
@@ -136,7 +133,9 @@
                     class="w-3 h-3 rounded-full flex-shrink-0"
                     :style="{ backgroundColor: getStepColor(step) }"
                   />
-                  <span class="text-sm font-medium truncate">{{ step.name }}</span>
+                  <span class="text-sm font-medium truncate" :style="getStepIndentStyle(step)">{{
+                    getStepName(step)
+                  }}</span>
                 </div>
                 <div class="text-xs font-mono text-muted flex-shrink-0">
                   {{ formatDuration(step.durationSeconds || step.duration || 0) }}
@@ -198,8 +197,8 @@
                 class="w-3 h-3 rounded-full flex-shrink-0 mt-1"
                 :style="{ backgroundColor: getStepColor(step) }"
               />
-              <div class="min-w-0">
-                <div class="text-sm font-medium truncate">{{ step.name }}</div>
+              <div class="min-w-0" :style="getStepIndentStyle(step)">
+                <div class="text-sm font-medium truncate">{{ getStepName(step) }}</div>
                 <div class="text-xs text-muted">{{ step.type }}</div>
               </div>
               <div class="text-center text-sm font-bold text-gray-500 dark:text-gray-400">
@@ -318,18 +317,19 @@
     userFtp?: number
   }>()
 
+  const normalizedSteps = computed(() => flattenWorkoutSteps(props.workout?.steps || []))
+
   const totalDuration = computed(() => {
-    if (!props.workout?.steps) return 0
-    return props.workout.steps.reduce(
+    return normalizedSteps.value.reduce(
       (acc: number, step: any) => acc + (step.durationSeconds || step.duration || 0),
       0
     )
   })
 
   const chartMaxPower = computed(() => {
-    if (!props.workout?.steps) return 1.5 // Fallback to 150% FTP
+    if (!normalizedSteps.value.length) return 1.5 // Fallback to 150% FTP
     let max = 0
-    props.workout.steps.forEach((step: any) => {
+    normalizedSteps.value.forEach((step: any) => {
       const val = step.power?.range ? step.power.range.end : step.power?.value || 0
       if (val > max) max = val
     })
@@ -344,8 +344,8 @@
   })
 
   const avgPower = computed(() => {
-    if (!props.workout?.steps || totalDuration.value === 0) return 0
-    const totalWork = props.workout.steps.reduce((acc: number, step: any) => {
+    if (!normalizedSteps.value.length || totalDuration.value === 0) return 0
+    const totalWork = normalizedSteps.value.reduce((acc: number, step: any) => {
       const val = step.power?.range
         ? (step.power.range.start + step.power.range.end) / 2
         : step.power?.value || 0
@@ -356,8 +356,8 @@
   })
 
   const maxPower = computed(() => {
-    if (!props.workout?.steps) return 0
-    return props.workout.steps.reduce((acc: number, step: any) => {
+    if (!normalizedSteps.value.length) return 0
+    return normalizedSteps.value.reduce((acc: number, step: any) => {
       const val = step.power?.range ? step.power.range.end : step.power?.value || 0
       return Math.max(acc, val)
     }, 0)
@@ -368,12 +368,12 @@
   })
 
   const cadencePath = computed(() => {
-    if (!props.workout?.steps || totalDuration.value === 0) return ''
+    if (!normalizedSteps.value.length || totalDuration.value === 0) return ''
 
     let path = ''
     let currentTime = 0
 
-    props.workout.steps.forEach((step: any, index: number) => {
+    normalizedSteps.value.forEach((step: any) => {
       if (!step.cadence) {
         currentTime += step.durationSeconds || step.duration || 0
         return
@@ -415,9 +415,9 @@
       { name: 'Z6', min: 1.2, max: 9.99, duration: 0, color: ZONE_COLORS[5] }
     ]
 
-    if (!props.workout?.steps) return distribution
+    if (!normalizedSteps.value.length) return distribution
 
-    props.workout.steps.forEach((step: any) => {
+    normalizedSteps.value.forEach((step: any) => {
       // If range (ramp), take average
       const val = step.power?.range
         ? (step.power.range.start + step.power.range.end) / 2
@@ -434,7 +434,96 @@
   })
 
   // Functions
+  function normalizeTarget(
+    target: any
+  ): { value?: number; range?: { start: number; end: number } } | undefined {
+    if (target === null || target === undefined) return undefined
+
+    if (Array.isArray(target)) {
+      if (target.length >= 2) {
+        return { range: { start: Number(target[0]) || 0, end: Number(target[1]) || 0 } }
+      }
+      if (target.length === 1) {
+        return { value: Number(target[0]) || 0 }
+      }
+      return undefined
+    }
+
+    if (typeof target === 'number') {
+      return { value: target }
+    }
+
+    if (typeof target === 'object') {
+      if (target.range && typeof target.range === 'object') {
+        return {
+          range: {
+            start: Number(target.range.start) || 0,
+            end: Number(target.range.end) || 0
+          }
+        }
+      }
+      if (target.start !== undefined && target.end !== undefined) {
+        return {
+          range: {
+            start: Number(target.start) || 0,
+            end: Number(target.end) || 0
+          }
+        }
+      }
+      if (target.value !== undefined) {
+        return { value: Number(target.value) || 0 }
+      }
+    }
+
+    return undefined
+  }
+
+  function flattenWorkoutSteps(steps: any[], depth = 0): any[] {
+    if (!Array.isArray(steps)) return []
+
+    const flattened: any[] = []
+
+    steps.forEach((step: any) => {
+      const children = Array.isArray(step.steps) ? step.steps : []
+      const hasChildren = children.length > 0
+
+      if (hasChildren) {
+        const reps = Number(step.reps) > 1 ? Number(step.reps) : 1
+        for (let i = 0; i < reps; i++) {
+          flattened.push(...flattenWorkoutSteps(children, depth + 1))
+        }
+        return
+      }
+
+      flattened.push({
+        ...step,
+        _depth: depth,
+        power: normalizeTarget(step.power) || step.power,
+        heartRate: normalizeTarget(step.heartRate) || step.heartRate,
+        pace: normalizeTarget(step.pace) || step.pace
+      })
+    })
+
+    return flattened
+  }
+
+  function getStepName(step: any): string {
+    return step?.name || (step?.type === 'Rest' ? 'Rest' : 'Step')
+  }
+
+  function getStepIndentStyle(step: any) {
+    const depth = Number(step?._depth) || 0
+    return depth > 0 ? { paddingLeft: `${Math.min(depth, 5) * 12}px` } : undefined
+  }
+
   function getStepContainerStyle(step: any) {
+    if (totalDuration.value === 0) {
+      return {
+        width: '0%',
+        minWidth: '2px'
+      }
+    }
+
     const width = ((step.durationSeconds || step.duration || 0) / totalDuration.value) * 100
     return {
       width: `${width}%`,
@@ -468,6 +557,9 @@
   }
 
   function getZoneSegmentTooltip(zone: any) {
+    if (totalDuration.value === 0) {
+      return `${zone.name}: ${formatDuration(zone.duration)}`
+    }
     const percent = Math.round((zone.duration / totalDuration.value) * 100)
     return `${zone.name}: ${formatDuration(zone.duration)} (${percent}%) (Power)`
   }
