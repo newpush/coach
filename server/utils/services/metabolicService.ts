@@ -672,6 +672,12 @@ export const metabolicService = {
       totalSodium += plan.dailyTotals.sodium - 1000
     }
 
+    // Determine the dominant fuel state for the day
+    const dominantState = contexts.reduce((max, ctx) => {
+      const plan = calculateFuelingStrategy(profile, ctx)
+      return Math.max(max, plan.dailyTotals.fuelState)
+    }, 1)
+
     const breakdown = calculateDailyCalorieBreakdown(profile, contexts)
     const mergedWindows = mergeFuelingWindows(combinedWindows)
     const uniqueNotes = Array.from(new Set(combinedNotes))
@@ -689,6 +695,7 @@ export const metabolicService = {
         baseCalories: breakdown.baseCalories,
         activityCalories: breakdown.activityCalories,
         adjustmentCalories: breakdown.adjustmentCalories,
+        fuelState: dominantState,
         workoutCalories: breakdown.workouts.map((w) => ({ title: w.title, calories: w.calories }))
       }
     }
@@ -723,6 +730,156 @@ export const metabolicService = {
       skipped: false,
       plan: finalPlan
     }
+  },
+
+  /**
+   * Fetches and synthesizes future fueling targets for the next few days.
+   * Includes both planned workout windows and daily baseline meals.
+   * Implements physiological caps and carb-loading distribution.
+   */
+  async getUpcomingFuelingWindows(userId: string, daysAhead: number = 7) {
+    const timezone = await getUserTimezone(userId)
+    const today = getUserLocalDate(timezone)
+    const settings = await getUserNutritionSettings(userId)
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { weight: true }
+    })
+    const weight = user?.weight || 75
+    const MEAL_CAP = weight * 2.0 // 2.0g/kg per sitting
+
+    const days: any[] = []
+
+    // Pass 1: Generate daily plans and baseline slots
+    for (let i = 0; i < daysAhead; i++) {
+      const date = new Date(today)
+      date.setUTCDate(today.getUTCDate() + i)
+      const dateStr = formatDateUTC(date)
+
+      const dayPlan = await this.calculateFuelingPlanForDate(userId, date, { persist: false })
+      const plan = dayPlan.plan as any
+
+      const windows = [...(plan?.windows || [])]
+
+      // Add DAILY_BASE slots from pattern
+      const pattern =
+        settings.mealPattern && settings.mealPattern.length > 0
+          ? settings.mealPattern
+          : [
+              { name: 'Breakfast', time: '08:00' },
+              { name: 'Lunch', time: '13:00' },
+              { name: 'Dinner', time: '19:00' }
+            ]
+
+      pattern.forEach((p: any) => {
+        const startTime = buildZonedDateTimeFromUtcDate(date, p.time, timezone)
+        const endTime = new Date(startTime.getTime() + 60 * 60 * 1000)
+
+        windows.push({
+          type: 'DAILY_BASE',
+          startTime: startTime.toISOString(),
+          endTime: endTime.toISOString(),
+          targetCarbs: 0, // Distributed in Pass 2
+          targetProtein: Math.round((weight * 1.6) / pattern.length),
+          targetFat: Math.round((weight * 1.0) / pattern.length),
+          description: `Daily baseline ${p.name.toLowerCase()}.`,
+          status: 'PENDING'
+        })
+      })
+
+      days.push({
+        date,
+        dateKey: dateStr,
+        carbsGoal: plan.dailyTotals.carbs,
+        windows: mergeFuelingWindows(windows)
+      })
+    }
+
+    // Pass 2: Distribute carbs with physiological caps, flowing debt BACKWARDS (Carb Loading)
+    let carryOverDebt = 0
+    for (let i = days.length - 1; i >= 0; i--) {
+      const day = days[i]
+      const totalToAllocate = day.carbsGoal + carryOverDebt
+
+      // 1. Fixed Windows (Intra-Workout is exempt from stationary cap but has its own 90g/hr cap)
+      const intraWindows = day.windows.filter((w: any) => w.type === 'INTRA_WORKOUT')
+      const stationaryWindows = day.windows.filter(
+        (w: any) => w.type !== 'INTRA_WORKOUT' && w.type !== 'WORKOUT_EVENT'
+      )
+
+      let allocated = 0
+      intraWindows.forEach((w: any) => (allocated += w.targetCarbs))
+
+      // 2. Stationary Windows (Capped at 2.0g/kg)
+      let remainingForStationary = totalToAllocate - allocated
+
+      // Sort stationary windows to prioritize those already containing PRE/POST info
+      const sortedStationary = [...stationaryWindows].sort((a: any, b: any) => {
+        const aPri = a.type.includes('WORKOUT') ? 0 : 1
+        const bPri = b.type.includes('WORKOUT') ? 0 : 1
+        return aPri - bPri
+      })
+
+      // Evenly distribute into stationary slots but clamp each to MEAL_CAP
+      const baseShare = Math.max(0, remainingForStationary) / (sortedStationary.length || 1)
+
+      sortedStationary.forEach((w: any) => {
+        // If it was already a PRE/POST, it might have an engine target.
+        // We add the baseline share to it, then cap the result.
+        const currentAmount = w.targetCarbs || 0
+        const newAmount = Math.min(MEAL_CAP, currentAmount + baseShare)
+        w.targetCarbs = Math.round(newAmount)
+        allocated += w.targetCarbs
+        remainingForStationary -= w.targetCarbs
+      })
+
+      // Flow any unallocated "Mega-Debt" to the day before
+      carryOverDebt = Math.max(0, totalToAllocate - allocated)
+    }
+
+    // Pass 3: Finalize Labels and Advice
+    const allWindowsSorted = days
+      .flatMap((d) => d.windows)
+      .sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime())
+
+    return allWindowsSorted.map((w) => {
+      const mealName = this.getMealSlotName(new Date(w.startTime), timezone)
+      let label = mealName
+
+      if (w.type === 'PRE_WORKOUT') label = `Pre-Workout ${mealName}`
+      else if (w.type === 'POST_WORKOUT') label = `Post-Workout ${mealName}`
+      else if (w.type === 'INTRA_WORKOUT') label = 'Intra-Workout Fueling'
+      else if (w.type === 'TRANSITION') label = `${mealName} (Lead-up)`
+
+      // Contextual Advice
+      let advice = w.description
+      if (w.type === 'INTRA_WORKOUT')
+        advice = 'Direct performance fueling; focus on rapid absorption.'
+      else if (w.type === 'DAILY_BASE' || w.type === 'TRANSITION') {
+        advice =
+          w.targetCarbs > weight * 1.5
+            ? `Strategic carb-load: High-carb ${mealName.toLowerCase()} to build glycogen reserves.`
+            : `Balanced ${mealName.toLowerCase()} to maintain base energy.`
+      }
+
+      return {
+        ...w,
+        label,
+        advice,
+        isSynthetic: true
+      }
+    })
+  },
+
+  /**
+   * Identifies the human meal slot name based on time of day.
+   */
+  getMealSlotName(date: Date, timezone: string): string {
+    const hour = parseInt(formatUserTime(date, timezone, 'H'))
+    if (hour >= 5 && hour < 11) return 'Breakfast'
+    if (hour >= 11 && hour < 16) return 'Lunch'
+    if (hour >= 17 && hour < 22) return 'Dinner'
+    return 'Snack'
   },
 
   /**
