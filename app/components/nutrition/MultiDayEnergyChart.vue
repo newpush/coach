@@ -33,6 +33,7 @@
 
   const props = defineProps<{
     points: any[]
+    highlightedDate?: string | null
   }>()
 
   const chartData = computed(() => {
@@ -70,13 +71,23 @@
           },
           pointRadius: (ctx: any) => {
             const p = props.points[ctx.dataIndex]
-            return p?.eventType ? 4 : 0
+            return p?.eventType ? 6 : 0
           },
+          pointHoverRadius: 8,
           pointBackgroundColor: (ctx: any) => {
             const p = props.points[ctx.dataIndex]
-            if (p?.eventType === 'workout') return '#ef4444'
-            if (p?.eventType === 'meal') return '#10b981'
-            return 'transparent'
+            if (!p?.eventType) return 'transparent'
+            if (p.eventIcon === 'i-tabler-layers-intersect') return '#8b5cf6'
+            if (p.event && (p.event.includes('Synthetic') || p.event.includes('Probable')))
+              return '#a855f7'
+            return p.eventType === 'workout' ? '#ef4444' : '#10b981'
+          },
+          pointStyle: (ctx: any) => {
+            const p = props.points[ctx.dataIndex]
+            if (p?.eventIcon === 'i-tabler-layers-intersect') return 'triangle'
+            if (p?.eventType === 'workout') return 'rectRot'
+            if (p?.eventType === 'meal') return 'circle'
+            return 'circle'
           }
         }
       ]
@@ -112,6 +123,24 @@
       }
     }
 
+    // Add Highlighted Day Box
+    if (props.highlightedDate) {
+      const startIdx = props.points.findIndex((p) => p.dateKey === props.highlightedDate)
+      const endIdx = props.points.findLastIndex((p) => p.dateKey === props.highlightedDate)
+
+      if (startIdx >= 0 && endIdx >= 0) {
+        annotations.highlightBox = {
+          type: 'box' as const,
+          xMin: startIdx,
+          xMax: endIdx,
+          backgroundColor: 'rgba(59, 130, 246, 0.1)',
+          borderColor: 'transparent',
+          borderWidth: 0,
+          drawTime: 'beforeDatasetsDraw'
+        }
+      }
+    }
+
     // Add day boundary lines
     dayBoundaries.forEach((idx, i) => {
       annotations[`dayLine${i}`] = {
@@ -136,6 +165,29 @@
               const p = props.points[context[0].dataIndex]
               if (!p) return ''
               return `${p.dateKey} ${p.time}`
+            },
+            label: (context: any) => {
+              return `Glycogen: ${context.raw}%`
+            },
+            afterBody: (context: any) => {
+              const p = props.points[context[0].dataIndex]
+              if (!p) return ''
+
+              const lines = []
+              if (p.eventType === 'workout') {
+                lines.push(`Workout: ${p.event || 'Planned Activity'}`)
+              } else if (p.eventType === 'meal') {
+                lines.push(`Event: ${p.event || 'Food Logged'}`)
+                if (p.eventCarbs) lines.push(`Carbs: ${p.eventCarbs}g`)
+              }
+
+              if (p.eventFluid > 0) {
+                lines.push(`Fluid Intake: ${p.eventFluid}ml`)
+              } else if (p.fluidDeficit > 0) {
+                lines.push(`Fluid Debt: ${Math.round(p.fluidDeficit)}ml`)
+              }
+
+              return lines
             }
           }
         },

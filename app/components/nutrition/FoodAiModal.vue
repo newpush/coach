@@ -68,6 +68,10 @@
   const props = defineProps<{
     nutritionId?: string
     date: string
+    initialContext?: {
+      targetCarbs?: number
+      windowType?: string
+    } | null
   }>()
 
   const emit = defineEmits(['updated'])
@@ -77,6 +81,25 @@
   const query = ref('')
   const error = ref<string | null>(null)
   const mealType = ref('breakfast')
+
+  watch(
+    () => props.initialContext,
+    (ctx) => {
+      if (ctx && ctx.targetCarbs) {
+        if (ctx.item) {
+          query.value = `My coach recommended "${ctx.item}" (${ctx.targetCarbs}g carbs) for my ${ctx.windowType || 'fueling window'}. Can you give me the exact portion sizes or a similar recipe?`
+        } else {
+          query.value = `I need to eat ${ctx.targetCarbs}g of carbs for my ${ctx.windowType || 'fueling window'}. Suggest something.`
+        }
+
+        if (ctx.windowType?.toLowerCase().includes('breakfast')) mealType.value = 'breakfast'
+        else if (ctx.windowType?.toLowerCase().includes('lunch')) mealType.value = 'lunch'
+        else if (ctx.windowType?.toLowerCase().includes('dinner')) mealType.value = 'dinner'
+        else mealType.value = 'snacks'
+      }
+    },
+    { immediate: true }
+  )
 
   const mealTypes = [
     { label: 'Breakfast', value: 'breakfast' },

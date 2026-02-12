@@ -1,13 +1,18 @@
 <template>
   <div class="grid grid-cols-7 gap-2">
-    <div
+    <NuxtLink
       v-for="day in days"
       :key="day.date"
-      class="flex flex-col items-center p-2 rounded-lg border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900"
+      :to="`/nutrition/${day.date}`"
+      class="flex flex-col items-center p-2 rounded-lg border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 transition-colors hover:bg-gray-50 dark:hover:bg-gray-800/50"
       :class="{ 'ring-2 ring-primary-500': isToday(day.date) }"
+      @mouseenter="$emit('hover-day', day.date)"
+      @mouseleave="$emit('hover-day', null)"
     >
       <span class="text-xs font-medium text-gray-500 uppercase">{{ formatDay(day.date) }}</span>
-      <span class="text-sm font-bold my-1">{{ formatDate(day.date) }}</span>
+      <span class="text-sm font-bold my-1 text-gray-900 dark:text-white">{{
+        formatDate(day.date)
+      }}</span>
 
       <div class="relative group">
         <UTooltip :text="day.label">
@@ -22,8 +27,10 @@
         </div>
       </div>
 
-      <span class="text-xs font-medium mt-1">{{ day.carbsTarget }}g</span>
-    </div>
+      <span class="text-xs font-medium mt-1 text-gray-600 dark:text-gray-400"
+        >{{ day.carbsTarget }}g</span
+      >
+    </NuxtLink>
   </div>
 </template>
 
@@ -39,6 +46,8 @@
       isRest: boolean
     }>
   }>()
+
+  defineEmits(['hover-day'])
 
   function formatDay(dateStr: string) {
     return format(parseISO(dateStr), 'EEE')
