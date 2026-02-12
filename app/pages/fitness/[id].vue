@@ -357,12 +357,20 @@
                     <h3 class="text-lg font-semibold text-gray-900 dark:text-white">
                       {{ section.title }}
                     </h3>
-                    <span :class="getStatusBadgeClass(section.status)">
-                      {{ formatStatus(section.status) }}
+                    <span
+                      v-if="section.status || section.type"
+                      :class="getStatusBadgeClass(section.status || section.type)"
+                    >
+                      {{ formatStatus(section.status || section.type) }}
                     </span>
                   </div>
                   <div class="px-6 py-4">
-                    <ul class="space-y-2">
+                    <ul
+                      v-if="
+                        Array.isArray(section.analysis_points) && section.analysis_points.length > 0
+                      "
+                      class="space-y-2"
+                    >
                       <li
                         v-for="(point, pIndex) in section.analysis_points"
                         :key="pIndex"
@@ -374,6 +382,12 @@
                         <span>{{ point }}</span>
                       </li>
                     </ul>
+                    <div
+                      v-else-if="section.content"
+                      class="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-line"
+                    >
+                      {{ section.content }}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1046,13 +1060,14 @@
 
   function getStatusBadgeClass(status: string) {
     const baseClass = 'px-2 py-0.5 rounded text-xs font-medium'
-    if (status === 'optimal')
+    const normalized = (status || '').toLowerCase()
+    if (normalized === 'optimal' || normalized === 'ready')
       return `${baseClass} bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-200`
-    if (status === 'good')
+    if (normalized === 'good')
       return `${baseClass} bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-200`
-    if (status === 'caution')
+    if (normalized === 'caution')
       return `${baseClass} bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-200`
-    if (status === 'attention' || status === 'rest_required')
+    if (normalized === 'attention' || normalized === 'rest_required' || normalized === 'rest')
       return `${baseClass} bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-200`
     return `${baseClass} bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-200`
   }
