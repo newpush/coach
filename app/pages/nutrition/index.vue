@@ -109,9 +109,7 @@
               <NutritionWeeklyFuelingGrid
                 v-else-if="strategy"
                 :days="strategy.fuelingMatrix"
-                :selected-date="selectedDate"
                 @hover-day="highlightedDate = $event"
-                @select-day="selectedDate = $event"
               />
             </UCard>
           </div>
@@ -195,7 +193,6 @@
             <div v-if="upcomingPlan?.windows?.length" class="space-y-4">
               <NutritionUpcomingFuelingFeed
                 :windows="upcomingPlan.windows"
-                :selected-date="selectedDate"
                 @suggest="openAiHelperForWindow"
                 @export-grocery="showGroceryList = true"
               />
@@ -205,15 +202,6 @@
                   Targets are dynamically calculated based on your planned training intensity and
                   fuel states.
                 </p>
-                <UButton
-                  v-if="selectedDate"
-                  :to="`/nutrition/${selectedDate}`"
-                  size="xs"
-                  color="primary"
-                  variant="link"
-                >
-                  View Full Journal for {{ selectedDate }} →
-                </UButton>
               </div>
             </div>
           </div>
@@ -300,7 +288,6 @@
   const upcomingPlan = ref<any>(null)
   const showGroceryList = ref(false)
   const highlightedDate = ref<string | null>(null)
-  const selectedDate = ref<string | null>(null)
 
   const showAiHelper = ref(false)
   const aiHelperContext = ref<any>(null)
