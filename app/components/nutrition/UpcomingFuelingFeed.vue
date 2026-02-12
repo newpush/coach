@@ -196,3 +196,11 @@
     }
   )
 </script>
+
+<style scoped>
+  @media (max-width: 640px) {
+    tbody tr:nth-child(n + 6) {
+      display: none;
+    }
+  }
+</style>
