@@ -330,7 +330,8 @@
               </div>
             </div>
             <div
-              class="bg-gray-50 dark:bg-gray-900/50 p-2.5 rounded-xl border border-gray-100 dark:border-gray-800"
+              class="bg-gray-50 dark:bg-gray-900/50 p-2.5 rounded-xl border border-gray-100 dark:border-gray-800 cursor-pointer hover:border-primary-300 transition-colors group"
+              @click="isHydrationExplainOpen = true"
             >
               <div class="flex items-center justify-center gap-1 mb-1">
                 <UIcon name="i-tabler-droplet" class="w-3.5 h-3.5 text-blue-400" />
@@ -414,6 +415,11 @@
     :weight="weight || 75"
     :fueling-plan="nutrition?.fuelingPlan"
   />
+  <DashboardHydrationExplainModal
+    v-model="isHydrationExplainOpen"
+    :nutrition="nutrition"
+    :settings="settings"
+  />
 
   <NutritionFoodItemModal
     ref="itemModal"
@@ -454,6 +460,7 @@
   const generating = ref(false)
   const showExplainModal = ref(false)
   const isMacroExplainOpen = ref(false)
+  const isHydrationExplainOpen = ref(false)
   const selectedMacro = ref<any>(null)
 
   const itemModal = ref<any>(null)
