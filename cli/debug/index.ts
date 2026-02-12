@@ -29,6 +29,7 @@ import fixCheckinsCommand from './fix-checkins'
 import pmcCommand from './pmc'
 import chatHistoryCommand from './chat-history'
 import quotasCommand from './quotas'
+import chartCommand from './chart'
 
 const debugCommand = new Command('debug').description('Debugging utilities')
 
@@ -62,5 +63,6 @@ debugCommand.addCommand(fixCheckinsCommand)
 debugCommand.addCommand(pmcCommand)
 debugCommand.addCommand(chatHistoryCommand)
 debugCommand.addCommand(quotasCommand)
+debugCommand.addCommand(chartCommand)
 
 export default debugCommand
