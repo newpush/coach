@@ -7,7 +7,12 @@ import {
   calculateDailyCalorieBreakdown
 } from '../../utils/nutrition/fueling'
 import { plannedWorkoutRepository } from '../../utils/repositories/plannedWorkoutRepository'
-import { buildZonedDateTimeFromUtcDate, getUserTimezone } from '../../utils/date'
+import {
+  buildZonedDateTimeFromUtcDate,
+  getEndOfDayUTC,
+  getStartOfDayUTC,
+  getUserTimezone
+} from '../../utils/date'
 import { metabolicService } from '../../utils/services/metabolicService'
 
 export default defineEventHandler(async (event) => {
@@ -74,18 +79,39 @@ export default defineEventHandler(async (event) => {
 
   // AGGREGATED CALORIE AND PLAN ESTIMATION
   if (dateObj) {
-    const plannedWorkouts = await plannedWorkoutRepository.list(userId, {
-      startDate: dateObj,
-      endDate: dateObj,
-      limit: 10
-    })
-
     const user = await prisma.user.findUnique({
       where: { id: userId },
       select: { weight: true, ftp: true }
     })
     const settings = await getUserNutritionSettings(userId)
     const timezone = await getUserTimezone(userId)
+    const dayStart = getStartOfDayUTC(timezone, dateObj)
+    const dayEnd = getEndOfDayUTC(timezone, dateObj)
+    const [plannedWorkouts, completedWorkouts] = await Promise.all([
+      plannedWorkoutRepository.list(userId, {
+        startDate: dateObj,
+        endDate: dateObj,
+        limit: 20
+      }),
+      prisma.workout.findMany({
+        where: {
+          userId,
+          isDuplicate: false,
+          date: {
+            gte: dayStart,
+            lte: dayEnd
+          }
+        },
+        include: {
+          plannedWorkout: {
+            select: {
+              fuelingStrategy: true
+            }
+          }
+        },
+        orderBy: { date: 'asc' }
+      })
+    ])
 
     const profile = {
       weight: user?.weight || 75,
@@ -109,7 +135,20 @@ export default defineEventHandler(async (event) => {
       targetAdjustmentPercent: settings.targetAdjustmentPercent ?? 0
     }
 
-    const contexts: any[] = plannedWorkouts.map((workout) => {
+    const completedPlannedIds = new Set(
+      completedWorkouts.map((w) => w.plannedWorkoutId).filter(Boolean)
+    )
+    const remainingPlanned = plannedWorkouts.filter((p) => !completedPlannedIds.has(p.id))
+
+    const completedContexts: any[] = completedWorkouts.map((workout) => ({
+      ...workout,
+      startTime: workout.date,
+      durationHours: (workout.durationSec || 0) / 3600,
+      intensity: workout.intensity || 0.6,
+      strategyOverride: workout.plannedWorkout?.fuelingStrategy || undefined
+    }))
+
+    const plannedContexts: any[] = remainingPlanned.map((workout) => {
       let startTimeDate: Date | null = null
       if (
         workout.startTime &&
@@ -132,6 +171,7 @@ export default defineEventHandler(async (event) => {
         strategyOverride: workout?.fuelingStrategy || undefined
       }
     })
+    const contexts: any[] = [...completedContexts, ...plannedContexts]
 
     // Aggregate energy demand
     const breakdown = calculateDailyCalorieBreakdown(profile, contexts)

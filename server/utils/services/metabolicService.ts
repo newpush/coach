@@ -650,22 +650,43 @@ export const metabolicService = {
 
     const settings = await getUserNutritionSettings(userId)
     const timezone = await getUserTimezone(userId)
-    const allWorkouts = await prisma.plannedWorkout.findMany({
-      where: {
-        userId,
-        date: {
-          gte: targetDateStart,
-          lte: targetDateEnd
+    const [plannedWorkouts, completedWorkouts] = await Promise.all([
+      prisma.plannedWorkout.findMany({
+        where: {
+          userId,
+          date: {
+            gte: targetDateStart,
+            lte: targetDateEnd
+          },
+          completed: {
+            not: true
+          },
+          completedWorkouts: {
+            none: {}
+          }
         },
-        completed: {
-          not: true
+        orderBy: { date: 'asc' }
+      }),
+      prisma.workout.findMany({
+        where: {
+          userId,
+          isDuplicate: false,
+          date: {
+            gte: targetDateStart,
+            lte: targetDateEnd
+          }
         },
-        completedWorkouts: {
-          none: {}
+        orderBy: { date: 'asc' },
+        include: {
+          plannedWorkout: {
+            select: {
+              fuelingStrategy: true,
+              startTime: true
+            }
+          }
         }
-      },
-      orderBy: { date: 'asc' }
-    })
+      })
+    ])
 
     const user = await prisma.user.findUnique({ where: { id: userId } })
     const profile = {
@@ -691,7 +712,12 @@ export const metabolicService = {
     }
 
     const contexts: any[] = []
-    if (allWorkouts.length === 0) {
+    const completedPlannedIds = new Set(
+      completedWorkouts.map((w) => w.plannedWorkoutId).filter(Boolean)
+    )
+    const remainingPlanned = plannedWorkouts.filter((w) => !completedPlannedIds.has(w.id))
+
+    if (remainingPlanned.length === 0 && completedWorkouts.length === 0) {
       contexts.push({
         id: 'rest-virtual',
         title: 'Rest Day',
@@ -703,7 +729,21 @@ export const metabolicService = {
         strategyOverride: 'STANDARD'
       })
     } else {
-      for (const work of allWorkouts) {
+      for (const completed of completedWorkouts) {
+        contexts.push({
+          id: completed.id,
+          title: completed.title || 'Completed Workout',
+          durationSec: completed.durationSec || 0,
+          type: completed.type || 'Workout',
+          date: completed.date,
+          startTime: completed.date,
+          durationHours: (completed.durationSec || 0) / 3600,
+          intensity: completed.intensity || 0.6,
+          strategyOverride: completed.plannedWorkout?.fuelingStrategy || undefined
+        })
+      }
+
+      for (const work of remainingPlanned) {
         let startTimeDate: Date | null = null
         if (work.startTime && typeof work.startTime === 'string' && work.startTime.includes(':')) {
           startTimeDate = buildZonedDateTimeFromUtcDate(work.date, work.startTime, timezone, 10, 0)
