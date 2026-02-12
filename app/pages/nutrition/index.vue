@@ -160,18 +160,39 @@
               </template>
               <div class="text-center py-4">
                 <div
-                  class="text-3xl font-bold"
-                  :class="strategy?.hydrationDebt > 1000 ? 'text-error-500' : 'text-info-500'"
+                  class="mx-auto size-28 rounded-full border-8 flex items-center justify-center"
+                  :class="hydrationRingClass"
                 >
-                  {{ strategy?.hydrationDebt || 0 }}ml
+                  <div class="flex flex-col items-center">
+                    <span class="text-xl font-black text-gray-900 dark:text-white">
+                      {{ ((strategy?.hydrationDebt || 0) / 1000).toFixed(1) }}L
+                    </span>
+                    <span class="text-[10px] uppercase font-bold tracking-wider text-gray-500">
+                      {{ hydrationStatus.toUpperCase() }}
+                    </span>
+                  </div>
                 </div>
-                <p class="text-sm text-gray-500 mt-1">Persistent Fluid Debt</p>
+                <p class="text-sm text-gray-500 mt-3">Persistent Fluid Debt</p>
 
                 <div
                   class="mt-4 p-3 bg-info-50 dark:bg-info-900/20 rounded-lg text-xs text-info-700 dark:text-info-300"
                 >
                   {{ hydrationAdvice }}
                 </div>
+
+                <UAlert
+                  v-if="strategy?.showHydrationFlushPrompt"
+                  color="warning"
+                  variant="soft"
+                  class="mt-4 text-left"
+                  :title="strategy?.hydrationFlushPrompt"
+                >
+                  <template #actions>
+                    <UButton size="xs" color="warning" variant="solid" @click="resetHydrationDebt">
+                      Reset to zero
+                    </UButton>
+                  </template>
+                </UAlert>
               </div>
 
               <template #footer>
@@ -349,11 +370,33 @@
   const hydrationAdvice = computed(() => {
     if (!strategy.value) return 'Loading...'
     const debt = strategy.value.hydrationDebt
+    if (debt > 2000)
+      return 'High fluid debt detected. Add 500ml of water to your next two meals to normalize.'
     if (debt > 1500)
       return 'Severe dehydration risk. Sip 250ml every 30 mins until balance is restored.'
     if (debt > 500) return 'Moderate fluid debt. Increase intake by 500ml over your baseline today.'
     return 'Fluid balance is optimal. Maintain standard hydration pattern.'
   })
+
+  const hydrationStatus = computed(() => strategy.value?.hydrationStatus || 'green')
+  const hydrationRingClass = computed(() => {
+    if (hydrationStatus.value === 'red') {
+      return 'border-error-500 bg-error-50 dark:bg-error-900/20'
+    }
+    if (hydrationStatus.value === 'yellow') {
+      return 'border-yellow-500 bg-yellow-50 dark:bg-yellow-900/20'
+    }
+    return 'border-success-500 bg-success-50 dark:bg-success-900/20'
+  })
+
+  async function resetHydrationDebt() {
+    try {
+      await $fetch('/api/nutrition/hydration-reset', { method: 'POST' })
+      await refreshData()
+    } catch (error) {
+      console.error('Failed to reset hydration debt:', error)
+    }
+  }
 
   const groceryItems = computed(() => {
     if (!strategy.value) return []
