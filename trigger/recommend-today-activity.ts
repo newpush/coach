@@ -48,6 +48,13 @@ interface RecommendationAnalysis {
     fatigue_level: string
     readiness_score: number
   }
+  meal_recommendation?: {
+    item: string
+    carbs: number
+    absorptionType: 'RAPID' | 'FAST' | 'BALANCED' | 'DENSE' | 'HYPER_LOAD'
+    timing: string
+    reasoning: string
+  }
   key_factors?: string[]
 }
 
@@ -87,6 +94,19 @@ const recommendationSchema = {
         sleep_quality: { type: 'string' },
         fatigue_level: { type: 'string' },
         readiness_score: { type: 'number' }
+      }
+    },
+    meal_recommendation: {
+      type: 'object',
+      properties: {
+        item: { type: 'string' },
+        carbs: { type: 'number' },
+        absorptionType: {
+          type: 'string',
+          enum: ['RAPID', 'FAST', 'BALANCED', 'DENSE', 'HYPER_LOAD']
+        },
+        timing: { type: 'string' },
+        reasoning: { type: 'string' }
       }
     },
     key_factors: {
@@ -692,7 +712,26 @@ DECISION CRITERIA:
 **NUTRITION & RECOVERY SENSOR (Hunger Sensor)**:
 - If Sleep Score < 60% OR HRV Balance is "Low", explicitly recommend: "Consider 30-40g of slow-digesting protein (like Casein or Cottage Cheese) before bed tonight to aid overnight repair."
 - If Training Load > 100 TSS yesterday, recommend "Ensure you hit your carb targets to refill glycogen stores."
-- Include this advice in your reasoning.
+
+**MEAL RECOMMENDATION LOGIC**:
+When the user has a workout today, provide a \`meal_recommendation\` based on:
+1. **The Time Gap**: Time between NOW and the next workout.
+2. **The Tank Level**: Current "Live Energy" availability (if mentioned in reasoning/context).
+3. **The Match**:
+   - **Gap < 30m + Low Tank**: Recommend **RAPID** profile (Gel/Exogenous glucose).
+   - **Gap 30-60m**: Recommend **FAST** profile (Fruit/White bread).
+   - **Gap 60-120m**: Recommend **BALANCED** profile (Oats/Pasta).
+   - **Recovery/Daily Base**: Recommend **DENSE** profile (Mixed meal with protein/fat).
+   - **Pre-State 3 Night Before**: Recommend **HYPER_LOAD** (Large pasta meal).
+
+Absorption Profile Matrix for your guidance:
+- RAPID: Liquid/Gel, Start 5m, Peak 15m.
+- FAST: Fruit/Bread, Start 10m, Peak 30m.
+- BALANCED: Oats/Pasta, Start 30m, Peak 60m.
+- DENSE: Protein/Fats/Fiber, Start 45m, Peak 120m.
+- HYPER_LOAD: Large Meal, Start 60m, Peak 180m.
+
+Include this advice in your reasoning.
 
 Provide specific, actionable recommendations with clear reasoning.
 Maintain your **${aiSettings.aiPersona}** persona throughout.`
