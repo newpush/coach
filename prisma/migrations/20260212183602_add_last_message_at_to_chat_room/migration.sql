@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE "ChatRoom" ADD COLUMN     "lastMessageAt" TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP;

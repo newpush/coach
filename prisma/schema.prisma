@@ -1167,15 +1167,18 @@ model DailyCheckin {
 }
 
 model ChatRoom {
-  id        String            @id @default(uuid())
-  name      String?
-  avatar    String?
-  createdAt DateTime          @default(now())
-  updatedAt DateTime          @updatedAt
-  deletedAt DateTime?
-  messages  ChatMessage[]
-  users     ChatParticipant[]
-  bugReports BugReport[]
+  id            String            @id @default(uuid())
+  name          String?
+  avatar        String?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+  deletedAt     DateTime?
+  lastMessageAt DateTime?         @default(now())
+  messages      ChatMessage[]
+  users         ChatParticipant[]
+  bugReports    BugReport[]
+
+  @@index([lastMessageAt])
 }
 
 model ChatParticipant {
