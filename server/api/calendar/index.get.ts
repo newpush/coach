@@ -116,10 +116,6 @@ export default defineEventHandler(async (event) => {
     Date.UTC(endDate.getUTCFullYear(), endDate.getUTCMonth(), endDate.getUTCDate())
   )
 
-  console.log(
-    `[Calendar API] Fetching data for ${userId} from ${calendarStart.toISOString()} to ${calendarEnd.toISOString()}`
-  )
-
   // Fetch nutrition data for the date range
   const nutritionStartTime = Date.now()
   const nutrition = await nutritionRepository.getForUser(userId, {
@@ -148,7 +144,6 @@ export default defineEventHandler(async (event) => {
       snacks: true
     }
   })
-  console.log(`[Calendar API] Nutrition fetch took ${Date.now() - nutritionStartTime}ms`)
 
   // Create a map of nutrition data by date (YYYY-MM-DD)
   const nutritionByDate = new Map()
@@ -170,9 +165,6 @@ export default defineEventHandler(async (event) => {
       startingFluid: state.startingFluid
     })
   }
-  console.log(
-    `[Calendar API] Metabolic state calculation for ${nutrition.length} days took ${Date.now() - metabolicStartTime}ms`
-  )
 
   // Fetch wellness data for the date range
   const wellnessStartTime = Date.now()
@@ -181,7 +173,6 @@ export default defineEventHandler(async (event) => {
     endDate: calendarEnd,
     orderBy: { date: 'asc' }
   })
-  console.log(`[Calendar API] Wellness fetch took ${Date.now() - wellnessStartTime}ms`)
 
   // Fetch daily metrics data for the date range
   const dailyMetrics = await prisma.dailyMetric.findMany({
@@ -235,7 +226,6 @@ export default defineEventHandler(async (event) => {
       }
     }
   })
-  console.log(`[Calendar API] Workout fetch took ${Date.now() - workoutStartTime}ms`)
 
   // Fetch planned workouts (date-only)
   const plannedStartTime = Date.now()
@@ -249,7 +239,6 @@ export default defineEventHandler(async (event) => {
     },
     orderBy: { date: 'asc' }
   })
-  console.log(`[Calendar API] Planned workout fetch took ${Date.now() - plannedStartTime}ms`)
 
   // PROACTIVE NUTRITION ESTIMATION
   const estimationStartTime = Date.now()
@@ -335,7 +324,6 @@ export default defineEventHandler(async (event) => {
       }
     }
   }
-  console.log(`[Calendar API] Nutrition estimation took ${Date.now() - estimationStartTime}ms`)
 
   // Fetch calendar notes (timestamped)
   const notesStartTime = Date.now()
@@ -344,7 +332,6 @@ export default defineEventHandler(async (event) => {
     endDate: rangeEnd,
     orderBy: { startDate: 'asc' }
   })
-  console.log(`[Calendar API] Notes fetch took ${Date.now() - notesStartTime}ms`)
 
   // Create a set of plannedWorkoutIds that are already represented by completed workouts
   // We'll use this to mark them as linked or hide them if we only want them nested
@@ -542,10 +529,6 @@ export default defineEventHandler(async (event) => {
       })
     }
   }
-
-  console.log(
-    `[Calendar API] Total execution took ${Date.now() - startTime}ms for ${activities.length} activities`
-  )
 
   return activities
 })

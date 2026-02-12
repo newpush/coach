@@ -607,9 +607,6 @@ export const metabolicService = {
       }
     }
 
-    console.log(
-      `[MetabolicService] getWaveRange for ${daysDiff + 1} days took ${Date.now() - startTime}ms`
-    )
     return allPoints
   },
 
@@ -1040,11 +1037,6 @@ export const metabolicService = {
       }
     }
 
-    console.log(
-      `[MetabolicService] Bulk range calculation for ${daysDiff + 1} days took ${
-        Date.now() - startTime
-      }ms`
-    )
     return statesByDate
   },
 
