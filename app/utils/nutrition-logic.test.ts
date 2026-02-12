@@ -77,6 +77,7 @@ describe('calculateEnergyTimeline', () => {
     const mockWorkouts = [
       {
         title: 'Threshold Intervals',
+        date: '2026-02-10T11:00:00Z',
         startTime: '2026-02-10T11:00:00Z',
         durationSec: 3600, // 1 hour
         workIntensity: 0.95 // Z4
