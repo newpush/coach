@@ -16,6 +16,8 @@ import {
 import { calculateGlycogenState, calculateEnergyTimeline } from '../nutrition-domain/logic'
 import { getProfileForItem } from '../nutrition-domain/absorption'
 import { getUserNutritionSettings } from '../../utils/nutrition/settings'
+import { metabolicService } from '../services/metabolicService'
+import { INTRA_WORKOUT_TARGET_ML_PER_HOUR, MEAL_LINKED_WATER_ML } from '../nutrition/hydration'
 
 // Helper to calculate totals from all meals
 const recalculateDailyTotals = (nutrition: any) => {
@@ -136,6 +138,10 @@ export const nutritionTools = (userId: string, timezone: string) => ({
             .optional()
             .describe('How fast the food is absorbed'),
           quantity: z.string().optional().describe('Quantity description (e.g. "1 cup", "100g")'),
+          water_ml: z
+            .number()
+            .optional()
+            .describe('Optional fluid volume in ml when item is a drink'),
           logged_at: z
             .string()
             .optional()
@@ -145,6 +151,8 @@ export const nutritionTools = (userId: string, timezone: string) => ({
     }),
     execute: async ({ date, meal_type, items }) => {
       const dateUtc = new Date(`${date}T00:00:00Z`)
+
+      let explicitFluidMl = 0
 
       // Add IDs to items and normalize logged_at
       const itemsWithIds = items.map((item) => {
@@ -170,6 +178,8 @@ export const nutritionTools = (userId: string, timezone: string) => ({
             normalizedLoggedAt = finalDate.toISOString()
           }
         }
+
+        explicitFluidMl += Math.max(0, Math.round(item.water_ml || 0))
 
         return {
           id: crypto.randomUUID(),
@@ -208,7 +218,11 @@ export const nutritionTools = (userId: string, timezone: string) => ({
         carbs: totals.carbs,
         fat: totals.fat,
         fiber: totals.fiber,
-        sugar: totals.sugar
+        sugar: totals.sugar,
+        waterMl: Math.max(
+          0,
+          (nutrition.waterMl || 0) + MEAL_LINKED_WATER_ML + Math.max(0, explicitFluidMl)
+        )
       })
 
       try {
@@ -239,6 +253,93 @@ export const nutritionTools = (userId: string, timezone: string) => ({
           fat: Math.round(updatedNutrition.fat || 0)
         },
         current_meal_items: updatedNutrition[meal_type]
+      }
+    }
+  }),
+
+  log_hydration_intake: tool({
+    description:
+      'Log hydration volume in ml/L/oz and map it against intra-workout hydration target (0.7L/hr) when relevant.',
+    inputSchema: z.object({
+      date: z.string().describe('Date in ISO format (YYYY-MM-DD)'),
+      volume_ml: z.number().describe('Hydration volume in ml'),
+      logged_at: z
+        .string()
+        .optional()
+        .describe('ISO timestamp or time string (HH:mm) when the fluid was consumed')
+    }),
+    execute: async ({ date, volume_ml, logged_at }) => {
+      const dateUtc = new Date(`${date}T00:00:00Z`)
+      let normalizedLoggedAt = logged_at
+
+      if (!normalizedLoggedAt) {
+        normalizedLoggedAt = formatUserTime(new Date(), timezone)
+      }
+
+      if (normalizedLoggedAt.includes('T')) {
+        const timePart = normalizedLoggedAt.split('T')[1]
+        normalizedLoggedAt = `${date}T${timePart}`
+      } else if (/^\d{2}:\d{2}/.test(normalizedLoggedAt)) {
+        const timeMatch = normalizedLoggedAt.match(/^(\d{2}):(\d{2})/)
+        if (timeMatch) {
+          const h = parseInt(timeMatch[1]!)
+          const m = parseInt(timeMatch[2]!)
+          const baseDate = getStartOfLocalDateUTC(timezone, date)
+          const finalDate = new Date(baseDate.getTime() + (h * 3600 + m * 60) * 1000)
+          normalizedLoggedAt = finalDate.toISOString()
+        }
+      }
+
+      const loggedAtDate = new Date(normalizedLoggedAt)
+
+      let nutrition = await nutritionRepository.getByDate(userId, dateUtc)
+      if (!nutrition) {
+        nutrition = await nutritionRepository.create({
+          userId,
+          date: dateUtc,
+          waterMl: Math.max(0, Math.round(volume_ml))
+        })
+      } else {
+        nutrition = await nutritionRepository.update(nutrition.id, {
+          waterMl: Math.max(0, (nutrition.waterMl || 0) + Math.round(volume_ml))
+        })
+      }
+
+      const dayPlan = await metabolicService.calculateFuelingPlanForDate(userId, dateUtc, {
+        persist: false
+      })
+      const windows = ((dayPlan.plan as any)?.windows || []) as any[]
+      const intraWindow = windows.find((window) => {
+        if (window.type !== 'INTRA_WORKOUT') return false
+        const start = new Date(window.startTime)
+        const end = new Date(window.endTime)
+        return loggedAtDate >= start && loggedAtDate <= end
+      })
+
+      let intraStatus: any = null
+      if (intraWindow) {
+        const start = new Date(intraWindow.startTime)
+        const end = new Date(intraWindow.endTime)
+        const elapsedHours = Math.max(
+          0,
+          Math.min(
+            (loggedAtDate.getTime() - start.getTime()) / 3600000,
+            (end.getTime() - start.getTime()) / 3600000
+          )
+        )
+        const targetByNowMl = Math.round(elapsedHours * INTRA_WORKOUT_TARGET_ML_PER_HOUR)
+        intraStatus = {
+          targetByNowMl,
+          loggedMl: Math.round(volume_ml),
+          completionPercent:
+            targetByNowMl > 0 ? Math.round((Math.round(volume_ml) / targetByNowMl) * 100) : 100
+        }
+      }
+
+      return {
+        message: `Logged ${Math.round(volume_ml)}ml hydration for ${date}.`,
+        total_water_ml: nutrition.waterMl || 0,
+        intra_workout: intraStatus
       }
     }
   }),
