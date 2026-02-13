@@ -81,6 +81,14 @@
         }
       },
       {
+        label: 'Nutrition',
+        icon: 'i-lucide-utensils',
+        to: '/nutrition',
+        onSelect: () => {
+          open.value = false
+        }
+      },
+      {
         label: 'Performance',
         icon: 'i-lucide-trending-up',
         to: '/performance',
@@ -108,14 +116,6 @@
         label: 'Workouts',
         icon: 'i-lucide-activity',
         to: '/workouts',
-        onSelect: () => {
-          open.value = false
-        }
-      },
-      {
-        label: 'Nutrition',
-        icon: 'i-lucide-utensils',
-        to: '/nutrition',
         onSelect: () => {
           open.value = false
         }
