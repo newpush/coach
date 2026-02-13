@@ -194,6 +194,7 @@ export const recommendTodayActivityTask = task({
       focusedRecommendations,
       sportSettings,
       todayAvailability,
+      weeklyAvailability,
       mealTargetContext
     ] = await Promise.all([
       // Today's planned workouts (Fetch ALL to handle multi-session days)
@@ -324,6 +325,9 @@ export const recommendTodayActivityTask = task({
       // Today's Training Availability
       availabilityRepository.getForDay(userId, today.getDay()),
 
+      // Full weekly training availability (for forward-looking guidance)
+      availabilityRepository.getFullSchedule(userId),
+
       // Canonical metabolic meal target context (same engine as nutrition charts)
       metabolicService.getMealTargetContext(userId, today, new Date())
     ])
@@ -335,6 +339,10 @@ export const recommendTodayActivityTask = task({
     const availabilityContext = todayAvailability
       ? `\nTODAY'S TRAINING AVAILABILITY:\n${availabilityRepository.formatForPrompt(todayAvailability)}\n`
       : ''
+    const weeklyAvailabilityContext =
+      weeklyAvailability.length > 0
+        ? `\nWEEKLY TRAINING AVAILABILITY:\n${availabilityRepository.formatForPrompt(weeklyAvailability)}\n`
+        : ''
 
     // --- CHECK FOR AND RUN WELLNESS ANALYSIS IF MISSING ---
     // If we have a wellness record (todayMetric) but no AI analysis, run it now.
@@ -649,6 +657,7 @@ ${currentStatusContext}
 ${athleteContext}
 ${planContext}
 ${availabilityContext}
+${weeklyAvailabilityContext}
 ${focusedRecsContext}
 
 TODAY'S PLANNED WORKOUT(S):
@@ -719,6 +728,7 @@ CRITICAL INSTRUCTIONS:
 2. PRIORITIZE the "CURRENT ATHLETE STATUS (Source of Truth)" metrics above for any fitness assessment.
 3. IGNORE any conflicting TSB/CTL values found in the "ATHLETE PROFILE" section if they differ from the Source of Truth, as they may be stale summaries.
 4. Refer to the "PROJECTED FITNESS TRENDS" for future state, but base your primary decision on the current TSB and recovery metrics.
+5. RESPECT TRAINING AVAILABILITY: do not recommend sessions outside declared availability windows unless user feedback explicitly asks to override.
 
 ${zoneDefinitions}
 

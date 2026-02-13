@@ -15,6 +15,7 @@ import {
 import { getCurrentFitnessSummary } from '../server/utils/training-stress'
 import { getUserAiSettings } from '../server/utils/ai-user-settings'
 import { TRAINING_BLOCK_TYPES, TRAINING_BLOCK_FOCUSES } from '../app/utils/training-constants'
+import { availabilityRepository } from '../server/utils/repositories/availabilityRepository'
 
 const trainingBlockSchema = {
   type: 'object',
@@ -137,6 +138,8 @@ export const generateTrainingBlockTask = task({
       where: { id: userId },
       select: { ftp: true, weight: true, maxHr: true, aiPersona: true, dob: true, sex: true }
     })
+    const availability = await availabilityRepository.getFullSchedule(userId)
+    const availabilitySummary = availabilityRepository.formatForPrompt(availability)
 
     const userAge = calculateAge(user?.dob)
     logger.log('[GenerateBlock] Block fetched', {
@@ -367,6 +370,9 @@ WEEKLY SCHEDULE CONSTRAINTS (Explicit Dates):
 ${calendarContext}
 *Strictly follow this schedule. Only generate workouts for the days listed above for each week. If a week has "No valid training days", generate an empty week or rest.*
 
+TRAINING AVAILABILITY (when athlete can train):
+${availabilitySummary || 'No availability set - assume flexible schedule'}
+
 LOCKED/ANCHOR WORKOUTS (DO NOT CHANGE OR REPLACE):
 ${
   anchoredWorkouts.length > 0
@@ -386,6 +392,7 @@ Generate a detailed daily training plan for each week in this block (${block.dur
   - For RECOVERY weeks: Focus on shedding fatigue with significantly reduced volume and low intensity.
 - **WEEK NUMBERING**: You MUST use block-relative week numbers (1, 2, 3...) in your response, matching the numbering in the "WEEKLY SCHEDULE CONSTRAINTS" below.
 - **RESPECT LOCKED WORKOUTS**: You MUST include the "LOCKED/ANCHOR WORKOUTS" in your plan on their specific days. Do not schedule conflicting workouts on those days unless it's a multi-session day. Account for their TSS.
+- **RESPECT AVAILABILITY**: Do not schedule sessions on days marked as rest day or outside declared slots, unless athlete custom instructions explicitly override this.
 - **B-RACE HANDLING**: If the block focus includes "_WITH_RACE", implement a "Mini-Taper" on the 2 days prior to the race date while maintaining the overall block goal.
 - ONLY use the "Allowed Workout Types" listed above, UNLESS the athlete's custom instructions explicitly request otherwise (Custom Instructions take precedence).
 - Ensure progressive overload from week 1 to ${block.durationWeeks - 1}.
