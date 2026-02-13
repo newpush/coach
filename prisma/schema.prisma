@@ -1327,7 +1327,7 @@ model LlmAnalysisLevelSettings {
   id               String   @id @default(uuid())
   level            String   @unique // 'flash', 'pro', 'experimental'
   model            String   @default("flash") // flash/pro family
-  modelId          String   @default("gemini-flash-latest") // exact ID
+  modelId          String   @default("gemini-2.5-flash-preview-09-2025") // exact ID
   thinkingBudget   Int      @default(2000)
   thinkingLevel    String   @default("low")
   maxSteps         Int      @default(3)
