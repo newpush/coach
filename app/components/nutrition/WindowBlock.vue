@@ -346,8 +346,9 @@
   })
 
   const formatTime = (date: Date | string) => {
+    if (!date) return ''
     const d = typeof date === 'string' ? new Date(date) : date
-    if (!d || !(d instanceof Date) || isNaN(d.getTime())) return ''
+    if (!(d instanceof Date) || isNaN(d.getTime())) return ''
     const { formatDate } = useFormat()
     return formatDate(d, 'HH:mm')
   }

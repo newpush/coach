@@ -148,10 +148,10 @@
                       <span v-if="step.heartRate?.range">
                         {{ Math.round(step.heartRate.range.start * 100) }}-{{
                           Math.round(step.heartRate.range.end * 100)
-                        }}%
+                        }}% LTHR
                       </span>
                       <span v-else-if="step.heartRate?.value">
-                        {{ Math.round(step.heartRate.value * 100) }}%
+                        {{ Math.round(step.heartRate.value * 100) }}% LTHR
                       </span>
                       <span v-else-if="step.power">
                         {{ Math.round((step.power.value || 0) * 100) }}%
@@ -168,7 +168,7 @@
                         {{ Math.round(step.power.value * 100) }}%
                       </span>
                       <span v-else-if="step.heartRate">
-                        {{ Math.round((step.heartRate.value || 0) * 100) }}%
+                        {{ Math.round((step.heartRate.value || 0) * 100) }}% LTHR
                       </span>
                       <span v-else> {{ getInferredIntensity(step) * 100 }}% </span>
                     </template>
@@ -201,10 +201,10 @@
                     <span v-if="step.heartRate?.range">
                       {{ Math.round(step.heartRate.range.start * 100) }}-{{
                         Math.round(step.heartRate.range.end * 100)
-                      }}%
+                      }}% LTHR
                     </span>
                     <span v-else-if="step.heartRate?.value">
-                      {{ Math.round(step.heartRate.value * 100) }}%
+                      {{ Math.round(step.heartRate.value * 100) }}% LTHR
                     </span>
                     <span v-else-if="step.power">
                       {{ Math.round((step.power.value || 0) * 100) }}%
@@ -221,7 +221,7 @@
                       {{ Math.round(step.power.value * 100) }}%
                     </span>
                     <span v-else-if="step.heartRate">
-                      {{ Math.round((step.heartRate.value || 0) * 100) }}%
+                      {{ Math.round((step.heartRate.value || 0) * 100) }}% LTHR
                     </span>
                     <span v-else> {{ getInferredIntensity(step) * 100 }}% </span>
                   </template>

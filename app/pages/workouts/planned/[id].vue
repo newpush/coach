@@ -683,8 +683,26 @@
   const initialFeedbackText = ref<string | null>(null)
   const dayNutrition = ref<any>(null)
   const nutritionSettings = ref<any>(null)
+  const workoutFuelingPlan = ref<any>(null)
 
-  const fuelingPlan = computed(() => dayNutrition.value?.fuelingPlan)
+  const fuelingPlan = computed(() => {
+    if (workoutFuelingPlan.value?.windows?.length) return workoutFuelingPlan.value
+
+    const dayPlan = dayNutrition.value?.fuelingPlan
+    if (!dayPlan) return null
+
+    const workoutId = workout.value?.id
+    const windows = Array.isArray(dayPlan.windows) ? dayPlan.windows : []
+    if (!workoutId || windows.length === 0) return dayPlan
+
+    const matchedWindows = windows.filter((w: any) => w?.plannedWorkoutId === workoutId)
+    if (matchedWindows.length === 0) return dayPlan
+
+    return {
+      ...dayPlan,
+      windows: matchedWindows
+    }
+  })
   const fuelState = computed(() => {
     if (!fuelingPlan.value) return 1
     const intra = fuelingPlan.value.windows?.find((w: any) => w.type === 'INTRA_WORKOUT')
@@ -978,6 +996,7 @@
 
   async function fetchWorkout() {
     loading.value = true
+    workoutFuelingPlan.value = null
     try {
       const data: any = await $fetch(`/api/workouts/planned/${route.params.id}`)
       workout.value = data.workout
@@ -990,9 +1009,10 @@
       if (workout.value?.date) {
         try {
           const dateStr = formatDateUTC(new Date(workout.value.date), 'yyyy-MM-dd')
-          const [nData, sData] = await Promise.all([
+          const [nData, sData, wFueling] = await Promise.all([
             $fetch<any>(`/api/nutrition/${dateStr}`),
-            $fetch<any>('/api/profile/nutrition')
+            $fetch<any>('/api/profile/nutrition'),
+            $fetch<any>(`/api/workouts/planned/${workout.value.id}/fueling`)
           ])
 
           if (nData) {
@@ -1000,6 +1020,9 @@
           }
           if (sData) {
             nutritionSettings.value = sData.settings
+          }
+          if (wFueling?.fuelingPlan) {
+            workoutFuelingPlan.value = wFueling.fuelingPlan
           }
         } catch (e) {
           console.error('Failed to fetch nutrition or settings for workout date', e)
