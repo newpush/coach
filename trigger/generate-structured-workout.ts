@@ -60,7 +60,8 @@ const workoutStructureSchema = {
                 type: 'object',
                 properties: { start: { type: 'number' }, end: { type: 'number' } },
                 required: ['start', 'end'],
-                description: 'For ramps: start and end % of LTHR'
+                description:
+                  'Target range as % of LTHR (e.g. start: 0.70, end: 0.80 for Zone 2 blocks or progression)'
               }
             }
           },
@@ -284,10 +285,11 @@ export const generateStructuredWorkoutTask = task({
     - Steps should have 'type', 'durationSeconds', 'name'.
     - ALWAYS include 'distance' (meters) for each step. If duration-based, ESTIMATE the distance based on the intensity/pace.
     - Use 'power' object if it's a power-based run (e.g. Stryd).
-    - CRITICAL: You MUST include a 'heartRate' object with 'value' (target % of LTHR, e.g. 0.85) for EVERY step (except Rest where it's optional but recommended).
+    - CRITICAL: You MUST include a 'heartRate' object for EVERY step (except Rest where it's optional but recommended).
+    - Prefer 'heartRate.range' for steady aerobic/endurance/tempo blocks (e.g. Zone 2 -> start: 0.70, end: 0.80). Use 'heartRate.value' mainly for short precise efforts.
     - HIGHLY RECOMMENDED: Include a 'pace' object with 'value' (target % of threshold pace) for active steps. Providing both 'heartRate' and 'pace' is preferred for running.
     - DO NOT rely solely on description for intensity. Even for "Easy Jog", provide an estimated HR intensity (e.g. 0.70).
-    - If pace based, put pace in 'description' AND provide the equivalent HR intensity in 'heartRate.value' (e.g. 5k pace ~ 1.05 intensity).
+    - If pace based, put pace in 'description' AND provide the equivalent HR intensity in 'heartRate.value' or 'heartRate.range' (e.g. 5k pace ~ 1.05 intensity).
     
     FOR SWIMMING (Swim):
     - Steps should ideally have 'distance' (meters) instead of or in addition to duration. If using duration, estimate distance.
