@@ -311,6 +311,16 @@
     layout: 'default'
   })
 
+  useHead({
+    title: 'Metabolic Strategy',
+    meta: [
+      {
+        name: 'description',
+        content: 'View your 7-day metabolic horizon, fueling periodization, and fluid balance.'
+      }
+    ]
+  })
+
   const loadingWave = ref(true)
   const loadingStrategy = ref(true)
   const loadingActiveFeed = ref(true)

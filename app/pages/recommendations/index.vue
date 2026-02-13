@@ -207,6 +207,17 @@
     layout: 'default'
   })
 
+  useHead({
+    title: 'Coach Recommendations',
+    meta: [
+      {
+        name: 'description',
+        content:
+          'Personalized AI-generated recommendations to optimize your training and performance.'
+      }
+    ]
+  })
+
   const toast = useToast()
 
   // State

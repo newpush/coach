@@ -298,6 +298,19 @@
   const userStore = useUserStore()
   const { formatDateUTC } = useFormat()
 
+  useHead({
+    title: computed(() => {
+      const date = nutrition.value?.date || (route.params.id as string)
+      return `Fueling Strategy - ${formatDateLabel(date)}`
+    }),
+    meta: [
+      {
+        name: 'description',
+        content: 'Detailed fueling timeline and metabolic status for your training day.'
+      }
+    ]
+  })
+
   // State
   const nutrition = ref<any>(null)
   const workouts = ref<any[]>([])

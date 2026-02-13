@@ -109,6 +109,11 @@
     middleware: 'auth' // Ensure user is logged in (but specific onboarding middleware handles the redirection logic)
   })
 
+  useHead({
+    title: 'Welcome',
+    meta: [{ name: 'robots', content: 'noindex' }]
+  })
+
   const { data: session, refresh } = useAuth()
   const acceptedTerms = ref(false)
   const acceptedHealth = ref(false)

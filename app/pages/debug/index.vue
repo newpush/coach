@@ -234,6 +234,11 @@
 <script setup lang="ts">
   import { format, getISOWeek } from 'date-fns'
 
+  useHead({
+    title: 'System Debugger',
+    meta: [{ name: 'robots', content: 'noindex' }]
+  })
+
   const { data: session } = useAuth()
   const { getUserLocalDate, formatDateUTC, formatUserDate, formatDate } = useFormat()
 
