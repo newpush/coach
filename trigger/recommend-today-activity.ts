@@ -314,7 +314,10 @@ export const recommendTodayActivityTask = task({
       }),
 
       // Current Fitness State
-      getCurrentFitnessSummary(userId),
+      getCurrentFitnessSummary(userId, undefined, {
+        adjustForTodayUncompletedPlannedTSS: true,
+        timezone: userTimezone
+      }),
 
       // Pinned/Focused recommendations
       recommendationRepository.list(userId, { isPinned: true, status: 'ACTIVE' }),
