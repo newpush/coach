@@ -3,13 +3,56 @@ import { nutritionRepository } from '../../../utils/repositories/nutritionReposi
 import { generateStructuredAnalysis } from '../../../utils/gemini'
 import { z } from 'zod'
 import { getProfileForItem } from '../../../utils/nutrition-domain/absorption'
-import { getUserTimezone, formatUserTime, getStartOfLocalDateUTC } from '../../../utils/date'
+import { getUserTimezone, getStartOfLocalDateUTC } from '../../../utils/date'
 import { metabolicService } from '../../../utils/services/metabolicService'
+import { getUserNutritionSettings } from '../../../utils/nutrition/settings'
 import {
   extractFluidIntakeMl,
   INTRA_WORKOUT_TARGET_ML_PER_HOUR,
   MEAL_LINKED_WATER_ML
 } from '../../../utils/nutrition/hydration'
+
+const DEFAULT_MEAL_TIMES: Record<'breakfast' | 'lunch' | 'dinner' | 'snacks', string> = {
+  breakfast: '07:00',
+  lunch: '12:00',
+  dinner: '18:00',
+  snacks: '15:00'
+}
+
+function pickMealScheduledTime(
+  mealType: 'breakfast' | 'lunch' | 'dinner' | 'snacks',
+  mealPattern: unknown
+): string {
+  if (!Array.isArray(mealPattern) || mealPattern.length === 0) return DEFAULT_MEAL_TIMES[mealType]
+
+  const pattern = mealPattern as Array<{ name?: string; time?: string }>
+  const normalizedType = mealType.toLowerCase()
+
+  const exact = pattern.find(
+    (slot) => typeof slot?.name === 'string' && slot.name.toLowerCase().trim() === normalizedType
+  )
+  if (exact?.time) return exact.time
+
+  const aliases: Record<string, string[]> = {
+    breakfast: ['breakfast', 'morning'],
+    lunch: ['lunch', 'noon', 'midday'],
+    dinner: ['dinner', 'supper', 'evening'],
+    snacks: ['snack', 'snacks']
+  }
+
+  const aliasHit = pattern.find((slot) => {
+    if (typeof slot?.name !== 'string') return false
+    const n = slot.name.toLowerCase()
+    return aliases[normalizedType]?.some((alias) => n.includes(alias))
+  })
+  if (aliasHit?.time) return aliasHit.time
+
+  const fallbackIndex: Record<string, number> = { breakfast: 0, lunch: 1, dinner: 2, snacks: 3 }
+  const byIndex = pattern[fallbackIndex[normalizedType] ?? 0]
+  if (byIndex?.time) return byIndex.time
+
+  return DEFAULT_MEAL_TIMES[mealType]
+}
 
 const LogSchema = z.object({
   query: z.string(),
@@ -64,6 +107,7 @@ export default defineEventHandler(async (event) => {
 
   const userId = (session.user as any).id
   const timezone = await getUserTimezone(userId)
+  const settings = await getUserNutritionSettings(userId)
   const id = getRouterParam(event, 'id')
   const body = await readBody(event)
   const { query, mealType } = LogSchema.parse(body)
@@ -137,9 +181,14 @@ export default defineEventHandler(async (event) => {
     let targetDateStr = dateStr
     let normalizedLoggedAt = item.logged_at
 
-    // If no time is provided, use current time in user's timezone
+    // If no time is provided, anchor to configured meal schedule.
     if (!normalizedLoggedAt) {
-      normalizedLoggedAt = formatUserTime(new Date(), timezone)
+      const effectiveMealType = (item.mealType || mealType || 'snacks') as
+        | 'breakfast'
+        | 'lunch'
+        | 'dinner'
+        | 'snacks'
+      normalizedLoggedAt = pickMealScheduledTime(effectiveMealType, settings.mealPattern)
     }
 
     if (normalizedLoggedAt.includes('T')) {
