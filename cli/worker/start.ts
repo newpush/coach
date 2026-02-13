@@ -108,6 +108,19 @@ export const startCommand = new Command('start')
           return { queuedCount }
         }
 
+        if (provider === 'oauth-generic') {
+          const { appName, clientId, payload, logId, secretMatched } = job.data
+          console.log(
+            chalk.cyan(`[OAuthJob ${job.id}]`) +
+              ` Received push for ${chalk.bold(appName)} (${clientId}). Secret Matched: ${secretMatched ? chalk.green('YES') : chalk.red('NO')}`
+          )
+
+          if (logId) {
+            await updateWebhookStatus(logId, 'PROCESSED', `Captured data for ${appName}`)
+          }
+          return { handled: true, appName }
+        }
+
         if (provider === 'whoop') {
           const { type, payload, headers } = job.data
           let { userId, logId } = job.data
