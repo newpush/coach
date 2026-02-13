@@ -441,8 +441,23 @@ export const IntervalsService = {
     const readinessScale = settings?.readinessScale || 'STANDARD'
     const sleepScoreScale = settings?.sleepScoreScale || 'STANDARD'
 
+    // Fetch historical data for normalization if using HRV4TRAINING
+    let baselineRawReadiness: number[] = []
+    if (readinessScale === 'HRV4TRAINING') {
+      const recentWellness = await wellnessRepository.getForUser(userId, {
+        limit: 60, // Get a bit more for a better baseline
+        orderBy: { date: 'desc' }
+      })
+      baselineRawReadiness = recentWellness
+        .map((w) => (w.rawJson as any)?.readiness)
+        .filter((v) => typeof v === 'number')
+    }
+
     let upsertedCount = 0
-    for (const wellness of wellnessData) {
+    // Sort wellness data by date ascending to ensure baseline updates correctly during backfills
+    const sortedWellness = [...wellnessData].sort((a, b) => a.id.localeCompare(b.id))
+
+    for (const wellness of sortedWellness) {
       // Force wellness date to UTC midnight (Intervals.icu returns 'YYYY-MM-DD' as id)
       // This prevents timezone-based shifting when converting to Date object
       const rawDate = new Date(wellness.id)
@@ -455,8 +470,20 @@ export const IntervalsService = {
         userId,
         wellnessDate,
         readinessScale,
-        sleepScoreScale
+        sleepScoreScale,
+        {
+          historicalRawReadiness: baselineRawReadiness
+        }
       )
+
+      // If using HRV4TRAINING, update baseline for next iteration
+      if (readinessScale === 'HRV4TRAINING' && typeof wellness.readiness === 'number') {
+        baselineRawReadiness.push(wellness.readiness)
+        // Keep baseline to last 60 entries
+        if (baselineRawReadiness.length > 60) {
+          baselineRawReadiness.shift()
+        }
+      }
 
       const { isNew } = await wellnessRepository.upsert(
         userId,

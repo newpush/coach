@@ -99,6 +99,26 @@ export async function buildAthleteContext(userId: string): Promise<{
   const readinessScale = intervalsSettings?.readinessScale || 'STANDARD'
   const sleepScoreScale = intervalsSettings?.sleepScoreScale || 'STANDARD'
 
+  // Fetch baseline for HRV4Training if needed
+  let hrv4tBaseline = null
+  if (readinessScale === 'HRV4TRAINING') {
+    const recentWellnessRaw = await wellnessRepository.getForUser(userId, {
+      limit: 30,
+      orderBy: { date: 'desc' }
+    })
+    const rawValues = recentWellnessRaw
+      .map((w) => (w.rawJson as any)?.readiness)
+      .filter((v) => typeof v === 'number')
+
+    if (rawValues.length >= 3) {
+      hrv4tBaseline = {
+        min: Math.min(...rawValues),
+        max: Math.max(...rawValues),
+        count: rawValues.length
+      }
+    }
+  }
+
   // Get user timezone
   const userTimezone = userProfile?.timezone || 'UTC'
   const todayDate = getUserLocalDate(userTimezone)
@@ -275,6 +295,10 @@ export async function buildAthleteContext(userId: string): Promise<{
     }
     if (settings.length > 0) {
       athleteContext += `- **Preferences**: ${settings.join(' | ')}\n`
+    }
+
+    if (hrv4tBaseline) {
+      athleteContext += `- **HRV4Training Baseline (Last 30 days)**: Min=${hrv4tBaseline.min}, Max=${hrv4tBaseline.max} (based on ${hrv4tBaseline.count} entries). *Note: Readiness scores below are normalized to 1-100% based on this individual range.*\n`
     }
 
     // Sport Specific Settings & Zones
@@ -483,6 +507,9 @@ export async function buildAthleteContext(userId: string): Promise<{
           // 0-100
           // DB stores 1-10. We need to convert to 0-100.
           metrics.push(`Readiness: ${wellness.readiness * 10}%`)
+        } else if (readinessScale === 'HRV4TRAINING') {
+          // DB already stores 1-100 for HRV4TRAINING
+          metrics.push(`Readiness: ${wellness.readiness}%`)
         } else {
           // TEN_POINT, POLAR (1-6 ~ 1-10 normalized), or default fallback
           metrics.push(`Readiness: ${wellness.readiness}/10`)

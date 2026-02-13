@@ -1321,7 +1321,10 @@ export function normalizeIntervalsWellness(
   userId: string,
   date: Date,
   readinessScale: string = 'STANDARD',
-  sleepScoreScale: string = 'STANDARD'
+  sleepScoreScale: string = 'STANDARD',
+  options?: {
+    historicalRawReadiness?: number[]
+  }
 ) {
   let readiness = wellness.readiness || null
 
@@ -1329,26 +1332,48 @@ export function normalizeIntervalsWellness(
   if (readiness !== null) {
     if (readinessScale === 'POLAR') {
       // Map 1-6 scale to 1-10
-      // 1 -> 1.6
-      // 6 -> 10
       readiness = Math.round((readiness / 6) * 10)
+      readiness = Math.max(1, Math.min(10, readiness))
     } else if (readinessScale === 'TEN_POINT') {
       // Already 1-10, ensure it's capped
-      if (readiness > 10) readiness = Math.round(readiness / 10) // Handle accidental 0-100 inputs
+      if (readiness > 10) readiness = Math.round(readiness / 10)
+      readiness = Math.max(1, Math.min(10, readiness))
+    } else if (readinessScale === 'HRV4TRAINING') {
+      // HRV4Training uses absolute values (e.g., 6.8-8.0)
+      // Normalize to 0-100 based on historical distribution if provided
+      const history = options?.historicalRawReadiness || []
+      const allValues = [...history, readiness].filter((v) => v !== null && v !== undefined)
+
+      if (allValues.length >= 3) {
+        const min = Math.min(...allValues)
+        const max = Math.max(...allValues)
+        const range = max - min
+
+        if (range > 0) {
+          // Normalize to 1-100 range
+          readiness = Math.round(((readiness - min) / range) * 99) + 1
+        } else {
+          // If no range, default to middle (50)
+          readiness = 50
+        }
+      } else {
+        // Not enough data, can't normalize properly, but let's not treat it as 1-10
+        // Maybe just keep it as is? Or default to 50?
+        // User said it floats in narrow band. Without history we can't do much.
+        // Let's at least ensure it's > 10 so UI treats it as % if possible,
+        // but raw values like 7.6 are < 10.
+        // If we don't have history, maybe we can't support HRV4Training properly yet.
+        // For now, let's keep it raw if no history, but clamp it to 1-100 for DB safety if it was somehow larger.
+      }
+      // Clamping for HRV4Training is 1-100
+      readiness = Math.max(1, Math.min(100, readiness))
     } else {
       // STANDARD (0-100) or Default
-      // If we receive a small number (<=10) but expect STANDARD (0-100), convert it?
-      // No, "STANDARD" implies we expect 0-100 inputs from Oura/Whoop,
-      // BUT if Intervals sends 1-10, we usually map to 1-10 in our DB.
-      // Wait, our DB field 'readiness' is Int? (1-10).
-      // So if input is 0-100, we should convert to 1-10.
       if (readiness > 10) {
         readiness = Math.round(readiness / 10)
       }
+      readiness = Math.max(1, Math.min(10, readiness))
     }
-
-    // Safety clamp
-    readiness = Math.max(1, Math.min(10, readiness))
   }
 
   let sleepScore = wellness.sleepScore || null
@@ -1397,7 +1422,7 @@ export function normalizeIntervalsWellness(
 
     // Recovery
     readiness: readiness,
-    recoveryScore: null, // Not directly available from Intervals.icu
+    recoveryScore: readiness && readiness > 10 ? readiness : readiness ? readiness * 10 : null, // Map 1-10 to 10-100 if needed, or use direct % if > 10
 
     // Subjective
     soreness: mapIntervalsSoreness(wellness.soreness),
