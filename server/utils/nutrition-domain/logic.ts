@@ -1,5 +1,5 @@
 import { differenceInMinutes } from 'date-fns'
-import { fromZonedTime, format } from 'date-fns-tz'
+import { fromZonedTime, toZonedTime, formatInTimeZone } from 'date-fns-tz'
 import { getWorkoutDate } from './workout'
 import {
   getProfileForItem,
@@ -254,11 +254,12 @@ export function calculateEnergyTimeline(
       totalKcal: number
       profile: AbsorptionProfile
     }>
+    now?: Date
   } = {}
 ): EnergyPoint[] {
   const dateStr = getDateStr(nutritionRecord.date)
   const dayStart = fromZonedTime(`${dateStr}T00:00:00`, timezone)
-  const now = new Date()
+  const now = options.now || new Date()
 
   const points: EnergyPoint[] = []
   const INTERVAL = 15
@@ -336,7 +337,7 @@ export function calculateEnergyTimeline(
   })
 
   const finalMeals = [...actualMeals]
-  const todayStr = new Date().toISOString().split('T')[0]!
+  const todayStr = formatInTimeZone(now, timezone, 'yyyy-MM-dd')
   const isFutureDay = dateStr > todayStr
 
   // 2. SYNTHETIC REFILLS & PROBABLE INTAKE:
@@ -520,7 +521,7 @@ export function calculateEnergyTimeline(
   const manualFluidHours = new Set(
     finalMeals
       .filter((meal) => !meal.isSynthetic && (meal.totalFluid || 0) > 0)
-      .map((meal) => format(meal.time, 'yyyy-MM-dd-HH', { timeZone: timezone }))
+      .map((meal) => formatInTimeZone(meal.time, timezone, 'yyyy-MM-dd-HH'))
   )
 
   for (let i = 0; i <= TOTAL_POINTS; i++) {
@@ -564,7 +565,7 @@ export function calculateEnergyTimeline(
     const totalEventFluid = intervalEvents.reduce((sum, e) => sum + (e.fluid || 0), 0)
 
     points.push({
-      time: format(currentTime, 'HH:mm', { timeZone: timezone }),
+      time: formatInTimeZone(currentTime, timezone, 'HH:mm'),
       timestamp: currentTime.getTime(),
       level: Math.round((currentGrams / C_cap) * 100),
       kcalBalance: Math.round(cumulativeKcalDelta),
@@ -599,8 +600,8 @@ export function calculateEnergyTimeline(
       let intervalGramsIn = 0
       let intervalKcalIn = 0
       let intervalFluidIn = 0
-      const hourKey = format(currentTime, 'yyyy-MM-dd-HH', { timeZone: timezone })
-      const localHour = parseInt(format(currentTime, 'H', { timeZone: timezone }), 10)
+      const hourKey = formatInTimeZone(currentTime, timezone, 'yyyy-MM-dd-HH')
+      const localHour = parseInt(formatInTimeZone(currentTime, timezone, 'H'), 10)
       const isPassiveWindow =
         localHour >= PASSIVE_REHYDRATION_START_HOUR && localHour < PASSIVE_REHYDRATION_END_HOUR
 

@@ -133,7 +133,8 @@ export const metabolicService = {
       {
         startingGlycogenPercentage: startingGlycogen,
         startingFluidDeficit: startingFluid,
-        crossDayMeals: simulationMeals
+        crossDayMeals: simulationMeals,
+        now: currentTime
       }
     )
 
