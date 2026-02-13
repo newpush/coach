@@ -35,7 +35,17 @@ export default defineEventHandler(async (event) => {
   const userId = (session.user as any).id
   const id = getRouterParam(event, 'id')
   const body = await readBody(event)
-  const { action, mealType, item, itemId } = PatchSchema.parse(body)
+
+  let parsed: any
+  try {
+    parsed = PatchSchema.parse(body)
+  } catch (err: any) {
+    throw createError({
+      statusCode: 400,
+      message: `Invalid request body: ${err.message}`
+    })
+  }
+  const { action, mealType, item, itemId } = parsed
 
   let nutrition: any = null
   if (/^\d{4}-\d{2}-\d{2}$/.test(id!)) {
@@ -104,11 +114,10 @@ export default defineEventHandler(async (event) => {
           // Found it in another meal!
           // We need to remove it from there and add it to the target mealType
           const [foundItem] = otherItems.splice(otherIndex, 1)
-          await nutritionRepository.update(nutrition.id, { [m]: otherItems })
+          nutrition = await nutritionRepository.update(nutrition.id, { [m]: otherItems })
 
-          // Re-fetch nutrition to get updated state for other meals
-          const updatedNutrition = await nutritionRepository.getByIdInternal(nutrition.id)
-          index = updatedItems.length // Add to end of current mealType
+          // Update the local list and set the index
+          index = updatedItems.length
           updatedItems.push(foundItem!)
           break
         }
