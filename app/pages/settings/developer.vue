@@ -76,6 +76,35 @@
       </div>
     </UCard>
 
+    <!-- Bug Reports Link -->
+    <UCard>
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div class="flex items-start gap-3">
+          <div class="p-2 bg-red-50 dark:bg-red-900/20 rounded-lg shrink-0">
+            <UIcon name="i-heroicons-bug-ant" class="w-6 h-6 text-red-600 dark:text-red-400" />
+          </div>
+          <div class="min-w-0">
+            <h3 class="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-widest">
+              Bug Reports
+            </h3>
+            <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+              Track the status and resolution of the issues you've reported.
+            </p>
+          </div>
+        </div>
+        <UButton
+          to="/settings/bug-reports"
+          color="neutral"
+          variant="outline"
+          icon="i-heroicons-arrow-right"
+          size="sm"
+          class="font-bold shrink-0"
+        >
+          Track Issues
+        </UButton>
+      </div>
+    </UCard>
+
     <!-- OAuth Developer Portal Link -->
     <UCard>
       <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
