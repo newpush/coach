@@ -32,8 +32,91 @@
           {{ formatDay(day.dateKey) }}
         </span>
       </div>
+
+      <div class="sm:hidden space-y-2 px-4">
+        <div
+          v-for="window in day.windows"
+          :id="`window-mobile-${window.dateKey}-${window.type}-${startTimeKey(window.startTime)}`"
+          :key="`mobile-${window.dateKey}-${window.type}-${window.startTime}`"
+          class="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900/50 p-3 space-y-2"
+        >
+          <div class="flex items-start justify-between gap-3">
+            <div class="min-w-0 space-y-1">
+              <div class="flex items-center gap-1.5">
+                <span class="text-xs font-bold text-gray-700 dark:text-gray-300">
+                  {{ formatTime(window.startTime) }}
+                </span>
+                <span class="text-[10px] text-gray-400">•</span>
+                <span
+                  class="text-xs font-black uppercase tracking-tight"
+                  :class="getTypeColor(window.type)"
+                >
+                  {{ window.label }}
+                </span>
+              </div>
+              <div class="flex items-center gap-3 text-[10px] font-bold uppercase">
+                <span class="text-primary-600 dark:text-primary-400">
+                  {{ window.isLocked ? window.lockedMeal.totals.carbs : window.targetCarbs }}g carbs
+                </span>
+                <span class="text-gray-600 dark:text-gray-300">
+                  {{ window.isLocked ? window.lockedMeal.totals.protein : window.targetProtein }}g
+                  prot
+                </span>
+              </div>
+              <p v-if="window.workoutTitle" class="text-[10px] font-medium text-gray-500 truncate">
+                ⚓ {{ window.workoutTitle }}
+              </p>
+              <p
+                v-else-if="window.lockedMeal"
+                class="text-[10px] font-bold text-success-600 dark:text-success-400 truncate"
+              >
+                🍴 {{ window.lockedMeal.title }}
+              </p>
+            </div>
+            <UButton
+              size="xs"
+              color="neutral"
+              variant="ghost"
+              :icon="window.isLocked ? 'i-lucide-pencil' : 'i-lucide-sparkles'"
+              @click="emitSuggestion(day, window)"
+            />
+          </div>
+
+          <p
+            v-if="window.isLocked && hasLockedAdvice(window)"
+            class="text-xs text-gray-600 dark:text-gray-400 leading-relaxed"
+          >
+            {{ formatLockedAdvice(window) }}
+          </p>
+          <p v-else class="text-xs text-gray-600 dark:text-gray-400 leading-relaxed">
+            {{ window.advice }}
+          </p>
+        </div>
+
+        <div
+          class="rounded-xl border border-gray-200 dark:border-gray-800 bg-gray-50/80 dark:bg-gray-800/40 p-3"
+        >
+          <div class="text-[10px] font-black uppercase tracking-wide text-gray-600">
+            Daily Total
+          </div>
+          <div class="mt-1 flex items-center gap-2">
+            <span class="text-xs font-black text-primary-700 dark:text-primary-300"
+              >{{ day.totalCarbs }}g carbs</span
+            >
+            <span class="text-[10px] text-gray-400">•</span>
+            <span class="text-xs font-bold text-gray-700 dark:text-gray-300"
+              >{{ day.totalProtein }}g protein</span
+            >
+          </div>
+          <div class="mt-1 text-[10px] text-gray-500">
+            {{ day.windows.length }} windows • {{ day.plannedCarbs }}g planned •
+            {{ Math.max(0, day.totalCarbs - day.plannedCarbs) }}g remaining
+          </div>
+        </div>
+      </div>
+
       <div
-        class="overflow-x-auto border-y sm:border border-gray-200 dark:border-gray-800 sm:rounded-xl bg-white dark:bg-gray-900/50"
+        class="hidden sm:block overflow-x-auto border-y sm:border border-gray-200 dark:border-gray-800 sm:rounded-xl bg-white dark:bg-gray-900/50"
       >
         <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-800">
           <thead class="bg-gray-50 dark:bg-gray-800/50">
@@ -68,7 +151,7 @@
           <tbody class="divide-y divide-gray-100 dark:divide-gray-800">
             <tr
               v-for="window in day.windows"
-              :id="`window-${window.dateKey}`"
+              :id="`window-${window.dateKey}-${window.type}-${startTimeKey(window.startTime)}`"
               :key="`${window.dateKey}-${window.type}-${window.startTime}`"
               class="group hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors"
             >
@@ -119,41 +202,38 @@
                 </div>
               </td>
               <td class="px-4 py-4">
-                <div class="flex flex-col items-center gap-1">
-                  <div class="flex items-center gap-2">
-                    <div class="flex flex-col items-center">
-                      <span
-                        class="text-xs font-black"
-                        :class="
-                          window.isLocked
-                            ? 'text-success-600 dark:text-success-400'
-                            : 'text-primary-600 dark:text-primary-400'
-                        "
-                        >{{
-                          window.isLocked ? window.lockedMeal.totals.carbs : window.targetCarbs
-                        }}g</span
-                      >
-                      <span class="text-[8px] text-gray-400 uppercase font-bold">Carbs</span>
-                    </div>
-                    <div class="w-px h-4 bg-gray-200 dark:bg-gray-700 mx-1" />
-                    <div class="flex flex-col items-center">
-                      <span class="text-xs font-bold text-gray-700 dark:text-gray-300"
-                        >{{
-                          window.isLocked ? window.lockedMeal.totals.protein : window.targetProtein
-                        }}g</span
-                      >
-                      <span class="text-[8px] text-gray-400 uppercase font-bold">Prot</span>
-                    </div>
+                <div class="mx-auto grid w-[168px] grid-cols-[72px_24px_72px] items-center">
+                  <div class="flex flex-col items-end">
+                    <span
+                      class="text-xs font-black"
+                      :class="
+                        window.isLocked
+                          ? 'text-success-600 dark:text-success-400'
+                          : 'text-primary-600 dark:text-primary-400'
+                      "
+                      >{{
+                        window.isLocked ? window.lockedMeal.totals.carbs : window.targetCarbs
+                      }}g</span
+                    >
+                    <span class="text-[8px] text-gray-400 uppercase font-bold">Carbs</span>
+                  </div>
+                  <div class="mx-auto h-4 w-px bg-gray-200 dark:bg-gray-700" />
+                  <div class="flex flex-col items-start">
+                    <span class="text-xs font-bold text-gray-700 dark:text-gray-300"
+                      >{{
+                        window.isLocked ? window.lockedMeal.totals.protein : window.targetProtein
+                      }}g</span
+                    >
+                    <span class="text-[8px] text-gray-400 uppercase font-bold">Prot</span>
                   </div>
                 </div>
               </td>
               <td class="px-4 py-4">
                 <p
-                  v-if="window.isLocked"
+                  v-if="window.isLocked && hasLockedAdvice(window)"
                   class="text-xs text-gray-600 dark:text-gray-400 leading-relaxed max-w-xs font-medium"
                 >
-                  {{ window.lockedMeal.absorptionType }} absorption •
-                  {{ window.lockedMeal.prepMinutes }}m prep.
+                  {{ formatLockedAdvice(window) }}
                 </p>
                 <p v-else class="text-xs text-gray-600 dark:text-gray-400 leading-relaxed max-w-xs">
                   {{ window.advice }}
@@ -177,12 +257,12 @@
                 Daily Total
               </td>
               <td class="px-4 py-3">
-                <div class="flex items-center justify-center gap-2">
-                  <span class="text-xs font-black text-primary-700 dark:text-primary-300"
+                <div class="mx-auto grid w-[168px] grid-cols-[72px_24px_72px] items-center">
+                  <span class="text-right text-xs font-black text-primary-700 dark:text-primary-300"
                     >{{ day.totalCarbs }}g carbs</span
                   >
-                  <span class="text-[10px] text-gray-400">•</span>
-                  <span class="text-xs font-bold text-gray-700 dark:text-gray-300"
+                  <span class="text-center text-[10px] text-gray-400">•</span>
+                  <span class="text-left text-xs font-bold text-gray-700 dark:text-gray-300"
                     >{{ day.totalProtein }}g protein</span
                   >
                 </div>
@@ -288,6 +368,21 @@
     const parsed = parseISO(value)
     if (Number.isNaN(parsed.getTime())) return value
     return parsed.toISOString()
+  }
+
+  function formatLockedAdvice(window: any) {
+    const parts: string[] = []
+    const absorptionType = String(window.lockedMeal?.absorptionType || '').trim()
+    const prepMinutes = Number(window.lockedMeal?.prepMinutes || 0)
+
+    if (absorptionType) parts.push(`${absorptionType} absorption`)
+    if (prepMinutes > 0) parts.push(`${prepMinutes}m prep`)
+
+    return parts.join(' • ')
+  }
+
+  function hasLockedAdvice(window: any) {
+    return formatLockedAdvice(window).length > 0
   }
 
   function buildWindowAssignments(day: any, selectedWindow: any) {
