@@ -44,8 +44,53 @@
           </div>
         </div>
 
+        <!-- Locked / Planned Meal Display -->
         <div
-          v-if="displayRecommendation"
+          v-if="feed.nextWindow.lockedMeal"
+          class="p-3 bg-success-50 dark:bg-success-900/10 rounded-lg border border-success-200 dark:border-success-800"
+        >
+          <div class="flex items-center justify-between mb-2">
+            <div class="flex items-center gap-2">
+              <UIcon name="i-lucide-lock" class="size-4 text-success-500" />
+              <span class="text-xs font-bold text-success-700 dark:text-success-300"
+                >Planned Meal</span
+              >
+            </div>
+            <UButton
+              size="xs"
+              color="neutral"
+              variant="ghost"
+              icon="i-lucide-pencil"
+              @click="$emit('open-ai-helper', feed.nextWindow)"
+            />
+          </div>
+
+          <div class="space-y-2">
+            <p class="text-sm font-bold text-gray-900 dark:text-white">
+              {{ feed.nextWindow.lockedMeal.title }}
+            </p>
+            <div class="flex items-center gap-2">
+              <UBadge color="success" variant="subtle" size="xs">
+                {{ feed.nextWindow.lockedMeal.totals.carbs }}g Carbs
+              </UBadge>
+              <UBadge color="neutral" variant="subtle" size="xs">
+                {{ feed.nextWindow.lockedMeal.absorptionType }}
+              </UBadge>
+            </div>
+            <div class="flex flex-wrap gap-1 mt-1">
+              <span
+                v-for="ing in feed.nextWindow.lockedMeal.ingredients"
+                :key="ing.item"
+                class="text-[10px] text-gray-500 bg-white dark:bg-gray-800 px-1.5 py-0.5 rounded border border-gray-100 dark:border-gray-800"
+              >
+                {{ ing.quantity }}{{ ing.unit }} {{ ing.item }}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <div
+          v-else-if="displayRecommendation"
           class="p-3 bg-primary-50 dark:bg-primary-900/10 rounded-lg border border-dashed border-primary-200 dark:border-primary-800"
         >
           <div class="flex items-center gap-2 mb-2">

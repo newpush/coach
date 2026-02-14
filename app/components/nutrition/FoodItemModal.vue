@@ -96,13 +96,15 @@
   const props = defineProps<{
     nutritionId?: string
     date: string
+    initialData?: any
+    mode?: 'add' | 'edit'
   }>()
 
   const emit = defineEmits(['updated'])
 
-  const isOpen = ref(false)
+  const isOpen = defineModel<boolean>('open', { default: false })
   const loading = ref(false)
-  const isEditing = ref(false)
+  const isEditing = computed(() => props.mode === 'edit')
 
   const mealTypes = [
     { label: 'Breakfast', value: 'breakfast' },
@@ -142,7 +144,37 @@
     absorptionType: 'BALANCED'
   })
 
-  // Watch name to suggest absorption type
+  const currentItemId = ref<string | null>(null)
+
+  watch(isOpen, (newValue) => {
+    if (newValue) {
+      const { formatDate, getUserLocalTime } = useFormat()
+      if (props.initialData && props.mode === 'edit') {
+        currentItemId.value = props.initialData.id
+        state.value = {
+          ...props.initialData,
+          mealType: props.initialData.mealType || props.initialData.meal || 'breakfast'
+        }
+        if (state.value.logged_at && state.value.logged_at.includes('T')) {
+          state.value.logged_at = formatDate(state.value.logged_at, 'HH:mm')
+        }
+      } else {
+        currentItemId.value = null
+        state.value = {
+          name: '',
+          mealType: props.initialData?.mealType || 'breakfast',
+          calories: 0,
+          carbs: 0,
+          protein: 0,
+          fat: 0,
+          amount: 1,
+          unit: 'serving',
+          logged_at: getUserLocalTime()
+        }
+      }
+    }
+  })
+
   watch(
     () => state.value.name,
     (newName) => {
@@ -153,45 +185,12 @@
     }
   )
 
-  const currentItemId = ref<string | null>(null)
-
-  function open(mode: 'add' | 'edit', initialData?: any) {
-    const { formatDate, getUserLocalTime } = useFormat()
-    isEditing.value = mode === 'edit'
-    if (initialData) {
-      currentItemId.value = initialData.id
-      state.value = {
-        ...initialData,
-        mealType: initialData.mealType || initialData.meal || 'breakfast'
-      }
-      // If logged_at is a full ISO string, extract the time HH:mm in user's timezone
-      if (state.value.logged_at && state.value.logged_at.includes('T')) {
-        state.value.logged_at = formatDate(state.value.logged_at, 'HH:mm')
-      }
-    } else {
-      currentItemId.value = null
-      state.value = {
-        name: '',
-        mealType: initialData?.mealType || 'breakfast',
-        calories: 0,
-        carbs: 0,
-        protein: 0,
-        fat: 0,
-        amount: 1,
-        unit: 'serving',
-        logged_at: getUserLocalTime()
-      }
-    }
-    isOpen.value = true
-  }
-
   async function onSubmit() {
     loading.value = true
     try {
       const { getUserDateFromLocal } = useFormat()
       const payload = { ...state.value }
 
-      // If we have a local HH:mm time, convert it to a UTC ISO string before sending to API
       if (payload.logged_at && /^\d{2}:\d{2}$/.test(payload.logged_at)) {
         const dateObj = getUserDateFromLocal(props.date, payload.logged_at)
         if (!isNaN(dateObj.getTime())) {
@@ -239,6 +238,4 @@
       loading.value = false
     }
   }
-
-  defineExpose({ open })
 </script>

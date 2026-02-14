@@ -190,7 +190,6 @@
                   ]"
                   size="xs"
                   class="w-32"
-                  @update:model-value="console.log('[FuelingCard] View switched to:', $event)"
                 />
               </div>
               <NutritionLiveEnergyChart
@@ -422,22 +421,24 @@
   />
 
   <NutritionFoodItemModal
-    ref="itemModal"
+    v-model:open="showItemModal"
     :nutrition-id="nutrition?.id"
     :date="nutrition?.date || formatDateUTC(new Date(), 'yyyy-MM-dd')"
+    :mode="modalMode"
+    :initial-data="modalInitialData"
     @updated="emit('refresh')"
   />
   <NutritionFoodAiModal
-    ref="aiModal"
+    v-model:open="showAiModal"
     :nutrition-id="nutrition?.id"
     :date="nutrition?.date || formatDateUTC(new Date(), 'yyyy-MM-dd')"
+    :initial-context="aiModalContext"
     @updated="emit('refresh')"
   />
 </template>
 
 <script setup lang="ts">
   import { mapNutritionToTimeline } from '~/utils/nutrition-timeline'
-  import { calculateGlycogenState, calculateEnergyTimeline } from '~/utils/nutrition-logic'
   import { ABSORPTION_PROFILES, type AbsorptionType } from '~/utils/nutrition-absorption'
 
   const props = defineProps<{
@@ -463,8 +464,11 @@
   const isHydrationExplainOpen = ref(false)
   const selectedMacro = ref<any>(null)
 
-  const itemModal = ref<any>(null)
-  const aiModal = ref<any>(null)
+  const showItemModal = ref(false)
+  const showAiModal = ref(false)
+  const modalMode = ref<'add' | 'edit'>('add')
+  const modalInitialData = ref<any>(null)
+  const aiModalContext = ref<any>(null)
 
   const energyViewIdx = ref('0') // '0': %, '1': kcal, '2': carbs
   const energyViewMode = computed(() => {
@@ -485,7 +489,10 @@
     } else if (event.type === 'POST_WORKOUT') {
       mealType = 'lunch'
     }
-    itemModal.value?.open('add', { mealType })
+
+    modalMode.value = 'add'
+    modalInitialData.value = { mealType }
+    showItemModal.value = true
   }
 
   function handleAddItemAi(event: { type: string; meals?: string[] }) {
@@ -500,11 +507,15 @@
     } else if (event.type === 'POST_WORKOUT') {
       mealType = 'lunch'
     }
-    aiModal.value?.open(mealType)
+
+    aiModalContext.value = { mealType }
+    showAiModal.value = true
   }
 
   function handleEditItem(item: any) {
-    itemModal.value?.open('edit', item)
+    modalMode.value = 'edit'
+    modalInitialData.value = item
+    showItemModal.value = true
   }
 
   function showMacroExplain(label: string) {
@@ -565,70 +576,47 @@
 
   const energyPoints = computed(() => {
     // Priority: Server-provided points (consistent with metabolic chain)
-    if (props.nutrition?.energyPoints && props.nutrition.energyPoints.length > 0) {
-      return props.nutrition.energyPoints
+    return props.nutrition?.energyPoints || []
+  })
+
+  // Metabolic Ghost Line - Fetched from server
+  const ghostPoints = ref<any[]>([])
+  const loadingGhost = ref(false)
+
+  async function fetchGhostPoints() {
+    const mealRec = mealRecommendation.value
+    if (!mealRec || !props.nutrition) {
+      ghostPoints.value = []
+      return
     }
 
-    if (!props.nutrition || !props.settings) return []
+    loadingGhost.value = true
+    try {
+      const { points } = await $fetch<any>('/api/nutrition/simulate-impact', {
+        method: 'POST',
+        body: {
+          date: props.nutrition.date,
+          carbs: mealRec.carbs,
+          absorptionType: mealRec.absorptionType
+        }
+      })
+      ghostPoints.value = points
+    } catch (e) {
+      console.error('Failed to fetch ghost points:', e)
+      ghostPoints.value = []
+    } finally {
+      loadingGhost.value = false
+    }
+  }
 
-    const { timezone } = useFormat()
-
-    return calculateEnergyTimeline(
-      props.nutrition,
-      props.workouts || [],
-      props.settings,
-      timezone.value,
-      undefined,
-      {
-        startingGlycogenPercentage: props.nutrition.startingGlycogen,
-        startingFluidDeficit: props.nutrition.startingFluid
-      }
-    )
-  })
-
-  // Metabolic Ghost Line Calculation
-
-  const ghostPoints = computed(() => {
-    const mealRec = mealRecommendation.value
-
-    if (!mealRec || !props.nutrition || !props.settings) return []
-
-    const { timezone } = useFormat()
-
-    const now = new Date()
-
-    // Simulate adding the recommended meal 15 mins from now
-
-    const ghostTime = new Date(now.getTime() + 15 * 60000)
-
-    return calculateEnergyTimeline(
-      props.nutrition,
-
-      props.workouts || [],
-
-      props.settings,
-
-      timezone.value,
-
-      {
-        totalCarbs: mealRec.carbs || 30,
-
-        totalKcal: (mealRec.carbs || 30) * 4,
-
-        profile:
-          ABSORPTION_PROFILES[mealRec.absorptionType as AbsorptionType] ||
-          ABSORPTION_PROFILES.BALANCED,
-
-        time: ghostTime
-      },
-
-      {
-        startingGlycogenPercentage: props.nutrition.startingGlycogen,
-
-        startingFluidDeficit: props.nutrition.startingFluid
-      }
-    )
-  })
+  // Watch for recommendation changes to refresh ghost line
+  watch(
+    mealRecommendation,
+    () => {
+      fetchGhostPoints()
+    },
+    { immediate: true }
+  )
 
   const currentLevel = computed(() => {
     const points = energyPoints.value
@@ -668,27 +656,16 @@
       }
     }
 
-    if (!props.nutrition) {
-      return {
-        percentage: 85,
-        advice: 'Loading...',
-        state: 1,
-        breakdown: {
-          midnightBaseline: 80,
-          replenishment: { value: 5, actualCarbs: 0, targetCarbs: 300 },
-          depletion: []
-        }
+    return {
+      percentage: 85,
+      advice: 'Loading...',
+      state: 1,
+      breakdown: {
+        midnightBaseline: 80,
+        replenishment: { value: 5, actualCarbs: 0, targetCarbs: 300 },
+        depletion: []
       }
     }
-    const { timezone } = useFormat()
-    return calculateGlycogenState(
-      props.nutrition,
-      props.workouts || [],
-      props.settings,
-      timezone.value,
-      new Date(),
-      props.nutrition.startingGlycogen
-    )
   })
 
   const tankPercentage = computed(() => glycogenState.value.percentage)

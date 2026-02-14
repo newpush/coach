@@ -69,7 +69,7 @@
             <tr
               v-for="window in day.windows"
               :id="`window-${window.dateKey}`"
-              :key="window.dateKey"
+              :key="`${window.dateKey}-${window.type}-${window.startTime}`"
               class="group hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors"
             >
               <td class="px-4 py-4 whitespace-nowrap">
@@ -87,7 +87,16 @@
                       {{ window.label }}
                     </span>
                     <UBadge
-                      v-if="window.isSynthetic"
+                      v-if="window.isLocked"
+                      size="xs"
+                      color="success"
+                      variant="subtle"
+                      class="text-[8px] px-1 py-0 uppercase"
+                      icon="i-lucide-lock"
+                      >Locked</UBadge
+                    >
+                    <UBadge
+                      v-else-if="window.isSynthetic"
                       size="xs"
                       color="neutral"
                       variant="subtle"
@@ -101,21 +110,37 @@
                   >
                     ⚓ {{ window.workoutTitle }}
                   </span>
+                  <span
+                    v-else-if="window.lockedMeal"
+                    class="text-[10px] font-bold text-success-600 dark:text-success-400 truncate max-w-[120px]"
+                  >
+                    🍴 {{ window.lockedMeal.title }}
+                  </span>
                 </div>
               </td>
               <td class="px-4 py-4">
                 <div class="flex flex-col items-center gap-1">
                   <div class="flex items-center gap-2">
                     <div class="flex flex-col items-center">
-                      <span class="text-xs font-black text-primary-600 dark:text-primary-400"
-                        >{{ window.targetCarbs }}g</span
+                      <span
+                        class="text-xs font-black"
+                        :class="
+                          window.isLocked
+                            ? 'text-success-600 dark:text-success-400'
+                            : 'text-primary-600 dark:text-primary-400'
+                        "
+                        >{{
+                          window.isLocked ? window.lockedMeal.totals.carbs : window.targetCarbs
+                        }}g</span
                       >
                       <span class="text-[8px] text-gray-400 uppercase font-bold">Carbs</span>
                     </div>
                     <div class="w-px h-4 bg-gray-200 dark:bg-gray-700 mx-1" />
                     <div class="flex flex-col items-center">
                       <span class="text-xs font-bold text-gray-700 dark:text-gray-300"
-                        >{{ window.targetProtein }}g</span
+                        >{{
+                          window.isLocked ? window.lockedMeal.totals.protein : window.targetProtein
+                        }}g</span
                       >
                       <span class="text-[8px] text-gray-400 uppercase font-bold">Prot</span>
                     </div>
@@ -123,7 +148,14 @@
                 </div>
               </td>
               <td class="px-4 py-4">
-                <p class="text-xs text-gray-600 dark:text-gray-400 leading-relaxed max-w-xs">
+                <p
+                  v-if="window.isLocked"
+                  class="text-xs text-gray-600 dark:text-gray-400 leading-relaxed max-w-xs font-medium"
+                >
+                  {{ window.lockedMeal.absorptionType }} absorption •
+                  {{ window.lockedMeal.prepMinutes }}m prep.
+                </p>
+                <p v-else class="text-xs text-gray-600 dark:text-gray-400 leading-relaxed max-w-xs">
                   {{ window.advice }}
                 </p>
               </td>
@@ -132,13 +164,16 @@
                   size="xs"
                   color="neutral"
                   variant="ghost"
-                  icon="i-lucide-sparkles"
-                  @click="$emit('suggest', window)"
+                  :icon="window.isLocked ? 'i-lucide-pencil' : 'i-lucide-sparkles'"
+                  @click="emitSuggestion(day, window)"
                 />
               </td>
             </tr>
             <tr class="bg-gray-50/80 dark:bg-gray-800/40">
-              <td class="px-4 py-3 text-[10px] font-black uppercase tracking-wide text-gray-600" colspan="2">
+              <td
+                class="px-4 py-3 text-[10px] font-black uppercase tracking-wide text-gray-600"
+                colspan="2"
+              >
                 Daily Total
               </td>
               <td class="px-4 py-3">
@@ -153,7 +188,13 @@
                 </div>
               </td>
               <td class="px-4 py-3 text-[10px] text-gray-500">
-                {{ day.windows.length }} windows
+                <div class="flex flex-col gap-0.5">
+                  <span>{{ day.windows.length }} windows</span>
+                  <span class="text-[9px] uppercase tracking-wider">
+                    {{ day.plannedCarbs }}g planned •
+                    {{ Math.max(0, day.totalCarbs - day.plannedCarbs) }}g remaining
+                  </span>
+                </div>
               </td>
               <td class="px-4 py-3" />
             </tr>
@@ -171,7 +212,7 @@
     windows: any[]
   }>()
 
-  defineEmits(['export-grocery', 'suggest'])
+  const emit = defineEmits(['export-grocery', 'suggest'])
 
   const filteredWindows = computed(() => {
     // We show the next 8 items, or more if a specific day is selected and we want to scroll
@@ -182,11 +223,18 @@
   const groupedDays = computed(() => {
     const groups = new Map<
       string,
-      { dateKey: string; windows: any[]; totalCarbs: number; totalProtein: number }
+      {
+        dateKey: string
+        windows: any[]
+        totalCarbs: number
+        totalProtein: number
+        plannedCarbs: number
+        plannedProtein: number
+      }
     >()
 
     for (const window of filteredWindows.value) {
-      const dateKey = format(parseISO(window.startTime), 'yyyy-MM-dd')
+      const dateKey = window.dateKey || format(parseISO(window.startTime), 'yyyy-MM-dd')
       const existing = groups.get(dateKey)
 
       if (!existing) {
@@ -194,7 +242,9 @@
           dateKey,
           windows: [window],
           totalCarbs: Number(window.targetCarbs || 0),
-          totalProtein: Number(window.targetProtein || 0)
+          totalProtein: Number(window.targetProtein || 0),
+          plannedCarbs: Number(window.isLocked ? window.lockedMeal?.totals?.carbs || 0 : 0),
+          plannedProtein: Number(window.isLocked ? window.lockedMeal?.totals?.protein || 0 : 0)
         })
         continue
       }
@@ -202,6 +252,10 @@
       existing.windows.push(window)
       existing.totalCarbs += Number(window.targetCarbs || 0)
       existing.totalProtein += Number(window.targetProtein || 0)
+      if (window.isLocked) {
+        existing.plannedCarbs += Number(window.lockedMeal?.totals?.carbs || 0)
+        existing.plannedProtein += Number(window.lockedMeal?.totals?.protein || 0)
+      }
     }
 
     return Array.from(groups.values())
@@ -228,5 +282,67 @@
       default:
         return 'text-gray-500'
     }
+  }
+
+  function startTimeKey(value: string) {
+    const parsed = parseISO(value)
+    if (Number.isNaN(parsed.getTime())) return value
+    return parsed.toISOString()
+  }
+
+  function buildWindowAssignments(day: any, selectedWindow: any) {
+    const selectedKey = startTimeKey(selectedWindow.startTime)
+    const overlappingWindows = day.windows.filter(
+      (window: any) => startTimeKey(window.startTime) === selectedKey
+    )
+    const windowsToAssign = overlappingWindows.length > 1 ? overlappingWindows : [selectedWindow]
+    return windowsToAssign.map((window: any) => ({
+      windowType: window.type,
+      slotName: window.slotName || window.label || '',
+      label: window.label,
+      targetCarbs: Number(window.targetCarbs || 0),
+      targetProtein: Number(window.targetProtein || 0),
+      targetKcal: Number(window.targetKcal || 0)
+    }))
+  }
+
+  function emitSuggestion(day: any, window: any) {
+    const windowAssignments = buildWindowAssignments(day, window)
+    const mergedTargets = windowAssignments.reduce(
+      (sum, assignment) => ({
+        carbs: sum.carbs + Number(assignment.targetCarbs || 0),
+        protein: sum.protein + Number(assignment.targetProtein || 0),
+        kcal: sum.kcal + Number(assignment.targetKcal || 0)
+      }),
+      { carbs: 0, protein: 0, kcal: 0 }
+    )
+    const currentlyAssignedCarbs = day.windows
+      .filter((candidate: any) =>
+        windowAssignments.some(
+          (assignment) =>
+            assignment.windowType === candidate.type &&
+            String(assignment.slotName || '')
+              .trim()
+              .toLowerCase() ===
+              String(candidate.slotName || candidate.label || '')
+                .trim()
+                .toLowerCase()
+        )
+      )
+      .reduce((sum: number, candidate: any) => {
+        return sum + Number(candidate.isLocked ? candidate.lockedMeal?.totals?.carbs || 0 : 0)
+      }, 0)
+
+    emit('suggest', {
+      ...window,
+      dateKey: day.dateKey,
+      targetCarbs: mergedTargets.carbs || Number(window.targetCarbs || 0),
+      targetProtein: mergedTargets.protein || Number(window.targetProtein || 0),
+      targetKcal: mergedTargets.kcal || Number(window.targetKcal || 0),
+      windowAssignments,
+      dayTargetCarbs: day.totalCarbs,
+      dayPlannedCarbs: day.plannedCarbs,
+      currentAssignedCarbs: currentlyAssignedCarbs
+    })
   }
 </script>

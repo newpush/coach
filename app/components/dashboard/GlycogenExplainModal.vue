@@ -173,7 +173,7 @@
 </template>
 
 <script setup lang="ts">
-  import type { GlycogenBreakdown } from '~/utils/nutrition-logic'
+  import type { GlycogenBreakdown } from '~/types/nutrition'
 
   const props = defineProps<{
     modelValue: boolean

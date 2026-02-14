@@ -18,7 +18,7 @@
     Filler
   } from 'chart.js'
   import annotationPlugin from 'chartjs-plugin-annotation'
-  import type { EnergyPoint } from '~/utils/nutrition-logic'
+  import type { EnergyPoint } from '~/types/nutrition'
 
   ChartJS.register(
     CategoryScale,

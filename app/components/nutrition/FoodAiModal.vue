@@ -72,35 +72,38 @@
       targetCarbs?: number
       windowType?: string
       item?: string | null
+      mealType?: string
     } | null
   }>()
 
   const emit = defineEmits(['updated'])
 
-  const isOpen = ref(false)
+  const isOpen = defineModel<boolean>('open', { default: false })
   const loading = ref(false)
   const query = ref('')
   const error = ref<string | null>(null)
   const mealType = ref('breakfast')
 
-  watch(
-    () => props.initialContext,
-    (ctx) => {
-      if (ctx && ctx.targetCarbs) {
-        if (ctx.item) {
-          query.value = `My coach recommended "${ctx.item}" (${ctx.targetCarbs}g carbs) for my ${ctx.windowType || 'fueling window'}. Can you give me the exact portion sizes or a similar recipe?`
+  watch(isOpen, (newValue) => {
+    if (newValue) {
+      error.value = null
+      if (props.initialContext) {
+        mealType.value = props.initialContext.mealType || 'breakfast'
+        if (props.initialContext.targetCarbs) {
+          if (props.initialContext.item) {
+            query.value = `My coach recommended "${props.initialContext.item}" (${props.initialContext.targetCarbs}g carbs) for my ${props.initialContext.windowType || 'fueling window'}. Can you give me the exact portion sizes or a similar recipe?`
+          } else {
+            query.value = `I need to eat ${props.initialContext.targetCarbs}g of carbs for my ${props.initialContext.windowType || 'fueling window'}. Suggest something.`
+          }
         } else {
-          query.value = `I need to eat ${ctx.targetCarbs}g of carbs for my ${ctx.windowType || 'fueling window'}. Suggest something.`
+          query.value = ''
         }
-
-        if (ctx.windowType?.toLowerCase().includes('breakfast')) mealType.value = 'breakfast'
-        else if (ctx.windowType?.toLowerCase().includes('lunch')) mealType.value = 'lunch'
-        else if (ctx.windowType?.toLowerCase().includes('dinner')) mealType.value = 'dinner'
-        else mealType.value = 'snacks'
+      } else {
+        query.value = ''
+        mealType.value = 'breakfast'
       }
-    },
-    { immediate: true }
-  )
+    }
+  })
 
   const mealTypes = [
     { label: 'Breakfast', value: 'breakfast' },
@@ -108,13 +111,6 @@
     { label: 'Dinner', value: 'dinner' },
     { label: 'Snacks', value: 'snacks' }
   ]
-
-  function open(initialMealType: string = 'breakfast') {
-    mealType.value = initialMealType
-    query.value = ''
-    error.value = null
-    isOpen.value = true
-  }
 
   async function onLog() {
     if (!query.value.trim()) return
@@ -142,6 +138,4 @@
       loading.value = false
     }
   }
-
-  defineExpose({ open })
 </script>

@@ -86,7 +86,7 @@
 
 <script setup lang="ts">
   import { format } from 'date-fns'
-  import type { EnergyPoint } from '~/utils/nutrition-logic'
+  import type { EnergyPoint } from '~/types/nutrition'
   export type WavePoint = EnergyPoint & {
     dateKey?: string
     dataType?: 'historical' | 'current' | 'future'
