@@ -309,7 +309,7 @@
   function emitSuggestion(day: any, window: any) {
     const windowAssignments = buildWindowAssignments(day, window)
     const mergedTargets = windowAssignments.reduce(
-      (sum, assignment) => ({
+      (sum: any, assignment: any) => ({
         carbs: sum.carbs + Number(assignment.targetCarbs || 0),
         protein: sum.protein + Number(assignment.targetProtein || 0),
         kcal: sum.kcal + Number(assignment.targetKcal || 0)
@@ -319,7 +319,7 @@
     const currentlyAssignedCarbs = day.windows
       .filter((candidate: any) =>
         windowAssignments.some(
-          (assignment) =>
+          (assignment: any) =>
             assignment.windowType === candidate.type &&
             String(assignment.slotName || '')
               .trim()
