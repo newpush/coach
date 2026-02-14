@@ -273,11 +273,12 @@ export const generateStructuredWorkoutTask = task({
     INSTRUCTIONS:
     - Create a JSON structure defining the exact steps (Warmup, Intervals, Rest, Cooldown).
     - Ensure total duration matches the target duration exactly.
+    - **steps**: All rules below (targets, etc.) apply to BOTH top-level steps AND nested steps inside repeats.
     - **description**: Use ONLY complete sentences to describe the overall purpose and strategy. **NEVER use bullet points or list the steps here**.
     - **coachInstructions**: Provide a personalized message (2-3 sentences) explaining WHY this workout matters for their goal (${goal}) and how to execute it (e.g. "Focus on smooth cadence during the efforts"). Use the '${persona}' persona tone.
 
     FOR CYCLING (Ride/VirtualRide):
-    - Use % of FTP for power targets (e.g. 0.95 = 95%).
+    - MANDATORY: Use % of FTP for power targets (e.g. 0.95 = 95%) for EVERY step.
     - For ramps (Warmup/Cooldown), use "range" with "start" and "end" values (e.g. start: 0.50, end: 0.75 for warmup).
     - MANDATORY: Include target "cadence" (RPM) for EVERY step (including Warmup/Rest). Use 85-95 for active, 80 for rest.
 
@@ -313,29 +314,101 @@ export const generateStructuredWorkoutTask = task({
       entityId: plannedWorkoutId
     })) as any
 
-    const calculateMetrics = (steps: any[]) => {
+    const normalizeAndCalculate = (steps: any[], depth = 0, parentStep: any = null) => {
       let distance = 0
       let duration = 0
       let tss = 0
 
+      if (!Array.isArray(steps)) return { distance, duration, tss }
+
       steps.forEach((step: any) => {
+        // 1. Recover misplaced targets (AI sometimes puts 'value' or 'range' at top level)
+        const recoverTarget = (fieldName: string) => {
+          // If it's a string like "range", it's invalid AI junk, clear it
+          if (typeof step[fieldName] === 'string') {
+            step[fieldName] = undefined
+          }
+
+          const hasOwnTarget = step.range || step.value
+
+          if (
+            !step[fieldName] ||
+            (typeof step[fieldName] === 'object' && Object.keys(step[fieldName]).length === 0)
+          ) {
+            if (step.range) {
+              step[fieldName] = { range: step.range }
+              delete step.range
+            } else if (step.value) {
+              step[fieldName] = { value: step.value }
+              delete step.value
+            } else if (!hasOwnTarget && parentStep?.[fieldName]) {
+              // Inherit from parent ONLY if child has NO intensity targets of its own
+              step[fieldName] = JSON.parse(JSON.stringify(parentStep[fieldName]))
+            }
+          }
+        }
+
+        // 2. Sport-Specific Normalization (Recursive)
+        if (workout.type === 'Ride' || workout.type === 'VirtualRide') {
+          recoverTarget('power')
+
+          // Ensure Power exists for charts
+          if (!step.power || (step.power.value === undefined && !step.power.range)) {
+            if (step.type === 'Warmup') step.power = { value: 0.5 }
+            else if (step.type === 'Rest') step.power = { value: 0.45 }
+            else if (step.type === 'Cooldown') step.power = { value: 0.4 }
+            else step.power = { value: 0.75 }
+          }
+
+          // Ensure Cadence exists
+          if (!step.cadence) {
+            if (step.type === 'Warmup' || step.type === 'Cooldown') step.cadence = 85
+            else if (step.type === 'Rest') step.cadence = 80
+            else if (parentStep?.cadence) step.cadence = parentStep.cadence
+            else step.cadence = 90
+          }
+
+          // Strip swimming artifacts
+          step.stroke = undefined
+          step.equipment = undefined
+        } else if (workout.type === 'Run') {
+          recoverTarget('heartRate')
+          recoverTarget('pace')
+          recoverTarget('power')
+
+          // Ensure at least one target exists for runs (HR preferred)
+          // Only apply defaults if ALL targets are truly missing/empty after recovery
+          const hasHr = step.heartRate && (step.heartRate.value || step.heartRate.range)
+          const hasPace = step.pace && (step.pace.value || step.pace.range)
+          const hasPower = step.power && (step.power.value || step.power.range)
+
+          if (!hasHr && !hasPace && !hasPower) {
+            if (step.type === 'Warmup') step.heartRate = { value: 0.6 }
+            else if (step.type === 'Rest') step.heartRate = { value: 0.5 }
+            else if (step.type === 'Cooldown') step.heartRate = { value: 0.55 }
+            else step.heartRate = { value: 0.75 }
+          }
+
+          // Ensure distance is a number
+          if (step.distance) step.distance = Number(step.distance)
+        }
+
+        // 3. Structural Fixes
+        if (step.durationSeconds === undefined && step.duration !== undefined) {
+          step.durationSeconds = step.duration
+        }
+
+        // 4. Recurse and Calculate
         let stepDistance = 0
         let stepDuration = 0
         let stepTSS = 0
 
-        if (step.steps && Array.isArray(step.steps)) {
-          const nested = calculateMetrics(step.steps)
+        if (step.steps && Array.isArray(step.steps) && step.steps.length > 0) {
+          const nested = normalizeAndCalculate(step.steps, depth + 1, step)
           stepDistance = nested.distance
           stepDuration = nested.duration
           stepTSS = nested.tss
         } else {
-          // Fix missing cadence for Cycling
-          if ((workout.type === 'Ride' || workout.type === 'VirtualRide') && !step.cadence) {
-            if (step.type === 'Warmup' || step.type === 'Cooldown') step.cadence = 85
-            else if (step.type === 'Rest') step.cadence = 80
-            else step.cadence = 90
-          }
-
           // Distance
           stepDistance = step.distance || 0
 
@@ -343,24 +416,20 @@ export const generateStructuredWorkoutTask = task({
           stepDuration = step.durationSeconds || 0
 
           // Estimate TSS
-          // TSS = (sec * IF^2) / 3600 * 100
-          let intensity = 0.5 // Default fallback
-
-          if (step.power) {
-            if (typeof step.power.value === 'number') {
-              intensity = step.power.value
-            } else if (step.power.range) {
-              intensity = (step.power.range.start + step.power.range.end) / 2
-            }
-          } else if (step.heartRate) {
-            // HR intensity roughly proxies power intensity for TSS estimation
+          let intensity = 0.5
+          if (step.heartRate) {
             if (typeof step.heartRate.value === 'number') {
               intensity = step.heartRate.value
             } else if (step.heartRate.range) {
               intensity = (step.heartRate.range.start + step.heartRate.range.end) / 2
             }
+          } else if (step.power) {
+            if (typeof step.power.value === 'number') {
+              intensity = step.power.value
+            } else if (step.power.range) {
+              intensity = (step.power.range.start + step.power.range.end) / 2
+            }
           } else {
-            // Infer from type
             switch (step.type) {
               case 'Warmup':
                 intensity = 0.5
@@ -373,7 +442,7 @@ export const generateStructuredWorkoutTask = task({
                 break
               case 'Active':
                 intensity = 0.75
-                break // Moderate default
+                break
             }
           }
 
@@ -382,7 +451,7 @@ export const generateStructuredWorkoutTask = task({
           }
         }
 
-        const reps = step.reps || 1
+        const reps = Number(step.reps) || 1
         distance += stepDistance * reps
         duration += stepDuration * reps
         tss += stepTSS * reps
@@ -391,7 +460,7 @@ export const generateStructuredWorkoutTask = task({
       return { distance, duration, tss }
     }
 
-    const totals = calculateMetrics(structure.steps || [])
+    const totals = normalizeAndCalculate(structure.steps || [])
     const totalDistance = totals.distance
     let totalDuration = totals.duration
     let totalTSS = totals.tss
