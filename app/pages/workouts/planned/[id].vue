@@ -62,7 +62,7 @@
     </template>
 
     <template #body>
-      <div class="p-3 sm:p-6 max-w-6xl mx-auto space-y-4 sm:space-y-6">
+      <div class="max-w-4xl mx-auto w-full p-4 sm:p-6 space-y-4 sm:space-y-6">
         <!-- Loading State -->
         <div v-if="loading" class="space-y-6">
           <UCard>
