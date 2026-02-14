@@ -1249,6 +1249,7 @@ model ChatRoom {
   updatedAt     DateTime          @updatedAt
   deletedAt     DateTime?
   lastMessageAt DateTime?         @default(now())
+  metadata      Json?
   messages      ChatMessage[]
   users         ChatParticipant[]
   bugReports    BugReport[]
