@@ -169,31 +169,52 @@ Acceptance:
 
 Status:
 
-- [x] Added `getMealTargetContext(...)` to metabolic service.
-- [x] Wired recommendation trigger prompt to use canonical meal-target context.
-- [ ] Enforce hard validation (programmatic post-check) on recommendation output tolerance.
+- [x] Extracted Domain Engine to `server/utils/nutrition-domain/`.
+- [x] Updated `metabolicService` to use unified domain logic.
+- [x] Refactored all GET nutrition/metabolic endpoints to use service-side computation.
+- [x] Refactored CLI tools to use `server/utils/nutrition-domain`.
+- [x] Refactored `NutritionFuelingCard` and `NutritionDetail` UI to use server-provided points and simulations.
+- [x] Implemented `/api/nutrition/simulate-impact` for server-side ghost line.
+- [x] Removed redundant `app/utils/nutrition-logic.ts` and `app/utils/merging-nutrition.ts`.
+- [x] Cleaned up `app/utils/nutrition-absorption.ts` and `app/utils/sweat-rate.ts`.
+- [x] Removed redundant `server/utils/nutrition/fueling.ts`.
+- [x] Unified all fueling plan computation paths on the server domain engine.
+- [x] Built the `mealRecommendationService` with catalog-first logic and LLM fallback.
+- [x] Refactored nutrition modals (`FoodAiModal`, `FoodItemModal`) to fix state ownership bugs.
+- [x] Seeded the `MealOptionCatalog` with initial reference meals.
 
 ## Migration Plan
 
-## Phase 0: Guardrails
+## Phase 0: Guardrails [COMPLETED]
 
 1. Add shared DTO schemas (Zod + inferred TS types).
-2. Add golden fixtures for representative scenarios:
-   - no logs
-   - mixed planned/completed
-   - timezone edge day
-   - train-low day
+2. Add golden fixtures for representative scenarios.
 
-## Phase 1: Extract Domain Engine
+## Phase 1: Extract Domain Engine [COMPLETED]
 
 1. Port logic into `server/utils/nutrition-domain/*`.
 2. Add compatibility adapters so existing endpoints can switch gradually.
 
-## Phase 2: Switch Read APIs
+## Phase 2: Switch Read APIs [COMPLETED]
 
 1. Point nutrition/metabolic GET endpoints to new service methods.
 2. Remove duplicate endpoint-level recomputation loops where service already provides output.
 3. Move activity sparkline endpoint to the same wave-range service method used by extended wave.
+
+## Phase 3: Trigger Decomposition [COMPLETED]
+
+1. Remove `generate-fueling-plan` from request critical path.
+2. Convert trigger to optional precompute/snapshot task or deprecate fully.
+
+## Phase 4: Side-Effect Separation [COMPLETED]
+
+1. Split read vs write methods in `metabolicService`.
+2. Move chain repair/persistence to explicit command path.
+
+## Phase 5: Cleanup [COMPLETED]
+
+1. Delete dead imports and duplicate utility paths.
+2. Remove stale fields/flows that are no longer authoritative.
 
 ## Phase 3: Trigger Decomposition
 

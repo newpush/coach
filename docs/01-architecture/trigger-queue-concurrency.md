@@ -37,10 +37,11 @@ await analyzeWorkoutTask.trigger({ workoutId: 'workout-123' }, { concurrencyKey:
 
 ```typescript
 import { analyzeWorkoutTask } from '~/trigger/analyze-workout'
+import { getEffectiveUserId } from '~/server/utils/coaching'
 
 export default defineEventHandler(async (event) => {
   const { workoutId } = await readBody(event)
-  const userId = event.context.auth.userId
+  const userId = await getEffectiveUserId(event)
 
   const handle = await analyzeWorkoutTask.trigger({ workoutId }, { concurrencyKey: userId })
 

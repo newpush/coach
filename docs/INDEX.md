@@ -134,6 +134,7 @@ Future feature specifications and improvement plans.
 - [**Frontend Refactor**](./06-plans/frontend-refactor.md) - Plans for cleaning up and optimizing the UI codebase.
 - [**Mobile Review Report**](./06-plans/mobile_review_report.md) - Assessment of the mobile user experience.
 - [**Performance Page Upgrade**](./06-plans/performance-page-upgrade.md) - Next steps for the performance dashboard.
+- [**Nutrition Recommendation & Planning**](./06-plans/nutrition-recommendation-and-planning.md) - Living architecture plan for meal recommendations, nutrition planning, chat tools, and grocery export.
 - [**Strava Compliance**](./06-plans/strava_compliance_response.md) - Ensuring adherence to Strava API policies.
 - [**Withings Integration**](./06-plans/withings-enhancements.md) - Plans for adding smart scale data.
 

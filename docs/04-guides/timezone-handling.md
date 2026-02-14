@@ -43,6 +43,13 @@ Always use the centralized helpers in `server/utils/date.ts` for backend logic.
 - `getEndOfDayUTC(timezone, [date])`: Returns the true UTC timestamp for the _end_ of the user's day.
 - `formatUserDate(date, timezone, [format])`: Formats a date for display/prompts in the user's timezone.
 
+### Nutrition Context (`server/utils/nutrition-domain/date-context.ts`)
+
+For metabolic and nutrition calculations, use the specialized context:
+
+- `createNutritionDateContext(date, timezone, [now])`: Generates a canonical context containing `dateKey` (YYYY-MM-DD), `dayStart`, and `dayEnd` as true UTC timestamps.
+- `isPastLocalDay(ctx)` / `isTodayLocalDay(ctx)`: Deterministic day classification relative to the user's local timeline.
+
 ---
 
 ## 4. Frontend Helpers (`app/composables/useFormat.ts`)

@@ -15,12 +15,20 @@ Coach Watts is an AI-powered cycling coach that analyzes training data from mult
 | **Authentication**   | NuxtAuth                 | Based on NextAuth with Google Provider        |
 | **Background Jobs**  | Trigger.dev (v3)         | Async data ingestion and AI processing        |
 | **AI Engine**        | Google Gemini 2.5        | Flash for daily checks, Pro for deep analysis |
-| **Metabolic Engine** | Custom TS Implementation | Glycemic Response Modeling & Ra curves        |
+| **Metabolic Engine** | Custom TS Implementation | Unified Real-Time Domain Module               |
 | **UI Library**       | Nuxt UI                  | Component library for consistent design       |
 
 ## 2. Core Functional Modules
 
-### A. Data Access Layer (Repository Pattern)
+### A. Nutrition Domain Module (Canonical Engine)
+
+The system features a centralized **Nutrition Domain Module** (`server/utils/nutrition-domain/`) that acts as the single source of truth for all metabolic calculations.
+
+- **Real-Time Simulation**: Computes energy timelines, glycogen depletion, and absorption curves on-demand.
+- **Deterministic Logic**: Ensures that the Dashboard, Nutrition Detail, and AI Chat tools all see identical values for the same user context.
+- **Zero App Dependency**: The domain logic is strictly server-side, preventing "logic leak" into the frontend or background jobs.
+
+### B. Data Access Layer (Repository Pattern)
 
 To ensure data consistency and encapsulate complex logic (like handling duplicates or permissions), we use the Repository Pattern.
 

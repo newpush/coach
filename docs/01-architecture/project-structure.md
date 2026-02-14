@@ -212,8 +212,10 @@ Examples:
 
 ```typescript
 // server/api/workouts/index.ts
+import { getEffectiveUserId } from '../../utils/coaching'
+
 export default defineEventHandler(async (event) => {
-  const userId = event.context.auth.userId
+  const userId = await getEffectiveUserId(event)
   const workouts = await prisma.workout.findMany({
     where: { userId }
   })

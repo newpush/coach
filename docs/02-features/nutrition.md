@@ -6,6 +6,8 @@ Coach Wattz features a professional-grade, **Dynamic Periodized Fueling** system
 
 The core logic is anchored in "Fuel for the Work Required" and "Train High, Sleep Low" periodization models, allowing athletes to optimize their metabolic flexibility and performance.
 
+The system utilizes a **Unified Metabolic Engine** on the server, which computes fueling plans and energy simulations in real-time, ensuring deterministic results across all interfaces (Web UI, Mobile, and Chat).
+
 ## Metabolic Baselines
 
 The foundation of the nutrition system is the user's metabolic profile:
@@ -48,30 +50,30 @@ Food items are categorized into five distinct profiles, each using a **Gamma dis
 
 Even with high carbohydrate intake, the human body has a finite processing rate. The system enforces a **physiological oxidation limit of 90g/hr** (22.5g per 15-minute interval). Overeating results in a capped "refill plateau," accurately reflecting metabolic bottlenecks.
 
-### 3. Metabolic Ghost (Future Projection)
+### 3. Unified Real-Time Engine
 
-To help athletes "see the future" of their recovery, the Operation Dashboard includes a **Metabolic Ghost** line.
+All nutrition and metabolic calculations are performed on-demand via the server's **Nutrition Domain Module**. This eliminates drift between background jobs and UI displays.
+
+- **Real-Time Computation**: Fueling plans and energy timelines are re-calculated instantly when workouts are added, modified, or completed.
+- **Deterministic Continuity**: The "Fuel Chain" (carryover glycogen and fluid debt) is calculated recursively through the server-side logic, ensuring a smooth transition between historical data and future projections.
+- **Side-Effect Free Reads**: Fetching nutrition data does not trigger background jobs or DB writes by default, ensuring fast and safe API responses.
+
+### 4. Metabolic Ghost (Future Projection)
+
+To help athletes "see the future" of their recovery, the Operational Dashboard includes a **Metabolic Ghost** line.
 
 - **Function**: A faint, dashed purple line on the Live Energy Availability chart.
 - **Trigger**: Visible whenever the AI Coach provides a specific meal recommendation.
-- **Benefit**: It simulates the projected energy availability if the user follows the AI's current advice, allowing them to visualize the impact of refueling before they eat.
+- **Simulation**: The server runs a dedicated simulation (`/api/nutrition/simulate-impact`) to project the exact metabolic impact of the recommended meal.
 
-### 3. Fueling Sensitivity
+### 5. Fueling Sensitivity
 
 A global multiplier (80% to 120%) that scales all carbohydrate targets.
 
 - **Low Sensitivity (80-95%)**: Suited for "Fat Adapted" athletes or those in a base/weight-loss phase.
 - **High Sensitivity (105-120%)**: Suited for "Sugar Burners" or athletes in high-volume, high-intensity build blocks.
 
-### 3. Adaptive Metabolic Engine
-
-The system fine-tunes targets based on:
-
-- **Carb-to-Intensity Slope**: Controls how aggressively fuel targets increase as workout intensity rises.
-- **Gut Training Limits**: Tracks current vs. target carbohydrate absorption rates (g/hr) to safely build digestive capacity during training.
-- **Macro Baselines**: Configurable daily protein and fat targets relative to body weight (g/kg).
-
-### 4. Season Blocks (Training Phases)
+### 6. Season Blocks (Training Phases)
 
 Athletes can apply metabolic presets based on their current season focus:
 
@@ -124,34 +126,29 @@ The nutrition system is integrated across five primary views to provide a seamle
 ### 1. Strategic Calendar (Overview)
 
 - **Fuel State Dots**: Colored indicators (Blue/Eco, Orange/Steady, Red/Performance) on each day show the weekly "Carb Wave."
-- **Compliance Rings**: Subtle green or red rings around the date indicate whether macro targets were met for that day.
+- **Metabolic Horizon**: A continuous energy wave spanning the week, synchronized with the server's range-based wave generator.
 
 ### 2. Operational Dashboard (Execution)
 
 - **Nutrition Fueling Card**: A full-width dedicated section providing a real-time summary of the current day.
 - **Glycogen "Fuel Tank"**: Visual progress bar showing projected energy levels and metabolic state.
-- **Live Energy Availability Chart**: An interactive visualization showing projected fuel levels throughout the day using Glycemic Response Modeling.
+- **Live Energy Availability Chart**: An interactive visualization showing projected fuel levels throughout the day.
+  - **Single Source of Truth**: All points are pre-computed on the server to ensure consistency with the "Fuel Tank."
   - **Toggles**: Switch between **%** (Fuel Tank), **kcal** (Energy Balance), and **carbs** (Net Carb Balance).
-  - **Dashed Lines**: Represent predicted future state based on planned workouts and remaining absorption.
   - **Metabolic Ghost**: A faint purple dashed line showing the projected impact of current AI meal advice.
-- **AI Nutrition Advice**: A dedicated card that appears when the AI identifies a fueling gap, recommending specific items (e.g., "1 large bagel with jam") based on the 5 absorption profiles.
-- **Fueling Timeline**: Vertical list of windows (Pre, Intra, Post) with specific carb/protein targets.
-  - **Absorption Badges**: Each logged item displays its profile (Rapid, Fast, Balanced, Dense, Hyper-Load).
-- **AI Quick Log**: A persistent input bar for logging food items via natural language. The AI automatically identifies the correct absorption profile.
+- **AI Nutrition Advice**: A dedicated card that appears when the AI identifies a fueling gap.
 
 ### 3. Planned Workout "Prep Room" (Preparation)
 
-- **Nutrition & Fueling Prep**: Specific section inside planned workouts with step-by-step fueling scripts (e.g., "Take 1 gel every 45 minutes").
+- **Nutrition & Fueling Prep**: Specific section inside planned workouts with step-by-step fueling scripts.
 - **Hydration Targets**: Clear fluid (L) and sodium (mg) requirements based on projected intensity and duration.
-- **Gut Training Badge**: Visual indicator for "Gut Training Test" sessions where carb intake is deliberately pushed toward your upper limit.
 
 ### 4. Nutrition Journal (The "Specific Day")
 
-- **Window Grouping**: Food entries are automatically grouped into their respective fueling windows (Pre/Intra/Post/Daily Base) instead of a simple chronological list.
-- **Source Icons**: Clear visual markers showing where data originated (Synced from Yazio, logged via AI Chat, or manually entered).
+- **Fueling Timeline**: Food entries are automatically grouped into their respective fueling windows (Pre/Intra/Post/Daily Base) based on the server-calculated plan.
+- **Live Sync**: Journal updates immediately reflect in the "Fuel Tank" and "Energy Chart" via real-time server re-simulation.
 
 ### 5. Workout Debrief (Metabolic Analysis)
 
 - **Metabolic Delta**: Comparison of actual kJ burned vs. planned work.
-- **Recovery Correction**: Automatic alerts if over-performance requires extra recovery fuel (e.g., "+40g carbs added to target").
-- **Subjective Feedback**: A "Stomach Feel" rating (1-5) used to tune and calibrate your future "Carb Max" settings.
+- **Recovery Correction**: Automatic alerts if over-performance requires extra recovery fuel.
