@@ -1,43 +1,20 @@
 import { differenceInMinutes } from 'date-fns'
-import { fromZonedTime, toZonedTime, formatInTimeZone } from 'date-fns-tz'
-import { getWorkoutDate } from './workout'
+import { fromZonedTime, formatInTimeZone } from 'date-fns-tz'
 import {
-  getProfileForItem,
-  getAbsorbedInInterval,
   ABSORPTION_PROFILES,
-  type AbsorptionType,
-  type AbsorptionProfile
+  getAbsorbedInInterval,
+  getProfileForItem,
+  type AbsorptionType
 } from './absorption'
+import { getWorkoutDate } from './workout'
+import type { GlycogenResult, EnergyPoint, GlycogenBreakdown, WorkoutEvent } from './types'
 import {
-  NO_EXERCISE_DEBT_DECAY_ML_PER_HOUR,
   PASSIVE_REHYDRATION_END_HOUR,
   PASSIVE_REHYDRATION_ML_PER_HOUR,
-  PASSIVE_REHYDRATION_START_HOUR
+  PASSIVE_REHYDRATION_START_HOUR,
+  NO_EXERCISE_DEBT_DECAY_ML_PER_HOUR
 } from '../nutrition/hydration'
 import { extractWorkoutTemperatureC, getEstimatedSweatRateLph } from '../nutrition/sweat-rate'
-
-export interface GlycogenBreakdown {
-  midnightBaseline: number
-  replenishment: {
-    value: number
-    actualCarbs: number
-    targetCarbs: number
-  }
-  depletion: Array<{
-    title: string
-    value: number
-    intensity: number
-    durationMin: number
-  }>
-  restingMetabolism?: number
-}
-
-export interface GlycogenResult {
-  percentage: number
-  advice: string
-  state: number
-  breakdown: GlycogenBreakdown
-}
 
 export function getGramsPerMin(intensity: number): number {
   if (intensity >= 0.9) return 4.5
@@ -67,14 +44,11 @@ export function calculateGlycogenState(
   const weight = settings?.weight || settings?.user?.weight || 75
   const C_cap = weight * 8
 
-  // Use provided starting percentage or default to 85
-  // IMPORTANT: We trust 0 if explicitly passed!
   const baselinePct = startingPercentage !== undefined ? startingPercentage : 85
   let currentGrams = C_cap * (baselinePct / 100)
 
   const targetCarbs = nutritionRecord.carbsGoal || 300
 
-  // Only count meals that have occurred/been logged until now
   let absorbedUntilNow = 0
   const mealTypes = ['breakfast', 'lunch', 'dinner', 'snacks']
   const dateStr = getDateStr(nutritionRecord.date)
@@ -93,7 +67,6 @@ export function calculateGlycogenState(
         }
 
         if (mealTime && mealTime <= currentTime) {
-          // Use DIGESTION logic: How much is absorbed from mealTime until currentTime?
           const minsSince = differenceInMinutes(currentTime, mealTime)
           const profile = item.absorptionType
             ? ABSORPTION_PROFILES[item.absorptionType as AbsorptionType] ||
@@ -107,26 +80,20 @@ export function calculateGlycogenState(
     }
   })
 
-  // Fallback: If no granular meal logs exist but we have a total 'carbs' count,
-  // we assume it's fully absorbed (simplification for missing data)
   const hasGranularLogs = mealTypes.some(
     (t) => Array.isArray(nutritionRecord[t]) && nutritionRecord[t].length > 0
   )
   const actualCarbs = hasGranularLogs ? absorbedUntilNow : nutritionRecord.carbs || 0
 
-  // Add intake to current grams
   currentGrams += actualCarbs
 
-  // Calculate replenishment percentage for breakdown
   const replenishmentPct = (actualCarbs / C_cap) * 100
 
-  // Calculate BMR drain since midnight
   const dayStart = fromZonedTime(`${dateStr}T00:00:00`, timezone)
   const minsSinceMidnight = differenceInMinutes(currentTime, dayStart)
   const dailyBmr = settings?.bmr || 1600
   const gramsDrainedBmr = ((dailyBmr * 0.4) / 4) * (minsSinceMidnight / 1440)
 
-  // Subtract BMR drain
   currentGrams -= gramsDrainedBmr
 
   const bmrPctDrop = (gramsDrainedBmr / C_cap) * 100
@@ -148,12 +115,7 @@ export function calculateGlycogenState(
     const drainGramsTotal = gramsPerMin * durationMin
     const drainAmountPct = (drainGramsTotal / C_cap) * 100
 
-    // NEW GRADUAL DEPLETION LOGIC:
     if (isCompleted) {
-      // If completed, we assume it's done. But if it was completed TODAY,
-      // we should ideally only subtract what has elapsed if "Now" is during the workout.
-      // However, 'isCompleted' usually means the file is synced and finished.
-      // We'll trust completion for now but handle the 'planned' case more accurately.
       totalDepletionGrams += drainGramsTotal
       depletionEvents.push({
         title: workout.title,
@@ -162,7 +124,6 @@ export function calculateGlycogenState(
         durationMin: Math.round(durationMin)
       })
     } else if (workoutStart <= currentTime) {
-      // For planned workouts in progress or passed:
       const minsElapsed = Math.max(0, differenceInMinutes(currentTime, workoutStart))
       const effectiveMins = Math.min(durationMin, minsElapsed)
       const partialDrain = gramsPerMin * effectiveMins
@@ -179,13 +140,9 @@ export function calculateGlycogenState(
     }
   })
 
-  // Subtract workout depletion
   currentGrams -= totalDepletionGrams
-
-  // Clamp grams between 0 and C_cap
   currentGrams = Math.max(0, Math.min(C_cap, currentGrams))
 
-  // Calculate final percentage
   const percentage = Math.round((currentGrams / C_cap) * 100)
 
   let advice = ''
@@ -219,41 +176,16 @@ export function calculateGlycogenState(
   }
 }
 
-export interface EnergyPoint {
-  time: string
-  timestamp: number
-  level: number
-  kcalBalance: number
-  carbBalance: number
-  fluidDeficit: number
-  isFuture: boolean
-  event?: string
-  eventType?: 'workout' | 'meal'
-  eventIcon?: string
-  eventCarbs?: number
-  eventFluid?: number
-}
-
 export function calculateEnergyTimeline(
   nutritionRecord: any,
   workouts: any[],
   settings: any,
   timezone: string,
-  ghostMeal?: {
-    totalCarbs: number
-    totalKcal: number
-    profile: AbsorptionProfile
-    time: Date
-  },
+  ghostMeal?: any,
   options: {
     startingGlycogenPercentage?: number
     startingFluidDeficit?: number
-    crossDayMeals?: Array<{
-      time: Date
-      totalCarbs: number
-      totalKcal: number
-      profile: AbsorptionProfile
-    }>
+    crossDayMeals?: any[]
     now?: Date
   } = {}
 ): EnergyPoint[] {
@@ -268,11 +200,9 @@ export function calculateEnergyTimeline(
   const weight = settings?.user?.weight || 75
   const C_cap = weight * 8
 
-  // Fallback carbsGoal if missing on record
   const effectiveCarbsGoal =
     nutritionRecord.carbsGoal || (settings?.fuelState1Min ? settings.fuelState1Min * weight : 300)
 
-  // Use carryover percentage if provided, otherwise default to 85%
   let currentGrams =
     C_cap *
     (options.startingGlycogenPercentage !== undefined
@@ -286,18 +216,16 @@ export function calculateEnergyTimeline(
   const dailyBmr = settings?.bmr || 1600
   const intervalRestDrainGrams = (dailyBmr * 0.4) / (4 * 96)
   const intervalRestDrainKcal = (dailyBmr * 1.2) / 96
-  const intervalRestFluidLoss = 50 / 96 // ~50ml/day baseline insensible loss
+  const intervalRestFluidLoss = 50 / 96
 
   const actualMeals: any[] = []
   const mealTypes = ['breakfast', 'lunch', 'dinner', 'snacks']
   const mealPattern = settings?.mealPattern || []
 
-  // Add Cross-Day Meals (consumed yesterday but still absorbing today)
   if (options.crossDayMeals) {
     actualMeals.push(...options.crossDayMeals)
   }
 
-  // 1. Process Actual Logs
   mealTypes.forEach((type) => {
     if (Array.isArray(nutritionRecord[type]) && nutritionRecord[type].length > 0) {
       nutritionRecord[type].forEach((item: any) => {
@@ -340,13 +268,8 @@ export function calculateEnergyTimeline(
   const todayStr = formatInTimeZone(now, timezone, 'yyyy-MM-dd')
   const isFutureDay = dateStr > todayStr
 
-  // 2. SYNTHETIC REFILLS & PROBABLE INTAKE:
-  // We check each potential "refill period" (from plan AND baseline) and
-  // only add a synthetic meal if no actual meal covers that window.
-
   const syntheticCandidates: any[] = []
 
-  // A. From Fueling Plan (Pre/Intra/Post)
   if (nutritionRecord.fuelingPlan?.windows) {
     nutritionRecord.fuelingPlan.windows.forEach((window: any) => {
       if (window.targetCarbs > 0) {
@@ -365,8 +288,6 @@ export function calculateEnergyTimeline(
     })
   }
 
-  // B. From Baseline Pattern (Breakfast/Lunch/Dinner)
-  // We ALWAYS add these candidates, even if a plan exists, to cover the "Daily Base"
   if (effectiveCarbsGoal > 0) {
     const pattern =
       settings?.mealPattern && settings.mealPattern.length > 0
@@ -377,10 +298,6 @@ export function calculateEnergyTimeline(
             { name: 'Dinner', time: '19:00' }
           ]
 
-    // Distribute the "Non-Workout" carbs to these meals
-    // If plan exists, we should ideally subtract plan carbs from total goal?
-    // For simplicity/robustness, we stick to the daily distribution but maybe scale it?
-    // Let's stick to the equal distribution of the Daily Goal for now to ensure visibility.
     const baselineCarbPerMeal = effectiveCarbsGoal / pattern.length
 
     pattern.forEach((p: any) => {
@@ -395,50 +312,36 @@ export function calculateEnergyTimeline(
     })
   }
 
-  // C. Process All Candidates
   const sortedCandidates = syntheticCandidates.sort((a, b) => a.time.getTime() - b.time.getTime())
 
   sortedCandidates.forEach((cand: any, idx: number) => {
     const windowStartTime = cand.time
     const hasPassed = windowStartTime < now
 
-    // 1. Check coverage by ACTUAL logs
     const hasRealLog = actualMeals.some(
       (m) => Math.abs(m.time.getTime() - windowStartTime.getTime()) < 60 * 60 * 1000
     )
 
-    // 2. Check coverage by OTHER synthetic events (e.g. Plan Window overlaps Baseline Meal)
-    // If we have a Pre-Workout at 08:00 and a Breakfast at 08:00, we prefer the Pre-Workout
     const hasBetterSynthetic = sortedCandidates.some(
       (other) =>
         other !== cand &&
-        other.type !== 'DAILY_BASE' && // Plan windows beat Base windows
+        other.type !== 'DAILY_BASE' &&
         cand.type === 'DAILY_BASE' &&
         Math.abs(other.time.getTime() - windowStartTime.getTime()) < 60 * 60 * 1000
     )
 
     if (!hasRealLog && !hasBetterSynthetic) {
-      // STRICT ACTUALS: If the window has passed and no log exists, assume 0 intake.
-      // This ensures the "Fuel Chain" matches between days.
       const factor = isFutureDay || !hasPassed ? 1.0 : 0.0
 
       if (factor > 0) {
         let mealCarbs = cand.targetCarbs * factor
-
-        // --- DEFICIT-AWARE REFILL LOGIC ---
-        // Boost the FIRST synthetic event of the day if tank is low
         const currentTankPct = (currentGrams / C_cap) * 100
 
         if (idx === 0 && currentTankPct < 40 && (isFutureDay || !hasPassed)) {
           const gramsTo80 = C_cap * 0.8 - currentGrams
-          // Aggressive rescue boost to reach 80% if critical
           if (mealCarbs < gramsTo80) {
             const boost = gramsTo80 - mealCarbs
             mealCarbs += boost
-            if (process.env.DEBUG_METABOLIC)
-              console.log(
-                `[MetabolicRefill] CRITICAL RESCUE: Boosting ${cand.name} by ${boost.toFixed(1)}g to reach 80% capacity`
-              )
           }
         } else if (idx === 0 && currentTankPct < 85 && (isFutureDay || !hasPassed)) {
           const gramsTo85 = C_cap * 0.85 - currentGrams
@@ -461,14 +364,6 @@ export function calculateEnergyTimeline(
     }
   })
 
-  if (process.env.DEBUG_METABOLIC) {
-    console.log(`[MetabolicDebug] Day: ${dateStr}, Final meals count: ${finalMeals.length}`)
-    finalMeals.forEach((m) =>
-      console.log(` - Meal: ${m.name} at ${m.time.toISOString()} (${m.totalCarbs}g carbs)`)
-    )
-  }
-
-  // Add waterMl from record as generic "Hydration" event if not tied to items
   if (
     nutritionRecord.waterMl &&
     finalMeals.reduce((acc, m) => acc + (m.totalFluid || 0), 0) === 0
@@ -483,7 +378,6 @@ export function calculateEnergyTimeline(
     })
   }
 
-  // Add Ghost Meal if provided
   if (ghostMeal) {
     finalMeals.push({
       ...ghostMeal,
@@ -492,7 +386,7 @@ export function calculateEnergyTimeline(
     })
   }
 
-  const workoutEvents = workouts
+  const workoutEvents: WorkoutEvent[] = workouts
     .filter((w) => w.type !== 'Rest')
     .map((w) => {
       const start = new Date(getWorkoutDate(w, timezone))
@@ -526,10 +420,8 @@ export function calculateEnergyTimeline(
 
   for (let i = 0; i <= TOTAL_POINTS; i++) {
     const currentTime = new Date(dayStart.getTime() + i * INTERVAL * 60000)
-
     const intervalEvents: any[] = []
 
-    // Check for workouts in this interval
     workoutEvents.forEach((w) => {
       const msDiff = Math.abs(currentTime.getTime() - w.start.getTime())
       if (msDiff < (INTERVAL * 60000) / 2) {
@@ -537,13 +429,12 @@ export function calculateEnergyTimeline(
           name: w.title,
           type: 'workout',
           icon: 'i-tabler-bike',
-          carbs: -w.drainGramsPerInterval, // For workout, we show negative (burn)
+          carbs: -w.drainGramsPerInterval,
           fluid: w.drainFluidPerInterval
         })
       }
     })
 
-    // Check for meals in this interval
     finalMeals.forEach((m) => {
       const msDiff = Math.abs(currentTime.getTime() - m.time.getTime())
       if (msDiff < (INTERVAL * 60000) / 2) {

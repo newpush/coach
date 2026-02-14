@@ -1067,10 +1067,12 @@ function normalizeWorkoutSteps(steps: any[]): any[] {
         units.includes('%') || (!units && (step.power.value > 5 || step.power.range?.start > 5))
 
       if (isPercent) {
-        if (step.power.value !== undefined) step.power.value /= 100
+        if (step.power.value !== undefined && step.power.value > 2) step.power.value /= 100
         if (step.power.range) {
-          step.power.range.start /= 100
-          step.power.range.end /= 100
+          if (step.power.range.start !== undefined && step.power.range.start > 2)
+            step.power.range.start /= 100
+          if (step.power.range.end !== undefined && step.power.range.end > 2)
+            step.power.range.end /= 100
         }
       }
     }
@@ -1098,12 +1100,15 @@ function normalizeWorkoutSteps(steps: any[]): any[] {
         (!units && (step.heartRate.value > 5 || step.heartRate.range?.start > 5))
 
       if (isPercent) {
-        if (step.heartRate.value !== undefined) step.heartRate.value /= 100
+        if (step.heartRate.value !== undefined && step.heartRate.value > 2)
+          step.heartRate.value /= 100
 
         if (step.heartRate.range) {
-          step.heartRate.range.start /= 100
+          if (step.heartRate.range.start !== undefined && step.heartRate.range.start > 2)
+            step.heartRate.range.start /= 100
 
-          step.heartRate.range.end /= 100
+          if (step.heartRate.range.end !== undefined && step.heartRate.range.end > 2)
+            step.heartRate.range.end /= 100
         }
       }
     }

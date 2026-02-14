@@ -48,11 +48,7 @@ describe('Intervals.icu Parsing Logic', () => {
     it('should normalize %ftp to ratio (explicit units)', () => {
       const event = createEvent([{ duration: 60, power: { value: 0.9, units: '%ftp' } }])
       const result = normalizeIntervalsPlannedWorkout(event as any, 'user-1')
-      expect(result.structuredWorkout.steps[0].power.value).toBeCloseTo(0.009) // Logic divides by 100 if units=%ftp
-      // Wait, if input is already 0.9 but units is %ftp, it divides by 100?
-      // The logic is: units.includes('%') OR (!units && value > 5).
-      // If units='%ftp' and value=0.9, it becomes 0.009. Ideally inputs are consistent.
-      // Intervals usually sends 90 for 90%.
+      expect(result.structuredWorkout.steps[0].power.value).toBeCloseTo(0.9) // Fixed: should not divide by 100 if already ratio
     })
 
     it('should normalize power range with %ftp', () => {
