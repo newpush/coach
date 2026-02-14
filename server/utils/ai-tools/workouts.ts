@@ -10,8 +10,9 @@ import {
   getEndOfDayUTC
 } from '../../utils/date'
 import { analyzeWorkoutTask } from '../../../trigger/analyze-workout'
+import type { AiSettings } from '../ai-user-settings'
 
-export const workoutTools = (userId: string, timezone: string) => ({
+export const workoutTools = (userId: string, timezone: string, aiSettings: AiSettings) => ({
   get_recent_workouts: tool({
     description:
       'Get recent workouts with summary metrics (duration, TSS, intensity). Use this to see what the user has done recently.',
@@ -195,7 +196,7 @@ export const workoutTools = (userId: string, timezone: string) => ({
     inputSchema: z.object({
       workout_id: z.string().describe('The ID of the workout to analyze')
     }),
-    needsApproval: false,
+    needsApproval: async () => aiSettings.aiRequireToolApproval,
     execute: async ({ workout_id }) => {
       const workout = await workoutRepository.getById(workout_id, userId)
       if (!workout) return { error: 'Workout not found' }

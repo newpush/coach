@@ -4,8 +4,9 @@ import { userRepository } from '../repositories/userRepository'
 import { generateAthleteProfileTask } from '../../../trigger/generate-athlete-profile'
 import { prisma } from '../../utils/db'
 import { getStartOfDaysAgoUTC, getEndOfDayUTC } from '../../utils/date'
+import type { AiSettings } from '../ai-user-settings'
 
-export const profileTools = (userId: string, timezone: string) => ({
+export const profileTools = (userId: string, timezone: string, aiSettings: AiSettings) => ({
   get_user_profile: tool({
     description: 'Get user profile details like FTP, Max HR, Weight, Age.',
     inputSchema: z.object({}),
@@ -99,6 +100,7 @@ export const profileTools = (userId: string, timezone: string) => ({
       weightUnits: z.enum(['Kilograms', 'Pounds']).optional(),
       temperatureUnits: z.enum(['Celsius', 'Fahrenheit']).optional()
     }),
+    needsApproval: async () => aiSettings.aiRequireToolApproval,
     execute: async (data) => {
       try {
         const updated = await userRepository.update(userId, data)
@@ -149,6 +151,7 @@ export const profileTools = (userId: string, timezone: string) => ({
       thresholdPace: z.number().optional().describe('Pace in m/s'),
       restingHr: z.number().optional()
     }),
+    needsApproval: async () => aiSettings.aiRequireToolApproval,
     execute: async (data) => {
       try {
         // Prepare payload for repo (expects array of objects)

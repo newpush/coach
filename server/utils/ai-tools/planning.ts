@@ -14,6 +14,7 @@ import { tags } from '@trigger.dev/sdk/v3'
 import { plannedWorkoutRepository } from '../repositories/plannedWorkoutRepository'
 import { workoutRepository } from '../repositories/workoutRepository'
 import { sportSettingsRepository } from '../repositories/sportSettingsRepository'
+import type { AiSettings } from '../ai-user-settings'
 import {
   getUserLocalDate,
   formatUserDate,
@@ -183,11 +184,12 @@ const applyStructurePatchOperation = (structuredWorkout: any, operation: any) =>
     if (!(key in parent)) {
       throw new Error(`Path "${operation.path}" does not exist for remove`)
     }
+    // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
     delete parent[key]
   }
 }
 
-export const planningTools = (userId: string, timezone: string) => ({
+export const planningTools = (userId: string, timezone: string, aiSettings: AiSettings) => ({
   get_planned_workouts: tool({
     description: 'Get a list of planned workouts for a specific date range.',
     inputSchema: z.object({
@@ -388,6 +390,7 @@ export const planningTools = (userId: string, timezone: string) => ({
       workout_id: z.string().describe('The ID of the planned workout'),
       structured_workout: structuredWorkoutSchema
     }),
+    needsApproval: async () => aiSettings.aiRequireToolApproval,
     execute: async ({ workout_id, structured_workout }) => {
       const existing = (await plannedWorkoutRepository.getById(workout_id, userId, {
         select: {
@@ -423,6 +426,7 @@ export const planningTools = (userId: string, timezone: string) => ({
       workout_id: z.string().describe('The ID of the planned workout'),
       operations: z.array(patchOperationSchema).min(1)
     }),
+    needsApproval: async () => aiSettings.aiRequireToolApproval,
     execute: async ({ workout_id, operations }) => {
       const existing = (await plannedWorkoutRepository.getById(workout_id, userId, {
         select: {
@@ -484,6 +488,7 @@ export const planningTools = (userId: string, timezone: string) => ({
         .optional()
         .describe('Intensity description (e.g. "Zone 2", "Intervals")')
     }),
+    needsApproval: async () => aiSettings.aiRequireToolApproval,
     execute: async (args) => {
       // Create a PlannedWorkout, not a Workout
       const workout = await plannedWorkoutRepository.create({
@@ -534,6 +539,7 @@ export const planningTools = (userId: string, timezone: string) => ({
       duration_minutes: z.number().optional(),
       tss: z.number().optional()
     }),
+    needsApproval: async () => aiSettings.aiRequireToolApproval,
     execute: async (args) => {
       const data: any = {}
       if (args.title) data.title = args.title
@@ -636,7 +642,7 @@ export const planningTools = (userId: string, timezone: string) => ({
     inputSchema: z.object({
       workout_id: z.string()
     }),
-    needsApproval: false,
+    needsApproval: async () => aiSettings.aiRequireToolApproval,
     execute: async ({ workout_id }) => {
       // Use repository to find the workout
       const workout = (await plannedWorkoutRepository.getById(workout_id, userId, {
@@ -733,7 +739,7 @@ export const planningTools = (userId: string, timezone: string) => ({
       workout_id: z.string(),
       reason: z.string().optional()
     }),
-    needsApproval: false,
+    needsApproval: async () => aiSettings.aiRequireToolApproval,
     execute: async ({ workout_id }) => {
       try {
         await plannedWorkoutRepository.delete(workout_id, userId)
@@ -750,7 +756,7 @@ export const planningTools = (userId: string, timezone: string) => ({
       workout_id: z.string(),
       reason: z.string().optional()
     }),
-    needsApproval: false,
+    needsApproval: async () => aiSettings.aiRequireToolApproval,
     execute: async (args) => {
       // Try deleting from both tables or check which one
       // For simplicity, try PlannedWorkout first
@@ -786,6 +792,7 @@ export const planningTools = (userId: string, timezone: string) => ({
         })
       )
     }),
+    needsApproval: async () => aiSettings.aiRequireToolApproval,
     execute: async ({ plan_id, operations }) => {
       // Fetch current plan structure to work with
       const plan = await trainingPlanRepository.getById(plan_id, userId, {
@@ -856,6 +863,7 @@ export const planningTools = (userId: string, timezone: string) => ({
         .boolean()
         .describe('Has the user explicitly asked to generate/confirm the plan?')
     }),
+    needsApproval: async () => aiSettings.aiRequireToolApproval,
     execute: async (args) => {
       if (!args.user_confirmed) {
         return {

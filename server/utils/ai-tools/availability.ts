@@ -1,8 +1,9 @@
 import { tool } from 'ai'
 import { z } from 'zod'
 import { availabilityRepository } from '../repositories/availabilityRepository'
+import type { AiSettings } from '../ai-user-settings'
 
-export const availabilityTools = (userId: string) => ({
+export const availabilityTools = (userId: string, aiSettings: AiSettings) => ({
   get_training_availability: tool({
     description:
       "Get user's training availability schedule showing when they can train each day of the week.",
@@ -78,6 +79,7 @@ export const availabilityTools = (userId: string) => ({
           'The complete list of training slots for this day. Providing an empty array means a rest day.'
         )
     }),
+    needsApproval: async () => aiSettings.aiRequireToolApproval,
     execute: async (args) => {
       const { day_of_week, notes, slots } = args
 

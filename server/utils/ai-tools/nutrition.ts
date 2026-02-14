@@ -20,6 +20,7 @@ import { metabolicService } from '../services/metabolicService'
 import { INTRA_WORKOUT_TARGET_ML_PER_HOUR, MEAL_LINKED_WATER_ML } from '../nutrition/hydration'
 import { mealRecommendationService } from '../services/mealRecommendationService'
 import { nutritionPlanService } from '../services/nutritionPlanService'
+import type { AiSettings } from '../ai-user-settings'
 
 const DEFAULT_MEAL_TIMES: Record<'breakfast' | 'lunch' | 'dinner' | 'snacks', string> = {
   breakfast: '07:00',
@@ -88,7 +89,7 @@ const recalculateDailyTotals = (nutrition: any) => {
   return { calories, protein, carbs, fat, fiber, sugar }
 }
 
-export const nutritionTools = (userId: string, timezone: string) => ({
+export const nutritionTools = (userId: string, timezone: string, aiSettings: AiSettings) => ({
   get_nutrition_log: tool({
     description:
       'Get nutrition data for specific dates. Use this when the user asks about their eating, meals, macros, or calories. Returns detailed meal logs.',
@@ -402,6 +403,7 @@ export const nutritionTools = (userId: string, timezone: string) => ({
           'Name of the item to remove. If omitted, the ENTIRE meal will be cleared. Matching is case-insensitive.'
         )
     }),
+    needsApproval: async () => aiSettings.aiRequireToolApproval,
     execute: async ({ date, meal_type, item_name }) => {
       const dateUtc = new Date(`${date}T00:00:00Z`)
 

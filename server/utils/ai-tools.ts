@@ -20,17 +20,17 @@ export const getToolsWithContext = (
   chatRoomId?: string
 ) => {
   return {
-    ...workoutTools(userId, timezone),
-    ...planningTools(userId, timezone),
+    ...workoutTools(userId, timezone, settings),
+    ...planningTools(userId, timezone, settings),
     ...recommendationTools(userId, timezone),
     ...analysisTools(userId, timezone, settings),
-    ...profileTools(userId, timezone),
+    ...profileTools(userId, timezone, settings),
     ...supportTools(userId, chatRoomId),
     ...mathTools(),
     ...metricTools(userId, timezone),
-    ...nutritionTools(userId, timezone),
+    ...nutritionTools(userId, timezone, settings),
     ...wellnessTools(userId, timezone),
-    ...availabilityTools(userId),
+    ...availabilityTools(userId, settings),
     ...timeTools(userId, timezone)
   }
 }
