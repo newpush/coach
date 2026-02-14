@@ -49,7 +49,7 @@
 
   const loading = ref(false)
   const aggregatedZones = ref<number[]>([])
-  const zoneType = ref<'hr' | 'power'>('hr')
+  const zoneType = ref<'hr' | 'power' | 'pace'>('hr')
 
   const hasData = computed(() => {
     return aggregatedZones.value.length > 0 && aggregatedZones.value.some((v) => v > 0)

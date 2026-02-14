@@ -209,7 +209,7 @@
   const props = withDefaults(
     defineProps<{
       workout: any // structuredWorkout JSON
-      preference?: 'hr' | 'power'
+      preference?: 'hr' | 'power' | 'pace'
     }>(),
     {
       preference: 'hr'
@@ -305,22 +305,33 @@
         ? (step.heartRate.range.start + step.heartRate.range.end) / 2
         : step.heartRate?.value
       if (hr) return hr
-
-      const pwr = step.power?.range
-        ? (step.power.range.start + step.power.range.end) / 2
-        : step.power?.value
-      if (pwr) return pwr
+    } else if (props.preference === 'pace') {
+      const pace = step.pace?.range
+        ? (step.pace.range.start + step.pace.range.end) / 2
+        : step.pace?.value
+      if (pace) return pace
     } else {
       const pwr = step.power?.range
         ? (step.power.range.start + step.power.range.end) / 2
         : step.power?.value
       if (pwr) return pwr
-
-      const hr = step.heartRate?.range
-        ? (step.heartRate.range.start + step.heartRate.range.end) / 2
-        : step.heartRate?.value
-      if (hr) return hr
     }
+
+    // Final fallbacks in order of typical availability
+    const pwr = step.power?.range
+      ? (step.power.range.start + step.power.range.end) / 2
+      : step.power?.value
+    if (pwr) return pwr
+
+    const hr = step.heartRate?.range
+      ? (step.heartRate.range.start + step.heartRate.range.end) / 2
+      : step.heartRate?.value
+    if (hr) return hr
+
+    const pace = step.pace?.range
+      ? (step.pace.range.start + step.pace.range.end) / 2
+      : step.pace?.value
+    if (pace) return pace
 
     return getInferredIntensity(step)
   }

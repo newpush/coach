@@ -41,7 +41,7 @@
   const error = ref(false)
   const dataStream = ref<any>(null)
   const zonesData = ref<any>(null)
-  const zoneType = ref<'hr' | 'power'>('hr')
+  const zoneType = ref<'hr' | 'power' | 'pace'>('hr')
 
   const hasData = computed(() => {
     return zoneSegments.value.length > 0

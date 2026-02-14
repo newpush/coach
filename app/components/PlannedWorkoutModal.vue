@@ -567,8 +567,9 @@
     if (!props.plannedWorkout?.structuredWorkout) return 'power'
     const hasHr = props.plannedWorkout.structuredWorkout.steps?.some((s: any) => s.heartRate)
     const hasPower = props.plannedWorkout.structuredWorkout.steps?.some((s: any) => s.power)
+    const hasPace = props.plannedWorkout.structuredWorkout.steps?.some((s: any) => s.pace)
 
-    return getPreferredMetric(applicableSettings.value, { hasHr, hasPower })
+    return getPreferredMetric(applicableSettings.value, { hasHr, hasPower, hasPace })
   })
 
   async function generateStructure() {

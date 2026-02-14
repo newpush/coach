@@ -155,7 +155,7 @@
 
   const aggregatedZones = ref<number[]>([])
   const aggregatedPlannedZones = ref<number[]>([])
-  const zoneType = ref<'hr' | 'power'>('hr')
+  const zoneType = ref<'hr' | 'power' | 'pace'>('hr')
   const loading = ref(false)
 
   const zoneBreakdown = computed(() => {

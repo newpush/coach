@@ -168,7 +168,7 @@
   const error = ref<string | null>(null)
   const localStreamData = ref<any>(null)
   const userZones = ref<any>(null)
-  const selectedZoneType = ref<'hr' | 'power'>('hr')
+  const selectedZoneType = ref<'hr' | 'power' | 'pace'>('hr')
 
   // Computed properties
   const hasStreamData = computed(() => {
