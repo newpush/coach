@@ -29,6 +29,11 @@ Detailed documentation for specific application features.
 ### Nutrition & Fueling
 
 - [**Nutrition System**](./02-features/nutrition.md) - Dynamic periodized fueling, fuel states, and metabolic engine.
+- [**Fueling Logic**](./02-features/nutrition/fueling-logic.md) - Core metabolic engine and IF-based carb targets.
+
+### System Messages
+
+- [**System Messages**](./02-features/system-messages.md) - Admin-managed broadcast alerts and notifications.
 
 ### Analytics & Scoring
 
@@ -99,6 +104,8 @@ Instructional documents for developers.
 - [**Deployment Guide**](./04-guides/deployment.md) - Environment setup and deployment checklist.
 - [**Issue Management**](./04-guides/issue-management.md) - Guidelines for creating and managing GitHub issues.
 - [**LLM Quotas & Limits**](./04-guides/llm-quotas-and-limits.md) - Tier-based usage tracking and enforcement.
+- [**Timezone Handling**](./04-guides/timezone-handling.md) - Architecture for multi-source date consistency.
+- [**Chat Development**](./04-guides/chat-development.md) - Strict AI SDK sequencing and message normalization.
 - [**CLI Reference**](./04-guides/cli-reference.md) - Guide to using and extending the project CLI (`cw:cli`).
 - [**TSS Calculation**](./04-guides/tss-calculation.md) - How TSS is calculated from stream data.
 - [**Score Explanations**](./04-guides/score-explanations.md) - Guide to implementing score explanation features.
