@@ -8,6 +8,7 @@ import { WorkoutConverter } from '../server/utils/workout-converter'
 import { workoutRepository } from '../server/utils/repositories/workoutRepository'
 import { sportSettingsRepository } from '../server/utils/repositories/sportSettingsRepository'
 import { getUserTimezone, getUserLocalDate } from '../server/utils/date'
+import { checkQuota } from '../server/utils/quotas/engine'
 
 const workoutStructureSchema = {
   type: 'object',
@@ -158,6 +159,20 @@ export const generateStructuredWorkoutTask = task({
     if (!workout) {
       logger.warn('Workout not found, skipping structured generation', { plannedWorkoutId })
       return { success: false, error: 'Workout not found' }
+    }
+
+    // Check Quota
+    try {
+      await checkQuota(workout.userId, 'generate_structured_workout')
+    } catch (quotaError: any) {
+      if (quotaError.statusCode === 429) {
+        logger.warn('Structured workout generation quota exceeded', {
+          userId: workout.userId,
+          plannedWorkoutId
+        })
+        return { success: false, reason: 'QUOTA_EXCEEDED' }
+      }
+      throw quotaError
     }
 
     // Fetch Sport Specific Settings

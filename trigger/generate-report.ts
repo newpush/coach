@@ -3,6 +3,7 @@ import { logger, task } from '@trigger.dev/sdk/v3'
 import { generateStructuredAnalysis } from '../server/utils/gemini'
 import { prisma } from '../server/utils/db'
 import { userReportsQueue } from './queues'
+import { checkQuota } from '../server/utils/quotas/engine'
 import {
   fetchReportContext,
   renderPrompt,
@@ -25,6 +26,21 @@ export const generateReportTask = task({
     })
 
     if (!report) throw new Error(`Report not found: ${reportId}`)
+
+    // Check Quota
+    try {
+      await checkQuota(userId, 'unified_report_generation')
+    } catch (quotaError: any) {
+      if (quotaError.statusCode === 429) {
+        logger.warn('Unified report generation quota exceeded', { userId, reportId })
+        await prisma.report.update({
+          where: { id: reportId },
+          data: { status: 'FAILED' }
+        })
+        return { success: false, reason: 'QUOTA_EXCEEDED' }
+      }
+      throw quotaError
+    }
 
     // Use template from relation or from payload or fallback to a default
     const template =

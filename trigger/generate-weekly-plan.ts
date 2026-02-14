@@ -9,6 +9,7 @@ import { sportSettingsRepository } from '../server/utils/repositories/sportSetti
 import { availabilityRepository } from '../server/utils/repositories/availabilityRepository'
 import { generateTrainingContext } from '../server/utils/training-metrics'
 import { userBackgroundQueue } from './queues'
+import { checkQuota } from '../server/utils/quotas/engine'
 import {
   getUserTimezone,
   getStartOfDaysAgoUTC,
@@ -117,6 +118,17 @@ export const generateWeeklyPlanTask = task({
       trainingWeekId,
       anchorWorkoutIds
     })
+
+    // Check Quota
+    try {
+      await checkQuota(userId, 'weekly_plan_generation')
+    } catch (quotaError: any) {
+      if (quotaError.statusCode === 429) {
+        logger.warn('Weekly plan generation quota exceeded', { userId })
+        return { success: false, reason: 'QUOTA_EXCEEDED' }
+      }
+      throw quotaError
+    }
 
     const timezone = await getUserTimezone(userId)
     const aiSettings = await getUserAiSettings(userId)

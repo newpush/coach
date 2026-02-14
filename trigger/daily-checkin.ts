@@ -8,6 +8,7 @@ import { dailyCheckinRepository } from '../server/utils/repositories/dailyChecki
 import { formatUserDate, formatDateUTC, getUserLocalDate, calculateAge } from '../server/utils/date'
 import { calculateProjectedPMC, getCurrentFitnessSummary } from '../server/utils/training-stress'
 import { getUserAiSettings } from '../server/utils/ai-user-settings'
+import { checkQuota } from '../server/utils/quotas/engine'
 import { userReportsQueue } from './queues'
 import {
   getMoodLabel,
@@ -82,6 +83,22 @@ export const generateDailyCheckinTask = task({
       } else {
         // Update existing to PROCESSING
         await dailyCheckinRepository.update(checkinId, { status: 'PROCESSING' })
+      }
+
+      // Check Quota
+      try {
+        await checkQuota(userId, 'daily_checkin')
+      } catch (quotaError: any) {
+        if (quotaError.statusCode === 429) {
+          logger.warn('Daily check-in quota exceeded', { userId, checkinId })
+          if (checkinId) {
+            await dailyCheckinRepository.update(checkinId, {
+              status: 'FAILED'
+            })
+          }
+          return { success: false, reason: 'QUOTA_EXCEEDED' }
+        }
+        throw quotaError
       }
 
       const aiSettings = await getUserAiSettings(userId)

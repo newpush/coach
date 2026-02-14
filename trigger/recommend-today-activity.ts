@@ -14,6 +14,7 @@ import { analyzeWellness } from '../server/utils/services/wellness-analysis'
 import { getCheckinHistoryContext } from '../server/utils/services/checkin-service'
 import { getUserAiSettings } from '../server/utils/ai-user-settings'
 import { metabolicService } from '../server/utils/services/metabolicService'
+import { checkQuota } from '../server/utils/quotas/engine'
 import { generateAthleteProfileTask } from './generate-athlete-profile'
 import { userReportsQueue } from './queues'
 import {
@@ -133,6 +134,23 @@ export const recommendTodayActivityTask = task({
     logger.log("Starting today's activity recommendation", { userId, payloadDate })
 
     const aiSettings = await getUserAiSettings(userId)
+
+    // Check Quota
+    try {
+      await checkQuota(userId, 'activity_recommendation')
+    } catch (quotaError: any) {
+      if (quotaError.statusCode === 429) {
+        logger.warn('Activity recommendation quota exceeded', { userId, recommendationId })
+        if (recommendationId) {
+          await activityRecommendationRepository.update(recommendationId, userId, {
+            status: 'FAILED',
+            reasoning: 'Quota exceeded. Upgrade your plan for higher limits.'
+          })
+        }
+        return { success: false, reason: 'QUOTA_EXCEEDED' }
+      }
+      throw quotaError
+    }
 
     // 1. Fetch User Profile & Timezone FIRST to establish "Today" correctly
     const user = await prisma.user.findUnique({
