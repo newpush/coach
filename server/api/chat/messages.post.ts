@@ -10,6 +10,7 @@ import { getUserAiSettings } from '../../utils/ai-user-settings'
 import { getLlmOperationSettings } from '../../utils/ai-operation-settings'
 import { MODEL_NAMES, calculateLlmCost } from '../../utils/ai-config'
 import { checkQuota } from '../../utils/quotas/engine'
+import { truncateMessages } from '../../utils/chat/history'
 
 export default defineEventHandler(async (event) => {
   const session = await getServerSession(event)
@@ -28,6 +29,10 @@ export default defineEventHandler(async (event) => {
   const body = await readBody(event)
   const { roomId, messages, files, replyMessage } = body
 
+  // Truncate history to avoid massive context windows
+  // Keeping last 20 messages is usually plenty for conversation context
+  const truncatedMessages = truncateMessages(messages || [], 25)
+
   // Block messages in legacy rooms (pre-migration)
   const MIGRATION_CUTOFF = new Date('2026-01-22T00:00:00Z')
   const room = await prisma.chatRoom.findUnique({
@@ -44,7 +49,7 @@ export default defineEventHandler(async (event) => {
 
   // Vercel AI SDK sends the full conversation history in 'messages'
   // The last message is the new user input
-  const lastMessage = messages?.[messages.length - 1]
+  const lastMessage = truncatedMessages?.[truncatedMessages.length - 1]
 
   let content = lastMessage?.content
   // Handle cases where content might be in parts only (common in newer SDK versions)
@@ -55,7 +60,7 @@ export default defineEventHandler(async (event) => {
       .join('')
   }
 
-  const historyMessages = messages
+  const historyMessages = truncatedMessages
 
   // Allow empty content for tool messages (approvals/results)
   if (!roomId || (!content && lastMessage?.role !== 'tool')) {
@@ -73,7 +78,11 @@ export default defineEventHandler(async (event) => {
     include: {
       room: {
         select: {
-          deletedAt: true
+          deletedAt: true,
+          metadata: true,
+          _count: {
+            select: { messages: true }
+          }
         }
       }
     }
@@ -125,11 +134,46 @@ export default defineEventHandler(async (event) => {
   }
 
   // 2. Build Athlete Context
-  const { userProfile, systemInstruction } = await buildAthleteContext(userId)
+  const { userProfile, systemInstruction: baseSystemInstruction } =
+    await buildAthleteContext(userId)
+
+  // Prepend history summary if it exists in room metadata
+  const roomMetadata = participant.room.metadata as any
+  let finalSystemInstruction = baseSystemInstruction
+  if (roomMetadata?.historySummary) {
+    finalSystemInstruction = `## Previous Conversation Summary\n${roomMetadata.historySummary}\n\n${baseSystemInstruction}`
+  }
+
   const timezone = await getUserTimezone(userId)
   const aiSettings = await getUserAiSettings(userId)
 
-  // 3. Initialize Model and Tools
+  // 3. Proactive Summarization Trigger
+  const messageCount = participant.room._count.messages
+  let hasLargeMessage = false
+  const estimatedTokens = (messages || []).reduce((acc: number, msg: any) => {
+    const tokens = typeof msg.content === 'string' ? msg.content.length / 4 : 0
+    if (tokens > 5000) hasLargeMessage = true
+    return acc + tokens
+  }, 0)
+
+  // Trigger if:
+  // - Message count hits a milestone (every 30)
+  // - Total history tokens > 15,000 (roughly 60,000 chars)
+  // - Any single message is > 5,000 tokens (likely a massive tool response)
+  const shouldSummarize =
+    (messageCount > 0 && messageCount % 30 === 0) || estimatedTokens > 15000 || hasLargeMessage
+
+  if (shouldSummarize) {
+    // Trigger background summarization
+    try {
+      const { summarizeChatTask } = await import('../../../trigger/summarize-chat')
+      await summarizeChatTask.trigger({ roomId, userId })
+    } catch (err) {
+      console.error('[Chat API] Failed to trigger background summarization:', err)
+    }
+  }
+
+  // 4. Initialize Model and Tools
   const google = createGoogleGenerativeAI({
     apiKey: process.env.GEMINI_API_KEY
   })
@@ -240,17 +284,6 @@ export default defineEventHandler(async (event) => {
             }
           }
 
-          // 3. Defensive sequence check: Strip tool calls if not followed by results
-          if (msg.role === 'assistant' && (!nextMsg || nextMsg.role !== 'tool')) {
-            const hasCalls = msg.content.some((p: any) => p.type === 'tool-call')
-            if (hasCalls) {
-              console.warn(
-                `[Chat API]Normalizer: Stripping orphaned tool calls from turn index ${i} `
-              )
-              msg.content = msg.content.filter((p: any) => p.type !== 'tool-call')
-            }
-          }
-
           // 4. Fallback for empty assistant
           if (msg.content.length === 0) {
             if (msg.role === 'assistant') msg.content = [{ type: 'text', text: ' ' }]
@@ -277,11 +310,6 @@ export default defineEventHandler(async (event) => {
       }
     })
 
-    console.log(
-      '[Chat API] Final Core Sequence:',
-      normalizedMessages.map((m) => m.role).join(' -> ')
-    )
-
     // Configure thinking based on model version and tier settings
     const providerOptions: any = {}
     if (modelName.includes('gemini-3')) {
@@ -297,7 +325,7 @@ export default defineEventHandler(async (event) => {
 
     const result = await streamText({
       model: google(modelName),
-      system: systemInstruction,
+      system: finalSystemInstruction,
       messages: normalizedMessages,
       tools,
       stopWhen: stepCountIs(opSettings.maxSteps),
@@ -329,117 +357,110 @@ export default defineEventHandler(async (event) => {
             where: { id: roomId },
             data: { lastMessageAt: new Date() }
           })
-        } catch (dbErr) {
-          console.error('[Chat API] Failed to save AI message:', dbErr)
-          return
-        }
 
-        try {
-          const resultsToSave = finalStepResults?.length ? finalStepResults : allToolResults
-          const enrichedResults = resultsToSave.map((tr: any) => {
-            if (tr.toolName && (tr.args || tr.input)) return tr
-            const call =
-              finalCalls?.find((tc: any) => tc.toolCallId === tr.toolCallId) ||
-              historyToolCalls.get(tr.toolCallId)
-            return {
-              ...tr,
-              toolName: tr.toolName || call?.toolName,
-              args: tr.args || call?.args || call?.input
-            }
-          })
+          try {
+            const resultsToSave = finalStepResults?.length ? finalStepResults : allToolResults
+            const enrichedResults = resultsToSave.map((tr: any) => {
+              if (tr.toolName && (tr.args || tr.input)) return tr
+              const call =
+                finalCalls?.find((tc: any) => tc.toolCallId === tr.toolCallId) ||
+                historyToolCalls.get(tr.toolCallId)
+              return {
+                ...tr,
+                toolName: tr.toolName || call?.toolName,
+                args: tr.args || call?.args || call?.input
+              }
+            })
 
-          const toolCallsUsed = enrichedResults.map((tr: any) => ({
-            toolCallId: tr.toolCallId,
-            name: tr.toolName,
-            args: tr.args,
-            response: tr.result || tr.output,
-            timestamp: new Date().toISOString()
-          }))
-
-          const charts = enrichedResults
-            .filter(
-              (tr: any) =>
-                tr.toolName === 'create_chart' && (tr.result?.success || tr.output?.success)
-            )
-            .map((tr: any, index: number) => ({
-              id: `chart - ${aiMessage.id} -${index} `,
-              ...tr.args
+            const toolCallsUsed = enrichedResults.map((tr: any) => ({
+              toolCallId: tr.toolCallId,
+              name: tr.toolName,
+              args: tr.args,
+              response: tr.result || tr.output,
+              timestamp: new Date().toISOString()
             }))
 
-          if (charts.length > 0 || toolCallsUsed.length > 0) {
-            await prisma.chatMessage.update({
-              where: { id: aiMessage.id },
-              data: {
-                metadata: {
-                  charts,
-                  toolCalls: toolCallsUsed,
-                  toolsUsed: toolCallsUsed.map((t) => t.name),
-                  toolCallCount: toolCallsUsed.length
-                } as any
-              }
-            })
-          }
+            const charts = enrichedResults
+              .filter(
+                (tr: any) =>
+                  tr.toolName === 'create_chart' && (tr.result?.success || tr.output?.success)
+              )
+              .map((tr: any, index: number) => ({
+                id: `chart - ${aiMessage.id} -${index} `,
+                ...tr.args
+              }))
 
-          // Log usage
-          try {
-            const promptTokens = usage.inputTokens || 0
-            const completionTokens = usage.outputTokens || 0
-            const cachedTokens = usage.inputTokenDetails?.cacheReadTokens || 0
-            const reasoningTokens = (usage as any).outputTokenDetails?.reasoningTokens || 0
+            if (charts.length > 0 || toolCallsUsed.length > 0) {
+              await prisma.chatMessage.update({
+                where: { id: aiMessage.id },
+                data: {
+                  metadata: {
+                    charts,
+                    toolCalls: toolCallsUsed,
+                    toolsUsed: toolCallsUsed.map((t) => t.name),
+                    toolCallCount: toolCallsUsed.length
+                  } as any
+                }
+              })
+            }
 
-            console.log(
-              `[Chat API] Usage: Prompt=${promptTokens} (Cached Read=${cachedTokens}), Completion=${completionTokens} (Reasoning=${reasoningTokens})`
-            )
+            // Log usage
+            try {
+              const promptTokens = usage.inputTokens || 0
+              const completionTokens = usage.outputTokens || 0
+              const cachedTokens = usage.inputTokenDetails?.cacheReadTokens || 0
+              const reasoningTokens = (usage as any).outputTokenDetails?.reasoningTokens || 0
 
-            const estimatedCost = calculateLlmCost(
-              modelName,
-              promptTokens,
-              completionTokens + reasoningTokens,
-              cachedTokens
-            )
-
-            await prisma.llmUsage.create({
-              data: {
-                userId,
-                provider: 'google',
-                model: modelName,
-                modelType: aiSettings.aiModelPreference === 'flash' ? 'flash' : 'pro',
-                operation: 'chat',
-                entityType: 'ChatMessage',
-                entityId: aiMessage.id,
+              const estimatedCost = calculateLlmCost(
+                modelName,
                 promptTokens,
-                completionTokens,
-                cachedTokens,
-                reasoningTokens,
-                totalTokens: promptTokens + completionTokens,
-                estimatedCost,
-                durationMs: 0,
-                retryCount: 0,
-                success: true,
-                promptPreview:
-                  typeof content === 'string'
-                    ? content.substring(0, 500)
-                    : JSON.stringify(content).substring(0, 500),
-                responsePreview: (text || '').substring(0, 500)
-              }
-            })
-          } catch (e) {
-            console.error('[Chat] LLM usage log failed:', e)
+                completionTokens + reasoningTokens,
+                cachedTokens
+              )
+
+              await prisma.llmUsage.create({
+                data: {
+                  userId,
+                  provider: 'google',
+                  model: modelName,
+                  modelType: aiSettings.aiModelPreference === 'flash' ? 'flash' : 'pro',
+                  operation: 'chat',
+                  entityType: 'ChatMessage',
+                  entityId: aiMessage.id,
+                  promptTokens,
+                  completionTokens,
+                  cachedTokens,
+                  reasoningTokens,
+                  totalTokens: promptTokens + completionTokens,
+                  estimatedCost,
+                  durationMs: 0,
+                  retryCount: 0,
+                  success: true,
+                  promptPreview:
+                    typeof content === 'string'
+                      ? content.substring(0, 500)
+                      : JSON.stringify(content).substring(0, 500),
+                  responsePreview: (text || '').substring(0, 500)
+                }
+              })
+            } catch (e) {
+              console.error('[Chat API] LLM usage log failed:', e)
+            }
+          } catch (err) {
+            console.error('[Chat API] Metadata capture error:', err)
           }
         } catch (err) {
-          console.error(`[Chat API] Metadata capture error: ${err} `)
+          console.error('[Chat API] Failed to process finish event:', err)
         }
       }
     })
 
     return result.toUIMessageStreamResponse({
       onError: (error: any) => {
-        console.error('[Chat API] Stream error:', error)
         return `An error occurred while generating the response: ${error?.message || 'Unknown error'} `
       }
     })
   } catch (error: any) {
-    console.error('[Chat] Error in streamText:', error)
     throw createError({ statusCode: 500, message: 'Failed to generate response: ' + error.message })
   }
 })
