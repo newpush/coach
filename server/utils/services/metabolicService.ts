@@ -24,6 +24,29 @@ import {
 import { HYDRATION_DEBT_NUDGE_THRESHOLD_ML, MEAL_LINKED_WATER_ML } from '../nutrition/hydration'
 import { getUserNutritionSettings } from '../nutrition/settings'
 
+interface FuelingWindow {
+  type: string
+  startTime: string
+  endTime: string
+  workoutTitle?: string
+  targetCarbs?: number
+  targetProtein?: number
+  targetFat?: number
+  description?: string
+  status?: string
+  slotName?: string
+}
+
+interface NutritionPlanSummary {
+  windows?: FuelingWindow[]
+  dailyTotals?: {
+    carbs: number
+    protein: number
+    fat: number
+    calories: number
+  }
+}
+
 export const metabolicService = {
   getDailyBaseWindowKey(slotName?: string) {
     const normalized = (slotName || '')
@@ -230,15 +253,16 @@ export const metabolicService = {
       include: { meals: true }
     })
 
-    const windows = Array.isArray(plan?.summaryJson?.windows)
-      ? [...(plan.summaryJson.windows as any)]
-          .map((w: any) => ({
+    const summary = plan?.summaryJson as unknown as NutritionPlanSummary
+    const windows = Array.isArray(summary?.windows)
+      ? [...(summary.windows as FuelingWindow[])]
+          .map((w) => ({
             ...w,
             start: new Date(w.startTime),
             end: new Date(w.endTime)
           }))
-          .filter((w: any) => !isNaN(w.start.getTime()) && !isNaN(w.end.getTime()))
-          .sort((a: any, b: any) => a.start.getTime() - b.start.getTime())
+          .filter((w) => !isNaN(w.start.getTime()) && !isNaN(w.end.getTime()))
+          .sort((a, b) => a.start.getTime() - b.start.getTime())
       : []
 
     // If we don't have a plan with windows yet, we might need to compute them on the fly
@@ -246,9 +270,10 @@ export const metabolicService = {
     // Fallback to on-demand plan calculation if empty
     if (windows.length === 0) {
       const computed = await this.calculateFuelingPlanForDate(userId, date, { persist: false })
-      if (computed.plan?.windows) {
+      const computedPlan = computed.plan as unknown as NutritionPlanSummary
+      if (computedPlan?.windows) {
         windows.push(
-          ...computed.plan.windows.map((w: any) => ({
+          ...computedPlan.windows.map((w) => ({
             ...w,
             start: new Date(w.startTime),
             end: new Date(w.endTime)
@@ -1298,14 +1323,16 @@ export const metabolicService = {
       select: { weight: true }
     })
 
+    const plan = planResult.plan as unknown as NutritionPlanSummary
+
     return {
       nutrition,
-      fuelingPlan: planResult.plan,
+      fuelingPlan: plan,
       targets: {
-        carbs: planResult.plan?.dailyTotals.carbs || 0,
-        protein: planResult.plan?.dailyTotals.protein || 0,
-        fat: planResult.plan?.dailyTotals.fat || 0,
-        calories: planResult.plan?.dailyTotals.calories || 0
+        carbs: plan?.dailyTotals?.carbs || 0,
+        protein: plan?.dailyTotals?.protein || 0,
+        fat: plan?.dailyTotals?.fat || 0,
+        calories: plan?.dailyTotals?.calories || 0
       }
     }
   }

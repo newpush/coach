@@ -61,6 +61,8 @@ export const nutritionPlanService = {
     if (!overlappingPlans.length) return null
 
     const primary = overlappingPlans[0]
+    if (!primary) return null
+
     const mergedMealsMap = new Map<string, any>()
 
     for (const plan of overlappingPlans) {
@@ -267,11 +269,13 @@ export const nutritionPlanService = {
       )
     if (splitTotalsForAssignments.length > 0) {
       const last = splitTotalsForAssignments[splitTotalsForAssignments.length - 1]
-      last.totals = {
-        carbs: Math.max(0, Math.round(Number(totals.carbs || 0) - assignedSoFar.carbs)),
-        protein: Math.max(0, Math.round(Number(totals.protein || 0) - assignedSoFar.protein)),
-        kcal: Math.max(0, Math.round(Number(totals.kcal || 0) - assignedSoFar.kcal)),
-        fat: Math.max(0, Math.round(Number(totals.fat || 0) - assignedSoFar.fat))
+      if (last) {
+        last.totals = {
+          carbs: Math.max(0, Math.round(Number(totals.carbs || 0) - assignedSoFar.carbs)),
+          protein: Math.max(0, Math.round(Number(totals.protein || 0) - assignedSoFar.protein)),
+          kcal: Math.max(0, Math.round(Number(totals.kcal || 0) - assignedSoFar.kcal)),
+          fat: Math.max(0, Math.round(Number(totals.fat || 0) - assignedSoFar.fat))
+        }
       }
     }
 
@@ -330,6 +334,8 @@ export const nutritionPlanService = {
       const fuelingPlan = (nutrition.fuelingPlan as any) || { windows: [] }
       for (let i = 0; i < splitTotalsForAssignments.length; i++) {
         const assignment = splitTotalsForAssignments[i]
+        if (!assignment) continue
+
         const lockedMeal = persistedPlanMeals[i]
         const windowIndex = fuelingPlan.windows.findIndex((window: any) => {
           if (assignment.windowType === 'DAILY_BASE') {
