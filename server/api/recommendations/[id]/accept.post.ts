@@ -2,6 +2,7 @@ import { getServerSession } from '../../../utils/session'
 import { prisma } from '../../../utils/db'
 import { tasks } from '@trigger.dev/sdk/v3'
 import { syncPlannedWorkoutToIntervals } from '../../../utils/intervals-sync'
+import { isIntervalsEventId } from '../../../utils/intervals'
 
 defineRouteMeta({
   openAPI: {
@@ -147,10 +148,7 @@ export default defineEventHandler(async (event) => {
 
   // Sync to Intervals.icu if it's already published (not local-only)
   const isLocal =
-    updatedWorkout.syncStatus === 'LOCAL_ONLY' ||
-    updatedWorkout.externalId.startsWith('ai_gen_') ||
-    updatedWorkout.externalId.startsWith('ai-gen-') ||
-    updatedWorkout.externalId.startsWith('adhoc-')
+    updatedWorkout.syncStatus === 'LOCAL_ONLY' || !isIntervalsEventId(updatedWorkout.externalId)
 
   if (!isLocal) {
     await syncPlannedWorkoutToIntervals(

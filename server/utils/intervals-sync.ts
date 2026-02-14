@@ -3,7 +3,8 @@ import { prisma } from './db'
 import {
   updateIntervalsPlannedWorkout,
   createIntervalsPlannedWorkout,
-  deleteIntervalsPlannedWorkout
+  deleteIntervalsPlannedWorkout,
+  isIntervalsEventId
 } from './intervals'
 
 /**
@@ -42,7 +43,7 @@ export async function syncPlannedWorkoutToIntervals(
       case 'UPDATE':
         // If externalId is local (non-numeric), we can't update it on Intervals.
         // TODO: Should we CREATE it instead? For now, skip to avoid 404/429.
-        if (!/^\d+$/.test(workoutData.externalId)) {
+        if (!isIntervalsEventId(workoutData.externalId)) {
           return {
             success: true,
             synced: false,
@@ -57,7 +58,7 @@ export async function syncPlannedWorkoutToIntervals(
         break
       case 'DELETE':
         // If externalId is local (non-numeric), it doesn't exist on Intervals.
-        if (!/^\d+$/.test(workoutData.externalId)) {
+        if (!isIntervalsEventId(workoutData.externalId)) {
           return {
             success: true,
             synced: false,
@@ -163,9 +164,33 @@ export async function processSyncQueueItem(queueItem: any): Promise<boolean> {
         await createIntervalsPlannedWorkout(integration, payload)
         break
       case 'UPDATE':
+        if (!isIntervalsEventId(payload.externalId)) {
+          await prisma.syncQueue.update({
+            where: { id: queueItem.id },
+            data: {
+              status: 'FAILED',
+              error: 'Invalid Intervals externalId for UPDATE operation',
+              attempts: queueItem.attempts + 1,
+              lastAttempt: new Date()
+            }
+          })
+          return false
+        }
         await updateIntervalsPlannedWorkout(integration, payload.externalId, payload)
         break
       case 'DELETE':
+        if (!isIntervalsEventId(payload.externalId)) {
+          await prisma.syncQueue.update({
+            where: { id: queueItem.id },
+            data: {
+              status: 'FAILED',
+              error: 'Invalid Intervals externalId for DELETE operation',
+              attempts: queueItem.attempts + 1,
+              lastAttempt: new Date()
+            }
+          })
+          return false
+        }
         await deleteIntervalsPlannedWorkout(integration, payload.externalId)
         break
     }

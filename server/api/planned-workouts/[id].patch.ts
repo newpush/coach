@@ -1,5 +1,6 @@
 import { getServerSession } from '../../utils/session'
 import { syncPlannedWorkoutToIntervals } from '../../utils/intervals-sync'
+import { isIntervalsEventId } from '../../utils/intervals'
 import { plannedWorkoutRepository } from '../../utils/repositories/plannedWorkoutRepository'
 import { metabolicService } from '../../utils/services/metabolicService'
 import { getUserLocalDate, getUserTimezone } from '../../utils/date'
@@ -133,11 +134,7 @@ export default defineEventHandler(async (event) => {
     }
 
     // Determine if it's a local-only workout that needs CREATE instead of UPDATE
-    const isLocal =
-      existing.syncStatus === 'LOCAL_ONLY' ||
-      existing.externalId.startsWith('ai_gen_') ||
-      existing.externalId.startsWith('ai-gen-') ||
-      existing.externalId.startsWith('adhoc-')
+    const isLocal = existing.syncStatus === 'LOCAL_ONLY' || !isIntervalsEventId(existing.externalId)
 
     let finalWorkout = updated
 
