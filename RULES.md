@@ -61,6 +61,7 @@ This file aggregates all critical development rules and guidelines for the Coach
 
 - **Buttons**: Use `UButton`. Follow standard patterns for navbar actions (`size="sm"`, `class="font-bold"`, with icon).
 - **Cards**: Use `UCard` for content containers.
+- **Modals**: Nuxt UI Modals **MUST** use `v-model:open="isOpen"` (not just `v-model`). For custom content (like replacing default card), wrap the inner content in `<template #content>`.
 - **Nested Containers**: **AVOID** nesting `UCard` inside `UModal` body or `USlideover` body without overriding padding. This causes excessive whitespace on mobile. Use `:ui="{ body: 'p-0 sm:p-6' }"` or remove the nested card wrapper.
 - **Tables**: Use plain HTML tables wrapped in a card-like div for maximum reliability and control. Avoid `UTable` inside complex `UDashboardPanel` structures if rendering issues occur. **Do NOT use UCard for tables.**
 - **Tooltips**: Maintain consistent design, content, and behavior. Use `UPopover` (mode="hover") or `UTooltip` for explanations. Ensure visibility and verify content on hover.
@@ -134,6 +135,13 @@ This file aggregates all critical development rules and guidelines for the Coach
 ---
 
 ## 8. Troubleshooting & CLI
+
+### Search & Discovery
+
+- **Tooling**: Always prefer `ripgrep` (via the `grep_search` tool) over standard `grep` for significantly better performance and automatic filtering.
+- **Exclusions**: Always exclude hidden directories (folders starting with a dot, e.g., `.trigger`, `.nuxt`, `.git`) as well as `./backups/`, `./examples/`, and `./clients/` directories to avoid noise and performance issues.
+
+### CLI Usage
 
 - **Preference**: **ALWAYS** prefer extending the project CLI (`cli/`) over creating one-off scripts in `scripts/`. This ensures consistency and reusability.
 - **Documentation**: Refer to [docs/04-guides/cli-reference.md](docs/04-guides/cli-reference.md) for full usage and command reference.
@@ -225,6 +233,15 @@ const data = await prisma.model.findUnique({
   }
   ```
 - **Security**: Use `<!-- eslint-disable vue/no-v-html -->` only when absolutely necessary for trusted content (e.g., Markdown rendering). Wrap the directive around the specific element.
+
+## 12. Background Tasks (Trigger.dev)
+
+### Architecture
+
+- **Queues**: Tasks are strictly assigned to specific queues (`user-ingestion`, `user-analysis`, `user-reports`) with a concurrency limit of 2 per user.
+- **Concurrency**: All API triggers **MUST** pass `concurrencyKey: userId` to enforce isolation.
+- **Idempotency**: Use idempotency keys (e.g., entity ID) with a 5-minute TTL for analysis tasks to prevent duplicate runs.
+- **Sequencing**: Maintain sequential execution for user data flows: `ingest-all` -> `generate-athlete-profile` -> `recommend-today-activity`.
 
 ---
 

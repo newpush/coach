@@ -1,39 +1,22 @@
-## Gemini Added Memories
+## Coach Watts Hot Context
 
-- The "Settings" menu item in the main navigation (app/layouts/default.vue) has been modified to be a collapsible parent item by removing the 'to' link and 'onSelect' handler, ensuring sub-items can be accessed without navigation or closing the sidebar on mobile.
-- Implemented account deletion feature using Trigger.dev background job 'delete-user-account' and API endpoint 'DELETE /api/profile'. Updated 'DangerZone.vue' to confirm and trigger deletion.
-- Avoid using `grep` on the entire codebase; always specify subdirectories to prevent searching through large directories like `node_modules`.
-- Added `fetchWithRetry` utility with exponential backoff for handling 429 Too Many Requests in Intervals.icu integration (server/utils/intervals.ts).
-- Added `userIngestionQueue` to `trigger/queues.ts` and updated ingestion tasks (`ingest-intervals`, `ingest-strava`, `ingest-whoop`, etc.) to use it. Ensured `concurrencyKey: userId` is passed in triggers for per-user concurrency.
-- The "Daily Coach" feature (recommend-today-activity) now explicitly includes the user's local date, time, and timezone in the AI prompt to provide context-aware advice (e.g., handling late-night requests).
-- The application now enforces strict timezone handling: Database dates are UTC, Backend queries are relative to User Timezone (using server/utils/date.ts), and Frontend display respects User Timezone (via useFormat.ts). SWE agents should verify all date logic against RULES.md section 9.
-- The client now automatically detects the user's timezone via `app/plugins/timezone.client.ts` if it's missing from their profile, updates it via API, and falls back to 'UTC' if detection fails. The session object has been updated to include `timezone`.
-- All "Analyze" and "Generate Report" trigger tasks (analyze-last-3-workouts, analyze-nutrition, generate-athlete-profile, etc.) have been updated to use the centralized `server/utils/date.ts` logic (`getUserTimezone`, `getStartOfDaysAgoUTC`, `formatUserDate`). This ensures consistent timezone handling for data fetching and AI prompting. The `chat-tools.ts` helper has also been refactored to be timezone-aware.
-- The planning triggers (`generate-weekly-plan`, `generate-training-block`, `adapt-training-plan`) and ingestion triggers (`ingest-yazio`, `ingest-withings`, `ingest-hevy`) have been updated to import `server/utils/date.ts` and fetch/use the user's timezone where appropriate. Specifically, `generate-weekly-plan` now aligns plan dates to the user's local day boundaries converted to UTC. Ingestion triggers have date utilities imported for future robustness, although they largely rely on source API timestamps (which should be UTC).
-- The `ingest-hevy.ts` file exports `ingestHevyTask`, not `ingestHevy`. The `ingest-all.ts` file has been updated to import and use the correct export name. This fixes the build error. All ingestion tasks are now properly referenced in the batch ingestion trigger.
-- I have established strict guidelines for creating GitHub issues, detailed in `docs/04-guides/issue-management.md`. All future issues created by me must follow the defined templates (Bug, Feature, Maintenance) and use the specified labeling strategy (Type, Priority, Area).
-- The project now has a best-practice health check endpoint at /api/health that verifies database connectivity.
-- The project has failing typechecks (TS2307, TS2578) across multiple existing files (share API, user store, fit utils), indicating a need for a dedicated cleanup task unrelated to recent changes.
-- Fixed 401 Server Error in '/api/workouts/streams' by preventing server-side execution of `$fetch` in watchers within `app/pages/activities.vue`, `app/components/WeeklyZoneSummary.vue`, and `app/components/WeeklyZoneDetailModal.vue` using `if (import.meta.server) return`.
-- Fixed "No session data found in FIT file" error in `trigger/ingest-fit-file.ts` by implementing `reconstructSessionFromRecords` in `server/utils/fit.ts` as a fallback to calculate summary metrics from raw time-series records when the main session message is missing.
-- Nuxt UI Modals MUST use `v-model:open="isOpen"` (not just `v-model`). For custom content (like replacing default card), wrap the inner content in `<template #content>`. Reference `docs/04-guides/frontend-patterns.md`.
-- Standardized recommendation labels in 'trigger/generate-recommendations.ts' and cleaned up existing database entries to remove 'workout/' and 'nutrition/' prefixes.
-- Fixed issue where "Update Recommendations" button was not polling correctly by implementing `isRunIdRunning` in `server/utils/trigger-check.ts` and updating the status endpoint and frontend to track specific Trigger.dev run IDs instead of relying on generic tag-based status checks which were prone to race conditions.
-- Fixed issue where "Refresh" button in Athlete Profile on Dashboard was not polling correctly by creating `server/api/profile/status.get.ts` to check specific run IDs and updating `app/stores/user.ts` to use this endpoint for polling.
-- The `users` command group in the CLI now has a `search` subcommand that allows searching for users by email or name (partial, case-insensitive) and supports the `--prod` flag.
-- Fixed mobile hamburger menu in 'app/layouts/admin.vue' by replacing the non-functional event emission with a local 'isOpen' state and a 'USlideover' component to render the navigation on mobile.
-- Fixed the `USlideover` implementation in `app/layouts/admin.vue` by moving the sidebar content into the `#content` slot. This resolved the issue where the sidebar was incorrectly rendered as a permanent trigger (always visible) and the actual slideover appeared empty.
-- Refactored `app/layouts/admin.vue` to use the `UNavigationMenu` component for navigation, aligning it with the `app/layouts/default.vue` style. Updated the navigation links to be a computed property including `onSelect` behavior for mobile closure. Replaced manual `v-for` loops with `UNavigationMenu` in both mobile and desktop sidebars.
-- Migrated the admin layout (`app/layouts/admin.vue`) to use `UDashboardGroup` and `UDashboardSidebar` with `UNavigationMenu`, ensuring consistency with the main dashboard. Also refactored the admin index page (`app/pages/admin/index.vue`) to use `UDashboardPanel` and `UDashboardNavbar` with a sidebar collapse toggle for proper mobile responsiveness.
-- Implemented a robust Real-time Background Task Monitoring system using WebSockets (Nitro experimental) and Trigger.dev SDK.
-  - `server/api/websocket.ts`: WebSocket handler that streams run updates to clients via `runs.subscribeToRun` and `runs.subscribeToRunsWithTag`.
-  - `app/composables/useUserRuns.ts`: Singleton composable that manages the global list of active runs and WebSocket connection. Includes smart merging logic to handle race conditions between API fetches and WebSocket updates.
-  - `app/components/dashboard/TriggerMonitor.vue`: A collapsible widget that displays active background tasks with status animations and duration timers.
-  - `app/components/dashboard/TriggerMonitorButton.vue`: A navbar button with a badge showing the count of active tasks.
-  - `onTaskCompleted(taskIdentifier, callback)`: A helper in `useUserRuns` to allow components to react globally when specific background tasks finish, replacing legacy polling logic.
-- Resolved `DailyCheckin` schema drift where `userNotes` column was missing in Prod/migrations but present in schema/local. Fixed by manually creating the migration file and resolving it locally. Enforced `npx prisma migrate dev` workflow in `RULES.md` to prevent recurrence.
-- The project uses `pnpm` as the primary package manager in the development environment. All dependency management and script execution should be performed using `pnpm`.
-- Server logs can be found in `./logs/dev.log` (the file is overwritten every time the developer fully restarts the server).
-- Updated Jules Agent instructions in `.github/workflows/jules.yml` to ensure it reads up-to-date documentation for Nuxt/Nuxt UI in `.gemini/skills/` and project patterns in `GEMINI.md`, `RULES.md`, and `docs/`.
-- When writing scripts for troubleshooting, prioritize creating reusable CLI commands by augmenting or extending `cw:cli` command groups (e.g., `cli/nutrition/inspect.ts`) rather than creating one-off standalone scripts.
-- When searching for file content or patterns, prioritize using `ripgrep` (via the `search_file_content` tool) instead of standard `grep` for significantly better performance and automatic filtering.
+This file tracks ongoing project state, active blockers, and recent architectural changes that haven't yet been formalized in `RULES.md` or `docs/`.
+
+### Active Status & Known Issues
+
+- **Typechecks**: The project has failing typechecks (TS2307, TS2578) across multiple existing files (share API, user store, fit utils). This is a known cleanup task.
+- **Pricing Transition**: Transitioning from 'Free for Early Adopters' to tiered structure: Free ($0), Supporter ($8.99/mo), and Pro ($14.99/mo). See `docs/06-plans/pricing-and-entitlements.md`.
+
+### Recent Integrations & Changes
+
+- **Wellness Tracking**: Added Weight and Blood Pressure tracking via Intervals.icu.
+- **Oura Integration**: Expanded to include SpO2, Stress, VO2 Max, and Weight. Raw biometrics (HRV/RHR) are strictly extracted to avoid score conflicts.
+- **Location Tracking**: Added `cw:cli users location` tools to manage user countries based on last login IP.
+- **Chat Stability**: fully stabilized using AI SDK v5 UIMessage schema. See `docs/04-guides/chat-development.md`.
+
+### Feature Pointers
+
+- **Nutrition Logic**: See `docs/02-features/nutrition/fueling-logic.md`.
+- **System Messages**: See `docs/02-features/system-messages.md`.
+- **Chat Development**: See `docs/04-guides/chat-development.md`.
+- **Timezone Handling**: See `docs/04-guides/timezone-handling.md`.
