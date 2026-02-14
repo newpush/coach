@@ -36,208 +36,234 @@
 
     <template #body>
       <div class="p-0 sm:p-6 space-y-4 sm:space-y-6">
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:gap-6">
-          <!-- Main Chart Section -->
-          <div id="top-section" class="lg:col-span-2 space-y-4 sm:space-y-6">
-            <UCard
-              :ui="{
-                root: 'rounded-none sm:rounded-lg shadow-none sm:shadow',
-                body: 'p-4 sm:p-6'
-              }"
-            >
-              <template #header>
-                <div
-                  class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 sm:gap-0"
+        <UTabs :items="tabs" class="w-full">
+          <template #strategy>
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:gap-6 pt-4">
+              <!-- Main Chart Section -->
+              <div id="top-section" class="lg:col-span-2 space-y-4 sm:space-y-6">
+                <UCard
+                  :ui="{
+                    root: 'rounded-none sm:rounded-lg shadow-none sm:shadow',
+                    body: 'p-4 sm:p-6'
+                  }"
                 >
-                  <div>
+                  <template #header>
+                    <div
+                      class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 sm:gap-0"
+                    >
+                      <div>
+                        <h3 class="text-base font-semibold leading-6 text-gray-900 dark:text-white">
+                          Metabolic Horizon
+                        </h3>
+                        <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                          7-day rolling glycogen tank projection
+                        </p>
+                      </div>
+                      <div class="flex flex-wrap items-center gap-3">
+                        <div class="flex items-center gap-1">
+                          <div class="size-2 rounded-full bg-blue-500" />
+                          <span class="text-[10px] text-gray-500">Glycogen</span>
+                        </div>
+                        <div class="flex items-center gap-1">
+                          <div class="size-2 rounded-full bg-blue-500 border border-dashed" />
+                          <span class="text-[10px] text-gray-500">Projected</span>
+                        </div>
+                        <div class="flex items-center gap-1">
+                          <div class="size-2 rounded bg-[#ef4444]" />
+                          <span class="text-[10px] text-gray-500">Workout</span>
+                        </div>
+                        <div class="flex items-center gap-1">
+                          <div class="size-2 rounded-full bg-[#10b981]" />
+                          <span class="text-[10px] text-gray-500">Meal</span>
+                        </div>
+                        <div class="flex items-center gap-1">
+                          <div
+                            class="size-0 border-l-[4px] border-l-transparent border-r-[4px] border-r-transparent border-b-[6px] border-b-[#8b5cf6]"
+                          />
+                          <span class="text-[10px] text-gray-500">Multiple</span>
+                        </div>
+                      </div>
+                    </div>
+                  </template>
+
+                  <div v-if="loadingWave" class="h-[300px] flex items-center justify-center">
+                    <UIcon name="i-lucide-loader-2" class="size-8 animate-spin text-gray-400" />
+                  </div>
+                  <ClientOnly>
+                    <NutritionMultiDayEnergyChart
+                      v-if="!loadingWave && wavePoints.length"
+                      :points="wavePoints"
+                      :highlighted-date="highlightedDate"
+                    />
+                    <div
+                      v-else-if="!loadingWave"
+                      class="h-[300px] flex items-center justify-center text-gray-500"
+                    >
+                      No wave data available
+                    </div>
+                  </ClientOnly>
+                </UCard>
+
+                <UCard :ui="{ root: 'rounded-none sm:rounded-lg shadow-none sm:shadow' }">
+                  <template #header>
                     <h3 class="text-base font-semibold leading-6 text-gray-900 dark:text-white">
-                      Metabolic Horizon
+                      Weekly Fueling Periodization
                     </h3>
-                    <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                      7-day rolling glycogen tank projection
-                    </p>
+                  </template>
+                  <div v-if="loadingStrategy" class="h-24 flex items-center justify-center">
+                    <UIcon name="i-lucide-loader-2" class="size-6 animate-spin text-gray-400" />
                   </div>
-                  <div class="flex flex-wrap items-center gap-3">
-                    <div class="flex items-center gap-1">
-                      <div class="size-2 rounded-full bg-blue-500" />
-                      <span class="text-[10px] text-gray-500">Glycogen</span>
+                  <ClientOnly>
+                    <NutritionWeeklyFuelingGrid
+                      v-if="!loadingStrategy && strategy"
+                      :days="strategy.fuelingMatrix"
+                      @hover-day="highlightedDate = $event"
+                    />
+                  </ClientOnly>
+                </UCard>
+              </div>
+
+              <!-- Sidebar Section -->
+              <div class="space-y-4 sm:space-y-6 lg:row-span-2 lg:col-start-3">
+                <!-- Active Fueling Feed (The "On-Ramp") -->
+                <ClientOnly>
+                  <NutritionActiveFuelingFeed
+                    :feed="activeFeed"
+                    :loading="loadingActiveFeed"
+                    @open-ai-helper="openAiHelper"
+                  />
+                </ClientOnly>
+
+                <!-- Strategy Summary Card -->
+                <UCard
+                  color="primary"
+                  variant="subtle"
+                  :ui="{ root: 'rounded-none sm:rounded-lg shadow-none sm:shadow' }"
+                >
+                  <template #header>
+                    <div class="flex items-center gap-2">
+                      <UIcon name="i-lucide-sparkles" class="size-5 text-primary-500" />
+                      <h3 class="text-base font-semibold leading-6">Strategic Summary</h3>
                     </div>
-                    <div class="flex items-center gap-1">
-                      <div class="size-2 rounded-full bg-blue-500 border border-dashed" />
-                      <span class="text-[10px] text-gray-500">Projected</span>
-                    </div>
-                    <div class="flex items-center gap-1">
-                      <div class="size-2 rounded bg-[#ef4444]" />
-                      <span class="text-[10px] text-gray-500">Workout</span>
-                    </div>
-                    <div class="flex items-center gap-1">
-                      <div class="size-2 rounded-full bg-[#10b981]" />
-                      <span class="text-[10px] text-gray-500">Meal</span>
-                    </div>
-                    <div class="flex items-center gap-1">
-                      <div
-                        class="size-0 border-l-[4px] border-l-transparent border-r-[4px] border-r-transparent border-b-[6px] border-b-[#8b5cf6]"
-                      />
-                      <span class="text-[10px] text-gray-500">Multiple</span>
-                    </div>
+                  </template>
+                  <div v-if="loadingStrategy" class="space-y-2">
+                    <USkeleton class="h-4 w-full" />
+                    <USkeleton class="h-4 w-3/4" />
+                    <USkeleton class="h-4 w-5/6" />
                   </div>
-                </div>
-              </template>
+                  <p
+                    v-else-if="strategy"
+                    class="text-sm leading-relaxed text-gray-700 dark:text-gray-300"
+                  >
+                    {{ strategy.summary }}
+                  </p>
+                </UCard>
 
-              <div v-if="loadingWave" class="h-[300px] flex items-center justify-center">
-                <UIcon name="i-lucide-loader-2" class="size-8 animate-spin text-gray-400" />
-              </div>
-              <ClientOnly>
-                <NutritionMultiDayEnergyChart
-                  v-if="!loadingWave && wavePoints.length"
-                  :points="wavePoints"
-                  :highlighted-date="highlightedDate"
-                />
-                <div
-                  v-else-if="!loadingWave"
-                  class="h-[300px] flex items-center justify-center text-gray-500"
-                >
-                  No wave data available
-                </div>
-              </ClientOnly>
-            </UCard>
+                <!-- Hydration Debt Card -->
+                <UCard :ui="{ root: 'rounded-none sm:rounded-lg shadow-none sm:shadow' }">
+                  <template #header>
+                    <div class="flex items-center gap-2">
+                      <UIcon name="i-lucide-droplets" class="size-5 text-blue-500" />
+                      <h3 class="text-base font-semibold leading-6 text-gray-900 dark:text-white">
+                        Fluid Balance
+                      </h3>
+                    </div>
+                  </template>
+                  <div class="text-center py-4">
+                    <div
+                      class="mx-auto size-28 rounded-full border-8 flex items-center justify-center"
+                      :class="hydrationRingClass"
+                    >
+                      <div class="flex flex-col items-center">
+                        <span class="text-xl font-black text-gray-900 dark:text-white">
+                          {{ ((strategy?.hydrationDebt || 0) / 1000).toFixed(1) }}L
+                        </span>
+                        <span class="text-[10px] uppercase font-bold tracking-wider text-gray-500">
+                          {{ hydrationStatus.toUpperCase() }}
+                        </span>
+                      </div>
+                    </div>
+                    <p class="text-sm text-gray-500 mt-3">Persistent Fluid Debt</p>
 
-            <UCard :ui="{ root: 'rounded-none sm:rounded-lg shadow-none sm:shadow' }">
-              <template #header>
-                <h3 class="text-base font-semibold leading-6 text-gray-900 dark:text-white">
-                  Weekly Fueling Periodization
-                </h3>
-              </template>
-              <div v-if="loadingStrategy" class="h-24 flex items-center justify-center">
-                <UIcon name="i-lucide-loader-2" class="size-6 animate-spin text-gray-400" />
-              </div>
-              <ClientOnly>
-                <NutritionWeeklyFuelingGrid
-                  v-if="!loadingStrategy && strategy"
-                  :days="strategy.fuelingMatrix"
-                  @hover-day="highlightedDate = $event"
-                />
-              </ClientOnly>
-            </UCard>
-          </div>
+                    <div
+                      class="mt-4 p-3 bg-info-50 dark:bg-info-900/20 rounded-lg text-xs text-info-700 dark:text-info-300"
+                    >
+                      {{ hydrationAdvice }}
+                    </div>
 
-          <!-- Sidebar Section -->
-          <div class="space-y-4 sm:space-y-6 lg:row-span-2 lg:col-start-3">
-            <!-- Active Fueling Feed (The "On-Ramp") -->
-            <ClientOnly>
-              <NutritionActiveFuelingFeed
-                :feed="activeFeed"
-                :loading="loadingActiveFeed"
-                @open-ai-helper="openAiHelper"
-              />
-            </ClientOnly>
-
-            <!-- Strategy Summary Card -->
-            <UCard
-              color="primary"
-              variant="subtle"
-              :ui="{ root: 'rounded-none sm:rounded-lg shadow-none sm:shadow' }"
-            >
-              <template #header>
-                <div class="flex items-center gap-2">
-                  <UIcon name="i-lucide-sparkles" class="size-5 text-primary-500" />
-                  <h3 class="text-base font-semibold leading-6">Strategic Summary</h3>
-                </div>
-              </template>
-              <div v-if="loadingStrategy" class="space-y-2">
-                <USkeleton class="h-4 w-full" />
-                <USkeleton class="h-4 w-3/4" />
-                <USkeleton class="h-4 w-5/6" />
-              </div>
-              <p
-                v-else-if="strategy"
-                class="text-sm leading-relaxed text-gray-700 dark:text-gray-300"
-              >
-                {{ strategy.summary }}
-              </p>
-            </UCard>
-
-            <!-- Hydration Debt Card -->
-            <UCard :ui="{ root: 'rounded-none sm:rounded-lg shadow-none sm:shadow' }">
-              <template #header>
-                <div class="flex items-center gap-2">
-                  <UIcon name="i-lucide-droplets" class="size-5 text-blue-500" />
-                  <h3 class="text-base font-semibold leading-6 text-gray-900 dark:text-white">
-                    Fluid Balance
-                  </h3>
-                </div>
-              </template>
-              <div class="text-center py-4">
-                <div
-                  class="mx-auto size-28 rounded-full border-8 flex items-center justify-center"
-                  :class="hydrationRingClass"
-                >
-                  <div class="flex flex-col items-center">
-                    <span class="text-xl font-black text-gray-900 dark:text-white">
-                      {{ ((strategy?.hydrationDebt || 0) / 1000).toFixed(1) }}L
-                    </span>
-                    <span class="text-[10px] uppercase font-bold tracking-wider text-gray-500">
-                      {{ hydrationStatus.toUpperCase() }}
-                    </span>
+                    <UAlert
+                      v-if="strategy?.showHydrationFlushPrompt"
+                      color="warning"
+                      variant="soft"
+                      class="mt-4 text-left"
+                      :title="strategy?.hydrationFlushPrompt"
+                    >
+                      <template #actions>
+                        <UButton
+                          size="xs"
+                          color="warning"
+                          variant="solid"
+                          @click="resetHydrationDebt"
+                        >
+                          Reset to zero
+                        </UButton>
+                      </template>
+                    </UAlert>
                   </div>
-                </div>
-                <p class="text-sm text-gray-500 mt-3">Persistent Fluid Debt</p>
 
-                <div
-                  class="mt-4 p-3 bg-info-50 dark:bg-info-900/20 rounded-lg text-xs text-info-700 dark:text-info-300"
-                >
-                  {{ hydrationAdvice }}
-                </div>
-
-                <UAlert
-                  v-if="strategy?.showHydrationFlushPrompt"
-                  color="warning"
-                  variant="soft"
-                  class="mt-4 text-left"
-                  :title="strategy?.hydrationFlushPrompt"
-                >
-                  <template #actions>
-                    <UButton size="xs" color="warning" variant="solid" @click="resetHydrationDebt">
-                      Reset to zero
+                  <template #footer>
+                    <UButton
+                      block
+                      color="neutral"
+                      variant="outline"
+                      icon="i-lucide-clipboard-list"
+                      @click="showGroceryList = true"
+                    >
+                      View Grocery Needs
                     </UButton>
                   </template>
-                </UAlert>
+                </UCard>
               </div>
 
-              <template #footer>
-                <UButton
-                  block
-                  color="neutral"
-                  variant="outline"
-                  icon="i-lucide-clipboard-list"
-                  @click="showGroceryList = true"
-                >
-                  View Grocery Needs
-                </UButton>
-              </template>
-            </UCard>
-          </div>
+              <!-- Upcoming Fueling Plan -->
+              <div class="lg:col-span-2">
+                <ClientOnly>
+                  <div v-if="upcomingPlan?.windows?.length" class="space-y-4">
+                    <NutritionUpcomingFuelingFeed
+                      :windows="upcomingPlan.windows"
+                      @suggest="openAiHelperForWindow"
+                      @export-grocery="showGroceryList = true"
+                    />
+                  </div>
+                </ClientOnly>
+              </div>
+            </div>
+          </template>
 
-          <!-- Upcoming Fueling Plan (Moved to separate div for better grid control) -->
-          <div class="lg:col-span-2">
-            <ClientOnly>
-              <div v-if="upcomingPlan?.windows?.length" class="space-y-4">
-                <NutritionUpcomingFuelingFeed
-                  :windows="upcomingPlan.windows"
-                  @suggest="openAiHelperForWindow"
-                  @export-grocery="showGroceryList = true"
-                />
-
-                <div class="flex justify-between items-center px-4 sm:px-0">
-                  <p class="text-[10px] text-gray-500 italic">
-                    Targets are dynamically calculated based on your planned training intensity and
-                    fuel states.
+          <template #plan>
+            <div class="pt-4 space-y-6">
+              <div class="flex items-center justify-between">
+                <div>
+                  <h3 class="text-lg font-black uppercase tracking-tight">Active Plan</h3>
+                  <p class="text-xs text-gray-500 font-bold uppercase tracking-widest">
+                    Lock in your fueling for the week
                   </p>
                 </div>
               </div>
-            </ClientOnly>
-          </div>
-        </div>
+              <ClientOnly>
+                <NutritionWeeklyPlanDashboard
+                  ref="planDashboard"
+                  :start-date="weekStartDate"
+                  :end-date="weekEndDate"
+                  :generating="generatingPlan"
+                  @generate-draft="generatePlan"
+                  @open-grocery="showGroceryList = true"
+                  @suggest-window="openAiHelperForWindow"
+                />
+              </ClientOnly>
+            </div>
+          </template>
+        </UTabs>
 
         <UModal
           v-model:open="showGroceryList"
@@ -298,13 +324,29 @@
           :initial-context="aiHelperContext"
           @updated="refreshData"
         />
+
+        <!-- Meal Recommendation Modal -->
+        <NutritionMealRecommendationModal
+          v-model:open="showRecommendations"
+          :date="recommendationContext.date"
+          :target-carbs="recommendationContext.targetCarbs"
+          :target-protein="recommendationContext.targetProtein"
+          :target-kcal="recommendationContext.targetKcal"
+          :window-type="recommendationContext.windowType"
+          :slot-name="recommendationContext.slotName"
+          :window-assignments="recommendationContext.windowAssignments"
+          :day-target-carbs="recommendationContext.dayTargetCarbs"
+          :day-planned-carbs="recommendationContext.dayPlannedCarbs"
+          :current-assigned-carbs="recommendationContext.currentAssignedCarbs"
+          @updated="refreshData"
+        />
       </div>
     </template>
   </UDashboardPanel>
 </template>
 
 <script setup lang="ts">
-  import { format, parseISO } from 'date-fns'
+  import { format, parseISO, addDays, startOfWeek } from 'date-fns'
 
   definePageMeta({
     middleware: 'auth',
@@ -321,9 +363,24 @@
     ]
   })
 
+  const tabs = [
+    {
+      label: 'Strategic Horizon',
+      icon: 'i-lucide-activity',
+      slot: 'strategy'
+    },
+    {
+      label: 'Weekly Plan',
+      icon: 'i-lucide-calendar-days',
+      slot: 'plan'
+    }
+  ]
+
   const loadingWave = ref(true)
   const loadingStrategy = ref(true)
   const loadingActiveFeed = ref(true)
+  const generatingPlan = ref(false)
+  const planDashboard = ref<any>(null)
   const wavePoints = ref<any[]>([])
   const strategy = ref<any>(null)
   const activeFeed = ref<any>(null)
@@ -333,6 +390,26 @@
 
   const showAiHelper = ref(false)
   const aiHelperContext = ref<any>(null)
+
+  const showRecommendations = ref(false)
+  const recommendationContext = ref({
+    date: format(new Date(), 'yyyy-MM-dd'),
+    targetCarbs: 0,
+    targetProtein: 0,
+    targetKcal: 0,
+    windowType: '',
+    slotName: '',
+    windowAssignments: [] as any[],
+    dayTargetCarbs: 0,
+    dayPlannedCarbs: 0,
+    currentAssignedCarbs: 0
+  })
+  const weekStartDate = computed(() =>
+    format(startOfWeek(new Date(), { weekStartsOn: 1 }), 'yyyy-MM-dd')
+  )
+  const weekEndDate = computed(() =>
+    format(addDays(parseISO(weekStartDate.value), 6), 'yyyy-MM-dd')
+  )
 
   const loading = computed(
     () => loadingWave.value || loadingStrategy.value || loadingActiveFeed.value
@@ -364,11 +441,50 @@
     }
   }
 
+  async function generatePlan() {
+    generatingPlan.value = true
+    try {
+      await $fetch('/api/nutrition/plan/generate', {
+        method: 'POST',
+        body: { startDate: weekStartDate.value, endDate: weekEndDate.value }
+      })
+
+      if (planDashboard.value) {
+        planDashboard.value.refresh()
+      }
+    } catch (e) {
+      console.error('Failed to generate plan:', e)
+    } finally {
+      generatingPlan.value = false
+    }
+  }
+
   onMounted(() => {
     refreshData()
   })
 
   function openAiHelper(context: any) {
+    // If we have targetCarbs and windowType, it's a recommendation request
+    if ((context.carbs || context.targetCarbs) && (context.basedOnWindowType || context.type)) {
+      recommendationContext.value = {
+        date: context.date || format(new Date(), 'yyyy-MM-dd'),
+        targetCarbs: context.carbs || context.targetCarbs,
+        targetProtein: context.protein || context.targetProtein || 0,
+        targetKcal: context.kcal || context.targetKcal || 0,
+        windowType: context.basedOnWindowType || context.type,
+        slotName: context.slotName || context.label || '',
+        windowAssignments: Array.isArray(context.windowAssignments)
+          ? context.windowAssignments
+          : [],
+        dayTargetCarbs: context.dayTargetCarbs || 0,
+        dayPlannedCarbs: context.dayPlannedCarbs || 0,
+        currentAssignedCarbs: context.currentAssignedCarbs || 0
+      }
+      showRecommendations.value = true
+      return
+    }
+
+    // Otherwise, it's for general AI help/logging
     aiHelperContext.value = {
       type: 'suggestion',
       targetCarbs: context.carbs,
@@ -379,13 +495,33 @@
   }
 
   function openAiHelperForWindow(window: any) {
-    aiHelperContext.value = {
-      type: 'suggestion',
+    // This is the new recommendation flow
+    const dateFromWindow =
+      window.dateKey ||
+      (typeof window.startTime === 'string' && window.startTime.length >= 10
+        ? window.startTime.slice(0, 10)
+        : format(new Date(), 'yyyy-MM-dd'))
+
+    recommendationContext.value = {
+      date: dateFromWindow,
       targetCarbs: window.targetCarbs,
+      targetProtein: window.targetProtein || 0,
+      targetKcal: window.targetKcal || 0,
       windowType: window.type,
-      item: null
+      slotName: window.slotName || window.label || '',
+      windowAssignments: Array.isArray(window.windowAssignments) ? window.windowAssignments : [],
+      dayTargetCarbs: window.dayTargetCarbs || 0,
+      dayPlannedCarbs: window.dayPlannedCarbs || 0,
+      currentAssignedCarbs: window.currentAssignedCarbs || 0
     }
-    showAiHelper.value = true
+    console.log('[nutrition/index] openAiHelperForWindow', {
+      startTime: window.startTime,
+      dateKey: window.dateKey,
+      resolvedDate: dateFromWindow,
+      windowType: window.type,
+      slotName: window.slotName || window.label || ''
+    })
+    showRecommendations.value = true
   }
 
   const hydrationAdvice = computed(() => {

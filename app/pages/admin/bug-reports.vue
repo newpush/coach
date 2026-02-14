@@ -114,7 +114,7 @@
           v-if="(reports?.totalPages ?? 0) > 1"
           class="px-6 py-4 border-t border-gray-200 dark:border-gray-700 flex justify-end"
         >
-          <UPagination v-model="page" :page-count="limit" :total="reports?.count || 0" />
+          <UPagination v-model:page="page" :items-per-page="limit" :total="reports?.count || 0" />
         </div>
       </div>
     </div>
@@ -197,6 +197,90 @@
                   </div>
                 </div>
               </div>
+
+              <!-- Comments Section -->
+              <div class="mt-8 pt-6 border-t border-gray-200 dark:border-gray-800">
+                <h4
+                  class="text-sm font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2"
+                >
+                  <UIcon name="i-heroicons-chat-bubble-left-right" />
+                  Developer & User Comments
+                </h4>
+
+                <div class="space-y-4 mb-6">
+                  <div v-if="pendingComments" class="flex justify-center py-4">
+                    <UIcon name="i-heroicons-arrow-path" class="animate-spin text-gray-400" />
+                  </div>
+                  <div
+                    v-else-if="comments.length === 0"
+                    class="text-center py-4 text-sm text-gray-500 italic"
+                  >
+                    No comments yet.
+                  </div>
+                  <div
+                    v-for="comment in comments"
+                    :key="comment.id"
+                    class="flex gap-3"
+                    :class="{ 'flex-row-reverse': comment.isAdmin }"
+                  >
+                    <UAvatar
+                      :src="comment.user.image"
+                      :alt="comment.user.name"
+                      size="xs"
+                      class="shrink-0"
+                    />
+                    <div
+                      class="flex flex-col max-w-[80%]"
+                      :class="{ 'items-end': comment.isAdmin }"
+                    >
+                      <div class="flex items-center gap-2 mb-1">
+                        <span class="text-xs font-medium text-gray-900 dark:text-white">
+                          {{ comment.user.name || comment.user.email }}
+                        </span>
+                        <UBadge v-if="comment.isAdmin" color="primary" variant="subtle" size="xs"
+                          >Admin</UBadge
+                        >
+                        <span class="text-[10px] text-gray-500">
+                          {{
+                            new Date(comment.createdAt).toLocaleString([], {
+                              dateStyle: 'short',
+                              timeStyle: 'short'
+                            })
+                          }}
+                        </span>
+                      </div>
+                      <div
+                        class="px-3 py-2 rounded-lg text-sm"
+                        :class="
+                          comment.isAdmin
+                            ? 'bg-primary-50 dark:bg-primary-900/20 text-primary-900 dark:text-primary-100 rounded-tr-none'
+                            : 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-tl-none'
+                        "
+                      >
+                        {{ comment.content }}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="flex gap-2">
+                  <UTextarea
+                    v-model="newComment"
+                    placeholder="Add a comment..."
+                    autoresize
+                    :rows="1"
+                    class="flex-1"
+                    @keydown.enter.prevent="addComment"
+                  />
+                  <UButton
+                    icon="i-heroicons-paper-airplane"
+                    color="primary"
+                    :loading="sendingComment"
+                    :disabled="!newComment.trim()"
+                    @click="addComment"
+                  />
+                </div>
+              </div>
             </div>
           </div>
           <div
@@ -221,6 +305,11 @@
   const page = ref(1)
   const limit = 10
   const filterStatus = ref<string | undefined>()
+
+  // Reset page when filter changes
+  watch(filterStatus, () => {
+    page.value = 1
+  })
 
   const {
     data: reports,
@@ -259,6 +348,42 @@
   function openDetailModal(report: any) {
     selectedReport.value = JSON.parse(JSON.stringify(report)) // Deep copy
     isModalOpen.value = true
+    fetchComments()
+  }
+
+  const comments = ref<any[]>([])
+  const pendingComments = ref(false)
+  const newComment = ref('')
+  const sendingComment = ref(false)
+
+  async function fetchComments() {
+    if (!selectedReport.value) return
+    pendingComments.value = true
+    try {
+      comments.value = await $fetch(`/api/admin/bug-reports/${selectedReport.value.id}/comments`)
+    } catch (error) {
+      console.error('Failed to fetch comments:', error)
+    } finally {
+      pendingComments.value = false
+    }
+  }
+
+  async function addComment() {
+    if (!newComment.value.trim() || !selectedReport.value) return
+    sendingComment.value = true
+    try {
+      const comment = await $fetch(`/api/admin/bug-reports/${selectedReport.value.id}/comments`, {
+        method: 'POST',
+        body: { content: newComment.value }
+      })
+      comments.value.push(comment)
+      newComment.value = ''
+    } catch (error) {
+      console.error('Failed to add comment:', error)
+      toast.add({ title: 'Failed to add comment', color: 'error' })
+    } finally {
+      sendingComment.value = false
+    }
   }
 
   async function updateStatus() {

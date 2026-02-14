@@ -267,15 +267,18 @@
         </div>
 
         <NutritionFoodItemModal
-          ref="itemModal"
+          v-model:open="showItemModal"
           :nutrition-id="nutrition?.id"
           :date="nutrition?.date || (route.params.id as string)"
+          :mode="modalMode"
+          :initial-data="modalInitialData"
           @updated="fetchData"
         />
         <NutritionFoodAiModal
-          ref="aiModal"
+          v-model:open="showAiModal"
           :nutrition-id="nutrition?.id"
           :date="nutrition?.date || (route.params.id as string)"
+          :initial-context="aiModalContext"
           @updated="fetchData"
         />
       </div>
@@ -285,7 +288,6 @@
 
 <script setup lang="ts">
   import { mapNutritionToTimeline } from '~/utils/nutrition-timeline'
-  import { calculateGlycogenState, calculateEnergyTimeline } from '~/utils/nutrition-logic'
   import { ABSORPTION_PROFILES, type AbsorptionType } from '~/utils/nutrition-absorption'
   import { addDays, format } from 'date-fns'
 
@@ -308,8 +310,11 @@
   const quickLogInput = ref('')
   const isLogging = ref(false)
 
-  const itemModal = ref<any>(null)
-  const aiModal = ref<any>(null)
+  const showItemModal = ref(false)
+  const showAiModal = ref(false)
+  const modalMode = ref<'add' | 'edit'>('add')
+  const modalInitialData = ref<any>(null)
+  const aiModalContext = ref<any>(null)
 
   const energyViewIdx = ref('0') // '0': %, '1': kcal, '2': carbs
 
@@ -347,78 +352,59 @@
 
   const energyPoints = computed(() => {
     // Priority: Server-provided points (consistent with metabolic chain)
-    if (nutrition.value?.energyPoints && nutrition.value.energyPoints.length > 0) {
-      return nutrition.value.energyPoints
+    return nutrition.value?.energyPoints || []
+  })
+
+  // Metabolic Ghost Line - Fetched from server
+  const ghostPoints = ref<any[]>([])
+  const loadingGhost = ref(false)
+
+  async function fetchGhostPoints() {
+    const recommendationStore = useRecommendationStore()
+    const mealRec = recommendationStore.todayRecommendation?.analysisJson?.meal_recommendation
+    if (!mealRec || !nutrition.value) {
+      ghostPoints.value = []
+      return
     }
 
-    if (!nutrition.value || !nutritionSettings.value) return []
-
-    const { timezone } = useFormat()
-
-    return calculateEnergyTimeline(
-      nutrition.value,
-      workouts.value,
-      nutritionSettings.value,
-      timezone.value,
-      undefined,
-      {
-        startingGlycogenPercentage: nutrition.value.startingGlycogen,
-        startingFluidDeficit: nutrition.value.startingFluid
-      }
-    )
-  })
-
-  const ghostPoints = computed(() => {
-    // Recommendation-based ghost line logic
-
-    const recommendationStore = useRecommendationStore()
-
     const recDate = recommendationStore.todayRecommendation?.date
-
     const viewingDate = nutrition.value?.date
+    const viewingDateStr =
+      viewingDate instanceof Date ? viewingDate.toISOString().split('T')[0] : viewingDate
 
-    // Simple check if recommendation applies to viewing day
+    if (recDate && viewingDateStr && recDate.split('T')[0] !== viewingDateStr.split('T')[0]) {
+      ghostPoints.value = []
+      return
+    }
 
-    if (!recommendationStore.todayRecommendation?.analysisJson?.meal_recommendation) return []
+    loadingGhost.value = true
+    try {
+      const { points } = await $fetch<any>('/api/nutrition/simulate-impact', {
+        method: 'POST',
+        body: {
+          date: viewingDateStr,
+          carbs: mealRec.carbs,
+          absorptionType: mealRec.absorptionType
+        }
+      })
+      ghostPoints.value = points
+    } catch (e) {
+      console.error('Failed to fetch ghost points:', e)
+      ghostPoints.value = []
+    } finally {
+      loadingGhost.value = false
+    }
+  }
 
-    if (recDate && viewingDate && recDate.split('T')[0] !== viewingDate.split('T')[0]) return []
-
-    const mealRec = recommendationStore.todayRecommendation.analysisJson.meal_recommendation
-
-    const { timezone } = useFormat()
-
-    const now = new Date()
-
-    const ghostTime = new Date(now.getTime() + 15 * 60000)
-
-    return calculateEnergyTimeline(
-      nutrition.value,
-
-      workouts.value,
-
-      nutritionSettings.value,
-
-      timezone.value,
-
-      {
-        totalCarbs: mealRec.carbs || 30,
-
-        totalKcal: (mealRec.carbs || 30) * 4,
-
-        profile:
-          ABSORPTION_PROFILES[mealRec.absorptionType as AbsorptionType] ||
-          ABSORPTION_PROFILES.BALANCED,
-
-        time: ghostTime
-      },
-
-      {
-        startingGlycogenPercentage: nutrition.value.startingGlycogen,
-
-        startingFluidDeficit: nutrition.value.startingFluid
-      }
-    )
-  })
+  // Watch for recommendation or nutrition changes to refresh ghost line
+  const recommendationStore = useRecommendationStore()
+  watch(
+    [() => recommendationStore.todayRecommendation, nutrition],
+    () => {
+      fetchGhostPoints()
+    },
+    { immediate: true }
+  )
 
   const timeline = computed(() => {
     if (!nutrition.value || !nutritionSettings.value) return []
@@ -596,7 +582,9 @@
       mealType = 'lunch'
     }
 
-    itemModal.value?.open('add', { mealType })
+    modalMode.value = 'add'
+    modalInitialData.value = { mealType }
+    showItemModal.value = true
   }
 
   function handleAddItemAi(event: { type: string; meals?: string[] }) {
@@ -611,15 +599,20 @@
     } else if (event.type === 'POST_WORKOUT') {
       mealType = 'lunch'
     }
-    aiModal.value?.open(mealType)
+
+    aiModalContext.value = { mealType }
+    showAiModal.value = true
   }
 
   function handleEditItem(item: any) {
-    itemModal.value?.open('edit', item)
+    modalMode.value = 'edit'
+    modalInitialData.value = item
+    showItemModal.value = true
   }
 
   function openAiModal(mealType: string = 'snacks') {
-    aiModal.value?.open(mealType)
+    aiModalContext.value = { mealType }
+    showAiModal.value = true
   }
 
   function formatDateLabel(date: string) {
