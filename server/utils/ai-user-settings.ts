@@ -7,6 +7,7 @@ export interface AiSettings {
   aiAutoAnalyzeWorkouts: boolean
   aiAutoAnalyzeNutrition: boolean
   aiAutoAnalyzeReadiness: boolean
+  aiRequireToolApproval: boolean
   aiContext?: string | null
   nutritionTrackingEnabled: boolean
   nickname?: string | null
@@ -18,6 +19,7 @@ const DEFAULT_SETTINGS: AiSettings = {
   aiAutoAnalyzeWorkouts: false,
   aiAutoAnalyzeNutrition: false,
   aiAutoAnalyzeReadiness: false,
+  aiRequireToolApproval: false,
   aiContext: null,
   nutritionTrackingEnabled: true,
   nickname: null
@@ -32,6 +34,7 @@ export async function getUserAiSettings(userId: string): Promise<AiSettings> {
       aiAutoAnalyzeWorkouts: true,
       aiAutoAnalyzeNutrition: true,
       aiAutoAnalyzeReadiness: true,
+      aiRequireToolApproval: true,
       aiContext: true,
       nutritionTrackingEnabled: true,
       nickname: true
@@ -49,6 +52,7 @@ export async function getUserAiSettings(userId: string): Promise<AiSettings> {
     aiAutoAnalyzeWorkouts: user.aiAutoAnalyzeWorkouts ?? DEFAULT_SETTINGS.aiAutoAnalyzeWorkouts,
     aiAutoAnalyzeNutrition: user.aiAutoAnalyzeNutrition ?? DEFAULT_SETTINGS.aiAutoAnalyzeNutrition,
     aiAutoAnalyzeReadiness: user.aiAutoAnalyzeReadiness ?? DEFAULT_SETTINGS.aiAutoAnalyzeReadiness,
+    aiRequireToolApproval: user.aiRequireToolApproval ?? DEFAULT_SETTINGS.aiRequireToolApproval,
     aiContext: user.aiContext,
     nutritionTrackingEnabled:
       user.nutritionTrackingEnabled ?? DEFAULT_SETTINGS.nutritionTrackingEnabled,
