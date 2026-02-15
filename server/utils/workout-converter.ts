@@ -584,7 +584,9 @@ export const WorkoutConverter = {
 
         // Clean names for conciseness (e.g. "5 minutes" -> "5m")
         if (name) {
-          name = name.replace(/(\d+)\s*minutes?/gi, '$1m').replace(/(\d+)\s*seconds?/gi, '$1s')
+          name = name
+            .replace(/(\d+)\s*(minutes?|min)/gi, '$1m')
+            .replace(/(\d+)\s*(seconds?|sec)/gi, '$1s')
         }
 
         if (isRun && name) {
