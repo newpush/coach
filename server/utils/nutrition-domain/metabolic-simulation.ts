@@ -162,7 +162,7 @@ export function calculateGlycogenState(
     advice = 'Moderate depletion. Focus on replenishment.'
     state = 2
   } else {
-    advice = 'CRITICAL: Refuel immediately to avoid metabolic crash.'
+    advice = 'Low fuel. Prioritize carbohydrate intake soon to support your next effort.'
     state = 3
   }
 

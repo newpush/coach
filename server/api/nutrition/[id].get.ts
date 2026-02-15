@@ -77,14 +77,28 @@ export default defineEventHandler(async (event) => {
       },
       select: {
         date: true,
+        calories: true,
+        carbs: true,
+        breakfast: true,
+        lunch: true,
+        dinner: true,
+        snacks: true,
         startingGlycogenPercentage: true,
         endingGlycogenPercentage: true
       }
     })
 
-    const anchoredDays = recentChain.filter(
-      (d) => d.startingGlycogenPercentage != null || d.endingGlycogenPercentage != null
-    ).length
+    const anchoredDays = recentChain.filter((d) => {
+      const hasChainState =
+        d.startingGlycogenPercentage != null || d.endingGlycogenPercentage != null
+      const hasMealLogs =
+        (Array.isArray(d.breakfast) && d.breakfast.length > 0) ||
+        (Array.isArray(d.lunch) && d.lunch.length > 0) ||
+        (Array.isArray(d.dinner) && d.dinner.length > 0) ||
+        (Array.isArray(d.snacks) && d.snacks.length > 0)
+      const hasMacroSignal = (d.carbs || 0) > 0 || (d.calories || 0) > 0
+      return hasChainState || hasMealLogs || hasMacroSignal
+    }).length
 
     chainCalibration = {
       anchoredDays,
