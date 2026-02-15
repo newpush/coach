@@ -45,6 +45,10 @@ const workoutStructureSchema = {
             type: 'object',
             properties: {
               value: { type: 'number', description: 'Target % of FTP (e.g. 0.95)' },
+              units: {
+                type: 'string',
+                description: 'Target unit. Prefer "%" by default; can also be "w" or zone labels.'
+              },
               range: {
                 type: 'object',
                 properties: { start: { type: 'number' }, end: { type: 'number' } },
@@ -57,6 +61,10 @@ const workoutStructureSchema = {
             type: 'object',
             properties: {
               value: { type: 'number', description: 'Target % of LTHR (e.g. 0.85)' },
+              units: {
+                type: 'string',
+                description: 'Target unit. Use "LTHR" by default; can also be "HR" or "bpm".'
+              },
               range: {
                 type: 'object',
                 properties: { start: { type: 'number' }, end: { type: 'number' } },
@@ -71,6 +79,10 @@ const workoutStructureSchema = {
             description: 'Target % of threshold pace (e.g. 0.95 = 95%)',
             properties: {
               value: { type: 'number' },
+              units: {
+                type: 'string',
+                description: 'Pace target unit. Use "Pace" for percentages, or an absolute unit like "/km".'
+              },
               range: {
                 type: 'object',
                 properties: {
@@ -290,6 +302,9 @@ export const generateStructuredWorkoutTask = task({
     INSTRUCTIONS:
     - Create a JSON structure defining the exact steps (Warmup, Intervals, Rest, Cooldown).
     - Ensure total duration matches the target duration exactly.
+    - Every workout must have a clear physiological objective (e.g. aerobic endurance, threshold, VO2, neuromuscular, recovery) and each block should support that objective.
+    - Sequence intensity logically (warm-up -> quality work -> recovery -> cooldown). Avoid random intensity jumps.
+    - Include specific execution cues in 'coachInstructions' (breathing, pacing, cadence control, form focus).
     - **METRIC PRIORITY**: Respect the user's PREFERRED INTENSITY METRIC (${loadPreference}). 
       - Priority Order: ${loadPreference.split('_').join(' > ')}.
       - Use the FIRST available metric from this list for each step as the primary target object. 
@@ -300,8 +315,10 @@ export const generateStructuredWorkoutTask = task({
 
     FOR CYCLING (Ride/VirtualRide):
     - MANDATORY: Use % of FTP for power targets (e.g. 0.95 = 95%) for EVERY step.
+    - Set 'power.units' to "%" unless there is an explicit reason to use "w".
     - For ramps (Warmup/Cooldown), use "range" with "start" and "end" values (e.g. start: 0.50, end: 0.75 for warmup).
     - MANDATORY: Include target "cadence" (RPM) for EVERY step (including Warmup/Rest). Use 85-95 for active, 80 for rest.
+    - For interval sets, include realistic recovery between hard repetitions and maintain repeatability of quality efforts.
 
     FOR RUNNING (Run):
     - Steps should have 'type', 'durationSeconds', 'name'.
@@ -309,9 +326,12 @@ export const generateStructuredWorkoutTask = task({
     - Use 'power' object if it's a power-based run (e.g. Stryd).
     - Use the user's PREFERRED INTENSITY METRIC (${loadPreference}) as the primary target.
     - If HR is preferred, ensure 'heartRate' is populated. If PACE is preferred, ensure 'pace' is populated.
+    - Set 'heartRate.units' to "LTHR" by default for percentage targets.
+    - If 'pace' is used as percentage, set 'pace.units' to "Pace".
     - Do NOT mix HR and Pace targets in the same step unless specifically requested in the description.
     - Prefer 'heartRate.range' or 'pace.range' for steady aerobic/endurance/tempo blocks (e.g. Zone 2 -> start: 0.70, end: 0.80). 
     - DO NOT rely solely on description for intensity. Provide an estimated target object for every step.
+    - Respect quality spacing: avoid stacking maximal efforts without enough recovery.
     
     FOR SWIMMING (Swim):
     - Steps should ideally have 'distance' (meters) instead of or in addition to duration. If using duration, estimate distance.
@@ -319,6 +339,7 @@ export const generateStructuredWorkoutTask = task({
     - Use 'equipment' array for gear: Fins, Paddles, Snorkel, Pull Buoy.
     - Include 'stroke' type in description if applicable.
     - CRITICAL: You MUST include a 'heartRate' object with 'value' (target % of LTHR, e.g. 0.85) for EVERY step. Even if it's a technical drill, provide an estimated HR intensity.
+    - Set 'heartRate.units' to "LTHR" unless using explicit bpm.
     - RECOMMENDED: Include a 'pace' object with 'value' (target % of threshold pace) for main set intervals.
 
     FOR STRENGTH (Gym/WeightTraining):

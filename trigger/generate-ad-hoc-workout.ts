@@ -19,9 +19,26 @@ const adHocWorkoutSchema = {
       type: 'string',
       enum: ['Recovery', 'Endurance', 'Tempo', 'Threshold', 'VO2Max', 'Anaerobic']
     },
+    objective: {
+      type: 'string',
+      description: 'Primary physiological objective for this session.'
+    },
+    executionCues: {
+      type: 'array',
+      items: { type: 'string' },
+      description: '3 concise cues for how to execute the session well.'
+    },
     reasoning: { type: 'string' }
   },
-  required: ['title', 'type', 'durationMinutes', 'targetTss', 'intensity', 'reasoning']
+  required: [
+    'title',
+    'type',
+    'durationMinutes',
+    'targetTss',
+    'intensity',
+    'objective',
+    'reasoning'
+  ]
 }
 
 export const generateAdHocWorkoutTask = task({
@@ -141,7 +158,7 @@ export const generateAdHocWorkoutTask = task({
       - If recovery is good, prescribe a workout that fits the current focus or maintains fitness.`
     }
 
-    const prompt = `Design a specific specific single workout for this athlete for TODAY.
+    const prompt = `Design one high-quality workout prescription for this athlete for TODAY.
     
     LOCAL CONTEXT:
     - Date: ${dateStr}
@@ -154,8 +171,17 @@ export const generateAdHocWorkoutTask = task({
     GOAL:
     ${goalPrompt}
     
+    COACHING RULES:
+    - The workout must have one clear physiological objective (recovery, aerobic endurance, tempo, threshold, VO2, neuromuscular).
+    - Match stimulus to readiness: lower risk and lower dose when recovery is poor.
+    - Avoid prescribing maximal work if current recovery markers are low.
+    - Keep the session realistic and executable in the requested time.
+    - Prefer minimum effective dose over excessive load when uncertainty exists.
+    - Use the athlete's defined zones/thresholds when setting intensity language.
+    - Provide concise athlete-facing execution cues.
+    
     OUTPUT:
-    JSON with title, description, type (Ride/Run), durationMinutes, targetTss, intensity, and reasoning.`
+    JSON with title, description, type (Ride/Run), durationMinutes, targetTss, intensity, objective, executionCues, and reasoning.`
 
     const suggestion = await generateStructuredAnalysis(prompt, adHocWorkoutSchema, 'flash', {
       userId,
@@ -169,7 +195,11 @@ export const generateAdHocWorkoutTask = task({
         userId,
         date: today, // Correctly aligned to user's local day start (UTC)
         title: suggestion.title,
-        description: `${suggestion.description}\n\nReasoning: ${suggestion.reasoning}`,
+        description: `${suggestion.description}\n\nObjective: ${suggestion.objective}\n${
+          Array.isArray(suggestion.executionCues) && suggestion.executionCues.length > 0
+            ? `Execution Cues: ${suggestion.executionCues.join(' | ')}\n`
+            : ''
+        }\nReasoning: ${suggestion.reasoning}`,
         type: suggestion.type,
         durationSec: suggestion.durationMinutes * 60,
         tss: suggestion.targetTss,

@@ -390,17 +390,23 @@ Generate a detailed daily training plan for each week in this block (${block.dur
 - **TRAINING RHYTHM**: The athlete is on a ${block.plan.recoveryRhythm === 3 ? '2:1' : '3:1'} rhythm. 
   - For LOADING weeks: Focus on progressive overload, increasing difficulty slightly each week.
   - For RECOVERY weeks: Focus on shedding fatigue with significantly reduced volume and low intensity.
+- **LOAD PROGRESSION CAPS**:
+  - Keep week-to-week load increases conservative unless athlete context strongly supports aggressive loading.
+  - Prioritize sustainable progression over maximal overload.
 - **WEEK NUMBERING**: You MUST use block-relative week numbers (1, 2, 3...) in your response, matching the numbering in the "WEEKLY SCHEDULE CONSTRAINTS" below.
 - **RESPECT LOCKED WORKOUTS**: You MUST include the "LOCKED/ANCHOR WORKOUTS" in your plan on their specific days. Do not schedule conflicting workouts on those days unless it's a multi-session day. Account for their TSS.
 - **RESPECT AVAILABILITY**: Do not schedule sessions on days marked as rest day or outside declared slots, unless athlete custom instructions explicitly override this.
 - **B-RACE HANDLING**: If the block focus includes "_WITH_RACE", implement a "Mini-Taper" on the 2 days prior to the race date while maintaining the overall block goal.
 - ONLY use the "Allowed Workout Types" listed above, UNLESS the athlete's custom instructions explicitly request otherwise (Custom Instructions take precedence).
 - Ensure progressive overload from week 1 to ${block.durationWeeks - 1}.
-- Ensure the recovery week (if applicable) has significantly reduced volume and intensity.
+- Ensure the recovery week (if applicable) has clearly reduced volume and intensity versus prior loading weeks.
+- Quantify recovery intent in your rationale (what was reduced and why).
 - For "Ride" workouts, provide realistic TSS estimates based on duration and intensity.
 - Workout types: ${allowedTypesString}, Rest, Active Recovery.
 - Start each week on a Monday.
 - Provide a summary for each week explaining the focus and volume.
+- Explicitly connect each week focus to event demands and phase goals (base/build/peak/taper).
+- Manage hard session spacing to avoid clustering high neuromuscular and metabolic stress on consecutive days.
 - **Weekly Focus Details:**
   - focus_key: MUST be selected from the "ALLOWED FOCUS KEYS" list below.
   - focus_label: A friendly, descriptive title for the week.

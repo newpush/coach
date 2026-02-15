@@ -44,6 +44,10 @@ const workoutStructureSchema = {
             type: 'object',
             properties: {
               value: { type: 'number', description: 'Target % of FTP (e.g. 0.95)' },
+              units: {
+                type: 'string',
+                description: 'Target unit. Prefer "%" by default; can also be "w" or zone labels.'
+              },
               range: {
                 type: 'object',
                 properties: { start: { type: 'number' }, end: { type: 'number' } },
@@ -56,6 +60,10 @@ const workoutStructureSchema = {
             type: 'object',
             properties: {
               value: { type: 'number', description: 'Target % of LTHR (e.g. 0.85)' },
+              units: {
+                type: 'string',
+                description: 'Target unit. Use "LTHR" by default; can also be "HR" or "bpm".'
+              },
               range: {
                 type: 'object',
                 properties: { start: { type: 'number' }, end: { type: 'number' } },
@@ -69,6 +77,10 @@ const workoutStructureSchema = {
             description: 'Target % of threshold pace (e.g. 0.95 = 95%)',
             properties: {
               value: { type: 'number' },
+              units: {
+                type: 'string',
+                description: 'Pace target unit. Use "Pace" for percentages, or an absolute unit like "/km".'
+              },
               range: {
                 type: 'object',
                 properties: {
@@ -95,9 +107,26 @@ const workoutStructureSchema = {
         },
         required: ['type', 'name']
       }
+    },
+    exercises: {
+      type: 'array',
+      description: 'List of exercises for Strength training',
+      items: {
+        type: 'object',
+        properties: {
+          name: { type: 'string' },
+          sets: { type: 'integer' },
+          reps: { type: 'string', description: "e.g. '8-12' or 'AMRAP'" },
+          weight: { type: 'string', description: "e.g. '70% 1RM' or 'Bodyweight'" },
+          duration: { type: 'integer', description: 'Duration in seconds if time-based' },
+          rest: { type: 'string', description: "Rest between sets e.g. '90s'" },
+          notes: { type: 'string', description: 'Form cues or tempo' }
+        },
+        required: ['name']
+      }
     }
   },
-  required: ['steps', 'coachInstructions']
+  required: ['coachInstructions']
 }
 
 export const adjustStructuredWorkoutTask = task({
@@ -234,25 +263,37 @@ export const adjustStructuredWorkoutTask = task({
     - Create a NEW JSON structure defining the exact steps (Warmup, Intervals, Rest, Cooldown).
     - Ensure total duration matches the target duration (${Math.round((workout.durationSec || 3600) / 60)}m).
     - Respect the user's feedback.
+    - Preserve the workout's core objective unless the user explicitly requests changing it.
+    - Ensure each block has a clear physiological purpose and a logical sequence of stress and recovery.
     - **description**: Use ONLY complete sentences to describe the overall purpose and strategy. **NEVER use bullet points or list the steps here**.
-    - **coachInstructions**: Provide an updated personalized message (2-3 sentences) explaining the purpose of these adjustments.
+    - **coachInstructions**: Provide an updated personalized message (2-3 sentences) explaining what changed, why it changed, and how to execute the key set.
 
     FOR CYCLING (Ride/VirtualRide):
     - Use % of FTP for power targets (e.g. 0.95 = 95%).
+    - Set \`power.units\` to "%" unless the user explicitly requested watts.
     - Include target cadence (RPM).
+    - Keep hard interval work recoverable and repeatable.
 
     FOR RUNNING (Run):
     - ALWAYS include 'distance' (meters) for each step (estimate if needed).
     - CRITICAL: Use 'heartRate' object with 'value' (target % of LTHR, e.g. 0.85) for intensity.
+    - Set \`heartRate.units\` to "LTHR" by default.
     - HIGHLY RECOMMENDED: Include a 'pace' object with 'value' (target % of threshold pace) for active steps.
+    - If pace is percentage-based, set \`pace.units\` to "Pace".
     - If user specifies "Zone 2", refer to their HR Zones provided above.
+    - Do not stack maximal efforts without sufficient recovery.
 
     FOR SWIMMING (Swim):
     - ALWAYS include 'distance' (meters) for each step (estimate if needed).
     - Use 'stroke' to specify: Free, Back, Breast, Fly, IM, Choice, Kick, Pull.
     - Use 'equipment' array for gear: Fins, Paddles, Snorkel, Pull Buoy.
     - CRITICAL: You MUST include a 'heartRate' object with 'value' (target % of LTHR, e.g. 0.85) for EVERY step.
+    - Set \`heartRate.units\` to "LTHR" unless using explicit bpm.
     - RECOMMENDED: Include a 'pace' object with 'value' (target % of threshold pace) for main set intervals.
+    
+    FOR STRENGTH (Gym/WeightTraining):
+    - Instead of 'steps', provide a list of 'exercises'.
+    - Each exercise should include practical loading guidance and rest.
     
     OUTPUT JSON format matching the schema.`
 
@@ -263,44 +304,127 @@ export const adjustStructuredWorkoutTask = task({
       entityId: plannedWorkoutId
     })) as any
 
-    const calculateMetrics = (steps: any[]) => {
+    const normalizeAndCalculate = (steps: any[], depth = 0, parentStep: any = null) => {
       let distance = 0
       let duration = 0
       let tss = 0
 
+      if (!Array.isArray(steps)) return { distance, duration, tss }
+
       steps.forEach((step: any) => {
+        const recoverTarget = (fieldName: string) => {
+          if (typeof step[fieldName] === 'string') {
+            step[fieldName] = undefined
+          }
+
+          const hasOwnTarget = step.range || step.value
+          if (
+            !step[fieldName] ||
+            (typeof step[fieldName] === 'object' && Object.keys(step[fieldName]).length === 0)
+          ) {
+            if (step.range) {
+              step[fieldName] = { range: step.range }
+              delete step.range
+            } else if (step.value) {
+              step[fieldName] = { value: step.value }
+              delete step.value
+            } else if (!hasOwnTarget && parentStep?.[fieldName]) {
+              step[fieldName] = JSON.parse(JSON.stringify(parentStep[fieldName]))
+            }
+          }
+        }
+
+        if (workout.type === 'Ride' || workout.type === 'VirtualRide') {
+          recoverTarget('power')
+
+          if (!step.power || (step.power.value === undefined && !step.power.range)) {
+            if (step.type === 'Warmup') step.power = { value: 0.5, units: '%' }
+            else if (step.type === 'Rest') step.power = { value: 0.45, units: '%' }
+            else if (step.type === 'Cooldown') step.power = { value: 0.4, units: '%' }
+            else step.power = { value: 0.75, units: '%' }
+          } else if (!step.power.units) {
+            step.power.units = '%'
+          }
+
+          if (!step.cadence) {
+            if (step.type === 'Warmup' || step.type === 'Cooldown') step.cadence = 85
+            else if (step.type === 'Rest') step.cadence = 80
+            else if (parentStep?.cadence) step.cadence = parentStep.cadence
+            else step.cadence = 90
+          }
+
+          step.stroke = undefined
+          step.equipment = undefined
+        } else if (workout.type === 'Run') {
+          recoverTarget('heartRate')
+          recoverTarget('pace')
+          recoverTarget('power')
+
+          const hasHr = step.heartRate && (step.heartRate.value || step.heartRate.range)
+          const hasPace = step.pace && (step.pace.value || step.pace.range)
+          const hasPower = step.power && (step.power.value || step.power.range)
+
+          if (!hasHr && !hasPace && !hasPower) {
+            if (step.type === 'Warmup') step.heartRate = { value: 0.6, units: 'LTHR' }
+            else if (step.type === 'Rest') step.heartRate = { value: 0.5, units: 'LTHR' }
+            else if (step.type === 'Cooldown') step.heartRate = { value: 0.55, units: 'LTHR' }
+            else step.heartRate = { value: 0.75, units: 'LTHR' }
+          } else if (step.heartRate && !step.heartRate.units) {
+            step.heartRate.units = 'LTHR'
+          }
+
+          if (step.pace && !step.pace.units) {
+            step.pace.units = 'Pace'
+          }
+
+          if (step.distance) step.distance = Number(step.distance)
+        }
+
+        if (step.durationSeconds === undefined && step.duration !== undefined) {
+          step.durationSeconds = step.duration
+        }
+
         let stepDistance = 0
         let stepDuration = 0
         let stepTSS = 0
 
-        if (step.steps && Array.isArray(step.steps)) {
-          const nested = calculateMetrics(step.steps)
+        if (step.steps && Array.isArray(step.steps) && step.steps.length > 0) {
+          const nested = normalizeAndCalculate(step.steps, depth + 1, step)
           stepDistance = nested.distance
           stepDuration = nested.duration
           stepTSS = nested.tss
         } else {
-          // Distance
           stepDistance = step.distance || 0
-
-          // Duration
           stepDuration = step.durationSeconds || 0
 
-          // Estimate TSS
           let intensity = 0.5
-          if (step.power) {
-            intensity =
-              typeof step.power.value === 'number'
-                ? step.power.value
-                : step.power.range
-                  ? (step.power.range.start + step.power.range.end) / 2
-                  : 0.5
-          } else if (step.heartRate) {
-            intensity =
-              typeof step.heartRate.value === 'number'
-                ? step.heartRate.value
-                : step.heartRate.range
-                  ? (step.heartRate.range.start + step.heartRate.range.end) / 2
-                  : 0.5
+          if (step.heartRate) {
+            if (typeof step.heartRate.value === 'number') {
+              intensity = step.heartRate.value
+            } else if (step.heartRate.range) {
+              intensity = (step.heartRate.range.start + step.heartRate.range.end) / 2
+            }
+          } else if (step.power) {
+            if (typeof step.power.value === 'number') {
+              intensity = step.power.value
+            } else if (step.power.range) {
+              intensity = (step.power.range.start + step.power.range.end) / 2
+            }
+          } else {
+            switch (step.type) {
+              case 'Warmup':
+                intensity = 0.5
+                break
+              case 'Cooldown':
+                intensity = 0.4
+                break
+              case 'Rest':
+                intensity = 0.4
+                break
+              case 'Active':
+                intensity = 0.75
+                break
+            }
           }
 
           if (stepDuration > 0) {
@@ -317,7 +441,7 @@ export const adjustStructuredWorkoutTask = task({
       return { distance, duration, tss }
     }
 
-    const totals = calculateMetrics(structure.steps || [])
+    const totals = normalizeAndCalculate(structure.steps || [])
     const totalDistance = totals.distance
     const totalDuration = totals.duration
     const totalTSS = totals.tss
@@ -351,6 +475,7 @@ export const adjustStructuredWorkoutTask = task({
         description: updatedWorkout.description || '',
         type: updatedWorkout.type || '',
         steps: (structure as any).steps || [],
+        exercises: (structure as any).exercises || [],
         messages: [],
         ftp: ftp,
         sportSettings: sportSettings || undefined
