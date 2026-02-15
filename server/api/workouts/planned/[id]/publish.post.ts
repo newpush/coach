@@ -2,7 +2,8 @@ import { prisma } from '../../../../utils/db'
 import {
   createIntervalsPlannedWorkout,
   updateIntervalsPlannedWorkout,
-  cleanIntervalsDescription
+  cleanIntervalsDescription,
+  isIntervalsEventId
 } from '../../../../utils/intervals'
 import { WorkoutConverter } from '../../../../utils/workout-converter'
 import { getServerSession } from '../../../../utils/session'
@@ -51,11 +52,7 @@ export default defineEventHandler(async (event) => {
   }
 
   // Check if already published/synced
-  const isLocal =
-    workout.syncStatus === 'LOCAL_ONLY' ||
-    workout.externalId.startsWith('ai_gen_') ||
-    workout.externalId.startsWith('ai-gen-') ||
-    workout.externalId.startsWith('adhoc-')
+  const isLocal = workout.syncStatus === 'LOCAL_ONLY' || !isIntervalsEventId(workout.externalId)
 
   // Fetch sport settings to check preferences
   const sportSettings = await sportSettingsRepository.getForActivityType(userId, intervalsType)

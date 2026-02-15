@@ -8,7 +8,8 @@ import { WorkoutConverter } from '../../utils/workout-converter'
 import {
   cleanIntervalsDescription,
   createIntervalsPlannedWorkout,
-  updateIntervalsPlannedWorkout
+  updateIntervalsPlannedWorkout,
+  isIntervalsEventId
 } from '../../utils/intervals'
 import { tags } from '@trigger.dev/sdk/v3'
 import { plannedWorkoutRepository } from '../repositories/plannedWorkoutRepository'
@@ -659,11 +660,7 @@ export const planningTools = (userId: string, timezone: string, aiSettings: AiSe
 
       if (!integration) return { error: 'Intervals.icu integration not found' }
 
-      const isLocal =
-        workout.syncStatus === 'LOCAL_ONLY' ||
-        workout.externalId.startsWith('ai_gen_') ||
-        workout.externalId.startsWith('ai-gen-') ||
-        workout.externalId.startsWith('adhoc-')
+      const isLocal = workout.syncStatus === 'LOCAL_ONLY' || !isIntervalsEventId(workout.externalId)
 
       // Fetch sport settings to check preferences
       const sportSettings = await sportSettingsRepository.getForActivityType(

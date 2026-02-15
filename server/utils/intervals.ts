@@ -23,6 +23,10 @@ function getIntervalsAthleteId(integration: Integration): string {
   return integration.externalUserId || 'i0'
 }
 
+export function isIntervalsEventId(eventId: string | null | undefined): eventId is string {
+  return typeof eventId === 'string' && /^\d+$/.test(eventId.trim())
+}
+
 interface IntervalsActivity {
   id: string
   start_date: string // UTC timestamp
@@ -341,6 +345,10 @@ export async function deleteIntervalsPlannedWorkout(
   integration: Integration,
   eventId: string
 ): Promise<void> {
+  if (!isIntervalsEventId(eventId)) {
+    throw new Error(`Invalid Intervals event ID: ${eventId}`)
+  }
+
   const athleteId = getIntervalsAthleteId(integration)
 
   const url = `https://intervals.icu/api/v1/athlete/${athleteId}/events/${eventId}`
@@ -372,6 +380,10 @@ export async function updateIntervalsPlannedWorkout(
     startTime?: string | null
   }
 ): Promise<IntervalsPlannedWorkout> {
+  if (!isIntervalsEventId(eventId)) {
+    throw new Error(`Invalid Intervals event ID: ${eventId}`)
+  }
+
   const athleteId = getIntervalsAthleteId(integration)
 
   // Map workout types to Intervals.icu format
