@@ -167,9 +167,16 @@
               <p class="text-xs text-gray-600 dark:text-gray-300 mt-1.5">
                 {{ trainingContextSummary }}
               </p>
-              <div v-if="showTrainingContextDetails" class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 mt-3">
-                <div class="p-3 rounded-xl bg-gray-50 dark:bg-gray-950 border border-gray-100 dark:border-gray-800">
-                  <div class="text-[10px] font-bold uppercase tracking-wider text-gray-500 mb-1">Goal / Plan</div>
+              <div
+                v-if="showTrainingContextDetails"
+                class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 mt-3"
+              >
+                <div
+                  class="p-3 rounded-xl bg-gray-50 dark:bg-gray-950 border border-gray-100 dark:border-gray-800"
+                >
+                  <div class="text-[10px] font-bold uppercase tracking-wider text-gray-500 mb-1">
+                    Goal / Plan
+                  </div>
                   <div class="text-sm font-semibold text-gray-900 dark:text-white">
                     {{
                       workout.trainingWeek.block.plan.goal?.title ||
@@ -178,20 +185,32 @@
                     }}
                   </div>
                 </div>
-                <div class="p-3 rounded-xl bg-gray-50 dark:bg-gray-950 border border-gray-100 dark:border-gray-800">
-                  <div class="text-[10px] font-bold uppercase tracking-wider text-gray-500 mb-1">Block</div>
+                <div
+                  class="p-3 rounded-xl bg-gray-50 dark:bg-gray-950 border border-gray-100 dark:border-gray-800"
+                >
+                  <div class="text-[10px] font-bold uppercase tracking-wider text-gray-500 mb-1">
+                    Block
+                  </div>
                   <div class="text-sm font-semibold text-gray-900 dark:text-white">
                     {{ workout.trainingWeek.block.name }}
                   </div>
                 </div>
-                <div class="p-3 rounded-xl bg-gray-50 dark:bg-gray-950 border border-gray-100 dark:border-gray-800">
-                  <div class="text-[10px] font-bold uppercase tracking-wider text-gray-500 mb-1">Week</div>
+                <div
+                  class="p-3 rounded-xl bg-gray-50 dark:bg-gray-950 border border-gray-100 dark:border-gray-800"
+                >
+                  <div class="text-[10px] font-bold uppercase tracking-wider text-gray-500 mb-1">
+                    Week
+                  </div>
                   <div class="text-sm font-semibold text-gray-900 dark:text-white">
                     {{ workout.trainingWeek.weekNumber }}
                   </div>
                 </div>
-                <div class="p-3 rounded-xl bg-gray-50 dark:bg-gray-950 border border-gray-100 dark:border-gray-800">
-                  <div class="text-[10px] font-bold uppercase tracking-wider text-gray-500 mb-1">Focus</div>
+                <div
+                  class="p-3 rounded-xl bg-gray-50 dark:bg-gray-950 border border-gray-100 dark:border-gray-800"
+                >
+                  <div class="text-[10px] font-bold uppercase tracking-wider text-gray-500 mb-1">
+                    Focus
+                  </div>
                   <div class="text-sm font-semibold text-gray-900 dark:text-white">
                     {{ workout.trainingWeek.focus || workout.trainingWeek.block.primaryFocus }}
                   </div>
@@ -214,7 +233,10 @@
                     kpi.label
                   }}</span>
                 </div>
-                <span class="text-[10px] font-bold uppercase tracking-wide" :class="kpi.statusColor">
+                <span
+                  class="text-[10px] font-bold uppercase tracking-wide"
+                  :class="kpi.statusColor"
+                >
                   {{ kpi.status }}
                 </span>
               </div>
@@ -272,7 +294,9 @@
                 />
               </div>
 
-              <p class="text-blue-800 dark:text-blue-200 italic break-words">"{{ coachAdviceText }}"</p>
+              <p class="text-blue-800 dark:text-blue-200 italic break-words">
+                "{{ coachAdviceText }}"
+              </p>
             </div>
           </div>
 
@@ -633,6 +657,45 @@
       </div>
     </template>
   </UModal>
+
+  <UModal
+    v-if="showStructureModal"
+    v-model:open="showStructureModal"
+    title="Edit Workout Structure"
+    description="Modify the workout steps using Intervals.icu text format."
+    :ui="{ content: 'sm:max-w-2xl' }"
+  >
+    <template #body>
+      <div class="p-6 flex flex-col gap-4">
+        <div
+          class="bg-blue-50 dark:bg-blue-900/20 p-3 rounded-lg text-xs text-blue-800 dark:text-blue-200"
+        >
+          <p class="font-bold mb-1 uppercase tracking-wider">Format Tips:</p>
+          <ul class="list-disc list-inside space-y-0.5 opacity-80">
+            <li>- 10m 50% (Duration and intensity)</li>
+            <li>- Interval 5m 100% 90rpm (Name and cadence)</li>
+            <li>4x (Repeats, indent steps below)</li>
+            <li>Use "m" for minutes, "s" for seconds, "%" for power, "% LTHR" for heart rate.</li>
+          </ul>
+        </div>
+
+        <UTextarea
+          v-model="structureText"
+          placeholder="- Warmup 10m 50%\n- 4x\n  - 1m 100%\n  - 1m 50%\n- Cooldown 5m 40%"
+          :rows="12"
+          autofocus
+          class="font-mono text-sm"
+        />
+
+        <div class="flex justify-end pt-2 gap-2">
+          <UButton variant="ghost" @click="showStructureModal = false">Cancel</UButton>
+          <UButton color="primary" :loading="savingStructure" @click="saveStructure"
+            >Save Structure</UButton
+          >
+        </div>
+      </div>
+    </template>
+  </UModal>
 </template>
 
 <script setup lang="ts">
@@ -732,8 +795,23 @@
   const showEjectModal = ref(false)
   const ejecting = ref(false)
 
+  const showStructureModal = ref(false)
+  const structureText = ref('')
+  const savingStructure = ref(false)
+
   const secondaryMenuItems = computed(() => {
     const items = []
+
+    // Edit Structure action
+    if (workout.value) {
+      items.push({
+        label: 'Edit Structure',
+        icon: 'i-heroicons-pencil',
+        onSelect: () => {
+          editStructure()
+        }
+      })
+    }
 
     // Mark Complete action
     if (workout.value && !workout.value.completed) {
@@ -1059,6 +1137,125 @@
     // Use window.location.href to trigger download, avoiding popup blockers for direct user actions usually
     // But _blank is safer for files sometimes. Let's try direct nav.
     window.location.href = `/api/workouts/planned/${workout.value.id}/download/${format}`
+  }
+
+  function editStructure() {
+    if (!workout.value) return
+
+    // Convert current JSON structure to text
+    const workoutData = {
+      title: workout.value.title,
+      description: workout.value.description || '',
+      type: workout.value.type || '',
+      steps: workout.value.structuredWorkout?.steps || [],
+      exercises: workout.value.structuredWorkout?.exercises || [],
+      messages: []
+    }
+
+    // Since we're in Nuxt, we can import WorkoutConverter if exported from utils
+    // or just implement a simple conversion here.
+    // Actually WorkoutConverter is in server/utils, not app/utils.
+    // I should move it or implement a local version.
+    // Wait, let's see if WorkoutConverter is already used in frontend.
+    // It's not. I'll use a simple manual conversion for now or just trust the API will handle it if I send text.
+    // But I need to SHOW the text to the user.
+
+    // I'll define a simple local toIntervalsText function.
+    structureText.value = toIntervalsText(workoutData)
+    showStructureModal.value = true
+  }
+
+  function toIntervalsText(data: any): string {
+    const lines: string[] = []
+
+    if (data.type === 'Gym' || data.type === 'WeightTraining') {
+      if (data.exercises && data.exercises.length > 0) {
+        data.exercises.forEach((ex: any) => {
+          lines.push(`- **${ex.name}**`)
+          let details = ''
+          if (ex.sets) details += `${ex.sets} sets`
+          if (ex.reps) details += ` x ${ex.reps} reps`
+          if (ex.weight) details += ` @ ${ex.weight}`
+          if (details) lines.push(`  - ${details}`)
+          if (ex.rest) lines.push(`  - Rest: ${ex.rest}`)
+          if (ex.notes) lines.push(`  - Note: ${ex.notes}`)
+        })
+        return lines.join('\n')
+      }
+    }
+
+    const formatSteps = (steps: any[], indent = '') => {
+      steps.forEach((step: any) => {
+        if (step.steps && step.steps.length > 0) {
+          const reps = step.reps || 1
+          lines.push(`${indent}${reps}x`)
+          formatSteps(step.steps, indent + '  ')
+          return
+        }
+
+        let line = `${indent}-`
+        if (step.name) line += ` ${step.name}`
+
+        // Duration
+        if (step.durationSeconds) {
+          const mins = Math.floor(step.durationSeconds / 60)
+          const secs = step.durationSeconds % 60
+          if (mins > 0 && secs === 0) line += ` ${mins}m`
+          else if (mins === 0) line += ` ${secs}s`
+          else line += ` ${mins}m${secs}s`
+        } else if (step.distance) {
+          line += ` ${step.distance}m`
+        }
+
+        // Intensity
+        if (step.power) {
+          if (step.power.range)
+            line += ` ${Math.round(step.power.range.start * 100)}-${Math.round(step.power.range.end * 100)}%`
+          else if (step.power.value) line += ` ${Math.round(step.power.value * 100)}%`
+        } else if (step.heartRate) {
+          if (step.heartRate.range)
+            line += ` ${Math.round(step.heartRate.range.start * 100)}-${Math.round(step.heartRate.range.end * 100)}% LTHR`
+          else if (step.heartRate.value) line += ` ${Math.round(step.heartRate.value * 100)}% LTHR`
+        }
+
+        if (step.cadence) line += ` ${step.cadence}rpm`
+
+        lines.push(line)
+      })
+    }
+
+    if (data.steps && data.steps.length > 0) {
+      formatSteps(data.steps)
+    }
+
+    return lines.join('\n')
+  }
+
+  async function saveStructure() {
+    if (!workout.value?.id) return
+    savingStructure.value = true
+    try {
+      await $fetch(`/api/workouts/planned/${workout.value.id}/structure`, {
+        method: 'PATCH',
+        body: { text: structureText.value }
+      })
+      toast.add({
+        title: 'Structure Updated',
+        description: 'The workout structure has been updated.',
+        color: 'success'
+      })
+      showStructureModal.value = false
+      // Refresh workout data
+      await fetchWorkout()
+    } catch (error: any) {
+      toast.add({
+        title: 'Update Failed',
+        description: error.data?.message || 'Failed to update structure',
+        color: 'error'
+      })
+    } finally {
+      savingStructure.value = false
+    }
   }
 
   const generateShareLink = async () => {
