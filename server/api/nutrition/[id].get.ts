@@ -47,6 +47,7 @@ export default defineEventHandler(async (event) => {
   let startingFluid: number = 0
   let energyPoints: any[] = []
   let glycogenState: any = null
+  let chainCalibration: any = null
 
   if (dateObj) {
     const state = await metabolicService.getMetabolicStateForDate(userId, dateObj)
@@ -63,6 +64,34 @@ export default defineEventHandler(async (event) => {
     )
     energyPoints = timelineResult.points
     glycogenState = timelineResult.liveStatus
+
+    const lookbackStart = new Date(dateObj)
+    lookbackStart.setUTCDate(dateObj.getUTCDate() - 6)
+    const recentChain = await prisma.nutrition.findMany({
+      where: {
+        userId,
+        date: {
+          gte: lookbackStart,
+          lte: dateObj
+        }
+      },
+      select: {
+        date: true,
+        startingGlycogenPercentage: true,
+        endingGlycogenPercentage: true
+      }
+    })
+
+    const anchoredDays = recentChain.filter(
+      (d) => d.startingGlycogenPercentage != null || d.endingGlycogenPercentage != null
+    ).length
+
+    chainCalibration = {
+      anchoredDays,
+      totalDays: 7,
+      confidence: anchoredDays >= 5 ? 'HIGH' : anchoredDays >= 3 ? 'MEDIUM' : 'CALIBRATING',
+      isCalibrating: anchoredDays < 7
+    }
 
     // Use unified service for fueling plan if missing or needs refresh
     if (!nutrition || !nutrition.fuelingPlan) {
@@ -133,6 +162,7 @@ export default defineEventHandler(async (event) => {
     startingFluid,
     energyPoints,
     ...(glycogenState || {}),
+    chainCalibration,
     date:
       nutrition.date instanceof Date
         ? nutrition.date.toISOString().split('T')[0]

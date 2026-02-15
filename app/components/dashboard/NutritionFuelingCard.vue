@@ -132,6 +132,13 @@
             <div class="flex justify-between text-xs font-bold uppercase tracking-wider">
               <span class="text-gray-500 flex items-center gap-1">
                 Glycogen "Fuel Tank"
+                <UTooltip
+                  v-if="isChainCalibrating"
+                  :text="chainCalibrationTooltip"
+                  :popper="{ placement: 'top' }"
+                >
+                  <UBadge color="warning" variant="soft" size="xs">Calibrating</UBadge>
+                </UTooltip>
                 <UIcon
                   name="i-heroicons-information-circle"
                   class="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity"
@@ -159,6 +166,9 @@
                 class="text-[9px] font-black uppercase text-primary-500 opacity-0 group-hover:opacity-100 transition-opacity"
                 >Show Breakdown</span
               >
+            </p>
+            <p v-if="isChainCalibrating" class="text-[10px] text-amber-600 dark:text-amber-400">
+              Fuel chain is still calibrating ({{ chainAnchoredDays }}/7 anchored days).
             </p>
           </div>
 
@@ -670,6 +680,13 @@
 
   const tankPercentage = computed(() => glycogenState.value.percentage)
   const tankAdvice = computed(() => glycogenState.value.advice)
+  const chainAnchoredDays = computed(() => props.nutrition?.chainCalibration?.anchoredDays || 0)
+  const isChainCalibrating = computed(() => !!props.nutrition?.chainCalibration?.isCalibrating)
+  const chainCalibrationTooltip = computed(() => {
+    const anchored = chainAnchoredDays.value
+    const confidence = props.nutrition?.chainCalibration?.confidence || 'CALIBRATING'
+    return `This tank is based on chain reconstruction (${anchored}/7 anchored days, ${confidence.toLowerCase()} confidence). It stabilizes as more consecutive days are linked.`
+  })
 
   const mealRecommendationReasoning = computed(() => {
     const raw = mealRecommendation.value?.reasoning || ''
