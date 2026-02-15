@@ -5,8 +5,14 @@ import { PrismaPg } from '@prisma/adapter-pg'
 import pg from 'pg'
 import Table from 'cli-table3'
 import chalk from 'chalk'
+import llmStatsCommand from './stats'
+import recalculateCostsCommand from './recalculate-costs'
 
 const llmCommand = new Command('llm').description('LLM usage and cost management')
+
+// Register subcommands
+llmCommand.addCommand(llmStatsCommand)
+llmCommand.addCommand(recalculateCostsCommand)
 
 llmCommand
   .command('token-buckets')

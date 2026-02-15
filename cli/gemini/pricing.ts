@@ -1,5 +1,6 @@
 import { Command } from 'commander'
 import chalk from 'chalk'
+import { PRICING, MODEL_NAMES } from '../../server/utils/ai-config'
 
 export const pricingCommand = new Command('pricing')
   .description('Display current Gemini pricing used by the application')
@@ -7,37 +8,42 @@ export const pricingCommand = new Command('pricing')
     console.log(chalk.bold('Current Gemini Pricing Configuration:'))
     console.log('=====================================\n')
 
-    console.log(chalk.yellow('1. Utility Pricing (server/utils/gemini.ts)'))
-    console.log('Used by: Automatic analyses, reports, triggers\n')
+    console.log(chalk.yellow('1. Model Pricing (server/utils/ai-config.ts)'))
+    console.log('Authoritative rates used for all cost logging\n')
 
-    const utilityPricing = {
-      'gemini-flash-latest': { input: 0.075, output: 0.3 },
-      'gemini-3-pro-preview': { input: 1.25, output: 5.0 }
-    }
-
-    Object.entries(utilityPricing).forEach(([model, rates]) => {
+    Object.entries(PRICING).forEach(([model, config]) => {
       console.log(chalk.cyan(`Model: ${model}`))
-      console.log(`  Input:  $${rates.input} / 1M tokens`)
-      console.log(`  Output: $${rates.output} / 1M tokens`)
+
+      if (config.threshold < 1_000_000_000) {
+        console.log(chalk.gray(`  Tiered pricing threshold: ${config.threshold.toLocaleString()} tokens`))
+
+        console.log(chalk.white('  Base Rates:'))
+        console.log(`    Input:   $${config.base.input.toFixed(2)} / 1M tokens`)
+        console.log(`    Output:  $${config.base.output.toFixed(2)} / 1M tokens`)
+        console.log(`    Cached:  $${config.base.cacheInput.toFixed(3)} / 1M tokens`)
+
+        console.log(chalk.white('  Premium Rates:'))
+        console.log(`    Input:   $${config.premium.input.toFixed(2)} / 1M tokens`)
+        console.log(`    Output:  $${config.premium.output.toFixed(2)} / 1M tokens`)
+        console.log(`    Cached:  $${config.premium.cacheInput.toFixed(3)} / 1M tokens`)
+      } else {
+        console.log(chalk.white('  Fixed Rates:'))
+        console.log(`    Input:   $${config.base.input.toFixed(2)} / 1M tokens`)
+        console.log(`    Output:  $${config.base.output.toFixed(2)} / 1M tokens`)
+        console.log(`    Cached:  $${config.base.cacheInput.toFixed(3)} / 1M tokens`)
+      }
+      console.log('---')
     })
 
-    console.log('\n' + chalk.yellow('2. Chat Pricing (server/api/chat/messages.post.ts)'))
-    console.log('Used by: Real-time coach chat\n')
+    console.log('\n' + chalk.yellow('2. Active Model Aliases'))
+    console.log(chalk.cyan(`  Flash (Utility): ${MODEL_NAMES.flash}`))
+    console.log(chalk.cyan(`  Pro   (Chat):    ${MODEL_NAMES.pro}`))
 
-    const chatPricing = {
-      input: 0.075,
-      output: 0.3
-    }
+    console.log('\n' + chalk.green.bold('STATUS: SYNCHRONIZED'))
+    console.log('CLI is now displaying the actual logic from the server.')
 
-    console.log(chalk.cyan('Model: gemini-flash (Default)'))
-    console.log(`  Input:  $${chatPricing.input} / 1M tokens`)
-    console.log(`  Output: $${chatPricing.output} / 1M tokens`)
-
-    console.log('\n' + chalk.green.bold('STATUS: ALIGNED'))
-    console.log('Utility pricing and Chat pricing are now consistent.')
-
-    console.log('\n' + chalk.gray('Note: These values are currently hardcoded in the codebase.'))
+    console.log('\n' + chalk.gray('Note: These values are defined in server/utils/ai-config.ts.'))
     console.log(
-      chalk.gray('The Gemini API does not currently expose a programmatic pricing endpoint.')
+      chalk.gray('Google updates pricing periodically; ensure the config file matches latest docs.')
     )
   })
