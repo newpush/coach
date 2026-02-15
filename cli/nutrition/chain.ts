@@ -7,7 +7,7 @@ import {
   getStartOfDayUTC,
   getEndOfDayUTC
 } from '../../server/utils/date'
-import { calculateEnergyTimeline } from '../../server/utils/nutrition-domain'
+import { calculateEnergyTimeline, synthesizeRefills } from '../../server/utils/nutrition-domain'
 import { workoutRepository } from '../../server/utils/repositories/workoutRepository'
 import { plannedWorkoutRepository } from '../../server/utils/repositories/plannedWorkoutRepository'
 import { nutritionRepository } from '../../server/utils/repositories/nutritionRepository'
@@ -99,11 +99,17 @@ const chainCommand = new Command('chain')
         const isPast = date < today
 
         // Check for logs
-        const hasLogs = record && (record.breakfast || record.lunch || record.dinner)
+        const hasLogs = !!(
+          record &&
+          ((Array.isArray(record.breakfast) && record.breakfast.length > 0) ||
+            (Array.isArray(record.lunch) && record.lunch.length > 0) ||
+            (Array.isArray(record.dinner) && record.dinner.length > 0) ||
+            (Array.isArray(record.snacks) && record.snacks.length > 0))
+        )
         let simulationMeals: any[] = []
 
         if (!hasLogs && !isPast) {
-          simulationMeals = metabolicService.synthesizeRefills(
+          simulationMeals = synthesizeRefills(
             date,
             dayWorkouts,
             { weight: user.weight || 75, ftp: user.ftp || 250, ...settings },

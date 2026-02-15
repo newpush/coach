@@ -84,7 +84,7 @@ const debugMetabolicCommand = new Command('debug-metabolic')
         console.log('- No yesterday record found')
       }
 
-      // 3. Simulation
+      // 3. Simulation (write-path used by repair/finalize flows)
       console.log(chalk.yellow('\n3. Metabolic Chain Simulation:'))
       const chainState = await metabolicService.repairMetabolicChain(userId, targetDate)
       console.log(
@@ -117,7 +117,55 @@ const debugMetabolicCommand = new Command('debug-metabolic')
         }
       }
 
-      console.log(chalk.yellow('\n4. Live Status (Used by Fuel Tank):'))
+      // 4. Read-only state (matches /api/nutrition/:id behavior)
+      const readOnlyState = await metabolicService.getMetabolicStateForDate(userId, targetDate)
+      console.log(chalk.yellow('\n4. Read-only State (Used by /api/nutrition/:id):'))
+      console.log(
+        `- getMetabolicStateForDate: ${chalk.cyan(readOnlyState.startingGlycogen.toFixed(1))}%`
+      )
+
+      const { points: readOnlyPoints, liveStatus: readOnlyLiveStatus } =
+        await metabolicService.getDailyTimeline(
+          userId,
+          targetDate,
+          readOnlyState.startingGlycogen,
+          readOnlyState.startingFluid,
+          now
+        )
+      if (readOnlyPoints.length > 0) {
+        const nowTs = now.getTime()
+        const nowIdx = readOnlyPoints.findIndex((p) => p.timestamp > nowTs)
+        const currentPoint =
+          nowIdx > 0 ? readOnlyPoints[nowIdx - 1] : readOnlyPoints[readOnlyPoints.length - 1]
+        if (currentPoint) {
+          console.log(
+            `- Read-only Timeline @ ${options.time || 'NOW'} (${currentPoint.time}): ${chalk.bold(currentPoint.level)}%`
+          )
+        }
+      }
+      console.log(`- Read-only Live Status: ${chalk.bold(readOnlyLiveStatus.percentage)}%`)
+
+      // 5. Wave Path (Used by Metabolic Horizon)
+      const wavePoints = await metabolicService.getWaveRange(userId, targetDate, targetDate)
+      if (wavePoints.length > 0) {
+        const nowTs = now.getTime()
+        const nowIdx = wavePoints.findIndex((p) => p.timestamp > nowTs)
+        const currentWavePoint =
+          nowIdx > 0 ? wavePoints[nowIdx - 1] : wavePoints[wavePoints.length - 1]
+        const waveEnd = wavePoints[wavePoints.length - 1]
+
+        console.log(chalk.yellow('\n5. Wave Status (Used by Metabolic Horizon):'))
+        if (currentWavePoint) {
+          console.log(
+            `- Wave @ ${options.time || 'NOW'} (${currentWavePoint.time}): ${chalk.bold(currentWavePoint.level)}%`
+          )
+        }
+        if (waveEnd) {
+          console.log(`- Wave End-of-Day (${waveEnd.time}): ${chalk.bold(waveEnd.level)}%`)
+        }
+      }
+
+      console.log(chalk.yellow('\n6. Live Status (Write-path fuel tank):'))
       console.log(`- Percentage: ${chalk.bold(liveStatus.percentage)}%`)
       console.log(`- Advice: ${liveStatus.advice}`)
 
