@@ -131,7 +131,7 @@
     const isCarbs = props.viewMode === 'carbs'
 
     let yMin = 0
-    let yMax = 100
+    let yMax = 110 // Add padding above 100% for icons
 
     if (isKcal || isCarbs) {
       const values = props.points.map((p) => (isKcal ? p.kcalBalance : p.carbBalance))
@@ -265,6 +265,7 @@
             font: { size: 10 },
             callback: (val: any) => {
               if (isKcal || isCarbs) return `${val > 0 ? '+' : ''}${val}${isCarbs ? 'g' : ''}`
+              if (val > 100) return '' // Hide labels above 100% to keep padding clean
               return `${val}%`
             }
           }

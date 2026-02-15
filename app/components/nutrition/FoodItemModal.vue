@@ -175,16 +175,6 @@
     }
   })
 
-  watch(
-    () => state.value.name,
-    (newName) => {
-      if (!isEditing.value && newName) {
-        const profile = getProfileForItem(newName)
-        state.value.absorptionType = profile.id
-      }
-    }
-  )
-
   async function onSubmit() {
     loading.value = true
     try {
