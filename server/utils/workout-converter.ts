@@ -503,7 +503,7 @@ export const WorkoutConverter = {
           else durationStr = `${duration}s`
         }
 
-        // Format intensity string - For RUNS, we only want ONE target
+        // Format intensity string
         const intensities: string[] = []
 
         const getPowerStr = () => {
@@ -545,35 +545,43 @@ export const WorkoutConverter = {
           return ''
         }
 
-        if (isRun) {
-          const hr = getHrStr()
-          if (hr) intensities.push(hr)
-          else {
-            const pc = getPaceStr()
-            if (pc) intensities.push(pc)
-            else {
-              const pw = getPowerStr()
-              if (pw) intensities.push(pw)
+        // Use load preference to determine priority (e.g. 'hr_power_pace' -> prioritize HR)
+        const metrics = loadPref.split('_')
+        let primaryFound = false
+
+        for (const metric of metrics) {
+          if (metric === 'hr') {
+            const s = getHrStr()
+            if (s) {
+              intensities.push(s)
+              primaryFound = true
+            }
+          } else if (metric === 'power') {
+            const s = getPowerStr()
+            if (s) {
+              intensities.push(s)
+              primaryFound = true
+            }
+          } else if (metric === 'pace') {
+            const s = getPaceStr()
+            if (s) {
+              intensities.push(s)
+              primaryFound = true
             }
           }
-        } else {
-          if (prioritizeHr) {
-            const hr = getHrStr()
-            if (hr) intensities.push(hr)
-            const pw = getPowerStr()
-            if (pw) intensities.push(pw)
-          } else {
-            const pw = getPowerStr()
-            if (pw) intensities.push(pw)
-            const hr = getHrStr()
-            if (hr) intensities.push(hr)
-          }
-          const pc = getPaceStr()
-          if (pc) intensities.push(pc)
+          // If we found the primary metric, we can stop for Runs to keep it clean.
+          // For other sports, we might want to continue to show both Power and HR.
+          if (primaryFound && isRun) break
         }
 
-        if (intensities.length === 0 && isRun && step.type !== 'Rest') {
-          intensities.push('60% LTHR')
+        // Fallback if nothing found and it's an active step
+        if (intensities.length === 0 && step.type !== 'Rest') {
+          const fallback = getHrStr() || getPowerStr() || getPaceStr()
+          if (fallback) {
+            intensities.push(fallback)
+          } else if (isRun) {
+            intensities.push('60% LTHR')
+          }
         }
 
         const intensityStr = intensities.join(' ')

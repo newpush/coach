@@ -256,8 +256,9 @@ export const generateStructuredWorkoutTask = task({
     if (ftp) {
       zoneDefinitions += `**Reference FTP:** ${ftp} Watts\n`
     }
+    const loadPreference = sportSettings?.loadPreference || 'HR_POWER_PACE'
     if (sportSettings?.loadPreference) {
-      zoneDefinitions += `**Preferred Load Metric:** ${sportSettings.loadPreference}\n`
+      zoneDefinitions += `**Preferred Load Metric:** ${loadPreference}\n`
     }
 
     const prompt = `Design a structured ${workout.type} workout for ${workout.user.name || 'Athlete'}.
@@ -269,6 +270,7 @@ export const generateStructuredWorkoutTask = task({
     USER FTP: ${ftp}W
     USER LTHR: ${lthr} bpm
     TYPE: ${workout.type}
+    PREFERRED INTENSITY METRIC: ${loadPreference}
     
     CONTEXT:
     - Goal: ${goal}
@@ -288,6 +290,10 @@ export const generateStructuredWorkoutTask = task({
     INSTRUCTIONS:
     - Create a JSON structure defining the exact steps (Warmup, Intervals, Rest, Cooldown).
     - Ensure total duration matches the target duration exactly.
+    - **METRIC PRIORITY**: Respect the user's PREFERRED INTENSITY METRIC (${loadPreference}). 
+      - Priority Order: ${loadPreference.split('_').join(' > ')}.
+      - Use the FIRST available metric from this list for each step as the primary target object. 
+      - NEVER duplicate a workout step just to provide a different intensity metric. One step = one time block.
     - **steps**: All rules below (targets, etc.) apply to BOTH top-level steps AND nested steps inside repeats.
     - **description**: Use ONLY complete sentences to describe the overall purpose and strategy. **NEVER use bullet points or list the steps here**.
     - **coachInstructions**: Provide a personalized message (2-3 sentences) explaining WHY this workout matters for their goal (${goal}) and how to execute it (e.g. "Focus on smooth cadence during the efforts"). Use the '${persona}' persona tone.
@@ -301,11 +307,11 @@ export const generateStructuredWorkoutTask = task({
     - Steps should have 'type', 'durationSeconds', 'name'.
     - ALWAYS include 'distance' (meters) for each step. If duration-based, ESTIMATE the distance based on the intensity/pace.
     - Use 'power' object if it's a power-based run (e.g. Stryd).
-    - CRITICAL: You MUST include a 'heartRate' object for EVERY step (except Rest where it's optional but recommended).
-    - Prefer 'heartRate.range' for steady aerobic/endurance/tempo blocks (e.g. Zone 2 -> start: 0.70, end: 0.80). Use 'heartRate.value' mainly for short precise efforts.
-    - HIGHLY RECOMMENDED: Include a 'pace' object with 'value' (target % of threshold pace) for active steps. Providing both 'heartRate' and 'pace' is preferred for running.
-    - DO NOT rely solely on description for intensity. Even for "Easy Jog", provide an estimated HR intensity (e.g. 0.70).
-    - If pace based, put pace in 'description' AND provide the equivalent HR intensity in 'heartRate.value' or 'heartRate.range' (e.g. 5k pace ~ 1.05 intensity).
+    - Use the user's PREFERRED INTENSITY METRIC (${loadPreference}) as the primary target.
+    - If HR is preferred, ensure 'heartRate' is populated. If PACE is preferred, ensure 'pace' is populated.
+    - Do NOT mix HR and Pace targets in the same step unless specifically requested in the description.
+    - Prefer 'heartRate.range' or 'pace.range' for steady aerobic/endurance/tempo blocks (e.g. Zone 2 -> start: 0.70, end: 0.80). 
+    - DO NOT rely solely on description for intensity. Provide an estimated target object for every step.
     
     FOR SWIMMING (Swim):
     - Steps should ideally have 'distance' (meters) instead of or in addition to duration. If using duration, estimate distance.
