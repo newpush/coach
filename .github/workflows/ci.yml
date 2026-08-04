@@ -26,7 +26,7 @@ concurrency:
 jobs:
   typecheck:
     name: Typecheck
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux]
     timeout-minutes: 20
     steps:
       - name: Checkout code
@@ -49,7 +49,7 @@ jobs:
 
   lint:
     name: Lint
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux]
     timeout-minutes: 15
     steps:
       - name: Checkout code
@@ -75,7 +75,7 @@ jobs:
 
   unit-tests:
     name: Unit tests
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux]
     timeout-minutes: 20
     steps:
       - name: Checkout code
