@@ -10,7 +10,8 @@ import {
   calculateAerobicDecoupling,
   calculateCoastingStats,
   detectSurgesAndFades,
-  calculateRecoveryRateTrend
+  calculateRecoveryRateTrend,
+  resolveProviderIntervalTypes
 } from '../../../utils/interval-detection'
 import {
   calculateWPrimeBalance,
@@ -180,13 +181,23 @@ export default defineEventHandler(async (event) => {
 
   const mapSyncedIntervals = (intervals: any[]) => {
     if (!intervals || !Array.isArray(intervals)) return []
-    return intervals.map((i: any) => ({
+    // Providers (Intervals.icu especially) label almost every lap WORK, so the
+    // recovery jogs of an interval session would otherwise render as reps.
+    const resolvedTypes = resolveProviderIntervalTypes(
+      intervals.map((i: any) => ({
+        type: i.type,
+        intensity: Number(i.intensity),
+        avgPower: Number(i.average_watts),
+        avgSpeed: Number(i.average_speed)
+      }))
+    )
+    return intervals.map((i: any, index: number) => ({
       start_index: i.start_index,
       end_index: i.end_index,
       start_time: i.start_time,
       end_time: i.end_time,
       duration: i.duration || i.end_time - i.start_time,
-      type: i.type,
+      type: resolvedTypes[index],
       avg_power: i.average_watts,
       max_power: i.max_watts,
       avg_heartrate: i.average_heartrate,

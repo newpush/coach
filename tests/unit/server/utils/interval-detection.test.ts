@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { detectIntervals } from '../../../../server/utils/interval-detection'
+import {
+  detectIntervals,
+  resolveProviderIntervalTypes
+} from '../../../../server/utils/interval-detection'
 
 describe('detectIntervals', () => {
   it('preserves the final recovery block before cooldown for plan-guided detection', () => {
@@ -85,5 +88,79 @@ describe('detectIntervals', () => {
     expect(intervals[6]?.avg_cadence).toBeGreaterThanOrEqual(78)
     expect(intervals[7]?.avg_cadence).toBeLessThan(intervals[6]?.avg_cadence || 999)
     expect(intervals[6]?.detection_confidence).toBeGreaterThan(0.35)
+  })
+})
+
+describe('resolveProviderIntervalTypes', () => {
+  // Intervals.icu labels nearly every synced lap WORK, including the recovery
+  // jogs of a threshold session.
+  const thresholdSession = [
+    { type: 'WORK', intensity: 83, avgPower: 220 },
+    { type: 'WORK', intensity: 101, avgPower: 270 },
+    { type: 'WORK', intensity: 52, avgPower: 139 },
+    { type: 'WORK', intensity: 103, avgPower: 275 },
+    { type: 'WORK', intensity: 52, avgPower: 138 },
+    { type: 'WORK', intensity: 105, avgPower: 280 },
+    { type: 'WORK', intensity: 52, avgPower: 139 },
+    { type: 'WORK', intensity: 109, avgPower: 291 },
+    { type: 'WORK', intensity: 52, avgPower: 140 },
+    { type: 'WORK', intensity: 69, avgPower: 184 },
+    { type: 'RECOVERY', intensity: 38, avgPower: 103 }
+  ]
+
+  it('demotes recovery jogs and end blocks that the provider labelled WORK', () => {
+    expect(resolveProviderIntervalTypes(thresholdSession)).toEqual([
+      'WARMUP',
+      'WORK',
+      'RECOVERY',
+      'WORK',
+      'RECOVERY',
+      'WORK',
+      'RECOVERY',
+      'WORK',
+      'RECOVERY',
+      'COOLDOWN',
+      'RECOVERY'
+    ])
+  })
+
+  it('falls back to average power when the provider reports no intensity', () => {
+    const withoutIntensity = thresholdSession.map(({ type, avgPower }) => ({ type, avgPower }))
+    expect(resolveProviderIntervalTypes(withoutIntensity)).toEqual(
+      resolveProviderIntervalTypes(thresholdSession)
+    )
+  })
+
+  it('leaves an evenly paced endurance run untouched', () => {
+    const steadyLaps = [62, 64, 63, 65, 64, 63, 66, 64].map((intensity) => ({
+      type: 'WORK',
+      intensity
+    }))
+    expect(resolveProviderIntervalTypes(steadyLaps)).toEqual(steadyLaps.map(() => 'WORK'))
+  })
+
+  it('never promotes an explicit recovery label to work', () => {
+    const laps = [
+      { type: 'WARMUP', intensity: 60 },
+      { type: 'RECOVERY', intensity: 104 },
+      { type: 'WORK', intensity: 105 },
+      { type: 'RECOVERY', intensity: 103 },
+      { type: 'WORK', intensity: 106 }
+    ]
+    expect(resolveProviderIntervalTypes(laps)).toEqual([
+      'WARMUP',
+      'RECOVERY',
+      'WORK',
+      'RECOVERY',
+      'WORK'
+    ])
+  })
+
+  it('keeps provider types when there is nothing to compare', () => {
+    expect(resolveProviderIntervalTypes([{ type: 'WORK' }, { type: 'WORK' }])).toEqual([
+      'WORK',
+      'WORK'
+    ])
+    expect(resolveProviderIntervalTypes([])).toEqual([])
   })
 })

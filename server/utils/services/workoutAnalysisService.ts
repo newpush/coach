@@ -35,6 +35,7 @@ import {
   type WorkoutAnalysisFactsV2
 } from '../workout-analysis-facts'
 import { summarizePowerFromWatts } from '../power-metrics'
+import { resolveProviderIntervalTypes } from '../interval-detection'
 import type { JourneyEventCategory } from '@prisma/client'
 import { registerTaskHandler } from '../task-registry'
 
@@ -338,8 +339,19 @@ export function buildWorkoutAnalysisData(workout: any) {
         ? raw.intervals
         : null
     if (rawIntervals) {
-      data.intervals = rawIntervals.map((interval: any) => ({
-        type: interval.type,
+      // Provider lap labels are unreliable (Intervals.icu marks nearly every
+      // lap WORK); re-derive them so the model does not read recovery jogs as
+      // work reps.
+      const resolvedTypes = resolveProviderIntervalTypes(
+        rawIntervals.map((interval: any) => ({
+          type: interval.type,
+          intensity: Number(interval.intensity),
+          avgPower: Number(interval.average_watts),
+          avgSpeed: Number(interval.average_speed)
+        }))
+      )
+      data.intervals = rawIntervals.map((interval: any, index: number) => ({
+        type: resolvedTypes[index],
         label: interval.label,
         duration_s: interval.moving_time ?? interval.elapsed_time,
         distance_m: interval.distance,
