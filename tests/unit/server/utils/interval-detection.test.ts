@@ -184,41 +184,69 @@ describe('resolveHrWorkThreshold', () => {
     expect(resolveHrWorkThreshold({})).toBeUndefined()
   })
 
-  it('separates run work reps from recovery jogs when the real threshold pace is supplied', () => {
-    // Threshold pace in m/s (same unit the app stores sportSettings.thresholdPace in).
-    const thresholdPace = 4.0
-    const workPace = 4.3 // ~108% of threshold — a typical rep pace
-    const recoveryPace = 2.4 // 60% of threshold — an easy recovery jog
-    const warmupPace = 2.3
-    const cooldownPace = 2.2
+  // Threshold pace in m/s (same unit the app stores sportSettings.thresholdPace in).
+  const THRESHOLD_PACE = 4.0
 
+  /** 5 x 3min reps with 3min jogs, bracketed by a warmup and a cooldown. */
+  const buildIntervalRun = (workFraction: number, recoveryFraction: number) => {
+    const workPace = THRESHOLD_PACE * workFraction
+    const recoveryPace = THRESHOLD_PACE * recoveryFraction
     const velocity = [
-      ...Array.from({ length: 600 }, () => warmupPace),
+      ...Array.from({ length: 600 }, () => 2.3), // warmup
       ...Array.from({ length: 5 }, () => [
         ...Array.from({ length: 180 }, () => workPace),
         ...Array.from({ length: 180 }, () => recoveryPace)
       ]).flat(),
-      ...Array.from({ length: 300 }, () => cooldownPace)
+      ...Array.from({ length: 300 }, () => 2.2) // cooldown
     ]
-    const time = velocity.map((_, index) => index)
+    return { velocity, time: velocity.map((_, index) => index), workPace }
+  }
 
-    const withThreshold = detectIntervals(time, velocity, 'pace', thresholdPace)
+  it('separates run work reps from a realistic 70%-of-threshold recovery jog', () => {
+    // The case that failed before CW-401: with the old 0.65 work bar a 70% jog
+    // (2.8 m/s against a 2.6 m/s bar) read as work and the session welded into
+    // one block. The bar is now 0.8 * threshold pace, so it sits at 3.2 m/s.
+    const { velocity, time, workPace } = buildIntervalRun(1.05, 0.7)
+
+    const withThreshold = detectIntervals(time, velocity, 'pace', THRESHOLD_PACE)
     const workIntervals = withThreshold.filter((interval) => interval.type === 'WORK')
 
     expect(workIntervals).toHaveLength(5)
     for (const interval of workIntervals) {
       expect(interval.duration).toBeGreaterThan(150)
       expect(interval.duration).toBeLessThan(210)
-      expect(interval.avg_pace || 0).toBeGreaterThan(4)
+      expect(interval.avg_pace || 0).toBeGreaterThan(THRESHOLD_PACE)
+      expect(interval.avg_pace || 0).toBeLessThanOrEqual(workPace)
     }
     // The gaps between reps must come back as recovery, not be swallowed into the reps.
-    expect(withThreshold.filter((interval) => interval.type === 'RECOVERY')).toHaveLength(4)
+    const recoveries = withThreshold.filter((interval) => interval.type === 'RECOVERY')
+    expect(recoveries).toHaveLength(4)
+    for (const interval of recoveries) {
+      expect(interval.avg_pace || 0).toBeLessThan(THRESHOLD_PACE * 0.8)
+    }
     expect(withThreshold[0]?.type).toBe('WARMUP')
     expect(withThreshold.at(-1)?.type).toBe('COOLDOWN')
+  })
 
-    // Regression guard: this is what the pace branch used to do (CW-384). Without a threshold
-    // the engine falls back to 0.65 * median(stream); the median here sits at recovery pace, so
-    // the work bar lands at ~1.6 m/s and the entire run collapses into a single "work" block.
+  it('holds the work/recovery split across the realistic 60-75% recovery-jog range', () => {
+    // Real recovery jogs land anywhere in this band; none of them is work.
+    for (const recoveryFraction of [0.6, 0.65, 0.7, 0.75]) {
+      const { velocity, time } = buildIntervalRun(1.05, recoveryFraction)
+      const detected = detectIntervals(time, velocity, 'pace', THRESHOLD_PACE)
+      expect({
+        recoveryFraction,
+        work: detected.filter((interval) => interval.type === 'WORK').length,
+        recovery: detected.filter((interval) => interval.type === 'RECOVERY').length
+      }).toEqual({ recoveryFraction, work: 5, recovery: 4 })
+    }
+  })
+
+  it('still collapses into one block when no threshold pace is available', () => {
+    // Regression guard for CW-384's fix at the CALL SITES: without a threshold the engine
+    // falls back to 0.8 * median(stream), and the median of an interval run sits at recovery
+    // pace — so the work bar lands below the jog and the run reads as one work block. This is
+    // why callers must pass the athlete's real thresholdPace; the engine cannot infer it.
+    const { velocity, time } = buildIntervalRun(1.05, 0.7)
     const withoutThreshold = detectIntervals(time, velocity, 'pace', undefined)
     expect(withoutThreshold.filter((interval) => interval.type === 'WORK')).toHaveLength(1)
     expect(withoutThreshold.filter((interval) => interval.type === 'RECOVERY')).toHaveLength(0)
