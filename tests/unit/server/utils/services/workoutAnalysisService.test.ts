@@ -1,10 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import {
-  buildWorkoutAnalysisData,
   convertWorkoutAnalysisToMarkdown,
   runWorkoutAnalysis,
   type StructuredAnalysis
 } from '../../../../../server/utils/services/workoutAnalysisService'
+// CW-392: the payload builder now lives in the shared prompt module, which both the
+// service and the Trigger.dev task consume.
+import { buildWorkoutAnalysisData } from '../../../../../server/utils/services/workout-analysis-prompt'
 import { prisma } from '../../../../../server/utils/db'
 import { workoutRepository } from '../../../../../server/utils/repositories/workoutRepository'
 import { hasTaskHandler, getTaskHandler } from '../../../../../server/utils/task-registry'
