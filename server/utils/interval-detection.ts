@@ -1222,11 +1222,38 @@ export function findPeakEfforts(
 
 // --- Helper Functions ---
 
+/**
+ * Centred moving average — the smoothed value at `i` is the mean of a window
+ * whose centre of mass is `i` itself, so a smoothed edge sits where the real
+ * edge sits.
+ *
+ * This used to take `[i - floor(w/2) .. i + ceil(w/2) - 1]`. For the `w = 10`
+ * both call sites use, that is `[i-5 .. i+4]`: ten samples centred on `i - 0.5`.
+ * Half a sample of lag is small, but it is a lag in one direction only, so it
+ * moved every detected rising edge early and every falling edge late — and the
+ * detector runs on this signal, so the shift lands directly in rep boundaries
+ * and therefore in every per-rep statistic (CW-432).
+ *
+ * Even/odd `windowSize` (CW-432 acceptance criterion): the window is always
+ * `[i - half .. i + half]` inclusive with `half = floor(windowSize / 2)`, i.e.
+ * `2 * half + 1` samples. An ODD window is therefore exactly `windowSize`
+ * samples wide, as asked. An EVEN window cannot be centred on an integer index
+ * at its requested width — any 10-sample window is centred on a half-sample —
+ * so it is widened by one to 11. Widening rather than narrowing keeps at least
+ * the smoothing strength the caller asked for; the alternative (dropping to 9)
+ * would quietly under-smooth. Callers that need an exact width should pass an
+ * odd one.
+ *
+ * Near the array ends the window is clipped to the available data, so the first
+ * and last `half` outputs are means of fewer samples. That is unchanged, and is
+ * the standard trade for not inventing data outside the stream.
+ */
 function smoothData(data: number[], windowSize: number): number[] {
+  const half = Math.floor(windowSize / 2)
   const result: number[] = []
   for (let i = 0; i < data.length; i++) {
-    const start = Math.max(0, i - Math.floor(windowSize / 2))
-    const end = Math.min(data.length, i + Math.ceil(windowSize / 2))
+    const start = Math.max(0, i - half)
+    const end = Math.min(data.length, i + half + 1)
     const subset = data.slice(start, end)
     const avg = subset.reduce((a, b) => a + (b || 0), 0) / subset.length
     result.push(avg)
