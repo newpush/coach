@@ -5,6 +5,7 @@ import { lttb } from '../../../utils/analytics/lttb'
 import { calculateVirtualStream, type VirtualField } from '../../../utils/analytics/virtual-streams'
 import { sportSettingsRepository } from '../../../utils/repositories/sportSettingsRepository'
 import { formatAlignmentLabel } from '../../../utils/analytics/format-alignment-label'
+import { metresPerSecondToKmh } from '../../../../shared/units'
 
 const schema = z.object({
   analysis: z.object({
@@ -203,7 +204,8 @@ export default defineEventHandler(async (event) => {
     if (rawFields.includes(field)) {
       let values = rawStreams[field as keyof typeof rawStreams] || []
       if (field === 'velocity') {
-        values = values.map((v) => Number((v * 3.6).toFixed(1)))
+        // The velocity stream is persisted in m/s; the explorer charts km/h.
+        values = values.map((v) => Number(metresPerSecondToKmh(v).toFixed(1)))
       }
       return values
     }

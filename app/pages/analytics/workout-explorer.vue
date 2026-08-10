@@ -9,6 +9,7 @@
   } from '~/utils/workout-explorer-presets'
   import { useAnalyticsBus } from '~/composables/useAnalyticsBus'
   import { formatElevation } from '~/utils/metrics'
+  import { workoutExplorerMetricUnits } from '#shared/workout-explorer-metrics'
 
   type ExplorerSummaryChartType = 'bar' | 'line' | 'combo' | 'radar' | 'scatter'
   type ExplorerStreamField =
@@ -125,32 +126,6 @@
       if (newMode !== oldMode) activeRange.value = null
     }
   )
-
-  const workoutMetricUnits: Record<string, string> = {
-    trainingLoad: 'load',
-    tss: 'tss',
-    durationSec: 'duration',
-    elapsedTimeSec: 'duration',
-    distanceMeters: 'm',
-    elevationGain: 'm',
-    averageWatts: 'W',
-    maxWatts: 'W',
-    normalizedPower: 'W',
-    averageHr: 'bpm',
-    maxHr: 'bpm',
-    averageCadence: 'rpm',
-    averageSpeed: 'km/h',
-    intensity: '',
-    calories: 'kcal',
-    efficiencyFactor: '',
-    decoupling: '%',
-    powerHrRatio: '',
-    kilojoules: 'kJ',
-    variabilityIndex: '',
-    trimp: 'load',
-    hrLoad: 'load',
-    workAboveFtp: 'kJ'
-  }
 
   const streamFieldUnits: Record<string, string> = {
     watts: 'W',
@@ -614,7 +589,7 @@
           datasets:
             options.preset.summary?.type === 'advanced'
               ? []
-              : metrics.map((metric) => workoutMetricUnits[metric.field] || '')
+              : metrics.map((metric) => workoutExplorerMetricUnits[metric.field] || '')
         },
         scales: isMmp ? { x: { type: 'logarithmic' as const } } : options.preset.scales,
         metrics,
