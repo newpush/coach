@@ -2362,6 +2362,41 @@ function rateConfidence(score: number): FactConfidence {
   return 'low'
 }
 
+/**
+ * Median of the finite entries; `null` when there are none.
+ *
+ * `null` and `undefined` are dropped rather than coerced — `Number(null)` is a
+ * perfectly finite `0`, which would drag a median of real intensity factors
+ * toward zero every time a step carried no target.
+ */
+function medianOf(values: Array<number | null | undefined>): number | null {
+  const finite = values
+    .filter((value) => value !== null && value !== undefined)
+    .map((value) => Number(value))
+    .filter((value) => Number.isFinite(value))
+    .sort((a, b) => a - b)
+  if (finite.length === 0) return null
+  const middle = Math.floor(finite.length / 2)
+  return finite.length % 2 === 1 ? finite[middle]! : (finite[middle - 1]! + finite[middle]!) / 2
+}
+
+/**
+ * Whole-word race markers for the title/description.
+ *
+ * Substring matching used to be the rule here, which made `'event'` fire on
+ * `prevention`, `eventually` and `events`, and `'race'` fire on `racecourse`
+ * and `terrace` (CW-396). Word boundaries fix those, but they do not rescue a
+ * bare `event`: `'Recovery spin after event'` is a whole-word match and still
+ * is not a race. The bare token is therefore gone, and only phrasings that
+ * actually frame the session as the event itself remain.
+ */
+const RACE_TITLE_PATTERN =
+  /\b(?:races?|racing|criteriums?|triathlons?|marathons?|event day|goal event|target event|a[- ]event)\b/
+
+function detectRaceContext(titleContext: string): boolean {
+  return RACE_TITLE_PATTERN.test(titleContext)
+}
+
 function classifyArchetype(params: {
   workout: any
   family: ReturnType<typeof getWorkoutFamily>
@@ -2394,23 +2429,67 @@ function classifyArchetype(params: {
   )
   const workSteps = plannedSteps.filter((step) => step.classification === 'work')
   const actualIntervals = extractActualIntervals(workout, plannedWorkout, refs)
-  const intervalCount = actualIntervals.filter(
+  const actualWorkIntervals = actualIntervals.filter(
     (interval) => interval.classification === 'work'
-  ).length
+  )
+  const intervalCount = actualWorkIntervals.length
   const vi = Number(workout?.variabilityIndex || 0)
   const intensity = Number.isFinite(Number(workout?.intensity)) ? Number(workout.intensity) : null
-  const isRace = ['race', 'criterium', 'triathlon', 'marathon', 'event'].some((token) =>
-    titleContext.includes(token)
+  const isRace = detectRaceContext(titleContext)
+
+  // Evidence for the "repeated reps" vo2 arm (CW-396). The arm used to fire on
+  // `intervalCount >= 6` alone, which is a count with no reference to how hard
+  // the reps were: six 6-minute tempo blocks came back as `vo2` and the session
+  // was then judged against VO2max expectations it was never meant to meet.
+  //
+  // Planned targets are the better evidence when a plan exists (they state the
+  // athlete's intent); measured rep intensity is the fallback. Both are on the
+  // same fraction-of-threshold scale. The median, not the max, so a single
+  // sprint lap inside an otherwise steady set does not carry the whole session.
+  const plannedWorkIntensityFactor = medianOf(workSteps.map((step) => step.intensityFactor))
+  const repIntensityFactor =
+    plannedWorkIntensityFactor ??
+    medianOf(actualWorkIntervals.map((interval) => interval.intensity))
+  // Duration is a shape proxy, only consulted when there is no intensity signal
+  // at all (engine-detected intervals never carry one). Reps this short are not
+  // sustainable at tempo, so repeating six of them is VO2-shaped by itself.
+  const medianWorkRepSeconds = medianOf(
+    actualWorkIntervals.map((interval) => interval.durationSeconds || null)
   )
+  const hasRepeatedReps = intervalCount >= 6
+  const plannedVo2Target = workSteps.some((step) => (step.intensityFactor || 0) >= 1.15)
+  const repeatedHardReps =
+    hasRepeatedReps && repIntensityFactor !== null && repIntensityFactor >= 1.1
+  const repeatedShortReps =
+    hasRepeatedReps &&
+    repIntensityFactor === null &&
+    medianWorkRepSeconds !== null &&
+    medianWorkRepSeconds <= 300
 
   let primaryArchetype: PrimaryArchetype
   if (family === 'strength') primaryArchetype = 'strength'
   else if (isRace) {
     primaryArchetype = 'race'
     rationale.push('Workout title or description indicates an event/race context.')
-  } else if (workSteps.some((step) => (step.intensityFactor || 0) >= 1.15) || intervalCount >= 6) {
+  } else if (plannedVo2Target || repeatedHardReps || repeatedShortReps) {
     primaryArchetype = 'vo2'
-    rationale.push('Repeated hard work intervals detected.')
+    // Say which evidence actually fired; the old unconditional "Repeated hard
+    // work intervals detected." asserted a hardness nothing in the arm checked.
+    if (plannedVo2Target)
+      rationale.push('Planned work steps target supra-threshold intensity (IF >= 1.15).')
+    else if (repeatedHardReps)
+      rationale.push(
+        `${intervalCount} work reps at a median intensity factor of ${repIntensityFactor!.toFixed(2)} indicate repeated hard efforts.`
+      )
+    else {
+      const repLength =
+        medianWorkRepSeconds! >= 60
+          ? `${(medianWorkRepSeconds! / 60).toFixed(1)}min`
+          : `${Math.round(medianWorkRepSeconds!)}s`
+      rationale.push(
+        `${intervalCount} work reps with a median length of ${repLength} and no recorded intensity; short repeated reps are treated as VO2-shaped.`
+      )
+    }
   } else if (workSteps.some((step) => (step.intensityFactor || 0) >= 1.03)) {
     primaryArchetype = 'threshold'
     rationale.push('Planned work steps cluster around threshold intensity.')

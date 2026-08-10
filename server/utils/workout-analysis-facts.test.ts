@@ -2039,3 +2039,205 @@ describe('rep-scoped durability and stability signals', () => {
     expect(facts.performanceSignals.applicability.repeatability.applicable).toBe(false)
   })
 })
+
+describe('archetype classification robustness (CW-396)', () => {
+  const FTP = 250
+  const THRESHOLD_PACE = 4.0 // m/s, roughly 4:10/km
+
+  /** Work laps at `intensity`, separated by recovery laps, plus a warmup/cooldown. */
+  function lapSet(reps: number, workSeconds: number, intensity: number) {
+    const laps: Array<Record<string, unknown>> = [
+      { type: 'WORK', moving_time: 600, average_watts: FTP * 0.55, intensity: 0.55 }
+    ]
+    for (let rep = 0; rep < reps; rep++) {
+      laps.push({
+        type: 'WORK',
+        moving_time: workSeconds,
+        average_watts: Math.round(FTP * intensity),
+        intensity
+      })
+      if (rep < reps - 1)
+        laps.push({
+          type: 'WORK',
+          moving_time: 180,
+          average_watts: Math.round(FTP * 0.5),
+          intensity: 0.5
+        })
+    }
+    laps.push({ type: 'WORK', moving_time: 600, average_watts: FTP * 0.5, intensity: 0.5 })
+    return laps
+  }
+
+  /** A structured plan of `reps` work steps at `watts`, bracketed by warmup/cooldown. */
+  function repPlan(reps: number, workSeconds: number, watts: number) {
+    return {
+      structuredWorkout: {
+        steps: [
+          {
+            name: 'Warmup',
+            type: 'Warmup',
+            durationSeconds: 600,
+            power: { value: Math.round(FTP * 0.55), units: 'w' }
+          },
+          {
+            reps,
+            steps: [
+              {
+                name: 'Effort',
+                type: 'Interval',
+                durationSeconds: workSeconds,
+                power: { value: watts, units: 'w' }
+              },
+              {
+                name: 'Float',
+                type: 'Recovery',
+                durationSeconds: 180,
+                power: { value: Math.round(FTP * 0.5), units: 'w' }
+              }
+            ]
+          },
+          {
+            name: 'Cooldown',
+            type: 'Cooldown',
+            durationSeconds: 600,
+            power: { value: Math.round(FTP * 0.5), units: 'w' }
+          }
+        ]
+      }
+    }
+  }
+
+  it('classifies six long sub-threshold reps as tempo rather than vo2', () => {
+    // Six work reps used to be enough on their own: the arm read
+    // `intervalCount >= 6` with no reference to intensity, so this session came
+    // back as `vo2` and was judged against VO2max expectations. At IF 0.9 and
+    // six minutes a rep, the only honest reading is tempo.
+    const facts = buildWorkoutAnalysisFactsV2({
+      workout: makeWorkout({
+        title: '6 x 6min tempo blocks',
+        durationSec: 4500,
+        intensity: 0.88,
+        variabilityIndex: 1.08,
+        rawJson: { icu_intervals: lapSet(6, 360, 0.9) }
+      }),
+      plannedWorkout: repPlan(6, 360, Math.round(FTP * 0.9)),
+      sportSettings: { ftp: FTP }
+    })
+
+    expect(facts.guardrails.archetype.primaryArchetype).toBe('tempo')
+  })
+
+  it('still classifies six short hard reps as vo2 and says which evidence fired', () => {
+    const facts = buildWorkoutAnalysisFactsV2({
+      workout: makeWorkout({
+        title: '6 x 3min hard',
+        durationSec: 3600,
+        intensity: 0.95,
+        variabilityIndex: 1.18,
+        rawJson: { icu_intervals: lapSet(6, 180, 1.12) }
+      }),
+      plannedWorkout: repPlan(6, 180, Math.round(FTP * 1.12)),
+      sportSettings: { ftp: FTP }
+    })
+
+    expect(facts.guardrails.archetype.primaryArchetype).toBe('vo2')
+    // The rationale must name the evidence instead of asserting an unchecked
+    // "Repeated hard work intervals detected."
+    expect(facts.guardrails.archetype.rationale.join(' ')).toContain('median intensity factor')
+  })
+
+  it('treats repeated short reps with no recorded intensity as vo2-shaped', () => {
+    // Engine-detected intervals carry no intensity at all, so rep length is the
+    // only shape evidence available; 45s reps repeated eight times are not tempo.
+    const laps = Array.from({ length: 8 }, () => ({ type: 'WORK', moving_time: 45 }))
+    const facts = buildWorkoutAnalysisFactsV2({
+      workout: makeWorkout({
+        title: 'Sprint set',
+        durationSec: 3600,
+        intensity: 0.95,
+        variabilityIndex: 1.3,
+        rawJson: { icu_intervals: laps }
+      }),
+      sportSettings: { ftp: FTP }
+    })
+
+    expect(facts.guardrails.archetype.primaryArchetype).toBe('vo2')
+    expect(facts.guardrails.archetype.rationale.join(' ')).toContain('no recorded intensity')
+  })
+
+  it('does not read a trailing "event" in a title as a race', () => {
+    const facts = buildWorkoutAnalysisFactsV2({
+      workout: makeWorkout({
+        title: 'Recovery spin after event',
+        durationSec: 3600,
+        intensity: 0.55,
+        variabilityIndex: 1.02
+      })
+    })
+
+    expect(facts.guardrails.archetype.primaryArchetype).not.toBe('race')
+    expect(facts.guardrails.archetype.primaryArchetype).toBe('recovery')
+  })
+
+  it('does not match race tokens inside longer words', () => {
+    for (const title of ['Prevention ride', 'Eventually easy', 'Laps of the terrace']) {
+      const facts = buildWorkoutAnalysisFactsV2({
+        workout: makeWorkout({ title, durationSec: 3600, intensity: 0.55, variabilityIndex: 1.02 })
+      })
+      expect(facts.guardrails.archetype.primaryArchetype).not.toBe('race')
+    }
+  })
+
+  it('still classifies genuine race titles as race', () => {
+    for (const title of ['Race day', 'Local criterium', 'Marathon', 'Event day']) {
+      const facts = buildWorkoutAnalysisFactsV2({
+        workout: makeWorkout({ title, durationSec: 3600, intensity: 0.55, variabilityIndex: 1.02 })
+      })
+      expect(facts.guardrails.archetype.primaryArchetype).toBe('race')
+    }
+  })
+
+  it('classifies a pace-targeted threshold run plan as threshold (refs plumbing regression)', () => {
+    // Guards the CW-384 / CW-402 refs plumbing: with a real threshold pace the
+    // planned steps carry an intensity factor, so the threshold arm can fire.
+    // With zeroed refs the IFs come back null and this lands on endurance.
+    const facts = buildWorkoutAnalysisFactsV2({
+      workout: makeWorkout({
+        title: 'Threshold repeats',
+        type: 'Run',
+        durationSec: 3600,
+        averageWatts: null,
+        averageSpeed: 3.9,
+        intensity: 0.92,
+        variabilityIndex: 1.04
+      }),
+      plannedWorkout: {
+        structuredWorkout: {
+          steps: [
+            {
+              name: 'Warmup',
+              type: 'Warmup',
+              durationSeconds: 600,
+              pace: { value: 3.0, units: 'm/s' }
+            },
+            {
+              name: 'Threshold rep',
+              type: 'Interval',
+              durationSeconds: 900,
+              pace: { value: 4.2, units: 'm/s' }
+            },
+            {
+              name: 'Cooldown',
+              type: 'Cooldown',
+              durationSeconds: 600,
+              pace: { value: 3.0, units: 'm/s' }
+            }
+          ]
+        }
+      },
+      sportSettings: { thresholdPace: THRESHOLD_PACE }
+    })
+
+    expect(facts.guardrails.archetype.primaryArchetype).toBe('threshold')
+  })
+})
