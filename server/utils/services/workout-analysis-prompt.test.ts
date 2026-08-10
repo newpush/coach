@@ -372,6 +372,93 @@ describe('buildWorkoutAnalysisPrompt', () => {
     expect(prompt).not.toContain('spm')
   })
 
+  it('floors the minutes term of an interval duration instead of rounding it (CW-388)', () => {
+    // The seconds term is a true remainder, so rounding the minutes counted it
+    // twice: 150s rendered as "3m 30s" and 110s as "2m 50s".
+    const prompt = buildWorkoutAnalysisPrompt(
+      buildWorkoutAnalysisData({
+        id: 'workout-fixture-duration',
+        date: new Date('2026-03-18T06:00:00Z'),
+        title: 'Short reps',
+        type: 'Ride',
+        durationSec: 1800,
+        ftp: 275,
+        rawJson: {
+          icu_intervals: [
+            { type: 'WORK', label: 'Rep 1', moving_time: 150, average_watts: 300 },
+            { type: 'WORK', label: 'Rep 2', moving_time: 110, average_watts: 295 },
+            { type: 'WORK', label: 'Rep 3', moving_time: 720, average_watts: 260 }
+          ]
+        }
+      }),
+      'Europe/Budapest',
+      'Supportive',
+      { loadPreference: 'POWER' },
+      USER_PROFILE
+    )
+
+    expect(prompt).toContain('- Duration: 2m 30s')
+    expect(prompt).toContain('- Duration: 1m 50s')
+    // A whole number of minutes is unaffected.
+    expect(prompt).toContain('- Duration: 12m 0s')
+    expect(prompt).not.toContain('- Duration: 3m 30s')
+    expect(prompt).not.toContain('- Duration: 2m 50s')
+  })
+
+  it('puts interval intensity on the session Intensity Factor scale and labels it (CW-388)', () => {
+    // Intervals.icu hands us `icu_intervals[].intensity` as a PERCENTAGE of
+    // threshold, while the session line is a factor. Both must read as one scale.
+    const prompt = buildWorkoutAnalysisPrompt(
+      buildWorkoutAnalysisData({
+        id: 'workout-fixture-intensity',
+        date: new Date('2026-03-18T06:00:00Z'),
+        title: 'Threshold blocks',
+        type: 'Ride',
+        durationSec: 3600,
+        ftp: 275,
+        averageWatts: 230,
+        intensity: 0.83,
+        rawJson: {
+          icu_intervals: [
+            // Percent scale, as the provider sends it.
+            { type: 'WORK', label: 'Block 1', moving_time: 600, intensity: 101 },
+            // Already on the factor scale -- must pass through, not be divided again.
+            { type: 'WORK', label: 'Block 2', moving_time: 600, intensity: 0.93 }
+          ]
+        }
+      }),
+      'Europe/Budapest',
+      'Supportive',
+      { loadPreference: 'POWER' },
+      USER_PROFILE
+    )
+
+    expect(prompt).toContain('- Intensity Factor: 0.830')
+    expect(prompt).toContain('- Intensity: 1.01 IF (101% of threshold)')
+    expect(prompt).toContain('- Intensity: 0.93 IF (93% of threshold)')
+    // The raw provider percentage must never reach the model unlabelled.
+    expect(prompt).not.toContain('- Intensity: 101.00')
+  })
+
+  it('normalises interval intensity in the payload, not in the renderer (CW-388)', () => {
+    const data = buildWorkoutAnalysisData({
+      id: 'workout-fixture-intensity-payload',
+      date: new Date('2026-03-18T06:00:00Z'),
+      title: 'Threshold blocks',
+      type: 'Ride',
+      durationSec: 3600,
+      rawJson: {
+        icu_intervals: [
+          { type: 'WORK', label: 'Block 1', moving_time: 600, intensity: 101 },
+          { type: 'WORK', label: 'Block 2', moving_time: 600, intensity: 0.93 }
+        ]
+      }
+    })
+
+    expect(data.intervals[0].intensity).toBeCloseTo(1.01, 5)
+    expect(data.intervals[1].intensity).toBeCloseTo(0.93, 5)
+  })
+
   it('respects the athlete distanceUnits preference for strength set distances', () => {
     const workoutData = {
       date: new Date('2026-03-15T10:00:00Z'),

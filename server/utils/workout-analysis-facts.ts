@@ -1519,7 +1519,7 @@ function mapProviderIntervalsToActual(intervals: any[]): ActualInterval[] {
  * Engine-detected intervals (`detectIntervals`) carry no intensity field at
  * all, so they stay `null` — there is no second unit to reconcile.
  */
-function toIntervalIntensityFactor(value: unknown): number | null {
+export function toIntervalIntensityFactor(value: unknown): number | null {
   const numeric = Number(value)
   if (!Number.isFinite(numeric)) return null
   return numeric > 5 ? numeric / 100 : numeric

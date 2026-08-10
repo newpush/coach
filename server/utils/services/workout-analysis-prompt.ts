@@ -28,6 +28,7 @@ import {
   formatCadenceWithUnit,
   isRunningCadenceFamily,
   toCanonicalCadence,
+  toIntervalIntensityFactor,
   type WorkoutAnalysisFactsV2
 } from '../workout-analysis-facts'
 import { summarizePowerFromWatts } from '../power-metrics'
@@ -502,7 +503,12 @@ export function buildWorkoutAnalysisData(workout: any) {
         avg_power: interval.average_watts,
         max_power: interval.max_watts,
         weighted_avg_power: interval.weighted_average_watts,
-        intensity: interval.intensity,
+        // The ONLY place interval intensity gets put on a scale. Provider laps
+        // carry Intervals.icu's PERCENTAGE of threshold (e.g. 101), while the
+        // session-level `intensity` line is an intensity factor (0.83), so the
+        // two collided in one prompt. Reuse the shared CW-385 heuristic rather
+        // than a second copy of it; the renderer may only label (CW-388).
+        intensity: toIntervalIntensityFactor(interval.intensity),
         avg_hr: interval.average_heartrate,
         max_hr: interval.max_heartrate,
         avg_cadence: normalizeCadence(interval.average_cadence),
@@ -908,6 +914,35 @@ export function buildAnalysisGuardrailInstructions(
   }
 
   return rules.map((rule) => `- ${rule}`).join('\n')
+}
+
+/**
+ * Render an interval's duration as `<minutes>m <seconds>s`.
+ *
+ * The minutes term must FLOOR: the seconds term is a true remainder, so
+ * rounding the minutes counts the remainder twice and invents up to a full
+ * minute of work (150s used to render as "3m 30s" instead of "2m 30s", and the
+ * model quoted the inflated number back to the athlete). Same convention as
+ * `formatActualIntervalsForPrompt` in `workout-analysis-facts.ts` and as the
+ * lap-split renderer below (CW-388).
+ */
+export function formatIntervalDuration(durationSeconds: number): string {
+  const minutes = Math.floor(durationSeconds / 60)
+  const seconds = durationSeconds % 60
+  return `${minutes}m ${seconds}s`
+}
+
+/**
+ * Label an interval intensity that `buildWorkoutAnalysisData` has ALREADY put
+ * on the intensity-factor scale (`toIntervalIntensityFactor`).
+ *
+ * The prompt used to print a bare `Intensity: 101.00` a few lines from
+ * `Intensity Factor: 0.83` -- two scales for one concept, neither labelled. The
+ * percentage in brackets is a restatement of the same number, not a second
+ * scale, so the model can tie the row to the session line either way (CW-388).
+ */
+export function formatIntervalIntensity(intensityFactor: number): string {
+  return `${intensityFactor.toFixed(2)} IF (${Math.round(intensityFactor * 100)}% of threshold)`
 }
 
 export function buildWorkoutAnalysisPrompt(
@@ -1399,9 +1434,10 @@ When analyzing "Execution" and "Effort", specifically reference how well the ath
     workoutData.intervals.forEach((interval: any, index: number) => {
       prompt += `\n### Interval ${index + 1}: ${interval.label || interval.type || 'Unnamed'}\n`
       if (interval.duration_s)
-        prompt += `- Duration: ${Math.round(interval.duration_s / 60)}m ${interval.duration_s % 60}s\n`
+        prompt += `- Duration: ${formatIntervalDuration(interval.duration_s)}\n`
       if (interval.avg_power) prompt += `- Avg Power: ${interval.avg_power}W\n`
-      if (interval.intensity) prompt += `- Intensity: ${formatMetric(interval.intensity, 2)}\n`
+      if (interval.intensity)
+        prompt += `- Intensity: ${formatIntervalIntensity(Number(interval.intensity))}\n`
       if (interval.avg_hr) prompt += `- Avg HR: ${interval.avg_hr} bpm\n`
       // Values are already canonical (buildWorkoutAnalysisData normalised them);
       // this only attaches the unit the workout family uses, so a run no longer
