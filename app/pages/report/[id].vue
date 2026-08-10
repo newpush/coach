@@ -25,12 +25,12 @@
         <div v-if="pending && !report" class="space-y-0 sm:space-y-6">
           <!-- Header Skeleton -->
           <div class="mb-6 px-4 sm:px-0">
-            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
-              <div class="space-y-2">
-                <USkeleton class="h-8 w-64" />
+            <div class="space-y-2 mb-4">
+              <USkeleton class="h-8 w-64" />
+              <div class="flex items-center gap-2">
                 <USkeleton class="h-4 w-48" />
+                <USkeleton class="h-4 w-24 rounded-md" />
               </div>
-              <USkeleton class="h-8 w-24 rounded-full" />
             </div>
           </div>
 
@@ -51,17 +51,39 @@
         <div v-else-if="report" class="space-y-0 sm:space-y-6">
           <!-- Header -->
           <div class="mb-6 px-4 sm:px-0">
-            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
-              <div>
-                <h2 class="text-xl sm:text-3xl font-bold">{{ reportTitle }}</h2>
-                <p class="text-xs sm:text-sm text-gray-600 dark:text-gray-400 mt-1 sm:mt-2">
-                  {{ formatDateRange(report.dateRangeStart, report.dateRangeEnd) }}
-                </p>
-              </div>
-              <div class="flex">
-                <UBadge :color="statusColor as any" size="md" class="sm:size-lg">
-                  {{ report.status }}
-                </UBadge>
+            <div class="mb-4">
+              <h2 class="text-xl sm:text-3xl font-bold">{{ reportTitle }}</h2>
+              <!--
+                Document metadata line: the date range the report covers, then the report's
+                own lifecycle state (CW-442).
+
+                Before this, the lifecycle state was a `UBadge` in the header's right-hand
+                column: a `rounded-md` chip that rendered as the *sixth* `span[data-slot=base]`
+                on the page, right-aligned in the same vertical run as the five analysis
+                section grades below it. It differed from a grade only by being solid green
+                instead of tinted, so it read as one -- and at 2.38:1 white-on-green it was
+                also the loudest thing on the page.
+
+                Four things now separate it from a grade: it sits inline in the metadata line
+                under the title instead of in the grades' right-hand column; it is 11px
+                uppercase against their 14px sentence case; it is icon-led where they carry no
+                icon and ring-less where they carry a tinted `ring-inset`; and for COMPLETED --
+                the only lifecycle state that ever shares the page with the grades -- it uses
+                neutral zinc, so it is not on the severity ramp at all.
+              -->
+              <div
+                class="mt-1 sm:mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs sm:text-sm text-gray-600 dark:text-gray-400"
+              >
+                <span>{{ formatDateRange(report.dateRangeStart, report.dateRangeEnd) }}</span>
+                <span aria-hidden="true" class="text-gray-400 dark:text-gray-600">&middot;</span>
+                <span
+                  class="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-medium uppercase tracking-wide"
+                  :class="statusChipClass"
+                >
+                  <UIcon :name="statusIcon" class="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+                  <span class="sr-only">{{ tr('lifecycle_label', 'Report status') }}: </span>
+                  {{ statusLabel }}
+                </span>
               </div>
             </div>
           </div>
@@ -917,20 +939,64 @@
     return titles[report.value.type] || tr('default_title', 'Report')
   })
 
-  const statusColor = computed(() => {
-    if (!report.value) return 'neutral'
-    const colors: Record<string, string> = {
-      PENDING: 'warning',
-      PROCESSING: 'info',
-      COMPLETED: 'success',
-      FAILED: 'error'
+  /**
+   * The report's own lifecycle state (PENDING/PROCESSING/COMPLETED/FAILED).
+   *
+   * CW-442: this used to be a solid `UBadge` -- white on the base 500 token, which
+   * measured 2.38:1 in light mode for the green COMPLETED case, below AA at any size.
+   * It is now a tinted chip with an explicit light/dark text pair, the same mechanism
+   * CW-424 used for the section grades (`getStatusBadgeClass` below). Nuxt UI's
+   * `subtle` variant is *not* used: it resolves the label to the base 500 token in both
+   * themes and only flips the backdrop, which is why it measured worse than the solid
+   * badges it replaced when CW-424 tried it.
+   *
+   * COMPLETED deliberately leaves the severity ramp for neutral zinc. The analysis
+   * grades only render once the report is COMPLETED, so COMPLETED is the one lifecycle
+   * state that ever shares the page with them -- a green pill there competed with the
+   * green `excellent`/`good` grades and read as a severity judgement about the report.
+   * The states that never coexist with a grade keep their colour, because there the
+   * colour is the whole signal.
+   */
+  const LIFECYCLE_CHIP_CLASSES: Readonly<Record<string, string>> = Object.freeze({
+    PENDING: 'bg-amber-50 text-amber-800 dark:bg-amber-400/10 dark:text-amber-300',
+    PROCESSING: 'bg-blue-50 text-blue-800 dark:bg-blue-400/10 dark:text-blue-300',
+    COMPLETED: 'bg-zinc-100 text-zinc-700 dark:bg-zinc-400/10 dark:text-zinc-300',
+    FAILED: 'bg-red-50 text-red-800 dark:bg-red-400/10 dark:text-red-300'
+  })
+
+  const LIFECYCLE_CHIP_FALLBACK_CLASS =
+    'bg-zinc-100 text-zinc-700 dark:bg-zinc-400/10 dark:text-zinc-300'
+
+  const LIFECYCLE_ICONS: Readonly<Record<string, string>> = Object.freeze({
+    PENDING: 'i-heroicons-clock',
+    PROCESSING: 'i-heroicons-arrow-path',
+    COMPLETED: 'i-heroicons-check-circle',
+    FAILED: 'i-heroicons-exclamation-triangle'
+  })
+
+  const statusChipClass = computed(
+    () => LIFECYCLE_CHIP_CLASSES[report.value?.status ?? ''] ?? LIFECYCLE_CHIP_FALLBACK_CLASS
+  )
+
+  const statusIcon = computed(
+    () => LIFECYCLE_ICONS[report.value?.status ?? ''] ?? 'i-heroicons-document-text'
+  )
+
+  const statusLabel = computed(() => {
+    const status = report.value?.status
+    if (!status) return ''
+    const labels: Record<string, string> = {
+      PENDING: tr('lifecycle_pending', 'Pending'),
+      PROCESSING: tr('lifecycle_processing', 'Processing'),
+      COMPLETED: tr('lifecycle_completed', 'Completed'),
+      FAILED: tr('lifecycle_failed', 'Failed')
     }
-    return colors[report.value.status] || 'neutral'
+    return labels[status] ?? status
   })
 
   /**
    * AI analysis *section* status -> colour. Shared with the workout page, the share
-   * page and the score modal (CW-424). Not to be confused with `statusColor` above,
+   * page and the score modal (CW-424). Not to be confused with `statusChipClass` above,
    * which colours the report's own PENDING/PROCESSING/COMPLETED/FAILED lifecycle.
    */
   const getStatusBadgeColor = (status?: string | null) => getAnalysisStatusColor(status)
