@@ -2,6 +2,7 @@ import { defineEventHandler, createError, getRouterParam, getQuery } from 'h3'
 import { getServerSession } from '../../../utils/session'
 import { prisma } from '../../../utils/db'
 import { attachStreamToWorkout } from '../../../utils/repositories/workoutStreamRepository'
+import { sportSettingsRepository } from '../../../utils/repositories/sportSettingsRepository'
 import { calculateRollingNormalizedPower } from '../../../utils/power-metrics'
 import {
   detectIntervals,
@@ -14,7 +15,6 @@ import {
   resolveProviderIntervalTypes,
   resolveHrWorkThreshold
 } from '../../../utils/interval-detection'
-import { sportSettingsRepository } from '../../../utils/repositories/sportSettingsRepository'
 import {
   calculateWPrimeBalance,
   calculateEfficiencyFactorDecay,
@@ -129,6 +129,13 @@ export default defineEventHandler(async (event) => {
 
   const workout = await attachStreamToWorkout(workoutRecord)
 
+  // Athlete-level reference values (FTP / max HR / threshold pace) for the sport of this
+  // workout. Detection needs these so work reps can be separated from recovery blocks.
+  const sportSettings = await sportSettingsRepository.getForActivityType(
+    user.id,
+    workout.type || ''
+  )
+
   // Check if workout has stream data
   if (!workout.streams) {
     console.log(`[Intervals API] Workout ${workoutId} has no streams relation`)
@@ -174,7 +181,10 @@ export default defineEventHandler(async (event) => {
   const hasHr = !!(hrStream && hrStream.length > 0)
   const hasCadence = !!(cadenceStream && cadenceStream.length > 0)
 
-  const calculationFtp = workout.ftp || user?.ftp || 250
+  const calculationFtp = workout.ftp || sportSettings?.ftp || user?.ftp || 250
+  // Threshold pace is stored in m/s (same convention as calculatePaceZones), so it can be
+  // handed to the detection engine directly as the pace work/recovery reference.
+  const calculationThresholdPace = Number(sportSettings?.thresholdPace || 0) || undefined
 
   // 1. INTERVAL DETECTION LOGIC
 
@@ -242,21 +252,18 @@ export default defineEventHandler(async (event) => {
       time,
       velocityStream!,
       'pace',
-      undefined,
+      calculationThresholdPace,
       plannedSteps,
       undefined,
       cadenceStream || undefined
     )
   } else if (hasHr) {
     autoDetectionMetric = 'heartrate'
-    // Source the reference from the athlete's PROFILE. Using this workout's own
-    // max HR would make the bar self-referential and drift session to session,
-    // so it is only reached as an explicit last resort inside
-    // `resolveHrWorkThreshold` when the profile carries neither LTHR nor max HR.
-    const sportSettings = await sportSettingsRepository.getForActivityType(
-      user.id,
-      String(workout.type || '')
-    )
+    // Source the reference from the athlete's PROFILE (the `sportSettings`
+    // already loaded above, then the user record). Using this workout's own max
+    // HR would make the bar self-referential and drift session to session, so it
+    // is only reached as an explicit last resort inside `resolveHrWorkThreshold`
+    // when the profile carries neither LTHR nor max HR.
     const threshold = resolveHrWorkThreshold({
       lthr: sportSettings?.lthr ?? user.lthr,
       maxHr: sportSettings?.maxHr ?? user.maxHr,
@@ -426,6 +433,7 @@ export default defineEventHandler(async (event) => {
       plannedRaw: planned,
       plannedTitle: workout.plannedWorkout?.title || null,
       calculationFtp,
+      calculationThresholdPace: calculationThresholdPace ?? null,
       autoDetectionMetric
     }
 
