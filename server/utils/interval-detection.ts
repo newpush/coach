@@ -565,20 +565,87 @@ type NormalizedPlannedDetectionStep = {
   ramp: boolean
 }
 
-function normalizePlannedStepType(type: unknown, name?: string): Interval['type'] {
-  const normalized = String(type || '').toLowerCase()
-  const normalizedName = String(name || '').toLowerCase()
-  const recoveryTokens = ['rest', 'recovery', 'cooldown', 'warmup', 'recuperación', 'enfriamiento']
+/**
+ * A planned step whose target sits at or above this fraction of threshold is
+ * working, whatever its label says. Shared by every planned-step classifier so
+ * the promotion and the demotion below use one number (CW-402, CW-414).
+ */
+export const PLANNED_WORK_INTENSITY_FACTOR = 0.8
 
-  if (normalized.includes('warm') || normalizedName.includes('calentamiento')) return 'WARMUP'
-  if (normalized.includes('cool') || normalizedName.includes('enfriamiento')) return 'COOLDOWN'
-  if (
-    recoveryTokens.some((t) => normalized.includes(t) || normalizedName.includes(t)) ||
-    normalizedName.includes('descanso')
-  ) {
-    return 'RECOVERY'
-  }
-  return 'WORK'
+const PLANNED_RECOVERY_TOKENS = [
+  'rest',
+  // 'recover' rather than 'recovery' so 'Recover', 'Recovery' and 'Recovering'
+  // all match — the type-side rule this replaced already used the short form.
+  'recover',
+  'cooldown',
+  'warmup',
+  'recuperación',
+  'recuperacion',
+  'enfriamiento',
+  'descanso'
+]
+
+export type PlannedStepTypeEvidence = {
+  /** The structured step type, e.g. 'Warmup' | 'Active' | 'Rest' | 'Cooldown'. */
+  type?: unknown
+  /**
+   * The step's free-text, user-authored name. Evidence, never an override: see
+   * the intensity veto below and the note on `flattenPlannedStepsForDetection`.
+   */
+  name?: unknown
+  /**
+   * This step's target expressed as a fraction of threshold
+   * (`toIntensityFactorFromTarget`). Pass it whenever the athlete's references
+   * are resolvable; leave it out when they are not — it only ever *vetoes* a
+   * recovery label, so its absence reproduces the label-only classification.
+   */
+  intensityFactor?: number | null
+}
+
+/**
+ * THE planned-step type normaliser. One rule, used by every path that has to
+ * decide whether a planned step is work.
+ *
+ * The rule (lifted from `flattenPlannedSteps` in `workout-analysis-facts.ts`,
+ * which has always had it right):
+ *
+ * 1. Warmup and cooldown are STRUCTURAL, not intensity-based — a warmup ramp
+ *    can pass through work intensity and is still a warmup — so a `warm`/`cool`
+ *    type wins outright.
+ * 2. A recovery token in the type OR in the name marks the step recovery...
+ * 3. ...unless the step's own numeric target contradicts it. A step prescribed
+ *    at >= 80% of threshold is work no matter what it is called.
+ *
+ * Rule 3 is the point. A step name is user-authored free text — the analysis
+ * prompt itself tells the model that step names carry stale labels and must
+ * never override the structured values — and this used to be the one place that
+ * let free text beat a structured numeric target. Two normalisers disagreed:
+ * the facts layer promoted a work-intensity `Recovery` step to WORK on its
+ * intensity factor (CW-402), and then detection re-derived the type from the
+ * name and demoted it straight back, which is most recovery-labelled steps
+ * ("Recovery", "Recovery Jog", "Rest"). CW-414 folded both into this function.
+ *
+ * Returns `undefined` only when there is no evidence at all (no type, no name).
+ */
+export function normalizePlannedStepType(
+  step: PlannedStepTypeEvidence
+): Interval['type'] | undefined {
+  const type = String(step.type ?? '').toLowerCase()
+  const name = String(step.name ?? '').toLowerCase()
+  if (!type && !name) return undefined
+
+  if (type.includes('warm') || name.includes('calentamiento')) return 'WARMUP'
+  if (type.includes('cool') || name.includes('enfriamiento')) return 'COOLDOWN'
+
+  const hasRecoveryLabel = PLANNED_RECOVERY_TOKENS.some(
+    (token) => type.includes(token) || name.includes(token)
+  )
+  if (!hasRecoveryLabel) return 'WORK'
+
+  const intensityFactor = Number(step.intensityFactor)
+  const targetSaysWork =
+    Number.isFinite(intensityFactor) && intensityFactor >= PLANNED_WORK_INTENSITY_FACTOR
+  return targetSaysWork ? 'WORK' : 'RECOVERY'
 }
 
 function getTargetMidpoint(
@@ -632,15 +699,32 @@ function flattenPlannedStepsForDetection(
       continue
     }
     if (!Number.isFinite(durationSeconds) || durationSeconds <= 0) continue
+    // The free-text name is offered ONLY when the step carries no type at all.
+    //
+    // This layer cannot resolve an intensity factor — it never sees the
+    // athlete's references — so it has no way to check a name against the
+    // step's structured target, and `normalizePlannedStepType`'s intensity veto
+    // cannot fire here. A plan that reached detection through the facts layer
+    // has already been classified once by that same function WITH the intensity
+    // factor (`toDetectionPlannedSteps`), so its type is a resolved answer, not
+    // a raw label. Re-reading the name over it is exactly the bug: it demoted
+    // every step the CW-402 promotion had just moved to WORK, because those
+    // steps are named "Recovery" (CW-414). With no type, the name is the only
+    // evidence there is, and it is used as before.
+    const resolvedType =
+      normalizePlannedStepType({
+        type: step.type,
+        name: step.type ? undefined : step.name
+      }) ?? 'WORK'
     flattened.push({
       id: `${path}-${index}`,
       name: step.name,
       durationSeconds,
-      type: normalizePlannedStepType(step.type, step.name),
+      type: resolvedType,
       metricTarget: getPlannedTargetForMetric(step, metricType),
       cadence:
         typeof step.cadence === 'number' && Number.isFinite(step.cadence) ? step.cadence : null,
-      ramp: Boolean((step as any).ramp || normalizePlannedStepType(step.type) === 'COOLDOWN')
+      ramp: Boolean((step as any).ramp || resolvedType === 'COOLDOWN')
     })
   }
   return flattened
