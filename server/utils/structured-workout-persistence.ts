@@ -347,7 +347,11 @@ export function toIntensityFactorFromTarget(
   if (kind === 'power') {
     if (units === 'w' || units === 'watts') {
       if (refs.ftp > 0) return clamp(value / refs.ftp)
-      return clamp(value > 3 ? value / 250 : value)
+      // No FTP reference: an absolute wattage cannot be converted to an intensity
+      // factor. Never invent an FTP — a plausible-but-fabricated IF is worse than
+      // `null`, because callers cannot tell it was made up. This mirrors the bpm
+      // branch above and lets callers fall back to type/labels instead.
+      return value > 3 ? null : clamp(value)
     }
     if (units === 'power_zone' || units.includes('zone') || units.startsWith('z')) {
       const bounds = getZoneBoundsFromRefs('power', value, refs)
