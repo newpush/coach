@@ -197,7 +197,7 @@ export default defineEventHandler(async (event) => {
       start_time: i.start_time,
       end_time: i.end_time,
       duration: i.duration || i.end_time - i.start_time,
-      type: resolvedTypes[index],
+      type: resolvedTypes[index] ?? i.type,
       avg_power: i.average_watts,
       max_power: i.max_watts,
       avg_heartrate: i.average_heartrate,
