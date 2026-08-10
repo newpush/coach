@@ -945,6 +945,54 @@ export function formatIntervalIntensity(intensityFactor: number): string {
   return `${intensityFactor.toFixed(2)} IF (${Math.round(intensityFactor * 100)}% of threshold)`
 }
 
+/**
+ * Decide whether the derived pacing verdicts over `lap_splits` -- the
+ * first-half/second-half "split strategy" call and the pace-variability grade
+ * band -- mean anything for this session (CW-389).
+ *
+ * `lap_splits` are NOT laps. `buildWorkoutAnalysisData` fills them from
+ * `raw.splits_metric || raw.splits_standard` (and the FIT/Rouvy path from
+ * `calculateLapSplits(..., 1000)`), i.e. automatic per-kilometre or per-mile
+ * splits. On an intervalled or stochastic session those splits straddle warmup,
+ * work reps, recovery jogs and cooldown arbitrarily, so comparing the first half
+ * against the second half compares "mostly warmup" against "mostly cooldown" and
+ * reliably reports `Positive Split (slowed down)` for a workout that was simply
+ * intervals. The prompt used to assert that verdict as fact several hundred
+ * lines after `buildAnalysisGuardrailInstructions` had politely asked the model
+ * to disregard non-constant pace on such sessions (CW-393) -- a soft request
+ * losing to a hard assertion. The fix is to stop emitting the verdict.
+ *
+ * Gated on `guardrails.archetype.sessionSteadiness` rather than on an entry of
+ * `performanceSignals.applicability`: the closest neighbour there,
+ * `lateSessionFade`, also reports `applicable: false` whenever its own value
+ * could not be computed, which says nothing about whether half-splits are
+ * comparable. Session steadiness is the shape question this verdict actually
+ * poses -- `primaryArchetype` is an intent label (an interval run still reads
+ * `endurance` when no plan is linked) and does not answer it. The return shape
+ * follows `SignalApplicability` so a withheld verdict carries the reason it was
+ * withheld.
+ *
+ * Without v2 facts there is no session-shape evidence to gate on, so the legacy
+ * path is left exactly as it was.
+ */
+export function resolveSplitPacingVerdictApplicability(analysisFacts?: WorkoutAnalysisFactsV2): {
+  applicable: boolean
+  reason: string | null
+} {
+  if (!analysisFacts) return { applicable: true, reason: null }
+
+  const { sessionSteadiness } = analysisFacts.guardrails.archetype
+
+  if (sessionSteadiness === 'intervalled' || sessionSteadiness === 'stochastic') {
+    return {
+      applicable: false,
+      reason: `session steadiness is ${sessionSteadiness}, so automatic distance splits cut across warmup, work reps, recoveries and cooldown; their halves are not comparable`
+    }
+  }
+
+  return { applicable: true, reason: null }
+}
+
 export function buildWorkoutAnalysisPrompt(
   workoutData: any,
 
@@ -1375,13 +1423,20 @@ When analyzing "Execution" and "Effort", specifically reference how well the ath
     })
   }
 
-  // Add lap splits pacing analysis if available
+  // Add distance-split pacing analysis if available.
+  //
+  // These rows are the provider's automatic per-distance splits, not laps the
+  // athlete triggered and not the session's work intervals; the section used to
+  // be headed "Lap Pacing Analysis", which invited the model to talk about
+  // "laps" that never existed (CW-389).
   if (workoutData.lap_splits && workoutData.lap_splits.length > 0) {
-    prompt += '\n## Lap Pacing Analysis\n'
-    prompt += `Split-by-split pacing data showing consistency and strategy:\n\n`
+    const splitVerdict = resolveSplitPacingVerdictApplicability(analysisFactsV2)
+
+    prompt += '\n## Distance Split Pacing\n'
+    prompt += `Automatic per-distance splits (1 km / 1 mi) recorded for this session. These are not laps and not the workout's work intervals:\n\n`
 
     workoutData.lap_splits.forEach((split: any) => {
-      prompt += `**Lap ${split.lap}**: `
+      prompt += `**Split ${split.lap}**: `
       prompt += `${formatPromptDistance(split.distance_m, userProfile?.distanceUnits)} in ${Math.floor(split.time_s / 60)}:${(split.time_s % 60).toString().padStart(2, '0')} `
 
       const paceSecondsPerKm =
@@ -1393,13 +1448,19 @@ When analyzing "Execution" and "Effort", specifically reference how well the ath
     })
 
     if (workoutData.pace_variability_seconds) {
-      prompt += `\n**Pace Consistency**: ${formatMetric(workoutData.pace_variability_seconds, 1)} seconds standard deviation\n`
-      prompt += `- Lower is better (more consistent pacing)\n`
-      prompt += `- <10s = Excellent consistency, 10-20s = Good, >20s = Variable pacing\n`
+      // The raw dispersion is a measurement and may stay; the grade band is a
+      // verdict and only applies to a session that was meant to hold one pace.
+      prompt += `\n**Split Pace Consistency**: ${formatMetric(workoutData.pace_variability_seconds, 1)} seconds standard deviation\n`
+      if (splitVerdict.applicable) {
+        prompt += `- Lower is better (more consistent pacing)\n`
+        prompt += `- <10s = Excellent consistency, 10-20s = Good, >20s = Variable pacing\n`
+      } else {
+        prompt += `- Consistency grading omitted: ${splitVerdict.reason}. Do not read this number as a pacing grade.\n`
+      }
     }
 
     // Add first/second half comparison
-    if (workoutData.lap_splits.length >= 2) {
+    if (workoutData.lap_splits.length >= 2 && splitVerdict.applicable) {
       const halfwayIndex = Math.floor(workoutData.lap_splits.length / 2)
       const firstHalf = workoutData.lap_splits.slice(0, halfwayIndex)
       const secondHalf = workoutData.lap_splits.slice(halfwayIndex)
@@ -1423,6 +1484,11 @@ When analyzing "Execution" and "Effort", specifically reference how well the ath
       prompt += `- First half avg: ${formatPromptPace(firstHalfAvgPace, userProfile?.distanceUnits)}\n`
       prompt += `- Second half avg: ${formatPromptPace(secondHalfAvgPace, userProfile?.distanceUnits)}\n`
       prompt += `- Difference: ${Math.abs(splitDiff).toFixed(1)}s ${splitDiff > 0 ? 'slower' : 'faster'} in second half\n`
+    } else if (workoutData.lap_splits.length >= 2) {
+      // Stated rather than left as a silent gap: "do not infer meaning from
+      // omitted facts" is already a rule in the v2 facts contract, so a missing
+      // section has to say why it is missing.
+      prompt += `\nSplit-strategy verdict omitted: ${splitVerdict.reason}.\n`
     }
 
     prompt += '\n'
