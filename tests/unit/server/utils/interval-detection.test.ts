@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import {
   detectIntervals,
+  findPeakEfforts,
   resolveHrWorkThreshold,
-  resolveProviderIntervalTypes
+  resolveProviderIntervalTypes,
+  timeWeightedMean
 } from '../../../../server/utils/interval-detection'
 
 describe('detectIntervals', () => {
@@ -294,5 +296,128 @@ describe('resolveProviderIntervalTypes', () => {
       'WORK'
     ])
     expect(resolveProviderIntervalTypes([])).toEqual([])
+  })
+})
+
+/**
+ * A minute of riding recorded at two different rates: 50 seconds sampled every
+ * 10s at 100W, then the last 10 seconds sampled at 1Hz at 400W.
+ *
+ * Time-weighted mean over the minute: (50 * 100 + 10 * 400) / 60 = 150.
+ * Counting samples instead of seconds gives 4600 / 16 = 287.5 — the old bug.
+ */
+function mixedRateMinute() {
+  const times = [0, 10, 20, 30, 40, 50]
+  const values = [100, 100, 100, 100, 100, 100]
+  for (let t = 51; t <= 60; t++) {
+    times.push(t)
+    values.push(400)
+  }
+  return { times, values }
+}
+
+describe('timeWeightedMean', () => {
+  it('weights each sample by the time it covers, not by sample count', () => {
+    const { times, values } = mixedRateMinute()
+    expect(timeWeightedMean(times, values)).toBe(150)
+  })
+
+  it('drops the time spent inside a recording pause', () => {
+    // 60s at 100, a 10 minute pause, then 20s at 400.
+    const times: number[] = []
+    const values: number[] = []
+    for (let t = 0; t <= 59; t++) {
+      times.push(t)
+      values.push(100)
+    }
+    for (let t = 660; t <= 679; t++) {
+      times.push(t)
+      values.push(400)
+    }
+
+    // The paused 600s carries no value at all: only the recorded seconds count
+    // (59 in the first block, 19 in the second — the sample that reopens
+    // recording is a boundary). Charging the pause to the 400W sample that
+    // follows it would give ~372.
+    expect(timeWeightedMean(times, values)).toBeCloseTo((59 * 100 + 19 * 400) / 78, 10)
+  })
+
+  it('returns null when the range covers no elapsed time', () => {
+    expect(timeWeightedMean([5], [250])).toBeNull()
+    expect(timeWeightedMean([], [])).toBeNull()
+  })
+})
+
+describe('findPeakEfforts', () => {
+  it('averages a steady effort to its actual value', () => {
+    const times = Array.from({ length: 400 }, (_, index) => index)
+    const watts = times.map(() => 250)
+
+    const peaks = findPeakEfforts(times, watts, 'power')
+
+    expect(peaks.find((p) => p.duration === 60)?.value).toBe(250)
+    expect(peaks.find((p) => p.duration === 300)?.value).toBe(250)
+    expect(peaks.find((p) => p.duration === 600)).toBeUndefined()
+  })
+
+  it('averages by elapsed time when the sample rate is not 1Hz', () => {
+    const { times, values } = mixedRateMinute()
+
+    const peak = findPeakEfforts(times, values, 'power').find((p) => p.duration === 60)
+
+    // Sample-count averaging reported 288W for this minute.
+    expect(peak?.value).toBe(150)
+    expect(peak?.start_time).toBe(0)
+    expect(peak?.end_time).toBe(60)
+  })
+
+  it('does not let a peak window borrow time from across a recording pause', () => {
+    // 15 minutes at 200W, a 10 minute pause, then 15 minutes at 400W.
+    const times: number[] = []
+    const watts: number[] = []
+    for (let t = 0; t <= 899; t++) {
+      times.push(t)
+      watts.push(200)
+    }
+    for (let t = 1500; t <= 2399; t++) {
+      times.push(t)
+      watts.push(400)
+    }
+
+    const peaks = findPeakEfforts(times, watts, 'power')
+
+    // The best continuous 10 minutes is inside the second block.
+    const peak10m = peaks.find((p) => p.duration === 600)
+    expect(peak10m?.value).toBe(400)
+    expect(peak10m?.start_time).toBeGreaterThanOrEqual(1500)
+    expect(peaks.find((p) => p.duration === 300)?.start_time).toBeGreaterThanOrEqual(1500)
+
+    // No continuous 20 minute effort exists: the activity spans 40 minutes of
+    // wall time but only two 15 minute blocks were recorded. Sample-count
+    // averaging happily reported a 20m peak of 400W here.
+    expect(peaks.find((p) => p.duration === 1200)).toBeUndefined()
+  })
+
+  it('keeps decimal precision for pace peaks and whole numbers for power', () => {
+    const times = Array.from({ length: 301 }, (_, index) => index)
+    // A fast half at 3.42 m/s, then an easy half at 2.61 m/s. Rounded to whole
+    // numbers both collapse to 3, which is what made the pace curve useless.
+    const velocity = times.map((_, index) => (index <= 150 ? 3.42 : 2.61))
+    const watts = times.map((_, index) => 200 + (index % 10))
+
+    const pacePeaks = findPeakEfforts(times, velocity, 'pace')
+    const pacePeak = pacePeaks.find((p) => p.duration === 60)
+    const powerPeak = findPeakEfforts(times, watts, 'power').find((p) => p.duration === 60)
+
+    expect(pacePeak?.metric).toBe('pace')
+    expect(pacePeak?.value).toBe(3.42)
+    expect(pacePeaks.every((p) => Number.isInteger(p.value))).toBe(false)
+
+    expect(powerPeak?.value).toBe(Math.round(powerPeak?.value ?? 0))
+  })
+
+  it('returns nothing for streams that are too short or empty', () => {
+    expect(findPeakEfforts([], [], 'power')).toEqual([])
+    expect(findPeakEfforts([0, 1, 2], [200, 200, 200], 'power')).toEqual([])
   })
 })

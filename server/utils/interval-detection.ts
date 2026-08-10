@@ -795,6 +795,94 @@ function detectIntervalsFromPlannedSteps(
   return intervals.filter((interval) => interval.duration > 0)
 }
 
+/** A gap has to be at least this long before it can count as a recording pause. */
+export const MIN_PAUSE_GAP_SEC = 30
+
+/** ...and also this many times the stream's typical sample spacing. */
+const PAUSE_GAP_MULTIPLE = 4
+
+/**
+ * Seconds after which a gap between two consecutive samples is a recording
+ * pause rather than a slow sample rate.
+ *
+ * Derived from the stream itself so that files recorded at 1Hz, with Garmin
+ * "smart recording", or at a fixed coarse interval are all judged against their
+ * own normal spacing instead of a single hardcoded number.
+ */
+export function estimatePauseGapSeconds(times: number[]): number {
+  const gaps: number[] = []
+  for (let i = 1; i < times.length; i++) {
+    const current = times[i]
+    const previous = times[i - 1]
+    if (!Number.isFinite(current) || !Number.isFinite(previous)) continue
+    const delta = (current as number) - (previous as number)
+    if (delta > 0) gaps.push(delta)
+  }
+
+  if (gaps.length === 0) return MIN_PAUSE_GAP_SEC
+
+  gaps.sort((a, b) => a - b)
+  const median = gaps[Math.floor(gaps.length / 2)] ?? 1
+  return Math.max(MIN_PAUSE_GAP_SEC, median * PAUSE_GAP_MULTIPLE)
+}
+
+/**
+ * Elapsed time, in seconds, that the sample at `index` represents when
+ * averaging over time. A recorded sample describes the interval since the
+ * previous sample, so its weight is that gap.
+ *
+ * Returns 0 for the first sample (it is the left boundary of a range and covers
+ * no time), for missing/non-monotonic timestamps, and for gaps that exceed
+ * `pauseGapSeconds` — those are recording pauses, and the value recorded when
+ * the athlete started again says nothing about the time they were stopped.
+ */
+export function sampleWeightSeconds(
+  times: number[],
+  index: number,
+  pauseGapSeconds: number = MIN_PAUSE_GAP_SEC
+): number {
+  if (index <= 0) return 0
+  const current = times[index]
+  const previous = times[index - 1]
+  if (!Number.isFinite(current) || !Number.isFinite(previous)) return 0
+  const delta = (current as number) - (previous as number)
+  if (!(delta > 0) || delta > pauseGapSeconds) return 0
+  return delta
+}
+
+/**
+ * Time-weighted mean of `values` over the inclusive sample range
+ * [`startIndex`, `endIndex`].
+ *
+ * Each sample is weighted by the time it covers instead of counting as one
+ * sample, so streams recorded at anything other than a steady 1Hz — or with
+ * recording pauses in them — average correctly. `startIndex` is the boundary of
+ * the range and contributes no weight; time inside a recording pause is
+ * excluded entirely rather than attributed to the value that follows it.
+ *
+ * Returns `null` when the range covers no elapsed time.
+ */
+export function timeWeightedMean(
+  times: number[],
+  values: number[],
+  startIndex = 0,
+  endIndex = values.length - 1
+): number | null {
+  const pauseGapSeconds = estimatePauseGapSeconds(times)
+  let weightedSum = 0
+  let totalSeconds = 0
+
+  for (let i = Math.max(1, startIndex + 1); i <= endIndex; i++) {
+    const weight = sampleWeightSeconds(times, i, pauseGapSeconds)
+    if (weight <= 0) continue
+    const value = values[i]
+    weightedSum += (Number.isFinite(value) ? (value as number) : 0) * weight
+    totalSeconds += weight
+  }
+
+  return totalSeconds > 0 ? weightedSum / totalSeconds : null
+}
+
 /**
  * Find peak efforts for standard durations (1min, 5min, 20min, etc.)
  */
@@ -804,6 +892,7 @@ export function findPeakEfforts(
   metric: 'power' | 'heartrate' | 'pace'
 ): PeakEffort[] {
   if (!values || values.length === 0) return []
+  if (!times || times.length < 2) return []
 
   const durations = [
     { sec: 5, label: '5s' },
@@ -820,59 +909,65 @@ export function findPeakEfforts(
   // Optimization: Pre-calculate prefix sums for O(1) range sum queries?
   // Since we need max average, a simple sliding window is O(N) per duration.
 
+  const pauseGapSeconds = estimatePauseGapSeconds(times)
+
   for (const dur of durations) {
     const lastTime = times[times.length - 1]
     if (lastTime === undefined || lastTime < dur.sec) continue
 
-    // Find approximate number of data points for this duration
-    // Assuming 1Hz sampling for simplicity, or we check timestamps
-    // Robust approach: Sliding window on time
+    // Sliding window over time. The window is both advanced *and* averaged by
+    // elapsed time: each sample contributes the seconds it covers, so a file
+    // with non-1Hz sampling (or gaps) is not mis-averaged by sample count.
 
-    let maxSum = -Infinity
+    let maxAvg = -Infinity
     let bestStartIdx = -1
     let bestEndIdx = -1
 
-    let currentSum = 0
+    // Weighted sum of value*seconds over (startPtr, endPtr], and the seconds
+    // those samples cover. `startPtr` is the window's left boundary and carries
+    // no weight of its own.
+    let weightedSum = 0
+    let windowSeconds = 0
     let startPtr = 0
 
-    for (let endPtr = 0; endPtr < values.length; endPtr++) {
-      const val = values[endPtr]
-      if (val !== undefined) currentSum += val
+    for (let endPtr = 1; endPtr < values.length; endPtr++) {
+      const weight = sampleWeightSeconds(times, endPtr, pauseGapSeconds)
 
-      // Shrink window from left until duration is approx correct
-      // We want times[endPtr] - times[startPtr] approx dur.sec
-
-      while (times[endPtr] !== undefined && times[startPtr] !== undefined) {
-        const tEnd = times[endPtr]
-        const tStart = times[startPtr]
-        if (tEnd !== undefined && tStart !== undefined && tEnd - tStart > dur.sec) {
-          const startVal = values[startPtr]
-          if (startVal !== undefined) currentSum -= startVal
-          startPtr++
-        } else {
-          break
-        }
+      if (weight <= 0) {
+        // Recording pause (or an unusable timestamp): a peak window may not
+        // span it, so restart the window on the far side of the break.
+        weightedSum = 0
+        windowSeconds = 0
+        startPtr = endPtr
+        continue
       }
 
-      // Check if window is valid duration (close enough)
-      const tEnd = times[endPtr]
-      const tStart = times[startPtr]
+      const val = values[endPtr]
+      weightedSum += (Number.isFinite(val) ? (val as number) : 0) * weight
+      windowSeconds += weight
 
-      if (tEnd !== undefined && tStart !== undefined) {
-        const windowDuration = tEnd - tStart
-        if (windowDuration >= dur.sec * 0.95) {
-          // Allow slight tolerance
-          const avg = currentSum / (endPtr - startPtr + 1)
-          if (avg > maxSum) {
-            maxSum = avg
-            bestStartIdx = startPtr
-            bestEndIdx = endPtr
-          }
+      // Shrink from the left until the window is no longer than the target.
+      while (startPtr < endPtr && windowSeconds > dur.sec) {
+        const dropIdx = startPtr + 1
+        const dropWeight = sampleWeightSeconds(times, dropIdx, pauseGapSeconds)
+        const dropVal = values[dropIdx]
+        weightedSum -= (Number.isFinite(dropVal) ? (dropVal as number) : 0) * dropWeight
+        windowSeconds -= dropWeight
+        startPtr = dropIdx
+      }
+
+      // Allow slight tolerance so coarse sampling still yields a peak.
+      if (windowSeconds >= dur.sec * 0.95) {
+        const avg = weightedSum / windowSeconds
+        if (avg > maxAvg) {
+          maxAvg = avg
+          bestStartIdx = startPtr
+          bestEndIdx = endPtr
         }
       }
     }
 
-    if (bestStartIdx !== -1 && bestEndIdx !== -1) {
+    if (bestStartIdx !== -1 && bestEndIdx !== -1 && Number.isFinite(maxAvg)) {
       const startTimeValue = times[bestStartIdx]
       const endTimeValue = times[bestEndIdx]
       if (startTimeValue !== undefined && endTimeValue !== undefined) {
@@ -881,7 +976,9 @@ export function findPeakEfforts(
           duration_label: dur.label,
           start_time: startTimeValue,
           end_time: endTimeValue,
-          value: Math.round(maxSum),
+          // Pace is a velocity in m/s (typically 2-6), so whole-number rounding
+          // would destroy the curve. Watts and bpm stay integers.
+          value: metric === 'pace' ? Math.round(maxAvg * 100) / 100 : Math.round(maxAvg),
           metric
         })
       }
