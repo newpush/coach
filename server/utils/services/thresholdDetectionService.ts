@@ -6,7 +6,7 @@ import { queueThresholdUpdateEmail } from '../workout-insight-email'
 import { logger } from '@trigger.dev/sdk/v3'
 import { workoutStreamRepository } from '../repositories/workoutStreamRepository'
 import { formatPromptPace } from '../ai-prompt-format'
-import { calculateHrZones } from '../zones'
+import { calculateHrZones, calculatePaceZones, calculatePowerZones } from '../zones'
 
 /**
  * Threshold pace is taken directly off the best sustained 40 minute effort (no
@@ -23,11 +23,52 @@ import { calculateHrZones } from '../zones'
 export const THRESHOLD_PACE_PEAK_DURATION_SEC = 2400
 
 /**
- * Share of the peak window's samples that must carry a usable heart rate before
- * the average is treated as evidence. A strap that dropped out for most of the
- * effort corroborates nothing.
+ * Share of the peak window's samples that must carry a usable reading before the
+ * average is treated as evidence. A strap (or a power meter) that dropped out
+ * for most of the effort corroborates nothing.
  */
-const THRESHOLD_PACE_HR_COVERAGE_MIN = 0.8
+const THRESHOLD_EFFORT_COVERAGE_MIN = 0.8
+
+/**
+ * A first-ever detection arrives with no previous value: the field is absent,
+ * zero, or non-finite. Framing that as an improvement — "increased from 0" —
+ * reads as a bug to the athlete, so every piece of threshold copy branches on
+ * this one predicate rather than re-deriving the test (CW-421, CW-420).
+ */
+function hasPreviousValue(oldValue: number | null | undefined): boolean {
+  return typeof oldValue === 'number' && Number.isFinite(oldValue) && oldValue > 0
+}
+
+/**
+ * Mean of `values` over the closed `[startSec, endSec]` window, or `null` when
+ * too few of the window's samples carry a usable reading.
+ */
+function averageOverWindow(
+  times: number[],
+  values: readonly number[],
+  startSec: number,
+  endSec: number,
+  isUsable: (value: number) => boolean
+): number | null {
+  let inWindow = 0
+  let usable = 0
+  let sum = 0
+
+  for (let i = 0; i < times.length; i++) {
+    const t = times[i]
+    if (t === undefined || t < startSec || t > endSec) continue
+    inWindow++
+    const value = values[i]
+    if (typeof value === 'number' && Number.isFinite(value) && isUsable(value)) {
+      usable++
+      sum += value
+    }
+  }
+
+  if (inWindow === 0 || usable / inWindow < THRESHOLD_EFFORT_COVERAGE_MIN) return null
+
+  return sum / usable
+}
 
 export interface ThresholdEffortHrEvidence {
   corroborated: boolean
@@ -81,26 +122,12 @@ export function corroborateThresholdEffortWithHr(args: {
     return { corroborated: false, reason: 'no_hr_reference' }
   }
 
-  let inWindow = 0
-  let usable = 0
-  let sum = 0
+  // A zero is a dropped sample, not a resting heart rate, so it is not averaged.
+  const avgHr = averageOverWindow(times, heartrate, startSec, endSec, (hr) => hr > 0)
 
-  for (let i = 0; i < times.length; i++) {
-    const t = times[i]
-    if (t === undefined || t < startSec || t > endSec) continue
-    inWindow++
-    const hr = heartrate[i]
-    if (typeof hr === 'number' && Number.isFinite(hr) && hr > 0) {
-      usable++
-      sum += hr
-    }
-  }
-
-  if (inWindow === 0 || usable / inWindow < THRESHOLD_PACE_HR_COVERAGE_MIN) {
+  if (avgHr === null) {
     return { corroborated: false, reason: 'insufficient_hr_coverage', floorHr }
   }
-
-  const avgHr = sum / usable
 
   return {
     corroborated: avgHr >= floorHr,
@@ -108,6 +135,111 @@ export function corroborateThresholdEffortWithHr(args: {
     avgHr,
     floorHr
   }
+}
+
+export interface ThresholdEffortWorkEvidence {
+  corroborated: boolean
+  /** Machine-readable reason, for logs. */
+  reason:
+    'no_corroborating_axis' | 'insufficient_coverage' | 'below_threshold_band' | 'in_threshold_band'
+  /** Which axis produced the verdict. */
+  axis?: 'power' | 'pace'
+  avgValue?: number
+  floorValue?: number
+}
+
+/**
+ * Was a peak effort's own window worked at threshold *on a non-heart-rate axis*?
+ *
+ * This is the LTHR counterpart of `corroborateThresholdEffortWithHr`, and it
+ * exists because that function cannot serve here: corroborating a heart-rate
+ * derived threshold with heart rate is circular — the same 20 minute window
+ * would be both the claim and its own evidence. Power and pace are independent
+ * measurements of how hard the athlete was actually working, so they can vouch
+ * for the effort without begging the question (CW-420).
+ *
+ * The bar on each axis is that axis's own Z4 floor as the shared zone models
+ * already define it — `calculatePowerZones` (0.9 x FTP) and `calculatePaceZones`
+ * (0.95 x threshold speed). No new coefficient is invented here, exactly as in
+ * the CW-413 heart-rate precedent.
+ *
+ * Both references are the athlete's *stored* FTP and threshold pace, never a
+ * value detected in this same pass, so there is no cross-metric feedback loop.
+ *
+ * The axes are an OR: a ride corroborated by power and a run corroborated by
+ * pace both count, and the first axis that clears its floor wins. When neither
+ * axis is available — no stored FTP and no stored threshold pace, or no matching
+ * stream — the answer is `no_corroborating_axis` and the caller must not
+ * nominate. Preferring no recommendation over a weak one is the whole reason
+ * CW-413 works, and a machine-generated LTHR moves every heart rate zone in the
+ * app.
+ */
+export function corroborateThresholdEffortWithWorkRate(args: {
+  times: number[]
+  watts?: number[] | null
+  velocity?: number[] | null
+  startSec: number
+  endSec: number
+  ftp?: number | null
+  /** The athlete's stored threshold pace, in seconds per kilometre. */
+  thresholdPaceSecPerKm?: number | null
+}): ThresholdEffortWorkEvidence {
+  const { times, watts, velocity, startSec, endSec, ftp, thresholdPaceSecPerKm } = args
+
+  const axes: Array<{ axis: 'power' | 'pace'; values: number[]; floor: number }> = []
+
+  if (Array.isArray(watts) && watts.length > 0 && ftp && ftp > 0) {
+    const floor = calculatePowerZones(ftp).find((zone) => zone.name.startsWith('Z4'))?.min
+    if (floor && floor > 0) axes.push({ axis: 'power', values: watts, floor })
+  }
+
+  if (
+    Array.isArray(velocity) &&
+    velocity.length > 0 &&
+    thresholdPaceSecPerKm &&
+    thresholdPaceSecPerKm > 0
+  ) {
+    // Zones are built from threshold *speed* in m/s; the profile stores pace in
+    // seconds per kilometre.
+    const thresholdSpeed = 1000 / thresholdPaceSecPerKm
+    const floor = calculatePaceZones(thresholdSpeed).find((zone) => zone.name.startsWith('Z4'))?.min
+    if (floor && floor > 0) axes.push({ axis: 'pace', values: velocity, floor })
+  }
+
+  if (axes.length === 0) return { corroborated: false, reason: 'no_corroborating_axis' }
+
+  let rejection: ThresholdEffortWorkEvidence | null = null
+
+  for (const { axis, values, floor } of axes) {
+    // Unlike heart rate, a zero here is real: coasting and standing still are
+    // part of the effort and drag the average down, which fails safe.
+    const avgValue = averageOverWindow(times, values, startSec, endSec, (value) => value >= 0)
+
+    if (avgValue === null) {
+      rejection ??= {
+        corroborated: false,
+        reason: 'insufficient_coverage',
+        axis,
+        floorValue: floor
+      }
+      continue
+    }
+
+    if (avgValue >= floor) {
+      return { corroborated: true, reason: 'in_threshold_band', axis, avgValue, floorValue: floor }
+    }
+
+    // A measured rejection is more informative than an unmeasurable one.
+    rejection = {
+      corroborated: false,
+      reason: 'below_threshold_band',
+      axis,
+      avgValue,
+      floorValue: floor
+    }
+  }
+
+  return rejection ?? { corroborated: false, reason: 'no_corroborating_axis' }
 }
 
 export const thresholdDetectionService = {
@@ -228,9 +360,10 @@ export const thresholdDetectionService = {
         'heartrate'
       )
 
-      const peak20mHR = hrPeaks.find((p) => p.duration === 1200)?.value
+      const peak20m = hrPeaks.find((p) => p.duration === 1200)
+      const peak20mHR = peak20m?.value
 
-      if (peak20mHR && currentLthr) {
+      if (peak20m && peak20mHR) {
         // Industry standard (TrainingPeaks): LTHR is estimated as 95% of peak 20m HR
         // unless it's a specific 30m test protocol. For auto-detection, 95% is more accurate.
         const estimatedLthr = Math.round(peak20mHR * 0.95)
@@ -247,15 +380,66 @@ export const thresholdDetectionService = {
 
         results.minDurationMet = minMet
 
-        if (estimatedLthr > currentLthr && minMet) {
-          results.lthr = { old: currentLthr, new: estimatedLthr, detected: true }
+        // Two different questions, so two different tests (CW-420).
+        //
+        // The athlete who already has an LTHR is vouched for by the improvement
+        // test: a 20 minute peak that beats their known threshold is itself the
+        // evidence, and the value only ever ratchets upward. That path is
+        // deliberately untouched.
+        //
+        // The athlete who has none had, until CW-420, no path at all — the
+        // branch required `currentLthr` to be truthy, so a first-time athlete
+        // never received an LTHR and their heart rate zones stayed unset,
+        // silently degrading every zone-based analysis and (since CW-383/CW-384)
+        // interval detection too. Enabling it naively would be the CW-413 bug
+        // inverted: the 0.95 coefficient cannot tell a maximal 20 minutes from
+        // the steady middle of an easy ride, and there is nothing to beat.
+        //
+        // Decision (product, 2026-08-10): nominate, but only on corroborated
+        // effort — and on an axis other than heart rate, because corroborating
+        // an HR-derived threshold with HR is circular. Power or pace must show
+        // the same window was worked at threshold. If neither is available we do
+        // not nominate at all; a missing recommendation is invisible, a wrong one
+        // moves every training zone the athlete has. The result is a
+        // recommendation the athlete confirms, never a write to their profile.
+        let accepted: boolean
+
+        if (currentLthr) {
+          accepted = estimatedLthr > currentLthr && minMet
+        } else {
+          const evidence = corroborateThresholdEffortWithWorkRate({
+            times: workout.streams.time as number[],
+            watts: workout.streams.watts as number[] | null,
+            velocity: workout.streams.velocity as number[] | null,
+            startSec: peak20m.start_time,
+            endSec: peak20m.end_time,
+            ftp: currentFtp,
+            thresholdPaceSecPerKm: currentThresholdPace
+          })
+          accepted = minMet && evidence.corroborated
+
+          if (!accepted) {
+            logger.log('LTHR nomination rejected: no threshold-intensity evidence', {
+              workoutId: workout.id,
+              reason: evidence.reason,
+              axis: evidence.axis,
+              avgValue: evidence.avgValue,
+              floorValue: evidence.floorValue,
+              minMet,
+              estimatedLthr
+            })
+          }
+        }
+
+        if (accepted) {
+          results.lthr = { old: currentLthr || 0, new: estimatedLthr, detected: true }
 
           if (!dryRun) {
             await this.createThresholdRecommendation(
               workout.userId,
               workout.id,
               'LTHR',
-              currentLthr,
+              currentLthr || 0,
               estimatedLthr,
               peak20mHR,
               sportName,
@@ -269,16 +453,20 @@ export const thresholdDetectionService = {
                 title: sportName
                   ? `New Heart Rate Threshold Detected (${sportName})`
                   : 'New Heart Rate Threshold Detected',
-                message: sportName
-                  ? `Congratulations! Your ${sportName} profile threshold heart rate increased to ${estimatedLthr} bpm (previous: ${currentLthr} bpm) based on "${workout.title}".`
-                  : `Congratulations! Your threshold heart rate increased to ${estimatedLthr} bpm (previous: ${currentLthr} bpm) based on "${workout.title}".`,
+                message: hasPreviousValue(currentLthr)
+                  ? sportName
+                    ? `Congratulations! Your ${sportName} profile threshold heart rate increased to ${estimatedLthr} bpm (previous: ${currentLthr} bpm) based on "${workout.title}".`
+                    : `Congratulations! Your threshold heart rate increased to ${estimatedLthr} bpm (previous: ${currentLthr} bpm) based on "${workout.title}".`
+                  : sportName
+                    ? `We detected your ${sportName} profile threshold heart rate: ${estimatedLthr} bpm, based on "${workout.title}".`
+                    : `We detected your threshold heart rate: ${estimatedLthr} bpm, based on "${workout.title}".`,
                 icon: 'i-heroicons-bolt',
                 link: `/activities/${workout.id}`
               })
             }
           }
         } else {
-          results.lthr = { old: currentLthr, new: estimatedLthr, detected: false }
+          results.lthr = { old: currentLthr || 0, new: estimatedLthr, detected: false }
         }
       }
     }
@@ -295,20 +483,59 @@ export const thresholdDetectionService = {
         'power'
       )
 
-      const peak20mPower = powerPeaks.find((p) => p.duration === 1200)?.value
+      const peak20m = powerPeaks.find((p) => p.duration === 1200)
+      const peak20mPower = peak20m?.value
 
-      if (peak20mPower && currentFtp) {
+      if (peak20m && peak20mPower) {
         const estimatedFtp = Math.round(peak20mPower * 0.95)
 
-        if (estimatedFtp > currentFtp) {
-          results.ftp = { old: currentFtp, new: estimatedFtp, detected: true }
+        // Same two questions as the LTHR branch above, and the same decision
+        // (CW-420). The improvement path is untouched: beating a known FTP over
+        // 20 minutes is its own evidence.
+        //
+        // The first nomination has nothing to beat, so the 0.95 coefficient
+        // alone would happily mint an FTP off the strongest 20 minutes of an
+        // easy ride. FTP is the tractable half of this ticket: heart rate is an
+        // independent axis here, so the CW-413 corroboration applies directly —
+        // the same window must also sit in the athlete's Z4 heart rate band.
+        // `corroborateThresholdEffortWithHr` fails safe on every "we cannot
+        // tell" path (no strap, no HR reference, dropouts), so an athlete with
+        // no HR data gets no nomination rather than a guessed one.
+        let accepted: boolean
+
+        if (currentFtp) {
+          accepted = estimatedFtp > currentFtp
+        } else {
+          const evidence = corroborateThresholdEffortWithHr({
+            times: workout.streams.time as number[],
+            heartrate: workout.streams.heartrate as number[] | null,
+            startSec: peak20m.start_time,
+            endSec: peak20m.end_time,
+            lthr: currentLthr,
+            maxHr: currentMaxHr
+          })
+          accepted = evidence.corroborated
+
+          if (!accepted) {
+            logger.log('FTP nomination rejected: no threshold-intensity evidence', {
+              workoutId: workout.id,
+              reason: evidence.reason,
+              avgHr: evidence.avgHr,
+              floorHr: evidence.floorHr,
+              estimatedFtp
+            })
+          }
+        }
+
+        if (accepted) {
+          results.ftp = { old: currentFtp || 0, new: estimatedFtp, detected: true }
 
           if (!dryRun) {
             await this.createThresholdRecommendation(
               workout.userId,
               workout.id,
               'FTP',
-              currentFtp,
+              currentFtp || 0,
               estimatedFtp,
               peak20mPower,
               sportName,
@@ -320,16 +547,20 @@ export const thresholdDetectionService = {
             if (!noNotify) {
               await createUserNotification(workout.userId, {
                 title: sportName ? `New ${sportName} FTP Detected` : 'New FTP Detected',
-                message: sportName
-                  ? `Great job! Your ${sportName} profile FTP increased to ${estimatedFtp}W (previous: ${currentFtp}W) based on "${workout.title || 'your workout'}".`
-                  : `Great job! Your FTP increased to ${estimatedFtp}W (previous: ${currentFtp}W) based on "${workout.title || 'your workout'}".`,
+                message: hasPreviousValue(currentFtp)
+                  ? sportName
+                    ? `Great job! Your ${sportName} profile FTP increased to ${estimatedFtp}W (previous: ${currentFtp}W) based on "${workout.title || 'your workout'}".`
+                    : `Great job! Your FTP increased to ${estimatedFtp}W (previous: ${currentFtp}W) based on "${workout.title || 'your workout'}".`
+                  : sportName
+                    ? `We detected your ${sportName} profile FTP: ${estimatedFtp}W, based on "${workout.title || 'your workout'}".`
+                    : `We detected your FTP: ${estimatedFtp}W, based on "${workout.title || 'your workout'}".`,
                 icon: 'i-heroicons-fire',
                 link: `/activities/${workout.id}`
               })
             }
           }
         } else {
-          results.ftp = { old: currentFtp, new: estimatedFtp, detected: false }
+          results.ftp = { old: currentFtp || 0, new: estimatedFtp, detected: false }
         }
       }
 
@@ -495,15 +726,13 @@ export const thresholdDetectionService = {
     let description = ''
     const unit = metric === 'FTP' ? 'W' : metric === 'THRESHOLD_PACE' ? 's/km' : ' bpm'
 
-    // A first-ever detection arrives with no previous value (absent, 0, or
-    // non-finite). Framing that as an improvement — "increased from 0" — reads
-    // as a bug to the athlete, so the copy branches on whether there is a real
-    // previous value to compare against.
-    const hasPreviousValue = Number.isFinite(oldValue) && oldValue > 0
+    // See `hasPreviousValue`: the copy branches on whether there is a real
+    // previous value to compare against, never on the raw number.
+    const hasPrevious = hasPreviousValue(oldValue)
 
     if (metric === 'LTHR') {
       title = sportName ? `New ${sportName} LTHR Detected` : 'New LTHR Detected'
-      if (hasPreviousValue) {
+      if (hasPrevious) {
         description = sportName
           ? `Your ${sportName} LTHR has increased from ${oldValue} to ${newValue} bpm.`
           : `Your LTHR has increased from ${oldValue} to ${newValue} bpm.`
@@ -514,7 +743,7 @@ export const thresholdDetectionService = {
       }
     } else if (metric === 'FTP') {
       title = sportName ? `New ${sportName} FTP Detected` : 'New FTP Detected'
-      if (hasPreviousValue) {
+      if (hasPrevious) {
         description = sportName
           ? `Your ${sportName} FTP has increased from ${oldValue}W to ${newValue}W.`
           : `Your FTP has increased from ${oldValue}W to ${newValue}W.`
@@ -527,7 +756,7 @@ export const thresholdDetectionService = {
       title = sportName
         ? `New Max Heart Rate Detected (${sportName})`
         : 'New Max Heart Rate Detected'
-      description = hasPreviousValue
+      description = hasPrevious
         ? `We detected a new max heart rate of ${newValue} bpm (previous: ${oldValue} bpm).`
         : `We detected your max heart rate: ${newValue} bpm.`
     } else if (metric === 'THRESHOLD_PACE') {
@@ -535,7 +764,7 @@ export const thresholdDetectionService = {
         ? `New Threshold Pace Detected (${sportName})`
         : 'New Threshold Pace Detected'
       const formattedPace = formatPromptPace(newValue, distanceUnits)
-      if (hasPreviousValue) {
+      if (hasPrevious) {
         description = sportName
           ? `Your ${sportName} threshold pace has improved to ${formattedPace}.`
           : `Your threshold pace has improved to ${formattedPace}.`
