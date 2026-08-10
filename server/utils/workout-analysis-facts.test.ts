@@ -2,8 +2,12 @@ import { describe, expect, it } from 'vitest'
 import {
   buildWorkoutAnalysisFacts,
   buildWorkoutAnalysisFactsV2,
+  formatActualIntervalsForPrompt,
+  formatCadenceWithUnit,
   getActualIntervalsForAnalysis,
-  getActualIntervalsSourceForAnalysis
+  getActualIntervalsSourceForAnalysis,
+  resolveCadenceUnit,
+  toCanonicalCadence
 } from './workout-analysis-facts'
 
 function makeWorkout(overrides: Record<string, unknown> = {}) {
@@ -1071,5 +1075,119 @@ describe('run pace interval detection refs (CW-384)', () => {
     })
 
     expect(intervals.filter((interval) => interval.classification === 'work')).toHaveLength(5)
+  })
+})
+
+describe('cadence units and pace in actual interval rows (CW-387)', () => {
+  const RUN_WITH_LAPS = makeWorkout({
+    title: '3 x 1km Threshold',
+    type: 'Run',
+    averageWatts: null,
+    rawJson: {
+      icu_intervals: [
+        {
+          type: 'WORK',
+          moving_time: 240,
+          distance: 1000,
+          average_heartrate: 168,
+          // One-legged, exactly as Strava / Intervals.icu store run cadence.
+          average_cadence: 88,
+          average_speed: 4.1667,
+          intensity: 101
+        },
+        {
+          type: 'RECOVERY',
+          moving_time: 120,
+          distance: 400,
+          average_heartrate: 138,
+          average_cadence: 76,
+          average_speed: 3.0,
+          intensity: 68
+        }
+      ]
+    }
+  })
+
+  it('doubles run cadence once and labels it spm, and adds min/km pace', () => {
+    const rows = formatActualIntervalsForPrompt(RUN_WITH_LAPS)
+
+    // 88 rpm one-legged -> 176 spm, and the unit agrees with the number.
+    expect(rows).toContain('176spm')
+    expect(rows).toContain('152spm')
+    expect(rows).not.toContain('rpm')
+    // 4.1667 m/s -> 240 s/km -> 4:00/km; 3.0 m/s -> 333 s/km -> 5:33/km.
+    expect(rows).toContain('4:00/km')
+    expect(rows).toContain('5:33/km')
+  })
+
+  it('leaves ride cadence untouched, keeps rpm and omits the pace column', () => {
+    const rows = formatActualIntervalsForPrompt(
+      makeWorkout({
+        type: 'Ride',
+        rawJson: {
+          icu_intervals: [
+            {
+              type: 'WORK',
+              moving_time: 720,
+              distance: 6400,
+              average_watts: 255,
+              average_heartrate: 155,
+              average_cadence: 88,
+              average_speed: 8.9,
+              intensity: 93
+            }
+          ]
+        }
+      })
+    )
+
+    expect(rows).toContain('88rpm')
+    expect(rows).not.toContain('spm')
+    expect(rows).not.toContain('/km')
+  })
+
+  it('emits N/A for pace on a pace-capable workout with no speed', () => {
+    const rows = formatActualIntervalsForPrompt(
+      makeWorkout({
+        type: 'Run',
+        averageWatts: null,
+        rawJson: {
+          icu_intervals: [
+            { type: 'WORK', moving_time: 300, average_heartrate: 160, average_cadence: 90 }
+          ]
+        }
+      })
+    )
+
+    expect(rows).toContain('180spm | N/A')
+  })
+})
+
+describe('cadence convention helpers (CW-387)', () => {
+  it('resolves the unit from the workout family, not from a hardcoded string', () => {
+    expect(resolveCadenceUnit('Run')).toBe('spm')
+    expect(resolveCadenceUnit('TrailRun')).toBe('spm')
+    expect(resolveCadenceUnit('Treadmill')).toBe('spm')
+    expect(resolveCadenceUnit('Ride')).toBe('rpm')
+    expect(resolveCadenceUnit('VirtualRide')).toBe('rpm')
+    expect(resolveCadenceUnit(null)).toBe('rpm')
+  })
+
+  it('doubles one-legged run cadence and is idempotent for realistic values', () => {
+    expect(toCanonicalCadence(88, true)).toBe(176)
+    // Already steps-per-minute (Garmin's averageRunCadenceInStepsPerMinute).
+    expect(toCanonicalCadence(176, true)).toBe(176)
+    expect(toCanonicalCadence(toCanonicalCadence(88, true), true)).toBe(176)
+    // Never scales cycling cadence.
+    expect(toCanonicalCadence(88, false)).toBe(88)
+    expect(toCanonicalCadence(null, true)).toBeNull()
+    expect(toCanonicalCadence(0, true)).toBe(0)
+  })
+
+  it('keeps the value and its unit together', () => {
+    expect(formatCadenceWithUnit(176, 'Run')).toBe('176 spm')
+    expect(formatCadenceWithUnit(88.4, 'Ride')).toBe('88 rpm')
+    expect(formatCadenceWithUnit(88, 'Ride', '')).toBe('88rpm')
+    expect(formatCadenceWithUnit(null, 'Run')).toBe('N/A')
   })
 })

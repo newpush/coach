@@ -290,6 +290,83 @@ describe('buildWorkoutAnalysisPrompt', () => {
     expect(prompt).toContain('- Average Speed: 3.00 m/s')
   })
 
+  it('uses one cadence convention across the session line and the interval rows for a run (CW-387)', () => {
+    // Same physical legs, three places in one prompt. Before CW-387 the session line
+    // said "176 spm", the Interval Breakdown said "180 rpm" for an equally doubled
+    // number, and the facts rows said "90rpm" for the undoubled one.
+    const prompt = buildWorkoutAnalysisPrompt(
+      buildWorkoutAnalysisData({
+        id: 'workout-fixture-run-cadence',
+        date: new Date('2026-03-17T06:00:00Z'),
+        title: '3 x 1km Threshold',
+        type: 'Run',
+        durationSec: 3000,
+        distanceMeters: 9000,
+        averageSpeed: 3.0,
+        averageHr: 158,
+        maxHr: 176,
+        // One-legged, exactly as Strava / Intervals.icu store run cadence.
+        averageCadence: 88,
+        maxCadence: 95,
+        rawJson: {
+          icu_intervals: [
+            {
+              type: 'WORK',
+              label: 'Rep 1',
+              moving_time: 240,
+              distance: 1000,
+              average_heartrate: 168,
+              average_cadence: 90,
+              average_speed: 4.1667,
+              intensity: 101
+            },
+            {
+              type: 'RECOVERY',
+              label: 'Jog 1',
+              moving_time: 120,
+              distance: 400,
+              average_heartrate: 138,
+              average_cadence: 76,
+              average_speed: 3.0,
+              intensity: 68
+            }
+          ]
+        }
+      }),
+      'Europe/Budapest',
+      'Supportive',
+      // HR-primary so the session cadence line is not condensed away; the
+      // Interval Breakdown prints cadence either way.
+      { loadPreference: 'HR' },
+      USER_PROFILE
+    )
+
+    // Session level: doubled and labelled spm.
+    expect(prompt).toContain('- Average Cadence: 176 spm')
+    expect(prompt).toContain('- Max Cadence: 190 spm')
+    // Interval Breakdown: same convention, same unit -- no hardcoded rpm.
+    expect(prompt).toContain('## Interval Breakdown')
+    expect(prompt).toContain('- Avg Cadence: 180 spm')
+    expect(prompt).toContain('- Avg Cadence: 152 spm')
+    // A run prompt must never mention rpm anywhere.
+    expect(prompt).not.toContain('rpm')
+    expect(prompt).not.toContain('RPM')
+  })
+
+  it('keeps rpm for a ride in both the session line and the interval rows (CW-387)', () => {
+    const prompt = buildWorkoutAnalysisPrompt(
+      buildWorkoutAnalysisData(RIDE_WORKOUT),
+      'Europe/Budapest',
+      'Supportive',
+      { loadPreference: 'POWER' },
+      USER_PROFILE
+    )
+
+    expect(prompt).toContain('- Average Cadence: 88 rpm')
+    expect(prompt).toContain('- Avg Cadence: 90 rpm')
+    expect(prompt).not.toContain('spm')
+  })
+
   it('respects the athlete distanceUnits preference for strength set distances', () => {
     const workoutData = {
       date: new Date('2026-03-15T10:00:00Z'),

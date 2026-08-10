@@ -24,7 +24,12 @@ import {
   shouldCondenseHeartRateSection
 } from '../../../trigger/utils/workout-metric-priority'
 import { formatStructuredPlanForPrompt } from '../../../trigger/utils/planned-workout-targets'
-import type { WorkoutAnalysisFactsV2 } from '../workout-analysis-facts'
+import {
+  formatCadenceWithUnit,
+  isRunningCadenceFamily,
+  toCanonicalCadence,
+  type WorkoutAnalysisFactsV2
+} from '../workout-analysis-facts'
 import { summarizePowerFromWatts } from '../power-metrics'
 import type { JourneyEventCategory } from '@prisma/client'
 
@@ -52,18 +57,24 @@ export interface WorkoutAnalysisPromptRecentContext {
 /**
  * Running exports sometimes report "per-foot" cadence (< 120). Convert those into
  * total steps per minute so the model never reads a 85 spm run as a form problem.
+ *
+ * Thin alias for the shared {@link toCanonicalCadence}, which is the single
+ * implementation of the cadence convention (CW-387). Kept as a named export
+ * because `trigger/analyze-workout.ts` re-exports it.
  */
 export function normalizeRunningCadence(
   cadence: number | null | undefined,
   isRunningWorkout: boolean
 ): number | null | undefined {
-  if (!cadence) return cadence
-  return isRunningWorkout && cadence < 120 ? cadence * 2 : cadence
+  return toCanonicalCadence(cadence, isRunningWorkout)
 }
 
 export function buildWorkoutAnalysisData(workout: any) {
   const workoutType = String(workout.type || '')
-  const isRunningWorkout = workoutType.toLowerCase().includes('run')
+  const isRunningWorkout = isRunningCadenceFamily(workoutType)
+  // The ONLY place session and interval cadence gets converted to the canonical
+  // convention. Everything downstream of this payload -- including the
+  // "## Interval Breakdown" rows -- must only label, never re-scale.
   const normalizeCadence = (cadence: number | null | undefined) =>
     normalizeRunningCadence(cadence, isRunningWorkout)
 
@@ -911,11 +922,11 @@ When analyzing "Execution" and "Effort", specifically reference how well the ath
     // Cadence is only relevant for cycling/running-like workouts
     if (isCadenceRelevant && !condensedHrSection) {
       if (workoutData.avg_cadence)
-        prompt += `- Average Cadence: ${workoutData.avg_cadence} ${workoutType.toLowerCase().includes('run') ? 'spm' : 'rpm'}\n`
+        prompt += `- Average Cadence: ${formatCadenceWithUnit(workoutData.avg_cadence, workoutType)}\n`
       else prompt += `- Average Cadence: N/A\n`
 
       if (workoutData.max_cadence)
-        prompt += `- Max Cadence: ${workoutData.max_cadence} ${workoutType.toLowerCase().includes('run') ? 'spm' : 'rpm'}\n`
+        prompt += `- Max Cadence: ${formatCadenceWithUnit(workoutData.max_cadence, workoutType)}\n`
     }
   }
 
@@ -1109,7 +1120,11 @@ When analyzing "Execution" and "Effort", specifically reference how well the ath
       if (interval.avg_power) prompt += `- Avg Power: ${interval.avg_power}W\n`
       if (interval.intensity) prompt += `- Intensity: ${formatMetric(interval.intensity, 2)}\n`
       if (interval.avg_hr) prompt += `- Avg HR: ${interval.avg_hr} bpm\n`
-      if (interval.avg_cadence) prompt += `- Avg Cadence: ${interval.avg_cadence} rpm\n`
+      // Values are already canonical (buildWorkoutAnalysisData normalised them);
+      // this only attaches the unit the workout family uses, so a run no longer
+      // reads "177 rpm" (CW-387).
+      if (interval.avg_cadence)
+        prompt += `- Avg Cadence: ${formatCadenceWithUnit(interval.avg_cadence, workoutType)}\n`
       if (interval.variability)
         prompt += `- Power Variability: ${formatMetric(interval.variability, 2)}\n`
     })

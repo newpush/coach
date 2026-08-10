@@ -6,6 +6,7 @@ import {
   resolveProviderIntervalTypes
 } from './interval-detection'
 import { parseLegacyLoadPreference, type MetricTarget } from './workout-target-policy'
+import { formatPromptPace } from './ai-prompt-format'
 
 type FactConfidence = 'low' | 'medium' | 'high'
 type FactSeverity = 'low' | 'moderate' | 'high' | 'unknown'
@@ -277,6 +278,94 @@ function getWorkoutFamily(workoutType: string | null | undefined) {
     return 'nonimpact_cardio'
   }
   return 'other'
+}
+
+/* -------------------------------------------------------------------------- */
+/* Cadence convention (CW-387)                                                 */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The canonical cadence convention for every AI prompt in this codebase:
+ *
+ * - running-family workouts are expressed in **steps per minute (`spm`)**;
+ * - everything else (cycling and friends) is expressed in **revolutions per
+ *   minute (`rpm`)** and is never scaled.
+ *
+ * Only the helpers below implement that convention, and `formatCadenceWithUnit`
+ * is the only thing that ever prints a unit — so a value and its label cannot
+ * drift apart the way they did before CW-387 (session line said `spm`, the
+ * Interval Breakdown said `rpm` for the same doubled number, and the facts
+ * interval rows said `rpm` for the *undoubled* number).
+ */
+export function isRunningCadenceFamily(workoutType: string | null | undefined): boolean {
+  return getWorkoutFamily(workoutType) === 'run'
+}
+
+/**
+ * Convert a stored cadence value into the canonical convention.
+ *
+ * Running exports arrive in two different shapes depending on the sync writer:
+ *
+ * - `server/utils/services/garminService.ts` reads Garmin's
+ *   `averageRunCadenceInStepsPerMinute`, which is already both feet (~166);
+ * - `strava.ts`, `intervals.ts`, `wahoo.ts` and `fit.ts` store the provider's
+ *   `average_cadence` verbatim, and for runs those providers report *one leg*
+ *   (~83).
+ *
+ * There is no provenance flag on the workout row that distinguishes the two, so
+ * the magnitude heuristic below is what disambiguates them: a one-legged run
+ * cadence lives in ~60-100, an already-doubled one in ~140-200. See the
+ * threshold note on {@link CANONICAL_RUN_CADENCE_THRESHOLD}.
+ *
+ * Applying this twice is not harmful for realistic running cadences (the second
+ * pass sees a value >= the threshold and leaves it alone), but callers should
+ * still normalise exactly once, at the point where the workout row is turned
+ * into prompt data.
+ */
+export function toCanonicalCadence(
+  cadence: number | null | undefined,
+  isRunningFamily: boolean
+): number | null | undefined {
+  if (!cadence) return cadence
+  return isRunningFamily && cadence < CANONICAL_RUN_CADENCE_THRESHOLD ? cadence * 2 : cadence
+}
+
+/**
+ * Below this, a running cadence is read as one-legged and doubled.
+ *
+ * Safety review (CW-387): the value has to sit above the fastest realistic
+ * one-legged cadence (~110, i.e. a 220 spm sprint) and below the slowest
+ * already-doubled running cadence a provider will emit. Steady running is
+ * 150-190 spm and even a very slow shuffle is ~140 spm, so 120 clears both
+ * sides for *running*. The residual (accepted) risk is a Garmin-sourced "Run"
+ * that is mostly walking: walking is ~100-120 spm, so such a session can be
+ * reported below the threshold in real spm and would then be doubled. That is
+ * rare, only affects sessions whose primary activity is not running, and the
+ * alternative -- trusting per-source provenance -- is not reliable either,
+ * because Intervals.icu re-syncs Garmin activities and does not document which
+ * convention it forwards. Revisit if a provenance flag ever lands on the
+ * workout row.
+ */
+const CANONICAL_RUN_CADENCE_THRESHOLD = 120
+
+/** `spm` for running-family workouts, `rpm` for everything else. */
+export function resolveCadenceUnit(workoutType: string | null | undefined): 'spm' | 'rpm' {
+  return isRunningCadenceFamily(workoutType) ? 'spm' : 'rpm'
+}
+
+/**
+ * Render an already-canonical cadence together with the unit its workout family
+ * uses. Always pair a value with its label through this helper rather than
+ * concatenating a literal `rpm`/`spm`.
+ */
+export function formatCadenceWithUnit(
+  canonicalCadence: number | null | undefined,
+  workoutType: string | null | undefined,
+  separator = ' '
+): string {
+  if (canonicalCadence === null || canonicalCadence === undefined) return 'N/A'
+  if (!Number.isFinite(canonicalCadence)) return 'N/A'
+  return `${Math.round(canonicalCadence)}${separator}${resolveCadenceUnit(workoutType)}`
 }
 
 function inferImpactProfile(
@@ -1984,6 +2073,14 @@ export function getActualIntervalsSourceForAnalysis(
   return chooseActualIntervalsSource(rawActual, detectedActual, plannedSteps, refs)
 }
 
+/**
+ * Render the detected/synced actual intervals as compact prompt rows.
+ *
+ * The workout-family context needed for cadence units and pace comes off the
+ * `workout` row this function already receives, so the exported signature is
+ * unchanged for `cli/debug/workout-facts.ts`, `scripts/dump-intervals.ts` and
+ * `trigger/analyze-plan-adherence.ts` (CW-387).
+ */
 export function formatActualIntervalsForPrompt(
   workout: any,
   plannedWorkout?: any,
@@ -1992,6 +2089,13 @@ export function formatActualIntervalsForPrompt(
   const intervals = getActualIntervalsForAnalysis(workout, plannedWorkout, refs)
   if (intervals.length === 0) return 'N/A'
 
+  const workoutType = workout?.type
+  const family = getWorkoutFamily(workoutType)
+  const isRunningFamily = family === 'run'
+  // Pace is the leading metric for runs and useful for the other distance
+  // sports; it is noise for indoor/strength work and for power-primary rides.
+  const paceCapable = family !== 'ride' && family !== 'strength'
+
   return intervals
     .map((interval, idx) => {
       const minutes = Math.floor(interval.durationSeconds / 60)
@@ -1999,12 +2103,25 @@ export function formatActualIntervalsForPrompt(
       const duration = `${minutes}m ${seconds}s`
       const avgPower = interval.avgPower != null ? `${Math.round(interval.avgPower)}W` : 'N/A'
       const avgHr = interval.avgHr != null ? `${Math.round(interval.avgHr)}bpm` : 'N/A'
-      const avgCadence =
-        interval.avgCadence != null ? `${Math.round(interval.avgCadence)}rpm` : 'N/A'
+      // Doubled here (once) so a run's legs read as steps per minute, matching
+      // the unit label and the session-level cadence line.
+      const avgCadence = formatCadenceWithUnit(
+        toCanonicalCadence(interval.avgCadence, isRunningFamily),
+        workoutType,
+        ''
+      )
+      // `ActualInterval.avgSpeed` is m/s; 1000 / (m/s) is seconds per km.
+      const avgPace = paceCapable
+        ? ` | ${
+            interval.avgSpeed != null && Number.isFinite(interval.avgSpeed) && interval.avgSpeed > 0
+              ? formatPromptPace(1000 / interval.avgSpeed)
+              : 'N/A'
+          }`
+        : ''
       const confidence =
         interval.confidence != null ? ` | conf ${(interval.confidence * 100).toFixed(0)}%` : ''
       const note = interval.ambiguityNote ? ` | note ${interval.ambiguityNote}` : ''
-      return `Int ${idx + 1}: ${duration} | ${interval.type} | ${avgPower} | ${avgHr} | ${avgCadence}${confidence}${note}`
+      return `Int ${idx + 1}: ${duration} | ${interval.type} | ${avgPower} | ${avgHr} | ${avgCadence}${avgPace}${confidence}${note}`
     })
     .join('\n      ')
 }
