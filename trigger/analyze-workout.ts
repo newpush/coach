@@ -214,8 +214,17 @@ export const analyzeWorkoutTask = task({
         persona: aiSettings.aiPersona
       })
 
-      // Build comprehensive workout data for analysis
-      const workoutData = buildWorkoutAnalysisData(workout)
+      // Build comprehensive workout data for analysis.
+      //
+      // The plan and the athlete's sport settings are passed in so the payload
+      // segments the session with the SAME references the v2 facts below use --
+      // the arbitration between provider laps and engine detection depends on
+      // them, and a zeroed-refs payload can pick a different set of reps than
+      // the facts block (CW-391, CW-384).
+      const workoutData = buildWorkoutAnalysisData(workout, {
+        plannedWorkout: workout.plannedWorkout,
+        sportSettings
+      })
       const analysisFactsV2 = buildWorkoutAnalysisFactsV2({
         workout,
         sportSettings,
