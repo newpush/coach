@@ -489,6 +489,69 @@ describe('detectIntervals', () => {
       expect(workDurations).toEqual([239, 239, 239, 239])
     })
   })
+
+  /* ------------------------------------------------------------------ */
+  /* Centred smoothing window (CW-432)                                   */
+  /* ------------------------------------------------------------------ */
+
+  describe('centred smoothing window (CW-432)', () => {
+    /**
+     * A perfectly square block occupying samples 600..839 in an otherwise flat
+     * stream. Nothing about this signal is ambiguous: every sample is either in
+     * the block or out of it, so a detector that reports anything other than
+     * 600..839 is reporting its own smoothing lag.
+     *
+     * The engine's internal smoother (`smoothData(values, 10)`) used to average
+     * `[i-5 .. i+4]` — ten samples centred on `i - 0.5`. Half a sample of lag,
+     * always in the same direction, is enough to carry one recovery sample into
+     * the end of every rep: this fixture detected 600..840. It is now centred,
+     * so both edges land where they actually are.
+     *
+     * No plan is passed, so this is the candidate/merge pass, and HR is used
+     * because that path takes the engine's own smoothing (the power path is
+     * handed rolling normalized power by its caller instead).
+     */
+    const buildSquareBlock = (hi: number, lo: number) => {
+      const values = Array.from({ length: 1500 }, (_, index) =>
+        index >= 600 && index <= 839 ? hi : lo
+      )
+      return { values, time: values.map((_, index) => index) }
+    }
+
+    it('places both edges of a sharp block exactly, with no linked plan', () => {
+      const { values, time } = buildSquareBlock(170, 120)
+
+      const detected = detectIntervals(time, values, 'heartrate', 145)
+      const work = detected.filter((interval) => interval.type === 'WORK')
+
+      expect(work).toHaveLength(1)
+      // Was [600, 840] with the asymmetric window: sample 840 is a 120 bpm
+      // recovery sample, and it was the single worst input to a CoV taken
+      // inside the rep.
+      expect([work[0]?.start_index, work[0]?.end_index]).toEqual([600, 839])
+    })
+
+    it('places the edges independently of how far the block clears the bar', () => {
+      // The lag was a property of the window, not of the contrast, so it showed
+      // up identically at every amplitude. Guard all three.
+      for (const [hi, lo, bar] of [
+        [170, 120, 145],
+        [180, 120, 150],
+        [160, 130, 145]
+      ] as const) {
+        const { values, time } = buildSquareBlock(hi, lo)
+        const work = detectIntervals(time, values, 'heartrate', bar).filter(
+          (interval) => interval.type === 'WORK'
+        )
+
+        expect({ hi, lo, bounds: [work[0]?.start_index, work[0]?.end_index] }).toEqual({
+          hi,
+          lo,
+          bounds: [600, 839]
+        })
+      }
+    })
+  })
 })
 
 describe('resolveHrWorkThreshold', () => {
