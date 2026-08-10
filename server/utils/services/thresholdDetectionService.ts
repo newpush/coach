@@ -8,6 +8,7 @@ import { workoutStreamRepository } from '../repositories/workoutStreamRepository
 import { formatPromptPace } from '../ai-prompt-format'
 import { calculateHrZones, calculatePaceZones, calculatePowerZones } from '../zones'
 import { getHrStats, getPlausibleHrPeak } from '../workout-analysis-facts'
+import { calculateAge } from '../date'
 
 /**
  * Threshold pace is taken directly off the best sustained 40 minute effort (no
@@ -38,6 +39,51 @@ const THRESHOLD_EFFORT_COVERAGE_MIN = 0.8
  */
 function hasPreviousValue(oldValue: number | null | undefined): boolean {
   return typeof oldValue === 'number' && Number.isFinite(oldValue) && oldValue > 0
+}
+
+/**
+ * Share of age-predicted max HR (`220 - age`) that a session's peak must reach
+ * before that peak is treated as evidence of the athlete's *maximum*, on a first
+ * nomination only (CW-446).
+ *
+ * Two error rates trade off here, and they are not symmetric.
+ *
+ * Too low, and a threshold or endurance session nominates its peak. That number
+ * is presented as "your max heart rate", the athlete has no reason to doubt it,
+ * and confirming it recomputes every HR zone — and, since CW-383, interval
+ * detection's work bar — from a number well under their real maximum.
+ *
+ * Too high, and athletes whose true maximum sits below what their age predicts
+ * never receive a first nomination at all. That failure is invisible rather than
+ * wrong, and it is recoverable: they can enter a max HR by hand, after which the
+ * improvement path takes over and ratchets normally. It leaves them exactly
+ * where they were before this ticket rather than worse off.
+ *
+ * So the floor sits at the conservative end. A near-maximal effort reaches
+ * within a few percent of true max; age prediction carries roughly +/- 11 bpm of
+ * population spread, so allowing about one standard deviation of downward
+ * prediction error below that lands here. For a 40 year old (predicted 180) the
+ * floor is 162 bpm — clear of any endurance or tempo peak, and reachable by any
+ * genuinely hard session. The cost is the few percent of athletes whose real
+ * maximum is more than 10% under prediction; the benefit is that a confirmed
+ * recommendation is worth confirming.
+ */
+const FIRST_MAX_HR_AGE_PREDICTED_FRACTION = 0.9
+
+/**
+ * The lowest session peak that can stand as a first max-HR nomination, or `null`
+ * when the athlete's age is unknown or nonsensical — in which case there is no
+ * non-circular reference and nothing is nominated.
+ *
+ * `220 - age` is the standard age-predicted maximum. It is used here for one
+ * property only: it is independent of every heart rate value this service is
+ * trying to establish, so it cannot vouch for a number with itself.
+ */
+function agePredictedMaxHrFloor(dob: Date | string | null | undefined): number | null {
+  const age = calculateAge(dob ? new Date(dob) : null)
+  if (age === null || !Number.isFinite(age) || age <= 0 || age >= 120) return null
+
+  return Math.round((220 - age) * FIRST_MAX_HR_AGE_PREDICTED_FRACTION)
 }
 
 /**
@@ -268,6 +314,9 @@ export const thresholdDetectionService = {
               lthr: true,
               ftp: true,
               maxHr: true,
+              // The non-circular reference a first max-HR nomination is
+              // measured against (CW-446); without it nothing is nominated.
+              dob: true,
               distanceUnits: true
             }
           }
@@ -327,24 +376,44 @@ export const thresholdDetectionService = {
       // MAX HR DETECTION
       //
       // The third instance of the never-fires-for-a-first-time-athlete guard
-      // (CW-446), and deliberately *not* fixed the way LTHR and FTP were. Those
-      // two infer a threshold from a 20 minute peak, so a first nomination needs
-      // corroborating effort or the coefficient mints a threshold off an easy
-      // segment. A session max HR infers nothing: it is an observed maximum, and
-      // asking an athlete to have worked hard before their highest recorded beat
-      // counts would reject the very sessions — a race, a hill sprint — where it
-      // is real. So the first nomination is simply allowed.
+      // (CW-446), and fixed differently from LTHR and FTP. Those two infer a
+      // threshold from a 20 minute peak, so a first nomination needs the effort
+      // corroborated on another axis or the coefficient mints a threshold off an
+      // easy segment. A max HR infers nothing — it is observed — so it needs no
+      // corroborating *axis*. What it does need is the session to be a session
+      // in which a maximum could plausibly have been reached, and two separate
+      // things have to be true of it.
       //
-      // What it is not allowed to do is nominate an artifact. An improvement is
-      // sanity-checked by the value it has to beat; a first nomination has
-      // nothing, so one 240 bpm sample of strap static would become the
-      // athlete's max HR and skew every HR zone derived from it, including
-      // interval detection's work bar (CW-383). CW-395 already knows what
-      // impossible heart rate looks like, at two levels, and both are used:
-      // `getHrStats` decides whether the workout's telemetry is trustworthy at
-      // all, and `getPlausibleHrPeak` picks the highest sample that survives the
-      // same band and rate-of-change rules. No second plausibility check is
-      // written here.
+      // 1. The telemetry has to be trustworthy. An improvement is sanity-checked
+      //    by the value it has to beat; a first nomination has nothing, so one
+      //    240 bpm sample of strap static would become the athlete's max HR and
+      //    skew every HR zone derived from it, including interval detection's
+      //    work bar (CW-383). CW-395 already knows what impossible heart rate
+      //    looks like, at two levels, and both are used: `getHrStats` decides
+      //    whether the workout's heart rate can be trusted at all, and
+      //    `getPlausibleHrPeak` picks the highest sample that survives the same
+      //    band and rate-of-change rules. No second plausibility check is
+      //    written here.
+      //
+      // 2. The peak has to be near-maximal. "Observed maximum" was the framing
+      //    this ticket started from and it is half a sentence short: what the
+      //    stream observes is the maximum of *one session*, and only a session
+      //    taken near the athlete's limit makes that the same number as their
+      //    maximum. Without this gate a recovery spin nominates its 142 bpm
+      //    peak, the copy asserts it as "your max heart rate", and an athlete
+      //    with no reason to doubt it confirms zones computed from 142.
+      //
+      // The reference for (2) must not be derived from the athlete's own heart
+      // rate: they have no max HR, so there is no zone model to read a floor
+      // from, and inventing one from this same session's numbers is the
+      // circularity CW-420 already hit for LTHR. Age-predicted max (220 - age)
+      // is independent of anything we are trying to establish, which is the
+      // property that matters. It is a rough estimate — roughly +/- 11 bpm
+      // across a population — so the floor sits below it rather than at it; see
+      // `FIRST_MAX_HR_AGE_PREDICTED_FRACTION`. No date of birth means no
+      // reference and therefore no nomination: a missing recommendation is
+      // invisible and the athlete can still set their max HR by hand, while a
+      // wrong one silently rewrites every zone they train by.
       const workoutMaxHr = workout.maxHr || Math.max(...(workout.streams.heartrate as number[]))
       let nominatedMaxHr: number | null = null
 
@@ -359,17 +428,25 @@ export const thresholdDetectionService = {
         // precisely the number a first detection must not take on trust.
         const plausiblePeak =
           hrStats.usable && !hrStats.artifactFlag ? getPlausibleHrPeak(workout) : null
+        const nearMaximalFloor = agePredictedMaxHrFloor((workout.user as any)?.dob)
 
-        if (plausiblePeak) {
+        if (plausiblePeak && nearMaximalFloor && plausiblePeak >= nearMaximalFloor) {
           nominatedMaxHr = plausiblePeak
         } else {
-          logger.log('First max HR nomination rejected: heart rate telemetry not trustworthy', {
+          logger.log('First max HR nomination rejected', {
             workoutId: workout.id,
             hrUsable: hrStats.usable,
             hrArtifactFlag: hrStats.artifactFlag,
             implausibleRatio: hrStats.implausibleRatio,
             jumpRatio: hrStats.jumpRatio,
-            rawWorkoutMaxHr: workoutMaxHr
+            plausiblePeak,
+            nearMaximalFloor,
+            rawWorkoutMaxHr: workoutMaxHr,
+            reason: !plausiblePeak
+              ? 'no_trustworthy_hr'
+              : !nearMaximalFloor
+                ? 'no_age_reference'
+                : 'below_near_maximal_floor'
           })
         }
       }

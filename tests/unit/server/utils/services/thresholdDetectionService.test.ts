@@ -134,15 +134,7 @@ function sessionWith20mEffort(options: {
   return streams
 }
 
-/**
- * The metrics one run of the service actually recommended, and logged.
- *
- * Since CW-446 a trustworthy heart rate stream nominates a first max HR on its
- * own, with no effort corroboration — an observed maximum needs none. So "this
- * branch did not fire" has to name the branch: a bare `not.toHaveBeenCalled()`
- * on the recommendation mock would silently also assert that the unrelated
- * max-HR branch stayed quiet, and fail for the wrong reason.
- */
+/** The metrics one run of the service actually recommended, and logged. */
 function recommendedMetrics(): unknown[] {
   return vi
     .mocked(prisma.recommendation.create)
@@ -352,8 +344,8 @@ describe('thresholdDetectionService', () => {
 
       expect(results?.thresholdPace?.detected).toBe(false)
       expect(results?.thresholdPace?.old).toBe(0)
-      expect(recommendedMetrics()).not.toContain('THRESHOLD_PACE')
-      expect(loggedMetrics()).not.toContain('THRESHOLD_PACE')
+      expect(prisma.recommendation.create).not.toHaveBeenCalled()
+      expect(prisma.metricHistory.create).not.toHaveBeenCalled()
     })
 
     it('nominates one from a sustained 40 minute effort at threshold heart rate', async () => {
@@ -422,7 +414,7 @@ describe('thresholdDetectionService', () => {
       })
 
       expect(results?.thresholdPace?.detected).toBe(false)
-      expect(recommendedMetrics()).not.toContain('THRESHOLD_PACE')
+      expect(prisma.recommendation.create).not.toHaveBeenCalled()
     })
 
     it('leaves the improvement path ungated for an athlete who already has a pace', async () => {
@@ -528,8 +520,8 @@ describe('thresholdDetectionService', () => {
       })
 
       expect(results?.ftp).toMatchObject({ old: 0, new: 266, detected: false })
-      expect(recommendedMetrics()).not.toContain('FTP')
-      expect(loggedMetrics()).not.toContain('FTP')
+      expect(prisma.recommendation.create).not.toHaveBeenCalled()
+      expect(prisma.metricHistory.create).not.toHaveBeenCalled()
     })
 
     it('does not nominate one when the ride carries no heart rate stream', async () => {
@@ -575,7 +567,7 @@ describe('thresholdDetectionService', () => {
       })
 
       expect(results?.ftp?.detected).toBe(false)
-      expect(recommendedMetrics()).not.toContain('FTP')
+      expect(prisma.recommendation.create).not.toHaveBeenCalled()
     })
 
     it('leaves the improvement path ungated for an athlete who already has an FTP', async () => {
@@ -725,8 +717,8 @@ describe('thresholdDetectionService', () => {
       })
 
       expect(results?.lthr).toMatchObject({ old: 0, detected: false })
-      expect(recommendedMetrics()).not.toContain('LTHR')
-      expect(loggedMetrics()).not.toContain('LTHR')
+      expect(prisma.recommendation.create).not.toHaveBeenCalled()
+      expect(prisma.metricHistory.create).not.toHaveBeenCalled()
     })
 
     it('does not nominate one when there is no power or pace axis to corroborate with', async () => {
@@ -748,7 +740,7 @@ describe('thresholdDetectionService', () => {
       })
 
       expect(results?.lthr).toMatchObject({ old: 0, new: 171, detected: false })
-      expect(recommendedMetrics()).not.toContain('LTHR')
+      expect(prisma.recommendation.create).not.toHaveBeenCalled()
     })
 
     it('does not nominate one when the athlete has a stored FTP but the ride has no power', async () => {
@@ -769,7 +761,7 @@ describe('thresholdDetectionService', () => {
       })
 
       expect(results?.lthr?.detected).toBe(false)
-      expect(recommendedMetrics()).not.toContain('LTHR')
+      expect(prisma.recommendation.create).not.toHaveBeenCalled()
     })
 
     it('leaves the improvement path ungated for an athlete who already has an LTHR', async () => {
@@ -834,15 +826,20 @@ describe('thresholdDetectionService', () => {
 
       expect(results?.minDurationMet).toBe(false)
       expect(results?.lthr?.detected).toBe(false)
-      expect(recommendedMetrics()).not.toContain('LTHR')
+      expect(prisma.recommendation.create).not.toHaveBeenCalled()
     })
   })
 
   // Max HR was the third branch guarded by `currentMaxHr &&`, so an athlete with
-  // no stored max HR never received a first detection (CW-446). Unlike LTHR and
-  // FTP it is fixed without effort corroboration — a session max is an observed
-  // maximum, not an inferred threshold — but it must not nominate an artifact,
-  // because a first nomination has no prior value to be sanity-checked against.
+  // no stored max HR never received a first detection (CW-446). It is fixed
+  // without the effort *corroboration* LTHR and FTP needed — a max HR is
+  // observed, not inferred — but a first nomination still has to clear two
+  // gates: the telemetry has to be trustworthy (CW-395), and the session peak
+  // has to be near-maximal, because what a stream observes is the maximum of one
+  // session and only a near-maximal session makes that the athlete's maximum.
+  //
+  // A 40 year old's age-predicted max is 180 bpm, so the floor these fixtures
+  // are measured against is 162 bpm.
   describe('first max HR nomination (athlete has none)', () => {
     /** A flat 1Hz heart rate stream, with artifacts spliced in by timestamp. */
     function flatHrSession(options: {
@@ -859,7 +856,21 @@ describe('thresholdDetectionService', () => {
       return { time, heartrate }
     }
 
-    it('nominates one from a clean heart rate stream', async () => {
+    /**
+     * A date of birth that makes the athlete exactly `years` old today. Derived
+     * from the clock rather than hard-coded, because `calculateAge` reads the
+     * current date and a fixed date of birth would drift into a different age —
+     * and a different floor — as the suite ages.
+     */
+    function dobForAge(years: number) {
+      const dob = new Date()
+      dob.setFullYear(dob.getFullYear() - years)
+      // A day clear of the birthday, so a leap year cannot round the age down.
+      dob.setDate(dob.getDate() - 1)
+      return dob
+    }
+
+    it('nominates one from a clean, near-maximal heart rate stream', async () => {
       const workoutDate = new Date('2025-06-01T06:00:00Z')
 
       vi.mocked(sportSettingsRepository.getForActivityType).mockResolvedValue({
@@ -868,7 +879,8 @@ describe('thresholdDetectionService', () => {
 
       // The 115 -> 178 bpm step into the effort is far faster than any real
       // heart rate ramps, but it is then *held*, so it is a hard interval and
-      // not an artifact. The nominated value has to be the 178 it reached.
+      // not an artifact. 178 also clears the 162 bpm floor comfortably, which is
+      // what makes it evidence of a maximum rather than of one hard session.
       const results = await thresholdDetectionService.detectThresholdIncreases({
         id: 'workout-maxhr-first',
         userId: 'user-1',
@@ -877,7 +889,7 @@ describe('thresholdDetectionService', () => {
         durationSec: 1800,
         date: workoutDate,
         streams: sessionWith20mEffort({ warmupHr: 115, effortHr: 178 }),
-        user: {}
+        user: { dob: dobForAge(40) }
       })
 
       expect(results?.maxHr).toMatchObject({ old: 0, new: 178, detected: true })
@@ -922,7 +934,7 @@ describe('thresholdDetectionService', () => {
         durationSec: 1800,
         date: new Date('2025-06-02T06:00:00Z'),
         streams: flatHrSession({ sec: 1800, bpm: 165, artifacts }),
-        user: {}
+        user: { dob: dobForAge(40) }
       })
 
       expect(results?.maxHr).toBeNull()
@@ -946,7 +958,7 @@ describe('thresholdDetectionService', () => {
         durationSec: 1800,
         date: new Date('2025-06-03T06:00:00Z'),
         streams: flatHrSession({ sec: 1800, bpm: 165, artifacts: { 900: 240 } }),
-        user: {}
+        user: { dob: dobForAge(40) }
       })
 
       expect(results?.maxHr).toMatchObject({ old: 0, new: 165, detected: true })
@@ -974,10 +986,64 @@ describe('thresholdDetectionService', () => {
         durationSec: 1800,
         date: new Date('2025-06-04T06:00:00Z'),
         streams: flatHrSession({ sec: 1800, bpm: 165, artifacts: { 900: 205 } }),
-        user: {}
+        user: { dob: dobForAge(40) }
       })
 
       expect(results?.maxHr).toMatchObject({ old: 0, new: 165, detected: true })
+    })
+
+    // The case this gate exists for. Before it, a recovery spin's peak was
+    // nominated and the copy asserted it as "your max heart rate" — an athlete
+    // with no reason to doubt it would confirm zones computed from 142 bpm, and
+    // since CW-383 that number also sets interval detection's work bar.
+    it('does not nominate a peak that never came near a maximal effort', async () => {
+      vi.mocked(sportSettingsRepository.getForActivityType).mockResolvedValue({
+        name: 'Cycling'
+      } as any)
+
+      // Clean telemetry, nothing artifact-flagged, nothing spiky — the stream is
+      // beyond reproach. It is the *session* that is not evidence: 142 bpm is
+      // 79% of a 40 year old's age-predicted maximum, an easy aerobic ride.
+      const results = await thresholdDetectionService.detectThresholdIncreases({
+        id: 'workout-maxhr-easy',
+        userId: 'user-1',
+        type: 'Ride',
+        title: 'Recovery Spin',
+        durationSec: 1800,
+        date: new Date('2025-06-05T06:00:00Z'),
+        streams: flatHrSession({ sec: 1800, bpm: 142 }),
+        user: { dob: dobForAge(40) }
+      })
+
+      expect(results?.maxHr).toBeNull()
+      expect(recommendedMetrics()).not.toContain('MAX_HR')
+      expect(loggedMetrics()).not.toContain('MAX_HR')
+      expect(createUserNotification).not.toHaveBeenCalled()
+    })
+
+    it('does not nominate one when the athlete has no date of birth', async () => {
+      vi.mocked(sportSettingsRepository.getForActivityType).mockResolvedValue({
+        name: 'Cycling'
+      } as any)
+
+      // The same session that nominates 178 bpm for a 40 year old. Without a
+      // date of birth there is no reference the floor can be built from that is
+      // not derived from the athlete's own heart rate — and a reference derived
+      // from their heart rate would be vouching for the number with itself. No
+      // reference, no nomination.
+      const results = await thresholdDetectionService.detectThresholdIncreases({
+        id: 'workout-maxhr-no-dob',
+        userId: 'user-1',
+        type: 'Ride',
+        title: 'Hill Repeats',
+        durationSec: 1800,
+        date: new Date('2025-06-06T06:00:00Z'),
+        streams: sessionWith20mEffort({ warmupHr: 115, effortHr: 178 }),
+        user: {}
+      })
+
+      expect(results?.maxHr).toBeNull()
+      expect(recommendedMetrics()).not.toContain('MAX_HR')
     })
 
     it('leaves the improvement path ungated for an athlete who already has a max HR', async () => {
@@ -988,7 +1054,9 @@ describe('thresholdDetectionService', () => {
 
       // The improvement path is untouched by CW-446: it still reads the
       // device-reported maximum ahead of the stream, and still frames the copy
-      // as beating a previous value.
+      // as beating a previous value. Note the deliberate absence of a date of
+      // birth — neither the near-maximal floor nor the plausibility filter
+      // applies here, because the stored value it has to beat is the check.
       const results = await thresholdDetectionService.detectThresholdIncreases({
         id: 'workout-maxhr-improve',
         userId: 'user-1',
