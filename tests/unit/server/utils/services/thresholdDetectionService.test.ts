@@ -10,6 +10,7 @@ import { createUserNotification } from '../../../../../server/utils/notification
 import { queueThresholdUpdateEmail } from '../../../../../server/utils/workout-insight-email'
 import {
   corroborateThresholdEffortWithHr,
+  corroborateThresholdEffortWithWorkRate,
   THRESHOLD_PACE_PEAK_DURATION_SEC,
   thresholdDetectionService
 } from '../../../../../server/utils/services/thresholdDetectionService'
@@ -95,6 +96,42 @@ function runWithSustained40mEffortAndHr(options: {
   const { time, velocity } = runWithSustained40mEffort(options.velocity)
   const heartrate = time.map((t) => (t <= 300 ? options.warmupHr : options.effortHr))
   return { time, velocity, heartrate }
+}
+
+/**
+ * A 1Hz session: 5 minutes easy, then exactly 20 minutes steady — so the real
+ * `findPeakEfforts` reads its 20 minute bucket off the effort, not the warmup.
+ * Only the channels whose values are supplied are attached, which is how the
+ * "no corroborating signal at all" cases are built.
+ */
+function sessionWith20mEffort(options: {
+  warmupHr?: number
+  effortHr?: number
+  warmupWatts?: number
+  effortWatts?: number
+  warmupVelocity?: number
+  effortVelocity?: number
+}) {
+  const WARMUP_SEC = 300
+  const EFFORT_SEC = 1200
+
+  const time: number[] = []
+  for (let t = 0; t <= WARMUP_SEC + EFFORT_SEC; t++) time.push(t)
+
+  const channel = (warmup?: number, effort?: number) =>
+    warmup === undefined || effort === undefined
+      ? undefined
+      : time.map((t) => (t <= WARMUP_SEC ? warmup : effort))
+
+  const streams: Record<string, number[]> = { time }
+  const heartrate = channel(options.warmupHr, options.effortHr)
+  if (heartrate) streams.heartrate = heartrate
+  const watts = channel(options.warmupWatts, options.effortWatts)
+  if (watts) streams.watts = watts
+  const velocity = channel(options.warmupVelocity, options.effortVelocity)
+  if (velocity) streams.velocity = velocity
+
+  return streams
 }
 
 describe('thresholdDetectionService', () => {
@@ -393,6 +430,454 @@ describe('thresholdDetectionService', () => {
       expect(prisma.recommendation.create).toHaveBeenCalledWith({
         data: expect.objectContaining({ metric: 'THRESHOLD_PACE' })
       })
+    })
+  })
+
+  // Before CW-420 both branches required the athlete's CURRENT value to be
+  // truthy, so an athlete who had never configured an FTP or an LTHR got no
+  // first detection, ever — silently. Enabling it naively would have been the
+  // CW-413 bug inverted: the 0.95 coefficient cannot tell a maximal 20 minutes
+  // from the strongest 20 minutes of an easy session, and a first nomination has
+  // nothing to beat. Each metric now needs corroboration on an axis it is not
+  // itself derived from.
+  describe('first FTP nomination (athlete has none)', () => {
+    it('nominates one from a 20 minute effort held in the threshold heart rate band', async () => {
+      const workoutDate = new Date('2025-04-01T06:00:00Z')
+
+      vi.mocked(sportSettingsRepository.getForActivityType).mockResolvedValue({
+        name: 'Cycling',
+        lthr: 170
+      } as any)
+
+      // 280W held for 20 minutes at 168 bpm — 99% of LTHR, well inside the Z4
+      // band (floor 159 bpm).
+      const results = await thresholdDetectionService.detectThresholdIncreases({
+        id: 'workout-ftp-first',
+        userId: 'user-1',
+        type: 'Ride',
+        title: 'FTP Test',
+        durationSec: 3600,
+        date: workoutDate,
+        streams: sessionWith20mEffort({
+          warmupHr: 115,
+          effortHr: 168,
+          warmupWatts: 150,
+          effortWatts: 280
+        }),
+        user: {}
+      })
+
+      expect(results?.ftp).toMatchObject({ old: 0, new: 266, detected: true })
+      expect(prisma.recommendation.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          metric: 'FTP',
+          description: 'We detected your Cycling FTP: 266W.'
+        })
+      })
+      expect(createUserNotification).toHaveBeenCalledWith(
+        'user-1',
+        expect.objectContaining({
+          message: 'We detected your Cycling profile FTP: 266W, based on "FTP Test".'
+        })
+      )
+    })
+
+    it('does not nominate one from an easy 20 minute segment', async () => {
+      vi.mocked(sportSettingsRepository.getForActivityType).mockResolvedValue({
+        name: 'Cycling',
+        lthr: 170
+      } as any)
+
+      // The same 280W block, but at 130 bpm — 76% of LTHR, an easy aerobic heart
+      // rate nowhere near the Z4 floor. Nothing about this was maximal.
+      const results = await thresholdDetectionService.detectThresholdIncreases({
+        id: 'workout-ftp-easy',
+        userId: 'user-1',
+        type: 'Ride',
+        title: 'Endurance Ride',
+        durationSec: 3600,
+        date: new Date('2025-04-02T06:00:00Z'),
+        streams: sessionWith20mEffort({
+          warmupHr: 105,
+          effortHr: 130,
+          warmupWatts: 150,
+          effortWatts: 280
+        }),
+        user: {}
+      })
+
+      expect(results?.ftp).toMatchObject({ old: 0, new: 266, detected: false })
+      expect(prisma.recommendation.create).not.toHaveBeenCalled()
+      expect(prisma.metricHistory.create).not.toHaveBeenCalled()
+    })
+
+    it('does not nominate one when the ride carries no heart rate stream', async () => {
+      vi.mocked(sportSettingsRepository.getForActivityType).mockResolvedValue({
+        name: 'Cycling',
+        lthr: 170
+      } as any)
+
+      const results = await thresholdDetectionService.detectThresholdIncreases({
+        id: 'workout-ftp-nostrap',
+        userId: 'user-1',
+        type: 'Ride',
+        title: 'Unstrapped Ride',
+        durationSec: 3600,
+        date: new Date('2025-04-03T06:00:00Z'),
+        streams: sessionWith20mEffort({ warmupWatts: 150, effortWatts: 280 }),
+        user: {}
+      })
+
+      expect(results?.ftp?.detected).toBe(false)
+      expect(prisma.recommendation.create).not.toHaveBeenCalled()
+    })
+
+    it('does not nominate one when the athlete has no LTHR or max HR reference', async () => {
+      vi.mocked(sportSettingsRepository.getForActivityType).mockResolvedValue({
+        name: 'Cycling'
+      } as any)
+
+      const results = await thresholdDetectionService.detectThresholdIncreases({
+        id: 'workout-ftp-noref',
+        userId: 'user-1',
+        type: 'Ride',
+        title: 'Hard Ride, No Profile',
+        durationSec: 3600,
+        date: new Date('2025-04-04T06:00:00Z'),
+        streams: sessionWith20mEffort({
+          warmupHr: 115,
+          effortHr: 168,
+          warmupWatts: 150,
+          effortWatts: 280
+        }),
+        user: {}
+      })
+
+      expect(results?.ftp?.detected).toBe(false)
+      expect(prisma.recommendation.create).not.toHaveBeenCalled()
+    })
+
+    it('leaves the improvement path ungated for an athlete who already has an FTP', async () => {
+      vi.mocked(sportSettingsRepository.getForActivityType).mockResolvedValue({
+        name: 'Cycling',
+        ftp: 250,
+        lthr: 170
+      } as any)
+
+      // Easy heart rate, but 266W beats the stored 250W. Twenty minutes above a
+      // known FTP is its own evidence, so the HR gate deliberately does not apply.
+      const results = await thresholdDetectionService.detectThresholdIncreases({
+        id: 'workout-ftp-improve',
+        userId: 'user-1',
+        type: 'Ride',
+        title: 'Steady Ride',
+        durationSec: 3600,
+        date: new Date('2025-04-05T06:00:00Z'),
+        streams: sessionWith20mEffort({
+          warmupHr: 105,
+          effortHr: 130,
+          warmupWatts: 150,
+          effortWatts: 280
+        }),
+        user: {}
+      })
+
+      expect(results?.ftp).toMatchObject({ old: 250, new: 266, detected: true })
+      expect(prisma.recommendation.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          metric: 'FTP',
+          description: 'Your Cycling FTP has increased from 250W to 266W.'
+        })
+      })
+      expect(createUserNotification).toHaveBeenCalledWith(
+        'user-1',
+        expect.objectContaining({
+          message: expect.stringContaining('Cycling profile FTP increased to 266W (previous: 250W)')
+        })
+      )
+    })
+  })
+
+  // LTHR cannot be corroborated by heart rate — the window would be both the
+  // claim and its own evidence — so it is corroborated on a work-rate axis
+  // instead: power against the stored FTP, or pace against the stored threshold
+  // pace. With neither, there is no nomination.
+  describe('first LTHR nomination (athlete has none)', () => {
+    it('nominates one when the 20 minute peak coincides with threshold power', async () => {
+      const workoutDate = new Date('2025-05-01T06:00:00Z')
+
+      vi.mocked(sportSettingsRepository.getForActivityType).mockResolvedValue({
+        name: 'Cycling',
+        ftp: 250
+      } as any)
+
+      // 260W over the same 20 minutes is above the Z4 power floor (226W), so the
+      // 180 bpm was earned. 260W is below the stored FTP, so this test isolates
+      // the LTHR branch.
+      const results = await thresholdDetectionService.detectThresholdIncreases({
+        id: 'workout-lthr-first',
+        userId: 'user-1',
+        type: 'Ride',
+        title: 'Threshold Intervals',
+        durationSec: 3600,
+        date: workoutDate,
+        streams: sessionWith20mEffort({
+          warmupHr: 115,
+          effortHr: 180,
+          warmupWatts: 150,
+          effortWatts: 260
+        }),
+        user: {}
+      })
+
+      expect(results?.lthr).toMatchObject({ old: 0, new: 171, detected: true })
+      expect(results?.ftp?.detected).toBe(false)
+      expect(prisma.recommendation.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          metric: 'LTHR',
+          description: 'We detected your Cycling LTHR: 171 bpm.'
+        })
+      })
+      expect(createUserNotification).toHaveBeenCalledWith(
+        'user-1',
+        expect.objectContaining({
+          message:
+            'We detected your Cycling profile threshold heart rate: 171 bpm, based on "Threshold Intervals".'
+        })
+      )
+    })
+
+    it('nominates one when the 20 minute peak coincides with threshold pace', async () => {
+      vi.mocked(sportSettingsRepository.getForActivityType).mockResolvedValue({
+        name: 'Running',
+        thresholdPace: 300
+      } as any)
+
+      // 4 m/s clears the Z4 pace floor (0.95 x 3.33 m/s threshold speed). The
+      // effort is only 20 minutes, so no 40 minute pace bucket exists and the
+      // threshold-pace branch stays out of this.
+      const results = await thresholdDetectionService.detectThresholdIncreases({
+        id: 'workout-lthr-pace',
+        userId: 'user-1',
+        type: 'Run',
+        title: 'Tempo Run',
+        durationSec: 3000,
+        date: new Date('2025-05-02T06:00:00Z'),
+        streams: sessionWith20mEffort({
+          warmupHr: 115,
+          effortHr: 172,
+          warmupVelocity: 2.5,
+          effortVelocity: 4
+        }),
+        user: {}
+      })
+
+      expect(results?.lthr).toMatchObject({ old: 0, new: 163, detected: true })
+      expect(results?.thresholdPace).toBeNull()
+      expect(prisma.recommendation.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ metric: 'LTHR' })
+      })
+    })
+
+    it('does not nominate one from an easy 20 minute segment', async () => {
+      vi.mocked(sportSettingsRepository.getForActivityType).mockResolvedValue({
+        name: 'Cycling',
+        ftp: 250
+      } as any)
+
+      // 150W is Z2 endurance for a 250W athlete — the highest 20 minutes of an
+      // easy ride, and nothing the 142 bpm can be read as a threshold from.
+      const results = await thresholdDetectionService.detectThresholdIncreases({
+        id: 'workout-lthr-easy',
+        userId: 'user-1',
+        type: 'Ride',
+        title: 'Recovery Spin',
+        durationSec: 3600,
+        date: new Date('2025-05-03T06:00:00Z'),
+        streams: sessionWith20mEffort({
+          warmupHr: 105,
+          effortHr: 142,
+          warmupWatts: 120,
+          effortWatts: 150
+        }),
+        user: {}
+      })
+
+      expect(results?.lthr).toMatchObject({ old: 0, detected: false })
+      expect(prisma.recommendation.create).not.toHaveBeenCalled()
+      expect(prisma.metricHistory.create).not.toHaveBeenCalled()
+    })
+
+    it('does not nominate one when there is no power or pace axis to corroborate with', async () => {
+      vi.mocked(sportSettingsRepository.getForActivityType).mockResolvedValue({
+        name: 'Cycling'
+      } as any)
+
+      // Heart rate only, and no stored FTP or threshold pace to measure any work
+      // rate against. Prefer no recommendation over a weak one.
+      const results = await thresholdDetectionService.detectThresholdIncreases({
+        id: 'workout-lthr-noaxis',
+        userId: 'user-1',
+        type: 'Ride',
+        title: 'Strap Only',
+        durationSec: 3600,
+        date: new Date('2025-05-04T06:00:00Z'),
+        streams: sessionWith20mEffort({ warmupHr: 115, effortHr: 180 }),
+        user: {}
+      })
+
+      expect(results?.lthr).toMatchObject({ old: 0, new: 171, detected: false })
+      expect(prisma.recommendation.create).not.toHaveBeenCalled()
+    })
+
+    it('does not nominate one when the athlete has a stored FTP but the ride has no power', async () => {
+      vi.mocked(sportSettingsRepository.getForActivityType).mockResolvedValue({
+        name: 'Cycling',
+        ftp: 250
+      } as any)
+
+      const results = await thresholdDetectionService.detectThresholdIncreases({
+        id: 'workout-lthr-nopower',
+        userId: 'user-1',
+        type: 'Ride',
+        title: 'No Power Meter',
+        durationSec: 3600,
+        date: new Date('2025-05-05T06:00:00Z'),
+        streams: sessionWith20mEffort({ warmupHr: 115, effortHr: 180 }),
+        user: {}
+      })
+
+      expect(results?.lthr?.detected).toBe(false)
+      expect(prisma.recommendation.create).not.toHaveBeenCalled()
+    })
+
+    it('leaves the improvement path ungated for an athlete who already has an LTHR', async () => {
+      vi.mocked(sportSettingsRepository.getForActivityType).mockResolvedValue({
+        name: 'Cycling',
+        lthr: 160
+      } as any)
+
+      // No power and no pace at all, so the work-rate gate could not pass if it
+      // applied. Beating a known LTHR over 20 minutes is its own evidence.
+      const results = await thresholdDetectionService.detectThresholdIncreases({
+        id: 'workout-lthr-improve',
+        userId: 'user-1',
+        type: 'Ride',
+        title: 'Hard Group Ride',
+        durationSec: 3600,
+        date: new Date('2025-05-06T06:00:00Z'),
+        streams: sessionWith20mEffort({ warmupHr: 115, effortHr: 180 }),
+        user: {}
+      })
+
+      expect(results?.lthr).toMatchObject({ old: 160, new: 171, detected: true })
+      expect(prisma.recommendation.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          metric: 'LTHR',
+          description: 'Your Cycling LTHR has increased from 160 to 171 bpm.'
+        })
+      })
+      expect(createUserNotification).toHaveBeenCalledWith(
+        'user-1',
+        expect.objectContaining({
+          message: expect.stringContaining(
+            'threshold heart rate increased to 171 bpm (previous: 160 bpm)'
+          )
+        })
+      )
+    })
+
+    it('still respects the minimum workout duration on a first nomination', async () => {
+      vi.mocked(sportSettingsRepository.getForActivityType).mockResolvedValue({
+        name: 'Cycling',
+        ftp: 250
+      } as any)
+
+      // Corroborated by power, but a 40 minute ride is under the 50 minute bar
+      // the LTHR branch has always applied.
+      const results = await thresholdDetectionService.detectThresholdIncreases({
+        id: 'workout-lthr-short',
+        userId: 'user-1',
+        type: 'Ride',
+        title: 'Short Session',
+        durationSec: 2400,
+        date: new Date('2025-05-07T06:00:00Z'),
+        streams: sessionWith20mEffort({
+          warmupHr: 115,
+          effortHr: 180,
+          warmupWatts: 150,
+          effortWatts: 260
+        }),
+        user: {}
+      })
+
+      expect(results?.minDurationMet).toBe(false)
+      expect(results?.lthr?.detected).toBe(false)
+      expect(prisma.recommendation.create).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('corroborateThresholdEffortWithWorkRate', () => {
+    const times = Array.from({ length: 601 }, (_, i) => i)
+
+    it('accepts a window ridden above the Z4 power floor', () => {
+      expect(
+        corroborateThresholdEffortWithWorkRate({
+          times,
+          watts: times.map(() => 240),
+          startSec: 0,
+          endSec: 600,
+          ftp: 250
+        })
+      ).toMatchObject({ corroborated: true, reason: 'in_threshold_band', axis: 'power' })
+    })
+
+    it('rejects a window ridden below the Z4 power floor', () => {
+      expect(
+        corroborateThresholdEffortWithWorkRate({
+          times,
+          watts: times.map(() => 180),
+          startSec: 0,
+          endSec: 600,
+          ftp: 250
+        })
+      ).toMatchObject({ corroborated: false, reason: 'below_threshold_band', axis: 'power' })
+    })
+
+    it('falls back to the pace axis when there is no power to read', () => {
+      expect(
+        corroborateThresholdEffortWithWorkRate({
+          times,
+          velocity: times.map(() => 4),
+          startSec: 0,
+          endSec: 600,
+          thresholdPaceSecPerKm: 300
+        })
+      ).toMatchObject({ corroborated: true, reason: 'in_threshold_band', axis: 'pace' })
+    })
+
+    it('reports no axis when neither a stored FTP nor a stored threshold pace exists', () => {
+      expect(
+        corroborateThresholdEffortWithWorkRate({
+          times,
+          watts: times.map(() => 300),
+          velocity: times.map(() => 5),
+          startSec: 0,
+          endSec: 600
+        })
+      ).toMatchObject({ corroborated: false, reason: 'no_corroborating_axis' })
+    })
+
+    it('rejects a window whose power mostly dropped out', () => {
+      expect(
+        corroborateThresholdEffortWithWorkRate({
+          times,
+          watts: times.map((t) => (t > 480 ? 300 : Number.NaN)),
+          startSec: 0,
+          endSec: 600,
+          ftp: 250
+        })
+      ).toMatchObject({ corroborated: false, reason: 'insufficient_coverage', axis: 'power' })
     })
   })
 
