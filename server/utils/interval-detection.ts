@@ -165,6 +165,18 @@ export const HR_WORK_BAR_FRACTION_OF_MAX_HR = 0.7
 export const HR_WORK_BAR_FRACTION_OF_LTHR = 0.82
 
 /**
+ * Fraction of threshold pace (velocity, m/s) that marks the bottom of "work".
+ *
+ * ~80% of threshold velocity is the easy/steady boundary for running: recovery
+ * jogs in real interval sessions sit at 60-75% of threshold pace, while any
+ * deliberate rep - steady, tempo, threshold or faster - sits at 85%+. The bar
+ * used to be 0.65, which put a 4.0 m/s athlete's work bar at 2.6 m/s and made
+ * every recovery jog above ~65% read as work, welding reps and recoveries into
+ * one block (CW-401).
+ */
+export const PACE_WORK_BAR_FRACTION_OF_THRESHOLD = 0.8
+
+/**
  * Resolve the FINAL heart-rate work bar (in bpm) to hand to `detectIntervals`.
  *
  * `detectIntervals` deliberately applies no further multiplier to an HR
@@ -201,9 +213,13 @@ export function resolveHrWorkThreshold(refs: {
  * THRESHOLD CONTRACT (do not add a second discount on top of a scaled value):
  * - `power`:     `threshold` is the athlete's FTP. The work bar is derived here
  *                as 70% of FTP (the Z2/Z3 border).
- * - `pace`:      `threshold` is a reference velocity (usually omitted, in which
- *                case the stream's own median is used). The work bar is derived
- *                here as 65% of it.
+ * - `pace`:      `threshold` is a reference VELOCITY in m/s — the athlete's
+ *                threshold pace (omit it and the stream's own median is used
+ *                instead). The work bar is derived here as
+ *                `PACE_WORK_BAR_FRACTION_OF_THRESHOLD` (80%) of it, the
+ *                easy/steady boundary. Do not pre-scale it in the caller: pace
+ *                stays on the "caller passes the reference, engine scales it"
+ *                side of this contract, unlike heartrate.
  * - `heartrate`: `threshold` is ALREADY THE FINAL WORK BAR in bpm — build it
  *                with `resolveHrWorkThreshold()` from profile LTHR/max HR. No
  *                multiplier is applied here. Callers used to pass `maxHr * 0.7`
@@ -251,13 +267,14 @@ export function detectIntervals(
   //   (`resolveHrWorkThreshold`), so it is used verbatim. With no threshold at
   //   all the fallback baseline is the stream's own median HR, which is a
   //   sensible "above your typical effort = work" bar on its own.
-  // - pace: work is > 65% of the reference velocity
+  // - pace: work is > 80% of the reference velocity (the easy/steady boundary),
+  //   so a 60-75%-of-threshold recovery jog stays recovery (CW-401).
   const workThreshold =
     metricType === 'power'
       ? baseline * 0.7
       : metricType === 'heartrate'
         ? baseline
-        : baseline * 0.65
+        : baseline * PACE_WORK_BAR_FRACTION_OF_THRESHOLD
 
   let intervals: Interval[] = []
   let inInterval = false
@@ -350,7 +367,11 @@ export function detectIntervals(
   if (merged.length === 0 && times.length > 0) {
     const totalDuration = (times[times.length - 1] || 0) - (times[0] || 0)
     const avgValue = values.reduce((a, b) => a + (b || 0), 0) / values.length
-    // `baseline` is FTP for power and the work bar itself for HR/pace.
+    // `baseline` here is the caller's reference, NOT the work bar: FTP for
+    // power, threshold velocity for pace, the final work bar for HR (see the
+    // threshold contract above). Pace kept that meaning through CW-401 — only
+    // the work-bar factor moved — so "averaged at least half of threshold
+    // velocity for 15+ minutes" is still the right bar for a continuous run.
     const isSteady =
       totalDuration > 900 && // 15 mins
       (metricType === 'power' ? avgValue >= baseline * 0.4 : avgValue >= baseline * 0.5)
