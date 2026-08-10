@@ -379,8 +379,9 @@ describe('buildWorkoutAnalysisPrompt', () => {
       }),
       'Europe/Budapest',
       'Supportive',
-      // HR-primary so the session cadence line is not condensed away; the
-      // Interval Breakdown prints cadence either way.
+      // HR-primary. Since CW-412 the session cadence line no longer depends on
+      // the metric priority at all -- the pace-primary variant is pinned by the
+      // test below.
       { loadPreference: 'HR' },
       USER_PROFILE
     )
@@ -393,6 +394,84 @@ describe('buildWorkoutAnalysisPrompt', () => {
     expect(prompt).toContain('- Avg Cadence: 180 spm')
     expect(prompt).toContain('- Avg Cadence: 152 spm')
     // A run prompt must never mention rpm anywhere.
+    expect(prompt).not.toContain('rpm')
+    expect(prompt).not.toContain('RPM')
+  })
+
+  it('gives a pace-primary run a session cadence baseline for its interval rows (CW-412)', () => {
+    // `shouldCondenseHeartRateSection` fires for a pace-primary run, and the
+    // session-level cadence lines used to sit inside that branch. The Interval
+    // Breakdown prints per-interval cadence unconditionally, so the exact case
+    // where running cadence matters most handed the model per-rep numbers with
+    // nothing session-wide to compare them against. Cadence now follows
+    // `isCadenceRelevant` alone.
+    //
+    // `loadPreference: 'PACE'` rather than an omitted setting: the default
+    // priority is HR > PACE > POWER, so a bare default is HR-primary and would
+    // not condense at all. (That default contradicting the pace guardrail is
+    // CW-397, out of scope here.)
+    const prompt = buildWorkoutAnalysisPrompt(
+      buildWorkoutAnalysisData({
+        id: 'workout-fixture-run-pace-primary-cadence',
+        date: new Date('2026-03-18T06:00:00Z'),
+        title: '3 x 1km Threshold',
+        type: 'Run',
+        durationSec: 3000,
+        distanceMeters: 9000,
+        averageSpeed: 3.0,
+        averageHr: 158,
+        maxHr: 176,
+        // One-legged, exactly as Strava / Intervals.icu store run cadence.
+        averageCadence: 88,
+        maxCadence: 95,
+        rawJson: {
+          icu_intervals: [
+            {
+              type: 'WORK',
+              label: 'Rep 1',
+              moving_time: 240,
+              distance: 1000,
+              average_heartrate: 168,
+              average_cadence: 90,
+              average_speed: 4.1667,
+              intensity: 101
+            },
+            {
+              type: 'RECOVERY',
+              label: 'Jog 1',
+              moving_time: 120,
+              distance: 400,
+              average_heartrate: 138,
+              average_cadence: 76,
+              average_speed: 3.0,
+              intensity: 68
+            }
+          ]
+        }
+      }),
+      'Europe/Budapest',
+      'Supportive',
+      { loadPreference: 'PACE' },
+      USER_PROFILE
+    )
+
+    // Pace really is primary here, i.e. the condensing branch is live.
+    expect(prompt).toContain('## Pace & Speed (Primary Metric)')
+
+    // Heart-rate condensing itself is untouched: condensed heading, same HR lines.
+    expect(prompt).toContain('## Heart Rate (Secondary Corroboration) & Cadence')
+    expect(prompt).not.toContain('## Heart Rate & Cadence')
+    expect(prompt).toContain('- Average HR: 158 bpm')
+    expect(prompt).toContain('- Max HR: 176 bpm')
+
+    // The baseline the interval rows are read against -- this is what regressed.
+    expect(prompt).toContain('- Average Cadence: 176 spm')
+    expect(prompt).toContain('- Max Cadence: 190 spm')
+
+    // ...and the per-interval rows it explains, in the same CW-387 convention.
+    expect(prompt).toContain('## Interval Breakdown')
+    expect(prompt).toContain('- Avg Cadence: 180 spm')
+    expect(prompt).toContain('- Avg Cadence: 152 spm')
     expect(prompt).not.toContain('rpm')
     expect(prompt).not.toContain('RPM')
   })

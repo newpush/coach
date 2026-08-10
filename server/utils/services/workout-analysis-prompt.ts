@@ -1373,8 +1373,14 @@ When analyzing "Execution" and "Effort", specifically reference how well the ath
 
     if (workoutData.max_hr) prompt += `- Max HR: ${workoutData.max_hr} bpm\n`
 
-    // Cadence is only relevant for cycling/running-like workouts
-    if (isCadenceRelevant && !condensedHrSection) {
+    // Cadence is only relevant for cycling/running-like workouts. It is gated on
+    // `isCadenceRelevant` alone and deliberately NOT on `condensedHrSection`
+    // (CW-412): condensing exists to stop heart rate dominating the narrative
+    // when pace leads, and cadence is not heart rate. Coupling the two meant a
+    // pace-primary run -- the case where running cadence matters most -- got the
+    // unconditional per-interval cadence rows in `## Interval Breakdown` with no
+    // session baseline to compare them against.
+    if (isCadenceRelevant) {
       if (workoutData.avg_cadence)
         prompt += `- Average Cadence: ${formatCadenceWithUnit(workoutData.avg_cadence, workoutType)}\n`
       else prompt += `- Average Cadence: N/A\n`
