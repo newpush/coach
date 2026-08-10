@@ -237,7 +237,7 @@
                       >W</span
                     ></span
                   >
-                  <span class="text-zinc-600">-</span>
+                  <span v-else class="text-zinc-600">-</span>
                 </td>
                 <td
                   class="px-6 py-4 whitespace-nowrap text-sm font-black text-gray-900 dark:text-white tabular-nums"
@@ -248,7 +248,7 @@
                       >bpm</span
                     ></span
                   >
-                  <span class="text-zinc-600">-</span>
+                  <span v-else class="text-zinc-600">-</span>
                 </td>
               </tr>
             </tbody>
