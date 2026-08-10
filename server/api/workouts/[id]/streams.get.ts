@@ -7,7 +7,7 @@ import {
   DEFAULT_POWER_ZONES
 } from '../../../utils/training-metrics'
 import { sportSettingsRepository } from '../../../utils/repositories/sportSettingsRepository'
-import { detectIntervals } from '../../../utils/interval-detection'
+import { detectIntervals, resolveHrWorkThreshold } from '../../../utils/interval-detection'
 import { detectClimbs } from '../../../utils/climb-detection'
 import { formatPromptPace } from '../../../utils/ai-prompt-format'
 
@@ -76,6 +76,7 @@ export default defineEventHandler(async (event) => {
           select: {
             ftp: true,
             maxHr: true,
+            lthr: true,
             distanceUnits: true
           }
         }
@@ -199,6 +200,22 @@ export default defineEventHandler(async (event) => {
 
       processedStream.hrZones = (settings?.hrZones as any[]) || DEFAULT_HR_ZONES
       processedStream.powerZones = (settings?.powerZones as any[]) || DEFAULT_POWER_ZONES
+
+      // Athlete-level HR references for interval detection, sourced from the PROFILE (the
+      // sport settings loaded above, then the user record) exactly as
+      // `/api/workouts/[id]/intervals` does. They feed two distinct things: the work BAR
+      // (via `resolveHrWorkThreshold`, which prefers 0.82 * LTHR over 0.7 * max HR) and the
+      // zone reference handed to `detectIntervals` as `hrRefs` so HR intervals carry an
+      // `intensity_zone` (CW-400). Never scale these here - `resolveHrWorkThreshold` is the
+      // single place that scaling happens (CW-383/CW-418).
+      const hrRefs = {
+        lthr: settings?.lthr ?? user.lthr,
+        maxHr: settings?.maxHr ?? user.maxHr
+      }
+      const hrWorkThreshold = resolveHrWorkThreshold({
+        ...hrRefs,
+        sessionMaxHr: workout.maxHr
+      })
 
       if (Array.isArray(workoutStream.heartrate) && processedStream.hrZones.length > 0) {
         const recalculatedHrZoneTimes = new Array(processedStream.hrZones.length).fill(0)
@@ -328,15 +345,16 @@ export default defineEventHandler(async (event) => {
               cadence
             )
           } else if (heartrate.length === time.length) {
-            const threshold = user.maxHr ? user.maxHr * 0.7 : undefined
             ;(processedStream as any).detectedIntervals = detectIntervals(
               time,
               heartrate,
               'heartrate',
-              threshold,
+              hrWorkThreshold,
               undefined,
               undefined,
-              cadence
+              cadence,
+              // Zone reference, kept separate from the work bar above (CW-400).
+              hrRefs
             )
           }
 
@@ -413,15 +431,16 @@ export default defineEventHandler(async (event) => {
               cadence
             )
           } else if (heartrate.length === time.length) {
-            const threshold = user.maxHr ? user.maxHr * 0.7 : undefined
             ;(processedStream as any).detectedIntervals = detectIntervals(
               time,
               heartrate,
               'heartrate',
-              threshold,
+              hrWorkThreshold,
               undefined,
               undefined,
-              cadence
+              cadence,
+              // Zone reference, kept separate from the work bar above (CW-400).
+              hrRefs
             )
           }
 
