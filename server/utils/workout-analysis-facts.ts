@@ -1135,6 +1135,34 @@ type PlannedStepMetric = MetricTarget
 
 export type ActualIntervalForAnalysis = ActualInterval
 
+/**
+ * Resolve the reference values (FTP / LTHR / max HR / threshold pace) used by
+ * interval detection and source arbitration.
+ *
+ * Callers that already hold the athlete's sport settings (e.g.
+ * `buildWorkoutAnalysisFactsV2`) should always pass `refs` — those are the
+ * profile-level references. The fallback below only exists for the exported
+ * helpers that are still called from scripts/tasks without sport settings.
+ *
+ * Note on `workout.maxHr`: that is the SESSION max HR recorded for this single
+ * activity, not the athlete's profile max, so it is deliberately the last
+ * resort — it is only used when no profile value is available at all.
+ */
+function resolveAnalysisRefs(workout: any, refs?: AnalysisRefs): AnalysisRefs {
+  if (refs) return refs
+
+  return {
+    ftp: Number(workout?.sportSettings?.ftp || workout?.user?.ftp || workout?.ftp || 0),
+    lthr: Number(workout?.sportSettings?.lthr || workout?.user?.lthr || 0),
+    // Profile max HR first; session max HR (`workout.maxHr`) only as a last-resort fallback.
+    maxHr: Number(workout?.sportSettings?.maxHr || workout?.user?.maxHr || workout?.maxHr || 0),
+    thresholdPace: Number(workout?.sportSettings?.thresholdPace || 0),
+    hrZones: workout?.sportSettings?.hrZones || [],
+    powerZones: workout?.sportSettings?.powerZones || [],
+    paceZones: workout?.sportSettings?.paceZones || []
+  }
+}
+
 function getPromptFactValueByPath(value: unknown, path: string) {
   return path.split('.').reduce<unknown>((acc, key) => {
     if (!acc || typeof acc !== 'object') return undefined
@@ -1598,7 +1626,12 @@ function resolveComparableTargetValue(
   return planned.targetValue
 }
 
-function buildDetectedIntervals(workout: any, plannedWorkout?: any): ActualInterval[] {
+function buildDetectedIntervals(
+  workout: any,
+  plannedWorkout?: any,
+  refsInput?: AnalysisRefs
+): ActualInterval[] {
+  const refs = resolveAnalysisRefs(workout, refsInput)
   const time = asNumberArray(workout?.streams?.time)
   const power = asNumberArray(workout?.streams?.watts)
   const velocity = asNumberArray(workout?.streams?.velocity)
@@ -1625,24 +1658,37 @@ function buildDetectedIntervals(workout: any, plannedWorkout?: any): ActualInter
     velocity.length > 0 &&
     family === 'run'
   ) {
-    detected = detectIntervals(time, velocity, 'pace', undefined, plannedSteps, undefined, cadence)
+    // Threshold pace is stored in m/s (same convention as calculatePaceZones), so it can be
+    // handed to the detection engine directly as the work/recovery reference.
+    const thresholdPace = Number(refs.thresholdPace || 0) || undefined
+    detected = detectIntervals(
+      time,
+      velocity,
+      'pace',
+      thresholdPace,
+      plannedSteps,
+      undefined,
+      cadence
+    )
   } else if (time.length > 0 && power.length === time.length && power.length > 0) {
     detected = detectIntervals(
       time,
       power,
       'power',
-      Number(workout?.ftp || 0) || undefined,
+      Number(refs.ftp || workout?.ftp || 0) || undefined,
       plannedSteps,
       undefined,
       cadence
     )
   } else if (time.length > 0 && hr.length === time.length && hr.length > 0) {
-    // Profile-sourced reference (sportSettings, then the user record). This
+    // Profile-sourced reference, taken from the resolved analysis refs
+    // (sportSettings, then the user record) rather than off the workout object,
+    // which carries no user/sportSettings relation in the analysis path. This
     // workout's own max HR is only an explicit last-resort fallback — a bar
     // derived from it is self-referential and drifts session to session.
     const hrWorkThreshold = resolveHrWorkThreshold({
-      lthr: workout?.sportSettings?.lthr ?? workout?.user?.lthr,
-      maxHr: workout?.sportSettings?.maxHr ?? workout?.user?.maxHr,
+      lthr: refs.lthr,
+      maxHr: refs.maxHr,
       sessionMaxHr: workout?.maxHr
     })
     detected = detectIntervals(
@@ -1831,17 +1877,22 @@ function hasTerminalRecoveryPhase(workout: any, plannedWorkout: any, refs: Analy
     return true
   }
 
-  const lastActualInterval = extractActualIntervals(workout, plannedWorkout).at(-1)
+  const lastActualInterval = extractActualIntervals(workout, plannedWorkout, refs).at(-1)
   return Boolean(
     lastActualInterval?.classification === 'recovery' &&
     (lastActualInterval.durationSeconds || 0) >= 120
   )
 }
 
-function extractActualIntervals(workout: any, plannedWorkout?: any): ActualInterval[] {
+function extractActualIntervals(
+  workout: any,
+  plannedWorkout?: any,
+  refsInput?: AnalysisRefs
+): ActualInterval[] {
+  const refs = resolveAnalysisRefs(workout, refsInput)
   const rawIntervals = getRawIntervals(workout)
   const rawActual = mapProviderIntervalsToActual(rawIntervals)
-  const detectedActual = buildDetectedIntervals(workout, plannedWorkout)
+  const detectedActual = buildDetectedIntervals(workout, plannedWorkout, refs)
 
   if (rawActual.length === 0) return detectedActual
   if (detectedActual.length === 0) return rawActual
@@ -1850,22 +1901,11 @@ function extractActualIntervals(workout: any, plannedWorkout?: any): ActualInter
     getStructuredSteps(
       plannedWorkout?.structuredWorkout || workout?.plannedWorkout?.structuredWorkout
     ),
-    {
-      ftp: Number(workout?.ftp || 0),
-      lthr: 0,
-      maxHr: Number(workout?.maxHr || 0),
-      thresholdPace: 0
-    }
+    refs
   )
 
   if (plannedSteps.length === 0) return rawActual
 
-  const refs = {
-    ftp: Number(workout?.ftp || 0),
-    lthr: 0,
-    maxHr: Number(workout?.maxHr || 0),
-    thresholdPace: 0
-  }
   const source = chooseActualIntervalsSource(rawActual, detectedActual, plannedSteps, refs)
   return source === 'detected' ? detectedActual : rawActual
 }
@@ -1880,18 +1920,21 @@ export function getPlannedWorkIntervalsForAnalysis(
 
 export function getActualIntervalsForAnalysis(
   workout: any,
-  plannedWorkout?: any
+  plannedWorkout?: any,
+  refs?: AnalysisRefs
 ): ActualIntervalForAnalysis[] {
-  return extractActualIntervals(workout, plannedWorkout)
+  return extractActualIntervals(workout, plannedWorkout, refs)
 }
 
 export function getActualIntervalsSourceForAnalysis(
   workout: any,
-  plannedWorkout?: any
+  plannedWorkout?: any,
+  refsInput?: AnalysisRefs
 ): 'raw' | 'detected' | 'none' {
+  const refs = resolveAnalysisRefs(workout, refsInput)
   const rawIntervals = getRawIntervals(workout)
   const rawActual = mapProviderIntervalsToActual(rawIntervals)
-  const detectedActual = buildDetectedIntervals(workout, plannedWorkout)
+  const detectedActual = buildDetectedIntervals(workout, plannedWorkout, refs)
 
   if (rawActual.length === 0) return detectedActual.length > 0 ? 'detected' : 'none'
   if (detectedActual.length === 0) return 'raw'
@@ -1900,27 +1943,20 @@ export function getActualIntervalsSourceForAnalysis(
     getStructuredSteps(
       plannedWorkout?.structuredWorkout || workout?.plannedWorkout?.structuredWorkout
     ),
-    {
-      ftp: Number(workout?.ftp || 0),
-      lthr: 0,
-      maxHr: Number(workout?.maxHr || 0),
-      thresholdPace: 0
-    }
+    refs
   )
 
   if (plannedSteps.length === 0) return 'raw'
 
-  const refs = {
-    ftp: Number(workout?.ftp || 0),
-    lthr: 0,
-    maxHr: Number(workout?.maxHr || 0),
-    thresholdPace: 0
-  }
   return chooseActualIntervalsSource(rawActual, detectedActual, plannedSteps, refs)
 }
 
-export function formatActualIntervalsForPrompt(workout: any, plannedWorkout?: any): string {
-  const intervals = getActualIntervalsForAnalysis(workout, plannedWorkout)
+export function formatActualIntervalsForPrompt(
+  workout: any,
+  plannedWorkout?: any,
+  refs?: AnalysisRefs
+): string {
+  const intervals = getActualIntervalsForAnalysis(workout, plannedWorkout, refs)
   if (intervals.length === 0) return 'N/A'
 
   return intervals
@@ -1955,6 +1991,7 @@ function classifyArchetype(params: {
   powerSourceType: PowerSourceType
   hrUsable: boolean
   motionPattern: MotionPattern
+  refs: AnalysisRefs
 }): WorkoutAnalysisFactsV2['guardrails']['archetype'] {
   const {
     workout,
@@ -1964,20 +2001,19 @@ function classifyArchetype(params: {
     plannedWorkout,
     powerSourceType,
     hrUsable,
-    motionPattern
+    motionPattern,
+    refs
   } = params
   const rationale: string[] = []
   const titleContext = `${workout?.title || ''} ${workout?.description || ''}`.toLowerCase()
   const virtualContext =
     `${workout?.source || ''} ${workout?.type || ''} ${workout?.deviceName || ''} ${workout?.title || ''} ${workout?.description || ''}`.toLowerCase()
-  const plannedSteps = flattenPlannedSteps(getStructuredSteps(plannedWorkout?.structuredWorkout), {
-    ftp: Number(workout?.ftp || 0),
-    lthr: 0,
-    maxHr: 0,
-    thresholdPace: 0
-  })
+  const plannedSteps = flattenPlannedSteps(
+    getStructuredSteps(plannedWorkout?.structuredWorkout),
+    refs
+  )
   const workSteps = plannedSteps.filter((step) => step.classification === 'work')
-  const actualIntervals = extractActualIntervals(workout, plannedWorkout)
+  const actualIntervals = extractActualIntervals(workout, plannedWorkout, refs)
   const intervalCount = actualIntervals.filter(
     (interval) => interval.classification === 'work'
   ).length
@@ -2285,7 +2321,7 @@ function deriveDurabilitySignals(params: {
   workout: any
   family: ReturnType<typeof getWorkoutFamily>
   plannedWorkout?: any
-  refs: { ftp: number; lthr: number; maxHr: number; thresholdPace: number }
+  refs: AnalysisRefs
 }): WorkoutAnalysisFactsV2['performanceSignals']['durability'] {
   const { workout, family, plannedWorkout, refs } = params
   const time = asNumberArray(workout?.streams?.time)
@@ -2293,7 +2329,7 @@ function deriveDurabilitySignals(params: {
   const hr = asNumberArray(workout?.streams?.heartrate)
   const speed = asNumberArray(workout?.streams?.velocity)
   const cadence = asNumberArray(workout?.streams?.cadence)
-  const actualIntervals = extractActualIntervals(workout, plannedWorkout).filter(
+  const actualIntervals = extractActualIntervals(workout, plannedWorkout, refs).filter(
     (interval) => interval.classification === 'work'
   )
   const suppressLateFade = hasTerminalRecoveryPhase(workout, plannedWorkout, refs)
@@ -2509,7 +2545,7 @@ function deriveAdherence(params: {
   workout: any
   plannedWorkout: any
   family: ReturnType<typeof getWorkoutFamily>
-  refs: { ftp: number; lthr: number; maxHr: number; thresholdPace: number }
+  refs: AnalysisRefs
   metricOrder?: PlannedStepMetric[] | null
 }): WorkoutAnalysisFactsV2['adherence'] {
   const { workout, plannedWorkout, family, refs, metricOrder } = params
@@ -2543,7 +2579,7 @@ function deriveAdherence(params: {
     refs,
     metricOrder
   )
-  const actualIntervals = extractActualIntervals(workout, plannedWorkout)
+  const actualIntervals = extractActualIntervals(workout, plannedWorkout, refs)
   const plannedWork = plannedSteps.filter((step) => step.classification === 'work')
   const plannedRecovery = plannedSteps.filter((step) => step.classification === 'recovery')
   const actualWork = actualIntervals.filter((step) => step.classification === 'work')
@@ -3086,6 +3122,21 @@ export function buildWorkoutAnalysisFactsV2({
     hasPace,
     hasRpe: Boolean(rpe)
   })
+  // Reference values come from the athlete's sport settings (profile-level), not from the
+  // session row. They are resolved before archetype/interval work so every downstream
+  // consumer — including interval detection and raw-vs-detected arbitration — sees the
+  // same real FTP / LTHR / max HR / threshold pace instead of zeroed placeholders.
+  const refs: AnalysisRefs = {
+    ftp: Number(sportSettings?.ftp || workout?.ftp || 0),
+    lthr: Number(sportSettings?.lthr || 0),
+    // Profile max HR only; `workout.maxHr` is this session's max and would understate a
+    // fitter athlete's true ceiling, so it is not used as a stand-in here.
+    maxHr: Number(sportSettings?.maxHr || 0),
+    thresholdPace: Number(sportSettings?.thresholdPace || 0),
+    hrZones: sportSettings?.hrZones || [],
+    powerZones: sportSettings?.powerZones || [],
+    paceZones: sportSettings?.paceZones || []
+  }
   const warmupExcludedMinutes = clamp(Number(sportSettings?.warmupTime || 10), 10, 15)
   const erg = detectErg(workout, plannedWorkout)
   const lrBalance = deriveLrBalance(workout)
@@ -3098,7 +3149,8 @@ export function buildWorkoutAnalysisFactsV2({
     plannedWorkout,
     powerSourceType,
     hrUsable: hrStats.usable,
-    motionPattern
+    motionPattern,
+    refs
   })
   const decoupling = deriveDecouplingV2({
     workout,
@@ -3129,16 +3181,6 @@ export function buildWorkoutAnalysisFactsV2({
     suppressedMetrics.push(
       'Stop-and-go motion pattern detected; do not criticize lack of constant pace or invent steady-state drift narratives.'
     )
-
-  const refs = {
-    ftp: Number(sportSettings?.ftp || workout?.ftp || 0),
-    lthr: Number(sportSettings?.lthr || 0),
-    maxHr: Number(sportSettings?.maxHr || 0),
-    thresholdPace: Number(sportSettings?.thresholdPace || 0),
-    hrZones: sportSettings?.hrZones || [],
-    powerZones: sportSettings?.powerZones || [],
-    paceZones: sportSettings?.paceZones || []
-  }
 
   const adherence = deriveAdherence({
     workout,

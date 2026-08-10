@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   buildWorkoutAnalysisFacts,
   buildWorkoutAnalysisFactsV2,
+  getActualIntervalsForAnalysis,
   getActualIntervalsSourceForAnalysis
 } from './workout-analysis-facts'
 
@@ -904,5 +905,63 @@ describe('buildWorkoutAnalysisFacts', () => {
     )
     expect(facts.performanceSignals.decoupling.interpretable).toBe(false)
     expect(facts.guardrails.suppressions.join(' ')).toContain('Stop-and-go motion pattern')
+  })
+})
+
+describe('run pace interval detection refs (CW-384)', () => {
+  const thresholdPace = 4.0 // m/s, as stored on sportSettings.thresholdPace
+  const velocity = [
+    ...Array.from({ length: 600 }, () => 2.3), // warmup
+    ...Array.from({ length: 5 }, () => [
+      ...Array.from({ length: 180 }, () => 4.3), // rep at ~108% of threshold pace
+      ...Array.from({ length: 180 }, () => 2.4) // recovery jog at 60% of threshold pace
+    ]).flat(),
+    ...Array.from({ length: 300 }, () => 2.2) // cooldown
+  ]
+
+  const runWorkout = makeWorkout({
+    title: '5 x 3min Threshold Run',
+    type: 'Run',
+    durationSec: velocity.length,
+    averageWatts: null,
+    averageSpeed: 3.1,
+    streams: {
+      time: velocity.map((_, index) => index),
+      velocity
+    }
+  })
+
+  it('splits reps from recovery jogs when sport-settings refs carry a real threshold pace', () => {
+    const intervals = getActualIntervalsForAnalysis(runWorkout, undefined, {
+      ftp: 0,
+      lthr: 0,
+      maxHr: 0,
+      thresholdPace
+    })
+
+    expect(intervals.filter((interval) => interval.classification === 'work')).toHaveLength(5)
+    expect(intervals.filter((interval) => interval.type === 'RECOVERY')).toHaveLength(4)
+  })
+
+  it('collapses the same run into one block when no threshold pace reference exists', () => {
+    // Documents the pre-fix behaviour: with thresholdPace 0 the detection engine falls back to
+    // 0.65 * median(stream), which a recovery jog clears, so nothing separates the reps.
+    const intervals = getActualIntervalsForAnalysis(runWorkout, undefined, {
+      ftp: 0,
+      lthr: 0,
+      maxHr: 0,
+      thresholdPace: 0
+    })
+
+    expect(intervals.filter((interval) => interval.classification === 'work')).toHaveLength(1)
+  })
+
+  it('reads the threshold pace from sport settings when refs are not passed explicitly', () => {
+    const intervals = getActualIntervalsForAnalysis({
+      ...runWorkout,
+      sportSettings: { thresholdPace }
+    })
+
+    expect(intervals.filter((interval) => interval.classification === 'work')).toHaveLength(5)
   })
 })

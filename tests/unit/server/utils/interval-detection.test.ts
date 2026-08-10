@@ -181,6 +181,46 @@ describe('resolveHrWorkThreshold', () => {
     expect(resolveHrWorkThreshold({ sessionMaxHr: 175 })).toBeCloseTo(175 * 0.7, 5)
     expect(resolveHrWorkThreshold({})).toBeUndefined()
   })
+
+  it('separates run work reps from recovery jogs when the real threshold pace is supplied', () => {
+    // Threshold pace in m/s (same unit the app stores sportSettings.thresholdPace in).
+    const thresholdPace = 4.0
+    const workPace = 4.3 // ~108% of threshold — a typical rep pace
+    const recoveryPace = 2.4 // 60% of threshold — an easy recovery jog
+    const warmupPace = 2.3
+    const cooldownPace = 2.2
+
+    const velocity = [
+      ...Array.from({ length: 600 }, () => warmupPace),
+      ...Array.from({ length: 5 }, () => [
+        ...Array.from({ length: 180 }, () => workPace),
+        ...Array.from({ length: 180 }, () => recoveryPace)
+      ]).flat(),
+      ...Array.from({ length: 300 }, () => cooldownPace)
+    ]
+    const time = velocity.map((_, index) => index)
+
+    const withThreshold = detectIntervals(time, velocity, 'pace', thresholdPace)
+    const workIntervals = withThreshold.filter((interval) => interval.type === 'WORK')
+
+    expect(workIntervals).toHaveLength(5)
+    for (const interval of workIntervals) {
+      expect(interval.duration).toBeGreaterThan(150)
+      expect(interval.duration).toBeLessThan(210)
+      expect(interval.avg_pace || 0).toBeGreaterThan(4)
+    }
+    // The gaps between reps must come back as recovery, not be swallowed into the reps.
+    expect(withThreshold.filter((interval) => interval.type === 'RECOVERY')).toHaveLength(4)
+    expect(withThreshold[0]?.type).toBe('WARMUP')
+    expect(withThreshold.at(-1)?.type).toBe('COOLDOWN')
+
+    // Regression guard: this is what the pace branch used to do (CW-384). Without a threshold
+    // the engine falls back to 0.65 * median(stream); the median here sits at recovery pace, so
+    // the work bar lands at ~1.6 m/s and the entire run collapses into a single "work" block.
+    const withoutThreshold = detectIntervals(time, velocity, 'pace', undefined)
+    expect(withoutThreshold.filter((interval) => interval.type === 'WORK')).toHaveLength(1)
+    expect(withoutThreshold.filter((interval) => interval.type === 'RECOVERY')).toHaveLength(0)
+  })
 })
 
 describe('resolveProviderIntervalTypes', () => {
