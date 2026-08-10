@@ -454,9 +454,7 @@
                 </div>
                 <div>
                   <span class="text-[10px] text-muted block uppercase font-bold">Distance</span>
-                  <span class="text-sm font-medium">{{
-                    event.distance ? `${event.distance} km` : 'N/A'
-                  }}</span>
+                  <span class="text-sm font-medium">{{ formatDistance(event) }}</span>
                 </div>
                 <div>
                   <span class="text-[10px] text-muted block uppercase font-bold">Elevation</span>
@@ -661,6 +659,11 @@
   const selectedEvents = computed(() => {
     return userEvents.value.filter((e) => form.eventIds.includes(e.id))
   })
+
+  function formatDistance(event: { distance?: number | null }) {
+    const distance = event.distance ?? props.goal?.distance
+    return distance == null ? 'N/A' : `${distance} km`
+  }
 
   // Proxy to handle unified date input in Step 3
   // Decoupled from eventDate to avoid confusing side effects when editing goals
