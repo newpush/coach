@@ -1951,7 +1951,16 @@ export function buildDetectedIntervalCandidate(
     refs
   )
 
-  const paceFirstFamily = family === 'run' || family === 'nonimpact_cardio'
+  // Pace leads for runs — the CW-434 decision — and for swims, which the intervals
+  // endpoint has always segmented on velocity. Deliberately NOT the whole
+  // `nonimpact_cardio` family: that also holds ski and row, which the endpoint left
+  // on the power/HR order. Their speed is terrain- and condition-confounded much
+  // like cycling, and moving them was not part of the decision this change records.
+  // Widen only with evidence.
+  const isSwim = String(workout?.type || '')
+    .toLowerCase()
+    .includes('swim')
+  const paceFirstFamily = family === 'run' || isSwim
 
   if (
     time.length > 0 &&
