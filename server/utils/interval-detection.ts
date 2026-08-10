@@ -49,6 +49,108 @@ export interface PeakEffort {
   metric: 'power' | 'heartrate' | 'pace'
 }
 
+export interface ProviderIntervalSummary {
+  type?: string | null
+  /** Provider intensity as a percentage of threshold (Intervals.icu `intensity`) */
+  intensity?: number | null
+  avgPower?: number | null
+  avgSpeed?: number | null
+}
+
+const PROVIDER_RECOVERY_TOKENS = [
+  'rest',
+  'recover',
+  'recuper',
+  'warm',
+  'cool',
+  'calentamiento',
+  'enfriamiento',
+  'descanso'
+]
+
+/**
+ * Providers label synced laps inconsistently. Intervals.icu in particular marks
+ * nearly every lap `WORK` — warmups, recovery jogs and cooldowns included — so
+ * trusting the string verbatim makes a 4x4min threshold session look like ten
+ * work reps of wildly different intensity.
+ *
+ * Re-derive the type from the intensity profile of the session itself: a lap
+ * well below the session's own work band is recovery, and a low-intensity lap
+ * at either end is a warmup/cooldown. Explicit recovery-ish labels are always
+ * honoured — this only ever demotes a generic WORK lap, never promotes one.
+ */
+export function resolveProviderIntervalTypes(intervals: ProviderIntervalSummary[]): string[] {
+  const originalTypes = intervals.map((interval) => String(interval?.type || 'WORK'))
+  if (intervals.length < 3) return originalTypes
+
+  const isExplicitRecovery = originalTypes.map((type) => {
+    const lower = type.toLowerCase()
+    return PROVIDER_RECOVERY_TOKENS.some((token) => lower.includes(token))
+  })
+
+  // Prefer the provider's own intensity (% of threshold); fall back to raw
+  // power, then speed. Units do not matter — every comparison is a ratio
+  // against the other laps of the same workout.
+  const useIntensity = intervals.some((i) => Number.isFinite(Number(i?.intensity)))
+  const usePower = !useIntensity && intervals.some((i) => Number.isFinite(Number(i?.avgPower)))
+  const useSpeed =
+    !useIntensity && !usePower && intervals.some((i) => Number.isFinite(Number(i?.avgSpeed)))
+  if (!useIntensity && !usePower && !useSpeed) return originalTypes
+
+  const levels = intervals.map((interval) => {
+    const value = Number(
+      useIntensity ? interval?.intensity : usePower ? interval?.avgPower : interval?.avgSpeed
+    )
+    return Number.isFinite(value) && value > 0 ? value : null
+  })
+
+  const known = levels.filter((level): level is number => level !== null)
+  if (known.length < 3) return originalTypes
+
+  // Work band = median of the top third of laps, so a single short spike does
+  // not define "hard" for the whole session.
+  const sorted = [...known].sort((a, b) => b - a)
+  const topCount = Math.max(1, Math.round(sorted.length / 3))
+  const top = sorted.slice(0, topCount)
+  const workBand = top[Math.floor(top.length / 2)]!
+  if (!(workBand > 0)) return originalTypes
+
+  const RECOVERY_RATIO = 0.75
+  const EDGE_RATIO = 0.85
+
+  const demoted = levels.map((level, index) => {
+    if (level === null || isExplicitRecovery[index]) return false
+    const ratio = level / workBand
+    if (ratio < RECOVERY_RATIO) return true
+    // A first/last lap that sits clearly below the work band is a warmup or
+    // cooldown even when it is not deep in recovery territory.
+    const isEdge = index === 0 || index === intervals.length - 1
+    return isEdge && ratio < EDGE_RATIO
+  })
+
+  const resolved = originalTypes.map((type, index) => (demoted[index] ? 'RECOVERY' : type))
+
+  // Name the outermost demoted lap at each end for what it is. Trailing stubs
+  // the provider already flagged as recovery are skipped over, and only the
+  // first demoted lap reached is renamed — anything further in is a genuine
+  // between-reps recovery, not part of the warmup/cooldown.
+  const isRecoveryish = (index: number) => isExplicitRecovery[index] || demoted[index]
+  for (let index = 0; index < resolved.length && isRecoveryish(index); index++) {
+    if (demoted[index]) {
+      resolved[index] = 'WARMUP'
+      break
+    }
+  }
+  for (let index = resolved.length - 1; index >= 0 && isRecoveryish(index); index--) {
+    if (demoted[index]) {
+      resolved[index] = 'COOLDOWN'
+      break
+    }
+  }
+
+  return resolved
+}
+
 /**
  * Detect intervals in a workout based on power or heart rate data
  * Uses a moving average and threshold-based approach

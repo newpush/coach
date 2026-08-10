@@ -29,6 +29,7 @@ import {
   formatPromptPace
 } from '../server/utils/ai-prompt-format'
 import { isWorkoutEligibleForAutomaticInsights } from '../server/utils/automatic-workout-insights'
+import { resolveProviderIntervalTypes } from '../server/utils/interval-detection'
 import {
   buildAnalysisRequestMetricRules,
   buildMetricPriorityPromptBlock,
@@ -780,8 +781,19 @@ export function buildWorkoutAnalysisData(workout: any) {
         ? raw.intervals
         : null
     if (rawIntervals) {
-      data.intervals = rawIntervals.map((interval: any) => ({
-        type: interval.type,
+      // Provider lap labels are unreliable (Intervals.icu marks nearly every
+      // lap WORK); re-derive them so the model does not read recovery jogs as
+      // work reps.
+      const resolvedTypes = resolveProviderIntervalTypes(
+        rawIntervals.map((interval: any) => ({
+          type: interval.type,
+          intensity: Number(interval.intensity),
+          avgPower: Number(interval.average_watts),
+          avgSpeed: Number(interval.average_speed)
+        }))
+      )
+      data.intervals = rawIntervals.map((interval: any, index: number) => ({
+        type: resolvedTypes[index],
         label: interval.label,
         // Prefer moving time for pace analysis (elapsed_time can include pauses/stops and distort run interval pace).
         duration_s: interval.moving_time ?? interval.elapsed_time,

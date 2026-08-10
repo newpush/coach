@@ -1,6 +1,6 @@
 import { calculateFatigueSensitivity, calculateStabilityMetrics } from './performance-metrics'
 import { toIntensityFactorFromTarget } from './structured-workout-persistence'
-import { detectIntervals } from './interval-detection'
+import { detectIntervals, resolveProviderIntervalTypes } from './interval-detection'
 import { parseLegacyLoadPreference, type MetricTarget } from './workout-target-policy'
 
 type FactConfidence = 'low' | 'medium' | 'high'
@@ -1341,6 +1341,25 @@ function getRawIntervals(workout: any): any[] {
   return []
 }
 
+/**
+ * Provider-synced laps come with unreliable type labels (Intervals.icu marks
+ * nearly everything `WORK`), so re-derive them from the session's own intensity
+ * profile before they reach adherence facts or the AI prompt.
+ */
+function mapProviderIntervalsToActual(intervals: any[]): ActualInterval[] {
+  const resolvedTypes = resolveProviderIntervalTypes(
+    intervals.map((interval) => ({
+      type: interval?.type,
+      intensity: Number(interval?.intensity),
+      avgPower: Number(interval?.average_watts ?? interval?.avg_power),
+      avgSpeed: Number(interval?.average_speed ?? interval?.avg_pace)
+    }))
+  )
+  return mapIntervalsToActual(
+    intervals.map((interval, index) => ({ ...interval, type: resolvedTypes[index] }))
+  )
+}
+
 function mapIntervalsToActual(intervals: any[]): ActualInterval[] {
   return intervals
     .map((interval) => {
@@ -1810,7 +1829,7 @@ function hasTerminalRecoveryPhase(workout: any, plannedWorkout: any, refs: Analy
 
 function extractActualIntervals(workout: any, plannedWorkout?: any): ActualInterval[] {
   const rawIntervals = getRawIntervals(workout)
-  const rawActual = mapIntervalsToActual(rawIntervals)
+  const rawActual = mapProviderIntervalsToActual(rawIntervals)
   const detectedActual = buildDetectedIntervals(workout, plannedWorkout)
 
   if (rawActual.length === 0) return detectedActual
@@ -1860,7 +1879,7 @@ export function getActualIntervalsSourceForAnalysis(
   plannedWorkout?: any
 ): 'raw' | 'detected' | 'none' {
   const rawIntervals = getRawIntervals(workout)
-  const rawActual = mapIntervalsToActual(rawIntervals)
+  const rawActual = mapProviderIntervalsToActual(rawIntervals)
   const detectedActual = buildDetectedIntervals(workout, plannedWorkout)
 
   if (rawActual.length === 0) return detectedActual.length > 0 ? 'detected' : 'none'
