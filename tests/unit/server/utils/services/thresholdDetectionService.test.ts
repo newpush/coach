@@ -548,4 +548,154 @@ describe('thresholdDetectionService', () => {
       })
     })
   })
+
+  describe('createThresholdRecommendation copy', () => {
+    const workoutDate = new Date('2025-03-01T06:00:00Z')
+
+    /** Runs the recommendation and returns the `{ title, description }` written. */
+    async function recommendationCopy(options: {
+      metric: 'LTHR' | 'FTP' | 'MAX_HR' | 'THRESHOLD_PACE'
+      oldValue: number
+      newValue: number
+      sportName?: string | null
+    }) {
+      await thresholdDetectionService.createThresholdRecommendation(
+        'user-1',
+        'workout-copy',
+        options.metric,
+        options.oldValue,
+        options.newValue,
+        options.newValue,
+        options.sportName ?? null,
+        workoutDate,
+        undefined,
+        true,
+        'Kilometers'
+      )
+
+      const { data } = vi.mocked(prisma.recommendation.create).mock.calls.at(-1)![0] as any
+      return { title: data.title as string, description: data.description as string }
+    }
+
+    // A first detection arrives with oldValue 0 — the copy must not imply there
+    // was a previous value to improve on (CW-421).
+    it('does not frame a first LTHR detection as an increase from zero', async () => {
+      const { title, description } = await recommendationCopy({
+        metric: 'LTHR',
+        oldValue: 0,
+        newValue: 158
+      })
+
+      expect(description).toBe('We detected your LTHR: 158 bpm.')
+      expect(description).not.toContain('increased')
+      expect(description).not.toContain('0')
+      expect(title).toBe('New LTHR Detected')
+    })
+
+    it('still frames an LTHR improvement over an existing value as an increase', async () => {
+      const { description } = await recommendationCopy({
+        metric: 'LTHR',
+        oldValue: 152,
+        newValue: 158
+      })
+
+      expect(description).toBe('Your LTHR has increased from 152 to 158 bpm.')
+    })
+
+    it('does not frame a first FTP detection as an increase from zero', async () => {
+      const { title, description } = await recommendationCopy({
+        metric: 'FTP',
+        oldValue: 0,
+        newValue: 265
+      })
+
+      expect(description).toBe('We detected your FTP: 265W.')
+      expect(description).not.toContain('increased')
+      expect(description).not.toContain('0W')
+      expect(title).toBe('New FTP Detected')
+    })
+
+    it('still frames an FTP improvement over an existing value as an increase', async () => {
+      const { description } = await recommendationCopy({
+        metric: 'FTP',
+        oldValue: 250,
+        newValue: 265
+      })
+
+      expect(description).toBe('Your FTP has increased from 250W to 265W.')
+    })
+
+    it('does not report a previous max heart rate of zero on a first detection', async () => {
+      const { title, description } = await recommendationCopy({
+        metric: 'MAX_HR',
+        oldValue: 0,
+        newValue: 191
+      })
+
+      expect(description).toBe('We detected your max heart rate: 191 bpm.')
+      expect(description).not.toContain('previous')
+      expect(title).toBe('New Max Heart Rate Detected')
+    })
+
+    it('still reports the previous max heart rate when there was one', async () => {
+      const { description } = await recommendationCopy({
+        metric: 'MAX_HR',
+        oldValue: 186,
+        newValue: 191
+      })
+
+      expect(description).toBe('We detected a new max heart rate of 191 bpm (previous: 186 bpm).')
+    })
+
+    it('does not frame a first threshold pace detection as an improvement', async () => {
+      const { title, description } = await recommendationCopy({
+        metric: 'THRESHOLD_PACE',
+        oldValue: 0,
+        newValue: 250
+      })
+
+      expect(description).toBe('We detected your threshold pace: 4:10/km.')
+      expect(description).not.toContain('improved')
+      expect(title).toBe('New Threshold Pace Detected')
+    })
+
+    it('still frames a threshold pace improvement over an existing pace as an improvement', async () => {
+      const { description } = await recommendationCopy({
+        metric: 'THRESHOLD_PACE',
+        oldValue: 260,
+        newValue: 250
+      })
+
+      expect(description).toBe('Your threshold pace has improved to 4:10/km.')
+    })
+
+    it('keeps the sport profile name in both the first-detection and improvement copy', async () => {
+      const first = await recommendationCopy({
+        metric: 'THRESHOLD_PACE',
+        oldValue: 0,
+        newValue: 250,
+        sportName: 'Running'
+      })
+      expect(first.description).toBe('We detected your Running threshold pace: 4:10/km.')
+      expect(first.title).toBe('New Threshold Pace Detected (Running)')
+
+      const improved = await recommendationCopy({
+        metric: 'FTP',
+        oldValue: 250,
+        newValue: 265,
+        sportName: 'Cycling'
+      })
+      expect(improved.description).toBe('Your Cycling FTP has increased from 250W to 265W.')
+    })
+
+    it('treats a non-finite previous value as no previous value', async () => {
+      const { description } = await recommendationCopy({
+        metric: 'FTP',
+        oldValue: Number.NaN,
+        newValue: 265
+      })
+
+      expect(description).toBe('We detected your FTP: 265W.')
+    })
+  })
 })

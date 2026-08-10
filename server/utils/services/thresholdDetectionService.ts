@@ -495,29 +495,55 @@ export const thresholdDetectionService = {
     let description = ''
     const unit = metric === 'FTP' ? 'W' : metric === 'THRESHOLD_PACE' ? 's/km' : ' bpm'
 
+    // A first-ever detection arrives with no previous value (absent, 0, or
+    // non-finite). Framing that as an improvement — "increased from 0" — reads
+    // as a bug to the athlete, so the copy branches on whether there is a real
+    // previous value to compare against.
+    const hasPreviousValue = Number.isFinite(oldValue) && oldValue > 0
+
     if (metric === 'LTHR') {
       title = sportName ? `New ${sportName} LTHR Detected` : 'New LTHR Detected'
-      description = sportName
-        ? `Your ${sportName} LTHR has increased from ${oldValue} to ${newValue} bpm.`
-        : `Your LTHR has increased from ${oldValue} to ${newValue} bpm.`
+      if (hasPreviousValue) {
+        description = sportName
+          ? `Your ${sportName} LTHR has increased from ${oldValue} to ${newValue} bpm.`
+          : `Your LTHR has increased from ${oldValue} to ${newValue} bpm.`
+      } else {
+        description = sportName
+          ? `We detected your ${sportName} LTHR: ${newValue} bpm.`
+          : `We detected your LTHR: ${newValue} bpm.`
+      }
     } else if (metric === 'FTP') {
       title = sportName ? `New ${sportName} FTP Detected` : 'New FTP Detected'
-      description = sportName
-        ? `Your ${sportName} FTP has increased from ${oldValue}W to ${newValue}W.`
-        : `Your FTP has increased from ${oldValue}W to ${newValue}W.`
+      if (hasPreviousValue) {
+        description = sportName
+          ? `Your ${sportName} FTP has increased from ${oldValue}W to ${newValue}W.`
+          : `Your FTP has increased from ${oldValue}W to ${newValue}W.`
+      } else {
+        description = sportName
+          ? `We detected your ${sportName} FTP: ${newValue}W.`
+          : `We detected your FTP: ${newValue}W.`
+      }
     } else if (metric === 'MAX_HR') {
       title = sportName
         ? `New Max Heart Rate Detected (${sportName})`
         : 'New Max Heart Rate Detected'
-      description = `We detected a new max heart rate of ${newValue} bpm (previous: ${oldValue} bpm).`
+      description = hasPreviousValue
+        ? `We detected a new max heart rate of ${newValue} bpm (previous: ${oldValue} bpm).`
+        : `We detected your max heart rate: ${newValue} bpm.`
     } else if (metric === 'THRESHOLD_PACE') {
       title = sportName
         ? `New Threshold Pace Detected (${sportName})`
         : 'New Threshold Pace Detected'
       const formattedPace = formatPromptPace(newValue, distanceUnits)
-      description = sportName
-        ? `Your ${sportName} threshold pace has improved to ${formattedPace}.`
-        : `Your threshold pace has improved to ${formattedPace}.`
+      if (hasPreviousValue) {
+        description = sportName
+          ? `Your ${sportName} threshold pace has improved to ${formattedPace}.`
+          : `Your threshold pace has improved to ${formattedPace}.`
+      } else {
+        description = sportName
+          ? `We detected your ${sportName} threshold pace: ${formattedPace}.`
+          : `We detected your threshold pace: ${formattedPace}.`
+      }
     }
 
     // Check if an active recommendation for this metric already exists to avoid spamming
