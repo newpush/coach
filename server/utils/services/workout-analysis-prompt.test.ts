@@ -11,7 +11,8 @@ import {
   clampAnalysisScore,
   getAnalysisSectionsGuidance,
   getWorkoutTypeGuidance,
-  normalizeRunningCadence
+  normalizeRunningCadence,
+  resolveSplitPacingVerdictApplicability
 } from './workout-analysis-prompt'
 import * as analyzeWorkoutTrigger from '../../../trigger/analyze-workout'
 import { buildWorkoutAnalysisFactsV2 } from '../workout-analysis-facts'
@@ -226,6 +227,40 @@ describe('buildAnalysisFactsPromptBlock / buildAnalysisGuardrailInstructions', (
     expect(buildAnalysisGuardrailInstructions('Ride', undefined)).toContain(
       'Do not use ATL, CTL, or TSB alone as proof of technique breakdown'
     )
+
+    // The soft guardrail above asks the model to disregard non-constant pace;
+    // the same session must also stop being handed the hard split verdict that
+    // contradicts it (CW-389).
+    expect(resolveSplitPacingVerdictApplicability(facts).applicable).toBe(false)
+  })
+})
+
+describe('resolveSplitPacingVerdictApplicability', () => {
+  const withSteadiness = (sessionSteadiness: string, primaryArchetype = 'endurance') =>
+    ({ guardrails: { archetype: { sessionSteadiness, primaryArchetype } } }) as any
+
+  it('withholds the verdict for intervalled and stochastic sessions, with a reason', () => {
+    for (const steadiness of ['intervalled', 'stochastic']) {
+      const verdict = resolveSplitPacingVerdictApplicability(withSteadiness(steadiness))
+      expect(verdict.applicable).toBe(false)
+      expect(verdict.reason).toContain(`session steadiness is ${steadiness}`)
+    }
+  })
+
+  it('allows the verdict for steady and rolling sessions', () => {
+    for (const steadiness of ['steady', 'rolling']) {
+      expect(resolveSplitPacingVerdictApplicability(withSteadiness(steadiness))).toEqual({
+        applicable: true,
+        reason: null
+      })
+    }
+  })
+
+  it('leaves the legacy no-facts path applicable so the prompt is unchanged', () => {
+    expect(resolveSplitPacingVerdictApplicability(undefined)).toEqual({
+      applicable: true,
+      reason: null
+    })
   })
 })
 
@@ -457,6 +492,134 @@ describe('buildWorkoutAnalysisPrompt', () => {
 
     expect(data.intervals[0].intensity).toBeCloseTo(1.01, 5)
     expect(data.intervals[1].intensity).toBeCloseTo(0.93, 5)
+  })
+
+  /**
+   * CW-389 fixtures.
+   *
+   * Six automatic per-kilometre splits from one interval session: a warmup km,
+   * three rep-ish kms, then a jog and a cooldown km. First half averages 278s/km
+   * and second half 307s/km, so the unconditional verdict called it a
+   * "Positive Split (slowed down)"; the SD across them is ~41s, which the grade
+   * band called "Variable pacing". Both numbers describe the warmup and the
+   * cooldown, not the athlete's execution.
+   */
+  const KM_SPLITS = [
+    { distance: 1000, moving_time: 330, average_speed: 3.03, average_heartrate: 132 },
+    { distance: 1000, moving_time: 250, average_speed: 4.0, average_heartrate: 165 },
+    { distance: 1000, moving_time: 255, average_speed: 3.92, average_heartrate: 168 },
+    { distance: 1000, moving_time: 262, average_speed: 3.82, average_heartrate: 170 },
+    { distance: 1000, moving_time: 300, average_speed: 3.33, average_heartrate: 158 },
+    { distance: 1000, moving_time: 360, average_speed: 2.78, average_heartrate: 138 }
+  ]
+
+  const INTERVAL_RUN = {
+    id: 'workout-fixture-interval-splits',
+    date: new Date('2026-03-19T06:00:00Z'),
+    title: '4 x 1km Threshold',
+    type: 'Run',
+    durationSec: 1757,
+    distanceMeters: 6000,
+    averageSpeed: 3.42,
+    averageHr: 155,
+    maxHr: 182,
+    variabilityIndex: 1.14,
+    rawJson: {
+      splits_metric: KM_SPLITS,
+      icu_intervals: [
+        { type: 'WORK', label: 'Rep 1', moving_time: 240, distance: 1000, average_speed: 4.17 },
+        { type: 'RECOVERY', label: 'Jog 1', moving_time: 120, distance: 400, average_speed: 3.0 },
+        { type: 'WORK', label: 'Rep 2', moving_time: 242, distance: 1000, average_speed: 4.13 },
+        { type: 'RECOVERY', label: 'Jog 2', moving_time: 120, distance: 400, average_speed: 3.0 },
+        { type: 'WORK', label: 'Rep 3', moving_time: 245, distance: 1000, average_speed: 4.08 },
+        { type: 'RECOVERY', label: 'Jog 3', moving_time: 120, distance: 400, average_speed: 3.0 },
+        { type: 'WORK', label: 'Rep 4', moving_time: 247, distance: 1000, average_speed: 4.05 }
+      ]
+    }
+  }
+
+  const STEADY_RUN = {
+    id: 'workout-fixture-steady-splits',
+    date: new Date('2026-03-19T06:00:00Z'),
+    title: 'Steady Long Run',
+    type: 'Run',
+    durationSec: 3600,
+    distanceMeters: 6000,
+    averageSpeed: 3.42,
+    averageHr: 148,
+    maxHr: 162,
+    variabilityIndex: 1.02,
+    rawJson: { splits_metric: KM_SPLITS }
+  }
+
+  it('withholds the split-strategy verdict on an intervalled session (CW-389)', () => {
+    const facts = buildWorkoutAnalysisFactsV2({ workout: INTERVAL_RUN } as any)
+    expect(facts.guardrails.archetype.sessionSteadiness).toBe('intervalled')
+
+    const prompt = buildWorkoutAnalysisPrompt(
+      buildWorkoutAnalysisData(INTERVAL_RUN),
+      'Europe/Budapest',
+      'Supportive',
+      { loadPreference: 'PACE' },
+      USER_PROFILE,
+      null,
+      undefined,
+      facts
+    )
+
+    // The measurements survive: every split row, plus the raw dispersion.
+    expect(prompt).toContain('## Distance Split Pacing')
+    expect(prompt).toContain('**Split 1**')
+    expect(prompt).toContain('**Split 6**')
+    expect(prompt).toContain('**Split Pace Consistency**')
+
+    // The derived verdicts do not.
+    expect(prompt).not.toContain('**Split Strategy**')
+    expect(prompt).not.toContain('Positive Split (slowed down)')
+    expect(prompt).not.toContain('>20s = Variable pacing')
+    expect(prompt).not.toContain('Lower is better (more consistent pacing)')
+
+    // ...and the gap says why, because "do not infer meaning from omitted
+    // facts" is a stated rule of the facts contract.
+    expect(prompt).toContain('Split-strategy verdict omitted: session steadiness is intervalled')
+    expect(prompt).toContain('Consistency grading omitted: session steadiness is intervalled')
+
+    // These were never laps -- they are the provider's automatic distance splits.
+    expect(prompt).not.toContain('## Lap Pacing Analysis')
+    expect(prompt).not.toContain('**Lap 1**')
+  })
+
+  it('still emits both verdicts for a steady session (CW-389)', () => {
+    const facts = buildWorkoutAnalysisFactsV2({ workout: STEADY_RUN } as any)
+    expect(facts.guardrails.archetype.sessionSteadiness).toBe('steady')
+
+    const prompt = buildWorkoutAnalysisPrompt(
+      buildWorkoutAnalysisData(STEADY_RUN),
+      'Europe/Budapest',
+      'Supportive',
+      { loadPreference: 'PACE' },
+      USER_PROFILE,
+      null,
+      undefined,
+      facts
+    )
+
+    expect(prompt).toContain('**Split Strategy**: Positive Split (slowed down)')
+    expect(prompt).toContain('>20s = Variable pacing')
+    expect(prompt).not.toContain('Split-strategy verdict omitted')
+  })
+
+  it('leaves the no-facts legacy path exactly as it was (CW-389)', () => {
+    const prompt = buildWorkoutAnalysisPrompt(
+      buildWorkoutAnalysisData(INTERVAL_RUN),
+      'Europe/Budapest',
+      'Supportive',
+      { loadPreference: 'PACE' },
+      USER_PROFILE
+    )
+
+    expect(prompt).toContain('**Split Strategy**: Positive Split (slowed down)')
+    expect(prompt).toContain('>20s = Variable pacing')
   })
 
   it('respects the athlete distanceUnits preference for strength set distances', () => {
