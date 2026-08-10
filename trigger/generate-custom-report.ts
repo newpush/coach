@@ -16,156 +16,41 @@ import {
   formatPromptHeight,
   formatPromptDistance
 } from '../server/utils/ai-prompt-format'
+import {
+  buildReportAnalysisSchema,
+  REPORT_SCORE_SCALE_TEXT
+} from '../server/utils/services/report-analysis-schema'
 
-// Analysis schema for structured JSON output
-const analysisSchema = {
-  type: 'object',
-  properties: {
-    type: {
-      type: 'string',
-      description: 'Type of analysis: workout, weekly_report, planning, comparison',
-      enum: ['workout', 'weekly_report', 'planning', 'comparison']
-    },
-    title: {
-      type: 'string',
-      description: 'Title of the analysis'
-    },
-    date: {
-      type: 'string',
-      description: 'Date or date range of the analysis'
-    },
-    executive_summary: {
-      type: 'string',
-      description: '2-3 sentence high-level summary of key findings'
-    },
-    sections: {
-      type: 'array',
-      description: 'Analysis sections with status and points',
-      items: {
-        type: 'object',
-        properties: {
-          title: {
-            type: 'string',
-            description: 'Section title'
-          },
-          status: {
-            type: 'string',
-            description: 'Overall assessment',
-            enum: ['excellent', 'good', 'moderate', 'needs_improvement', 'poor']
-          },
-          status_label: {
-            type: 'string',
-            description: 'Display label for status'
-          },
-          analysis_points: {
-            type: 'array',
-            description:
-              'Detailed analysis points for this section. Each point should be 1-2 sentences maximum as a separate array item.',
-            items: {
-              type: 'string'
-            }
-          }
-        },
-        required: ['title', 'status', 'status_label', 'analysis_points']
-      }
-    },
-    recommendations: {
-      type: 'array',
-      description: 'Actionable coaching recommendations',
-      items: {
-        type: 'object',
-        properties: {
-          title: {
-            type: 'string',
-            description: 'Recommendation title'
-          },
-          priority: {
-            type: 'string',
-            description: 'Priority level',
-            enum: ['high', 'medium', 'low']
-          },
-          description: {
-            type: 'string',
-            description: 'Detailed recommendation'
-          }
-        },
-        required: ['title', 'priority', 'description']
-      }
-    },
-    scores: {
-      type: 'object',
-      description: 'Performance scores on 1-10 scale',
-      properties: {
-        overall: {
-          type: 'number',
-          description: 'Overall period assessment (1-10)',
-          minimum: 1,
-          maximum: 10
-        },
-        overall_explanation: {
-          type: 'string',
-          description: 'Detailed explanation of overall assessment'
-        },
-        training_load: {
-          type: 'number',
-          description: 'Training load management quality (1-10)',
-          minimum: 1,
-          maximum: 10
-        },
-        training_load_explanation: {
-          type: 'string',
-          description: 'Training load analysis and recommendations'
-        },
-        recovery: {
-          type: 'number',
-          description: 'Recovery adequacy score (1-10)',
-          minimum: 1,
-          maximum: 10
-        },
-        recovery_explanation: {
-          type: 'string',
-          description: 'Recovery analysis and optimization strategies'
-        },
-        progress: {
-          type: 'number',
-          description: 'Progress and adaptation score (1-10)',
-          minimum: 1,
-          maximum: 10
-        },
-        progress_explanation: {
-          type: 'string',
-          description: 'Progress assessment and recommendations'
-        },
-        consistency: {
-          type: 'number',
-          description: 'Training consistency score (1-10)',
-          minimum: 1,
-          maximum: 10
-        },
-        consistency_explanation: {
-          type: 'string',
-          description: 'Consistency analysis and improvement strategies'
-        }
-      }
-    },
-    metrics_summary: {
-      type: 'object',
-      description: 'Key metrics across the period',
-      properties: {
-        total_duration_minutes: { type: 'number' },
-        total_tss: { type: 'number' },
-        avg_power: { type: 'number' },
-        avg_heart_rate: { type: 'number' },
-        total_distance_km: { type: 'number' },
-        total_calories: { type: 'number' },
-        avg_protein_g: { type: 'number' },
-        avg_carbs_g: { type: 'number' },
-        avg_fat_g: { type: 'number' }
-      }
+/**
+ * Analysis schema for structured JSON output.
+ *
+ * Built from the shared report builder so the section-status vocabulary and the
+ * score bounds come from `ANALYSIS_SECTION_STATUSES` / `ANALYSIS_SCORE_MIN|MAX`
+ * rather than from a literal that can drift from the prompt below (CW-425).
+ *
+ * `scores.required` is false here on purpose: a custom report scoped to
+ * nutrition only asks for no performance scores (see `buildAnalysisPrompt`,
+ * which emits the "Include Performance Scores" block only when workout data is
+ * in range), so neither the individual scores nor the `scores` object itself
+ * may be mandatory.
+ */
+export const customReportAnalysisSchema = buildReportAnalysisSchema({
+  sectionTitleDescription: 'Section title',
+  forbidParagraphBlocks: false,
+  scores: {
+    description: `Performance scores on ${REPORT_SCORE_SCALE_TEXT}`,
+    required: false,
+    explanations: {
+      overall: 'Detailed explanation of overall assessment',
+      training_load: 'Training load analysis and recommendations',
+      recovery: 'Recovery analysis and optimization strategies',
+      progress: 'Progress assessment and recommendations',
+      consistency: 'Consistency analysis and improvement strategies'
     }
   },
-  required: ['type', 'title', 'executive_summary', 'sections']
-}
+  metricsSummaryDescription: 'Key metrics across the period',
+  extraMetricsSummaryKeys: ['total_calories', 'avg_protein_g', 'avg_carbs_g', 'avg_fat_g']
+})
 
 function buildNutritionSummary(nutritionDays: any[], timezone: string): string {
   if (nutritionDays.length === 0) return 'No nutrition data available'
@@ -383,12 +268,17 @@ export const generateCustomReportTask = task({
       logger.log('Generating structured report with Gemini')
 
       // Generate structured analysis
-      const analysisJson = await generateStructuredAnalysis<any>(prompt, analysisSchema, 'flash', {
-        userId,
-        operation: 'custom_report_generation',
-        entityType: 'Report',
-        entityId: reportId
-      })
+      const analysisJson = await generateStructuredAnalysis<any>(
+        prompt,
+        customReportAnalysisSchema,
+        'flash',
+        {
+          userId,
+          operation: 'custom_report_generation',
+          entityType: 'Report',
+          entityId: reportId
+        }
+      )
 
       logger.log('Structured report generated successfully')
 
