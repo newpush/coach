@@ -1191,3 +1191,241 @@ describe('cadence convention helpers (CW-387)', () => {
     expect(formatCadenceWithUnit(null, 'Run')).toBe('N/A')
   })
 })
+
+describe('planned-step detection refs (CW-402)', () => {
+  // The RECOVERY -> WORK promotion in `toDetectionPlannedSteps` reads an intensity
+  // factor built from the athlete's references. When those were hardcoded to zero,
+  // an absolute watts target fell back to a fixed "assume 250 W" divisor and an
+  // absolute bpm target produced null, so the rule could not fire off real
+  // references at all. The FTP below is deliberately far from 250 W so the two
+  // paths give different answers for the same step.
+  const FTP = 200
+  const LTHR = 160
+  const STEP_SECONDS = 300
+
+  function repeat(value: number) {
+    return Array.from({ length: STEP_SECONDS }, () => value)
+  }
+
+  function powerPlan() {
+    return {
+      structuredWorkout: {
+        steps: [
+          {
+            name: 'Spin up',
+            type: 'Warmup',
+            durationSeconds: STEP_SECONDS,
+            power: { value: 120, units: 'w' }
+          },
+          {
+            name: 'Effort 1',
+            type: 'Interval',
+            durationSeconds: STEP_SECONDS,
+            power: { value: 240, units: 'w' }
+          },
+          // Labelled recovery, but 170 W is 85% of a 200 W FTP: this is work.
+          {
+            name: 'Float 1',
+            type: 'Recovery',
+            durationSeconds: STEP_SECONDS,
+            power: { value: 170, units: 'w' }
+          },
+          {
+            name: 'Effort 2',
+            type: 'Interval',
+            durationSeconds: STEP_SECONDS,
+            power: { value: 240, units: 'w' }
+          },
+          // Genuine recovery at 50% of FTP: must stay RECOVERY either way.
+          {
+            name: 'Easy spin',
+            type: 'Recovery',
+            durationSeconds: STEP_SECONDS,
+            power: { value: 100, units: 'w' }
+          },
+          {
+            name: 'Wind down',
+            type: 'Cooldown',
+            durationSeconds: STEP_SECONDS,
+            power: { value: 110, units: 'w' }
+          }
+        ]
+      }
+    }
+  }
+
+  const powerStream = [
+    ...repeat(120),
+    ...repeat(240),
+    ...repeat(170),
+    ...repeat(240),
+    ...repeat(100),
+    ...repeat(110)
+  ]
+
+  const rideWorkout = makeWorkout({
+    title: '2 x 5min with tempo floats',
+    type: 'Ride',
+    durationSec: powerStream.length,
+    streams: {
+      time: powerStream.map((_, index) => index),
+      watts: powerStream
+    }
+  })
+
+  it('promotes a work-intensity RECOVERY step when refs carry a real FTP', () => {
+    const intervals = getActualIntervalsForAnalysis(rideWorkout, powerPlan(), {
+      ftp: FTP,
+      lthr: 0,
+      maxHr: 0,
+      thresholdPace: 0
+    })
+
+    expect(intervals.map((interval) => interval.type)).toEqual([
+      'WARMUP',
+      'WORK',
+      'WORK',
+      'WORK',
+      'RECOVERY',
+      'COOLDOWN'
+    ])
+    // The 100 W step is genuine recovery and must not be swept up by the promotion.
+    expect(intervals[4]?.classification).toBe('recovery')
+  })
+
+  it('leaves the same step as RECOVERY when no FTP reference exists', () => {
+    const intervals = getActualIntervalsForAnalysis(rideWorkout, powerPlan(), {
+      ftp: 0,
+      lthr: 0,
+      maxHr: 0,
+      thresholdPace: 0
+    })
+
+    expect(intervals.map((interval) => interval.type)).toEqual([
+      'WARMUP',
+      'WORK',
+      'RECOVERY',
+      'WORK',
+      'RECOVERY',
+      'COOLDOWN'
+    ])
+  })
+
+  it('reads the FTP from sport settings when refs are not passed explicitly', () => {
+    const intervals = getActualIntervalsForAnalysis(
+      { ...rideWorkout, sportSettings: { ftp: FTP } },
+      powerPlan()
+    )
+
+    expect(intervals.map((interval) => interval.type)).toEqual([
+      'WARMUP',
+      'WORK',
+      'WORK',
+      'WORK',
+      'RECOVERY',
+      'COOLDOWN'
+    ])
+  })
+
+  function hrPlan() {
+    return {
+      structuredWorkout: {
+        steps: [
+          {
+            name: 'Ease in',
+            type: 'Warmup',
+            durationSeconds: STEP_SECONDS,
+            heartRate: { value: 120, units: 'bpm' }
+          },
+          {
+            name: 'Effort 1',
+            type: 'Interval',
+            durationSeconds: STEP_SECONDS,
+            heartRate: { value: 172, units: 'bpm' }
+          },
+          // 142 bpm is 89% of a 160 bpm LTHR: work, despite the label.
+          {
+            name: 'Float 1',
+            type: 'Recovery',
+            durationSeconds: STEP_SECONDS,
+            heartRate: { value: 142, units: 'bpm' }
+          },
+          {
+            name: 'Effort 2',
+            type: 'Interval',
+            durationSeconds: STEP_SECONDS,
+            heartRate: { value: 172, units: 'bpm' }
+          },
+          {
+            name: 'Easy spin',
+            type: 'Recovery',
+            durationSeconds: STEP_SECONDS,
+            heartRate: { value: 118, units: 'bpm' }
+          },
+          {
+            name: 'Wind down',
+            type: 'Cooldown',
+            durationSeconds: STEP_SECONDS,
+            heartRate: { value: 110, units: 'bpm' }
+          }
+        ]
+      }
+    }
+  }
+
+  const hrStream = [
+    ...repeat(120),
+    ...repeat(172),
+    ...repeat(142),
+    ...repeat(172),
+    ...repeat(118),
+    ...repeat(110)
+  ]
+
+  const hrWorkout = makeWorkout({
+    title: '2 x 5min HR-guided',
+    type: 'Ride',
+    durationSec: hrStream.length,
+    averageWatts: null,
+    streams: {
+      time: hrStream.map((_, index) => index),
+      heartrate: hrStream
+    }
+  })
+
+  it('promotes a work-intensity RECOVERY step from an absolute bpm target and a real LTHR', () => {
+    const intervals = getActualIntervalsForAnalysis(hrWorkout, hrPlan(), {
+      ftp: 0,
+      lthr: LTHR,
+      maxHr: 0,
+      thresholdPace: 0
+    })
+
+    expect(intervals.map((interval) => interval.type)).toEqual([
+      'WARMUP',
+      'WORK',
+      'WORK',
+      'WORK',
+      'RECOVERY',
+      'COOLDOWN'
+    ])
+  })
+
+  it('keeps the bpm step as RECOVERY when there is no LTHR or max HR to compare against', () => {
+    const intervals = getActualIntervalsForAnalysis(hrWorkout, hrPlan(), {
+      ftp: 0,
+      lthr: 0,
+      maxHr: 0,
+      thresholdPace: 0
+    })
+
+    expect(intervals.map((interval) => interval.type)).toEqual([
+      'WARMUP',
+      'WORK',
+      'RECOVERY',
+      'WORK',
+      'RECOVERY',
+      'COOLDOWN'
+    ])
+  })
+})

@@ -1577,7 +1577,23 @@ function normalizePlannedStepType(
   return 'WORK'
 }
 
-function toDetectionPlannedSteps(steps: any[]): Array<{
+/**
+ * Flatten a structured workout into the shape `detectIntervals` consumes.
+ *
+ * `refs` must be the athlete's resolved references (`resolveAnalysisRefs`), NOT
+ * a zeroed placeholder: they are what turns an ABSOLUTE target (watts, bpm,
+ * m/s) into an intensity factor, and that intensity factor is the sole input to
+ * the RECOVERY -> WORK promotion below. With zeroed refs an absolute target
+ * yields null or a clamped guess, so a plan whose "recovery" steps are actually
+ * work-intensity was segmented as recovery and the resulting facts described the
+ * wrong session shape (CW-402). Callers without references may still pass a
+ * zeroed refs object: the promotion then simply cannot fire, which is the
+ * pre-fix behaviour.
+ */
+function toDetectionPlannedSteps(
+  steps: any[],
+  refs: AnalysisRefs
+): Array<{
   name?: string
   durationSeconds?: number
   duration?: number
@@ -1612,26 +1628,11 @@ function toDetectionPlannedSteps(steps: any[]): Array<{
       const metric = resolvePlannedStepMetric(step)
       const intensity =
         metric === 'power'
-          ? toIntensityFactorFromTarget(step.power, 'power', {
-              ftp: 0,
-              lthr: 0,
-              maxHr: 0,
-              thresholdPace: 0
-            })
+          ? toIntensityFactorFromTarget(step.power, 'power', refs)
           : metric === 'pace'
-            ? toIntensityFactorFromTarget(step.pace, 'pace', {
-                ftp: 0,
-                lthr: 0,
-                maxHr: 0,
-                thresholdPace: 0
-              })
+            ? toIntensityFactorFromTarget(step.pace, 'pace', refs)
             : metric === 'heartRate'
-              ? toIntensityFactorFromTarget(step.heartRate || step.hr, 'heartRate', {
-                  ftp: 0,
-                  lthr: 0,
-                  maxHr: 0,
-                  thresholdPace: 0
-                })
+              ? toIntensityFactorFromTarget(step.heartRate || step.hr, 'heartRate', refs)
               : metric === 'rpe' && typeof step.rpe === 'number'
                 ? clamp(step.rpe / 10, 0.3, 1.5)
                 : null
@@ -1762,7 +1763,8 @@ function buildDetectedIntervals(
   const plannedSteps = toDetectionPlannedSteps(
     getStructuredSteps(
       plannedWorkout?.structuredWorkout || workout?.plannedWorkout?.structuredWorkout
-    )
+    ),
+    refs
   )
 
   let detected: Array<{
