@@ -57,7 +57,13 @@
           <tr
             v-for="(interval, index) in intervals"
             :key="index"
-            :class="interval.type === 'WORK' ? `bg-${props.color}-500/[0.02]` : ''"
+            :class="
+              interval.type === 'WORK'
+                ? `bg-${props.color}-500/[0.02]`
+                : interval.type === 'STEADY'
+                  ? 'bg-cyan-500/[0.02]'
+                  : ''
+            "
             class="hover:bg-white/[0.02] transition-colors cursor-pointer"
             @mouseenter="$emit('interval-hover', interval)"
             @mouseleave="$emit('interval-leave', interval)"
@@ -68,9 +74,11 @@
                 :class="[
                   interval.type === 'WORK'
                     ? `border-${props.color}-500/30 text-${props.color}-500 bg-${props.color}-500/5`
-                    : interval.type === 'RECOVERY'
-                      ? 'border-blue-500/30 text-blue-400 bg-blue-500/5'
-                      : 'border-zinc-500/30 text-zinc-400 bg-zinc-500/5'
+                    : interval.type === 'STEADY'
+                      ? 'border-cyan-500/30 text-cyan-700 dark:text-cyan-400 bg-cyan-500/5'
+                      : interval.type === 'RECOVERY'
+                        ? 'border-blue-500/30 text-blue-400 bg-blue-500/5'
+                        : 'border-zinc-500/30 text-zinc-400 bg-zinc-500/5'
                 ]"
               >
                 {{ interval.type }}
