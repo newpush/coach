@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   detectIntervals,
+  resolveHrWorkThreshold,
   resolveProviderIntervalTypes
 } from '../../../../server/utils/interval-detection'
 
@@ -88,6 +89,97 @@ describe('detectIntervals', () => {
     expect(intervals[6]?.avg_cadence).toBeGreaterThanOrEqual(78)
     expect(intervals[7]?.avg_cadence).toBeLessThan(intervals[6]?.avg_cadence || 999)
     expect(intervals[6]?.detection_confidence).toBeGreaterThan(0.35)
+  })
+
+  // Regression: the HR work bar used to end up at maxHr * 0.7 * 0.65 (~46% of
+  // max HR) because the caller scaled the threshold and detectIntervals scaled
+  // it again. Every sample read as "work" and the merge pass welded the whole
+  // session into one interval.
+  it('segments an HR interval session against a profile-sourced work bar', () => {
+    const block = (bpm: number, seconds: number) => Array.from({ length: seconds }, () => bpm)
+
+    const heartrate = [
+      ...block(112, 300), // warmup
+      ...block(165, 240), // work 1
+      ...block(120, 180), // recovery 1
+      ...block(165, 240), // work 2
+      ...block(120, 180), // recovery 2
+      ...block(165, 240), // work 3
+      ...block(120, 180), // recovery 3
+      ...block(165, 240), // work 4
+      ...block(105, 300) // cooldown
+    ]
+    const time = heartrate.map((_, index) => index)
+
+    // Athlete profile max HR, not this session's own max.
+    const threshold = resolveHrWorkThreshold({ maxHr: 190 })
+    expect(threshold).toBeCloseTo(133, 5)
+
+    const intervals = detectIntervals(time, heartrate, 'heartrate', threshold)
+
+    expect(intervals.length).toBeGreaterThan(1)
+    expect(intervals.map((interval) => interval.type)).toEqual([
+      'WARMUP',
+      'WORK',
+      'RECOVERY',
+      'WORK',
+      'RECOVERY',
+      'WORK',
+      'RECOVERY',
+      'WORK',
+      'COOLDOWN'
+    ])
+
+    const workIntervals = intervals.filter((interval) => interval.type === 'WORK')
+    expect(workIntervals).toHaveLength(4)
+    workIntervals.forEach((interval) => {
+      expect(interval.avg_heartrate).toBeGreaterThan(threshold!)
+      // Nowhere near the full session length (2100s) — no mega-interval.
+      expect(interval.duration).toBeLessThan(300)
+    })
+
+    intervals
+      .filter((interval) => interval.type === 'RECOVERY')
+      .forEach((interval) => {
+        expect(interval.avg_heartrate).toBeLessThan(threshold!)
+      })
+  })
+
+  it('classifies a long steady HR session with no candidates as STEADY', () => {
+    const heartrate = Array.from({ length: 2400 }, (_, index) => 122 + (index % 3))
+    const time = heartrate.map((_, index) => index)
+
+    const threshold = resolveHrWorkThreshold({ maxHr: 190 })
+    const intervals = detectIntervals(time, heartrate, 'heartrate', threshold)
+
+    expect(intervals).toHaveLength(1)
+    expect(intervals[0]?.type).toBe('STEADY')
+    expect(intervals[0]?.duration).toBe(2399)
+  })
+
+  it('classifies a long steady power session with no candidates as STEADY', () => {
+    const watts = Array.from({ length: 2400 }, (_, index) => 130 + (index % 5))
+    const time = watts.map((_, index) => index)
+
+    const intervals = detectIntervals(time, watts, 'power', 250)
+
+    expect(intervals).toHaveLength(1)
+    expect(intervals[0]?.type).toBe('STEADY')
+  })
+})
+
+describe('resolveHrWorkThreshold', () => {
+  it('prefers LTHR, then max HR, and only then the session max as a last resort', () => {
+    expect(resolveHrWorkThreshold({ lthr: 160, maxHr: 190, sessionMaxHr: 175 })).toBeCloseTo(
+      160 * 0.82,
+      5
+    )
+    expect(resolveHrWorkThreshold({ lthr: null, maxHr: 190, sessionMaxHr: 175 })).toBeCloseTo(
+      190 * 0.7,
+      5
+    )
+    expect(resolveHrWorkThreshold({ sessionMaxHr: 175 })).toBeCloseTo(175 * 0.7, 5)
+    expect(resolveHrWorkThreshold({})).toBeUndefined()
   })
 })
 

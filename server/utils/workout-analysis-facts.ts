@@ -1,6 +1,10 @@
 import { calculateFatigueSensitivity, calculateStabilityMetrics } from './performance-metrics'
 import { toIntensityFactorFromTarget } from './structured-workout-persistence'
-import { detectIntervals, resolveProviderIntervalTypes } from './interval-detection'
+import {
+  detectIntervals,
+  resolveHrWorkThreshold,
+  resolveProviderIntervalTypes
+} from './interval-detection'
 import { parseLegacyLoadPreference, type MetricTarget } from './workout-target-policy'
 
 type FactConfidence = 'low' | 'medium' | 'high'
@@ -1633,12 +1637,19 @@ function buildDetectedIntervals(workout: any, plannedWorkout?: any): ActualInter
       cadence
     )
   } else if (time.length > 0 && hr.length === time.length && hr.length > 0) {
-    const maxHr = Number(workout?.maxHr || 0) || undefined
+    // Profile-sourced reference (sportSettings, then the user record). This
+    // workout's own max HR is only an explicit last-resort fallback — a bar
+    // derived from it is self-referential and drifts session to session.
+    const hrWorkThreshold = resolveHrWorkThreshold({
+      lthr: workout?.sportSettings?.lthr ?? workout?.user?.lthr,
+      maxHr: workout?.sportSettings?.maxHr ?? workout?.user?.maxHr,
+      sessionMaxHr: workout?.maxHr
+    })
     detected = detectIntervals(
       time,
       hr,
       'heartrate',
-      maxHr ? maxHr * 0.7 : undefined,
+      hrWorkThreshold,
       plannedSteps,
       undefined,
       cadence
