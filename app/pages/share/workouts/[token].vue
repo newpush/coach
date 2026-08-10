@@ -538,6 +538,7 @@
 
 <script setup lang="ts">
   import { getWorkoutSourceLabel } from '~/utils/workout-source'
+  import { getAnalysisStatusColor } from '~/utils/analysis-status'
 
   import PlanAdherence from '~/components/workouts/PlanAdherence.vue'
 
@@ -652,19 +653,26 @@
     return `${baseClass} bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200`
   }
 
-  function getStatusBadgeClass(status: string) {
+  /**
+   * Soft-pill styling for an AI analysis section status. The severity decision comes
+   * from `~/utils/analysis-status`, shared with the workout page, the report page and
+   * the score modal, so a shared analysis cannot be coloured differently from the same
+   * analysis on the owner's own workout page (CW-424).
+   */
+  function getStatusBadgeClass(status?: string | null) {
     const baseClass = 'px-3 py-1 rounded-full text-xs font-semibold'
-    if (status === 'excellent')
-      return `${baseClass} bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200`
-    if (status === 'good')
-      return `${baseClass} bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200`
-    if (status === 'moderate')
-      return `${baseClass} bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200`
-    if (status === 'needs_improvement')
-      return `${baseClass} bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200`
-    if (status === 'poor')
-      return `${baseClass} bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200`
-    return `${baseClass} bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200`
+    switch (getAnalysisStatusColor(status)) {
+      case 'success':
+        return `${baseClass} bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200`
+      case 'warning':
+        return `${baseClass} bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200`
+      case 'error':
+        return `${baseClass} bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200`
+      case 'info':
+        return `${baseClass} bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200`
+      default:
+        return `${baseClass} bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200`
+    }
   }
 
   function shouldShowPowerCurve(w: any) {
