@@ -1828,6 +1828,202 @@ function buildDetectedIntervals(
   return mapIntervalsToActual(detected)
 }
 
+/**
+ * One planned step and the actual segment it was executed as.
+ *
+ * `actual === null` means the alignment found no counterpart for this planned
+ * step at all — the athlete's file contains no segment that belongs to it.
+ * That is deliberately distinct from "there is a segment but it carries no
+ * comparable measurement", which callers detect from the segment itself.
+ */
+export type PlannedActualPair = {
+  planned: FlattenedPlannedStep
+  /** Index into the planned step list that was passed in. */
+  plannedIndex: number
+  actual: ActualInterval | null
+  /** Index into `PlannedActualAlignment.actualSegments`, not into the caller's raw list. */
+  actualIndex: number | null
+}
+
+export type PlannedActualAlignment = {
+  /** Exactly one entry per planned step, in plan order. */
+  pairs: PlannedActualPair[]
+  /**
+   * Actual segments no planned step claimed: extra laps, mid-step lap presses,
+   * an unplanned extra rep. Indices refer to `actualSegments`.
+   */
+  extraActual: Array<{ actual: ActualInterval; actualIndex: number }>
+  /**
+   * The actual list the alignment actually worked on: the caller's list minus
+   * the stub segments dropped by `dropStubSegments`. Callers that need counts
+   * or terminal-segment checks should use this rather than their raw input, so
+   * a 3-second lap fragment cannot masquerade as a rep.
+   */
+  actualSegments: ActualInterval[]
+  /** How many stub segments were dropped before pairing. */
+  droppedStubs: number
+}
+
+/**
+ * Longest a segment can be and still be treated as a lap-button artefact rather
+ * than something the athlete executed.
+ *
+ * Provider files routinely end with a 1-6 second fragment (the athlete pressing
+ * lap/stop, an auto-lap firing at the finish, a device split). Both reference
+ * workouts on CW-386 end in one. Fifteen seconds is the shortest step that
+ * appears in real prescriptions - 15s microbursts and strides are common, 10s
+ * ones are not - so a segment shorter than that is far more likely to be an
+ * artefact than a prescribed effort. The bar is lowered further when the plan
+ * itself asks for something shorter, so a 10-second sprint session still
+ * matches its own reps.
+ */
+const STUB_SEGMENT_MAX_SECONDS = 15
+
+function dropStubSegments(
+  actualIntervals: ActualInterval[],
+  plannedSteps: FlattenedPlannedStep[]
+): ActualInterval[] {
+  const shortestPlanned = plannedSteps.reduce(
+    (shortest, step) =>
+      step.durationSeconds > 0 ? Math.min(shortest, step.durationSeconds) : shortest,
+    Number.POSITIVE_INFINITY
+  )
+  const threshold = Math.min(STUB_SEGMENT_MAX_SECONDS, shortestPlanned)
+  const kept = actualIntervals.filter((interval) => interval.durationSeconds >= threshold)
+  // Never let the filter empty the list: a session made entirely of very short
+  // segments is a segmentation problem, not a reason to report no execution.
+  return kept.length > 0 ? kept : actualIntervals
+}
+
+/**
+ * How well one planned step and one actual segment go together. Positive means
+ * pairing them is better than leaving both unpaired.
+ *
+ * Classification dominates - a work rep must never be scored against a recovery
+ * lap - and duration breaks the ties between candidate reps.
+ */
+function scorePlannedActualAffinity(planned: FlattenedPlannedStep, actual: ActualInterval): number {
+  const classificationScore = planned.classification === actual.classification ? 1 : -1.5
+  const longest = Math.max(planned.durationSeconds, actual.durationSeconds)
+  const durationRatio =
+    longest > 0 ? Math.min(planned.durationSeconds, actual.durationSeconds) / longest : 0
+  // Centred on 0.5 so a same-classification pair with wildly different
+  // durations is still worth making, while a cross-classification pair is not.
+  return classificationScore + (durationRatio - 0.5)
+}
+
+/**
+ * Cost of leaving a planned step or an actual segment unpaired. Two gaps
+ * (-0.7) must be cheaper than forcing a work step onto a recovery lap (-1.0)
+ * and dearer than any same-classification pairing (>= +0.1), which is what
+ * keeps rep N against rep N when the actual list has extra or missing segments.
+ */
+const ALIGNMENT_GAP_PENALTY = -0.35
+
+/**
+ * Align a plan's steps to the segments the athlete actually executed.
+ *
+ * Pairing by array index breaks on the first structural mismatch: one extra
+ * lap, one missing rep or one stub fragment shifts every later comparison, so
+ * the athlete gets scored against the wrong step from that point on (CW-386).
+ *
+ * This is a Needleman-Wunsch global alignment over the two sequences, keyed on
+ * classification plus duration, with a fixed gap penalty. It is O(n*m) in a
+ * space where both sides are tens of entries, it preserves order (rep 3 can
+ * never be matched before rep 2), and unlike a forward greedy scan it can pay
+ * for a local mismatch to keep the rest of the sequence aligned.
+ *
+ * This is the one alignment used by adherence scoring and by source
+ * arbitration; new consumers should call it rather than re-pairing by index.
+ */
+export function alignPlannedToActualIntervals(
+  plannedSteps: FlattenedPlannedStep[],
+  actualIntervals: ActualInterval[]
+): PlannedActualAlignment {
+  const actualSegments = dropStubSegments(actualIntervals, plannedSteps)
+  const droppedStubs = actualIntervals.length - actualSegments.length
+
+  const emptyResult = (): PlannedActualAlignment => ({
+    pairs: plannedSteps.map((planned, plannedIndex) => ({
+      planned,
+      plannedIndex,
+      actual: null,
+      actualIndex: null
+    })),
+    extraActual: actualSegments.map((actual, actualIndex) => ({ actual, actualIndex })),
+    actualSegments,
+    droppedStubs
+  })
+
+  if (plannedSteps.length === 0 || actualSegments.length === 0) return emptyResult()
+
+  const plannedCount = plannedSteps.length
+  const actualCount = actualSegments.length
+
+  // score[i][j] = best score for aligning the first i planned steps with the
+  // first j actual segments.
+  const score: number[][] = Array.from({ length: plannedCount + 1 }, () =>
+    new Array<number>(actualCount + 1).fill(0)
+  )
+  for (let i = 1; i <= plannedCount; i++) score[i]![0] = i * ALIGNMENT_GAP_PENALTY
+  for (let j = 1; j <= actualCount; j++) score[0]![j] = j * ALIGNMENT_GAP_PENALTY
+
+  for (let i = 1; i <= plannedCount; i++) {
+    for (let j = 1; j <= actualCount; j++) {
+      const pairScore =
+        score[i - 1]![j - 1]! +
+        scorePlannedActualAffinity(plannedSteps[i - 1]!, actualSegments[j - 1]!)
+      const skipPlanned = score[i - 1]![j]! + ALIGNMENT_GAP_PENALTY
+      const skipActual = score[i]![j - 1]! + ALIGNMENT_GAP_PENALTY
+      score[i]![j] = Math.max(pairScore, skipPlanned, skipActual)
+    }
+  }
+
+  const pairs: PlannedActualPair[] = plannedSteps.map((planned, plannedIndex) => ({
+    planned,
+    plannedIndex,
+    actual: null,
+    actualIndex: null
+  }))
+  const claimedActual = new Array<boolean>(actualCount).fill(false)
+
+  // Traceback. Where several alignments score identically - four interchangeable
+  // reps against three executed ones, one planned warmup against two warmup laps
+  // - the tie is broken in favour of putting the gaps at the END of the
+  // sequence, which is why the gap branches are tested before the pairing one on
+  // a walk backwards. An athlete who cuts a session short drops the last rep,
+  // not the first, and an extra lap is far more often a trailing fragment than a
+  // sign that rep 1 never happened.
+  let i = plannedCount
+  let j = actualCount
+  while (i > 0 && j > 0) {
+    const pairScore =
+      score[i - 1]![j - 1]! +
+      scorePlannedActualAffinity(plannedSteps[i - 1]!, actualSegments[j - 1]!)
+    if (score[i]![j] === score[i - 1]![j]! + ALIGNMENT_GAP_PENALTY) {
+      i--
+    } else if (score[i]![j] === score[i]![j - 1]! + ALIGNMENT_GAP_PENALTY) {
+      j--
+    } else if (score[i]![j] === pairScore) {
+      pairs[i - 1]!.actual = actualSegments[j - 1]!
+      pairs[i - 1]!.actualIndex = j - 1
+      claimedActual[j - 1] = true
+      i--
+      j--
+    } else {
+      // Unreachable: score[i][j] is the max of exactly these three moves.
+      i--
+      j--
+    }
+  }
+
+  const extraActual = actualSegments
+    .map((actual, actualIndex) => ({ actual, actualIndex }))
+    .filter(({ actualIndex }) => !claimedActual[actualIndex])
+
+  return { pairs, extraActual, actualSegments, droppedStubs }
+}
+
 function scoreIntervalStructure(
   actualIntervals: ActualInterval[],
   plannedSteps: FlattenedPlannedStep[],
@@ -1835,12 +2031,14 @@ function scoreIntervalStructure(
 ): number {
   if (actualIntervals.length === 0) return 0
 
-  const sequencePairs = Math.min(actualIntervals.length, plannedSteps.length)
+  const alignment = alignPlannedToActualIntervals(plannedSteps, actualIntervals)
   let score = 0
 
-  for (let index = 0; index < sequencePairs; index++) {
-    const planned = plannedSteps[index]!
-    const actual = actualIntervals[index]!
+  for (const pair of alignment.pairs) {
+    const planned = pair.planned
+    const actual = pair.actual
+    // Unpaired planned steps are charged below, once, as a structure penalty.
+    if (!actual) continue
     score += planned.classification === actual.classification ? 1.5 : -1
 
     const durationRatio =
@@ -1892,11 +2090,17 @@ function scoreIntervalStructure(
     if (actual.confidence !== null) score += actual.confidence * 0.5
   }
 
-  score -= Math.abs(plannedSteps.length - actualIntervals.length) * 0.8
+  // Structure penalty, now counted from the alignment itself: every planned
+  // step that found no counterpart and every actual segment nothing claimed.
+  // Dropped stubs are deliberately not charged - they are device noise, not a
+  // structural difference between the two candidate segmentations.
+  const unpairedPlanned = alignment.pairs.filter((pair) => pair.actual === null).length
+  score -= (unpairedPlanned + alignment.extraActual.length) * 0.8
 
+  const comparableActual = alignment.actualSegments
   const plannedTerminalRecovery = plannedSteps.at(-2)?.classification === 'recovery'
-  const actualTerminalRecovery = actualIntervals.at(-2)?.classification === 'recovery'
-  const actualEndsWithCooldown = actualIntervals.at(-1)?.type === 'COOLDOWN'
+  const actualTerminalRecovery = comparableActual.at(-2)?.classification === 'recovery'
+  const actualEndsWithCooldown = comparableActual.at(-1)?.type === 'COOLDOWN'
   if (plannedTerminalRecovery && actualEndsWithCooldown && !actualTerminalRecovery) {
     score -= 2.25
   }
@@ -2735,10 +2939,15 @@ function deriveAdherence(params: {
     metricOrder
   )
   const actualIntervals = extractActualIntervals(workout, plannedWorkout, refs)
+  // One alignment for every comparison below: work steps, recovery steps and
+  // cadence targets all read the same pairs, so they cannot disagree about
+  // which executed segment a given planned step belongs to (CW-386).
+  const alignment = alignPlannedToActualIntervals(plannedSteps, actualIntervals)
+  const comparableActual = alignment.actualSegments
   const plannedWork = plannedSteps.filter((step) => step.classification === 'work')
   const plannedRecovery = plannedSteps.filter((step) => step.classification === 'recovery')
-  const actualWork = actualIntervals.filter((step) => step.classification === 'work')
-  const actualRecovery = actualIntervals.filter((step) => step.classification === 'recovery')
+  const actualWork = comparableActual.filter((step) => step.classification === 'work')
+  const actualRecovery = comparableActual.filter((step) => step.classification === 'recovery')
 
   if (plannedSteps.length === 0) {
     return {
@@ -2784,8 +2993,6 @@ function deriveAdherence(params: {
     }
   }
 
-  const workPairs = Math.min(plannedWork.length, actualWork.length)
-  const recoveryPairs = Math.min(plannedRecovery.length, actualRecovery.length)
   const cadencePlanned = plannedSteps.filter((step) => step.cadence !== null)
   const pairMetric = (
     planned: FlattenedPlannedStep,
@@ -2853,8 +3060,26 @@ function deriveAdherence(params: {
    * being counted as misses. Other metrics keep their existing behaviour: an
    * unmeasured power/pace/HR step still counts against the athlete.
    */
-  const isUnmeasurableRpeStep = (planned: FlattenedPlannedStep, result: { comparable: boolean }) =>
-    planned.metric === 'rpe' && !result.comparable
+  const isUnmeasurableRpeStep = (
+    planned: FlattenedPlannedStep,
+    actual: ActualInterval | null,
+    result: { comparable: boolean }
+  ) => actual !== null && planned.metric === 'rpe' && !result.comparable
+
+  /**
+   * A planned step the alignment could not pair at all is a different case from
+   * CW-385's unmeasurable RPE step, and is treated differently on purpose.
+   *
+   * CW-385 excludes a step when the segment exists but carries no comparable
+   * measurement - the athlete may well have executed it perfectly and the file
+   * simply cannot say. Here there is no segment at all: the alignment already
+   * tolerates extra laps, split laps and stub fragments, so a planned step with
+   * no counterpart left is evidence the work was not executed, not evidence
+   * that the measurement is missing. Those steps therefore stay in the
+   * denominator and count as misses - which is also what index pairing did for
+   * planned steps past the end of the actual list, so no session gets a better
+   * hit rate merely because alignment replaced indexing.
+   */
 
   let workHits = 0
   let recoveryHits = 0
@@ -2866,13 +3091,10 @@ function deriveAdherence(params: {
   const overshoots: number[] = []
   const undershoots: number[] = []
 
-  // Pairing stays index-based on purpose — reworking it is a separate concern.
-  // Planned steps past the end of the actual list simply have no counterpart.
-  for (let index = 0; index < plannedWork.length; index++) {
-    const planned = plannedWork[index]!
-    const actual = index < workPairs ? actualWork[index]! : null
+  for (const { planned, actual } of alignment.pairs) {
+    if (planned.classification !== 'work') continue
     const result = pairMetric(planned, actual)
-    if (isUnmeasurableRpeStep(planned, result)) {
+    if (isUnmeasurableRpeStep(planned, actual, result)) {
       scorableWorkSteps--
       continue
     }
@@ -2881,22 +3103,23 @@ function deriveAdherence(params: {
     if (result.deltaPct !== null && result.deltaPct < 0) undershoots.push(Math.abs(result.deltaPct))
   }
 
-  for (let index = 0; index < plannedRecovery.length; index++) {
-    const planned = plannedRecovery[index]!
-    const actual = index < recoveryPairs ? actualRecovery[index]! : null
+  for (const { planned, actual } of alignment.pairs) {
+    if (planned.classification !== 'recovery') continue
     const result = pairMetric(planned, actual)
-    if (isUnmeasurableRpeStep(planned, result)) {
+    if (isUnmeasurableRpeStep(planned, actual, result)) {
       scorableRecoverySteps--
       continue
     }
     if (result.hit) recoveryHits++
   }
 
-  for (let index = 0; index < Math.min(plannedSteps.length, actualIntervals.length); index++) {
-    const planned = plannedSteps[index]!
-    const actual = actualIntervals[index]!
+  // Cadence reads the same aligned pairs as the loops above. It used to walk
+  // `plannedSteps[i]` against `actualIntervals[i]` with no classification
+  // filter at all, so rep 1 of the plan was routinely scored against the
+  // athlete's warmup lap (CW-386).
+  for (const { planned, actual } of alignment.pairs) {
     if (planned.cadence === null) continue
-    if (actual.avgCadence === null || actual.avgCadence <= 0) continue
+    if (!actual || actual.avgCadence === null || actual.avgCadence <= 0) continue
     const tolerance = planned.ramp ? 8 : 5
     if (Math.abs(actual.avgCadence - planned.cadence) <= tolerance) cadenceHits++
   }

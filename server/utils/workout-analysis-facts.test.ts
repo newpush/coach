@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  alignPlannedToActualIntervals,
   buildWorkoutAnalysisFacts,
   buildWorkoutAnalysisFactsV2,
   formatActualIntervalsForPrompt,
@@ -1427,5 +1428,296 @@ describe('planned-step detection refs (CW-402)', () => {
       'RECOVERY',
       'COOLDOWN'
     ])
+  })
+})
+
+describe('planned-to-actual alignment (CW-386)', () => {
+  const plannedStep = (
+    overrides: Partial<{
+      type: string
+      durationSeconds: number
+      classification: 'work' | 'recovery'
+      cadence: number | null
+    }> = {}
+  ) => ({
+    type: 'Active',
+    durationSeconds: 300,
+    metric: 'power' as const,
+    targetValue: 250,
+    targetUnits: 'watts',
+    intensityFactor: 1,
+    cadence: null,
+    ramp: false,
+    classification: 'work' as const,
+    ...overrides
+  })
+
+  const actualSegment = (
+    overrides: Partial<{
+      type: string
+      durationSeconds: number
+      classification: 'work' | 'recovery'
+      avgCadence: number | null
+    }> = {}
+  ) => ({
+    type: 'WORK',
+    durationSeconds: 300,
+    avgPower: 250,
+    avgHr: null,
+    avgSpeed: null,
+    avgCadence: null,
+    intensity: 1,
+    matchScore: null,
+    confidence: null,
+    ambiguityNote: null,
+    classification: 'work' as const,
+    ...overrides
+  })
+
+  it('returns one pair per planned step and reports extra actual segments explicitly', () => {
+    const planned = [
+      plannedStep({ durationSeconds: 300 }),
+      plannedStep({ type: 'Rest', durationSeconds: 120, classification: 'recovery' }),
+      plannedStep({ durationSeconds: 300 })
+    ]
+    const actual = [
+      actualSegment({ durationSeconds: 300 }),
+      actualSegment({ type: 'RECOVERY', durationSeconds: 120, classification: 'recovery' }),
+      // An unplanned extra rep the athlete threw in.
+      actualSegment({ durationSeconds: 300 }),
+      actualSegment({ durationSeconds: 300 })
+    ]
+
+    const alignment = alignPlannedToActualIntervals(planned, actual)
+
+    expect(alignment.pairs).toHaveLength(3)
+    expect(alignment.pairs.every((pair) => pair.actual !== null)).toBe(true)
+    expect(alignment.pairs.map((pair) => pair.actualIndex)).toEqual([0, 1, 2])
+    expect(alignment.extraActual.map((entry) => entry.actualIndex)).toEqual([3])
+    expect(alignment.droppedStubs).toBe(0)
+  })
+
+  it('never pairs a work step with a recovery segment, leaving both unpaired instead', () => {
+    const planned = [plannedStep({ durationSeconds: 300 })]
+    const actual = [
+      actualSegment({ type: 'RECOVERY', durationSeconds: 300, classification: 'recovery' })
+    ]
+
+    const alignment = alignPlannedToActualIntervals(planned, actual)
+
+    expect(alignment.pairs[0]!.actual).toBeNull()
+    expect(alignment.extraActual).toHaveLength(1)
+  })
+
+  it('drops sub-15-second stub segments before pairing', () => {
+    const planned = [plannedStep({ durationSeconds: 300 }), plannedStep({ durationSeconds: 300 })]
+    const actual = [
+      actualSegment({ durationSeconds: 300 }),
+      actualSegment({ durationSeconds: 4 }),
+      actualSegment({ durationSeconds: 300 })
+    ]
+
+    const alignment = alignPlannedToActualIntervals(planned, actual)
+
+    expect(alignment.droppedStubs).toBe(1)
+    expect(alignment.actualSegments).toHaveLength(2)
+    expect(alignment.pairs.every((pair) => pair.actual !== null)).toBe(true)
+    expect(alignment.extraActual).toHaveLength(0)
+  })
+
+  it('keeps genuinely short prescribed reps when the plan itself asks for them', () => {
+    // A 10s sprint plan lowers the stub bar to its own shortest step, so the
+    // reps the athlete executed are not thrown away as device noise.
+    const planned = [plannedStep({ durationSeconds: 10 }), plannedStep({ durationSeconds: 10 })]
+    const actual = [actualSegment({ durationSeconds: 10 }), actualSegment({ durationSeconds: 11 })]
+
+    const alignment = alignPlannedToActualIntervals(planned, actual)
+
+    expect(alignment.droppedStubs).toBe(0)
+    expect(alignment.pairs.every((pair) => pair.actual !== null)).toBe(true)
+  })
+
+  it('scores a cadence-targeted plan against the matching rep instead of the warmup', () => {
+    // Shape of the workouts on the originating support case: the athlete's
+    // warmup arrives as two laps (a mid-warmup lap press) and the file ends in
+    // a 4-second stub. Index pairing shifted every cadence comparison by one
+    // from the second lap onwards, so plan step 1 was scored against the
+    // warmup and the hit rate came out at 20%.
+    const rep = (index: number) => [
+      {
+        type: 'WORK',
+        moving_time: 300,
+        average_watts: 250,
+        average_cadence: 95,
+        intensity: 100,
+        lap: index
+      },
+      {
+        type: 'REST',
+        moving_time: 180,
+        average_watts: 125,
+        average_cadence: 85,
+        intensity: 50,
+        lap: index
+      }
+    ]
+
+    const facts = buildWorkoutAnalysisFactsV2({
+      workout: makeWorkout({
+        title: 'Cadence Threshold Session',
+        type: 'Ride',
+        durationSec: 3120,
+        rawJson: {
+          icu_intervals: [
+            {
+              type: 'WARMUP',
+              moving_time: 300,
+              average_watts: 140,
+              average_cadence: 85,
+              intensity: 56
+            },
+            {
+              type: 'WARMUP',
+              moving_time: 300,
+              average_watts: 140,
+              average_cadence: 85,
+              intensity: 56
+            },
+            ...rep(1),
+            ...rep(2),
+            ...rep(3),
+            ...rep(4),
+            {
+              type: 'COOLDOWN',
+              moving_time: 600,
+              average_watts: 125,
+              average_cadence: 80,
+              intensity: 50
+            },
+            // Terminal stub lap: the athlete stopping the timer.
+            { type: 'WORK', moving_time: 4, average_watts: 240, average_cadence: 60, intensity: 96 }
+          ]
+        }
+      }),
+      sportSettings: { ftp: 250 },
+      plannedWorkout: {
+        durationSec: 3120,
+        structuredWorkout: {
+          steps: [
+            {
+              type: 'Warmup',
+              durationSeconds: 600,
+              power: { value: 55, units: '%' },
+              cadence: 85
+            },
+            ...Array.from({ length: 4 }, () => [
+              {
+                type: 'Interval',
+                durationSeconds: 300,
+                power: { value: 100, units: '%' },
+                cadence: 95
+              },
+              { type: 'Rest', durationSeconds: 180, power: { value: 50, units: '%' }, cadence: 85 }
+            ]).flat(),
+            {
+              type: 'Cooldown',
+              durationSeconds: 600,
+              power: { value: 50, units: '%' },
+              cadence: 80
+            }
+          ]
+        }
+      }
+    })
+
+    expect(facts.adherence.cadenceAssessable).toBe(true)
+    expect(facts.adherence.cadenceHitRate).toBe(100)
+    expect(facts.adherence.workIntervalHitRate).toBe(100)
+    expect(facts.adherence.recoveryHitRate).toBe(100)
+    expect(facts.adherence.structureMatched).toBe(true)
+    expect(facts.adherence.executionClassification).toBe('as_prescribed')
+  })
+
+  it('does not let a mid-session stub lap consume a planned rep', () => {
+    const facts = buildWorkoutAnalysisFactsV2({
+      workout: makeWorkout({
+        title: 'Stub Lap Session',
+        type: 'Ride',
+        durationSec: 1260,
+        rawJson: {
+          icu_intervals: [
+            { type: 'WORK', moving_time: 300, average_watts: 250 },
+            // 5-second fragment between rep 1 and its recovery. Index pairing
+            // handed it to planned rep 2, which then read as a 16% undershoot.
+            { type: 'WORK', moving_time: 5, average_watts: 210 },
+            { type: 'REST', moving_time: 120, average_watts: 125 },
+            { type: 'WORK', moving_time: 300, average_watts: 250 },
+            { type: 'REST', moving_time: 120, average_watts: 125 },
+            { type: 'WORK', moving_time: 300, average_watts: 250 },
+            { type: 'REST', moving_time: 120, average_watts: 125 }
+          ]
+        }
+      }),
+      sportSettings: { ftp: 250 },
+      plannedWorkout: {
+        durationSec: 1260,
+        structuredWorkout: {
+          steps: Array.from({ length: 3 }, () => [
+            { type: 'Interval', durationSeconds: 300, power: { value: 100, units: '%' } },
+            { type: 'Rest', durationSeconds: 120, power: { value: 50, units: '%' } }
+          ]).flat()
+        }
+      }
+    })
+
+    expect(facts.adherence.workIntervalHitRate).toBe(100)
+    expect(facts.adherence.recoveryHitRate).toBe(100)
+    expect(facts.adherence.targetUndershootPct).toBeNull()
+    expect(facts.adherence.structureMatched).toBe(true)
+  })
+
+  it('keeps the remaining reps aligned when one prescribed rep was never executed', () => {
+    // Ladder session: 4 reps of falling intensity and rising duration. The
+    // athlete skipped rep 3 (360s @ 260W) and rode the last rep 12% over its
+    // target. Index pairing scored the executed 420s rep against planned rep 3
+    // (260W), where +7.7% still counted as a hit - so the session came out at
+    // 75% with a 7.7% overshoot and the missed rep was never visible. Aligned,
+    // the skipped rep is the miss and the last rep is scored against its own
+    // target.
+    const facts = buildWorkoutAnalysisFactsV2({
+      workout: makeWorkout({
+        title: 'Descending Ladder',
+        type: 'Ride',
+        durationSec: 1320,
+        rawJson: {
+          icu_intervals: [
+            { type: 'WORK', moving_time: 240, average_watts: 280 },
+            { type: 'REST', moving_time: 180, average_watts: 120 },
+            { type: 'WORK', moving_time: 300, average_watts: 270 },
+            { type: 'REST', moving_time: 180, average_watts: 120 },
+            { type: 'WORK', moving_time: 420, average_watts: 280 }
+          ]
+        }
+      }),
+      sportSettings: { ftp: 250 },
+      plannedWorkout: {
+        durationSec: 1620,
+        structuredWorkout: {
+          steps: [
+            { type: 'Interval', durationSeconds: 240, power: { value: 280, units: 'watts' } },
+            { type: 'Rest', durationSeconds: 180, power: { value: 120, units: 'watts' } },
+            { type: 'Interval', durationSeconds: 300, power: { value: 270, units: 'watts' } },
+            { type: 'Rest', durationSeconds: 180, power: { value: 120, units: 'watts' } },
+            { type: 'Interval', durationSeconds: 360, power: { value: 260, units: 'watts' } },
+            { type: 'Rest', durationSeconds: 180, power: { value: 120, units: 'watts' } },
+            { type: 'Interval', durationSeconds: 420, power: { value: 250, units: 'watts' } }
+          ]
+        }
+      }
+    })
+
+    expect(facts.adherence.workIntervalHitRate).toBe(50)
+    expect(facts.adherence.targetOvershootPct).toBe(12)
+    expect(facts.adherence.recoveryHitRate).toBeCloseTo(66.7, 1)
   })
 })
