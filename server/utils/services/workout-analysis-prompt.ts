@@ -116,7 +116,11 @@ export function buildWorkoutAnalysisData(workout: any) {
   }
 
   // Speed
-  if (workout.averageSpeed) data.avg_speed_ms = workout.averageSpeed / 3.6 // km/h to m/s
+  // `workout.averageSpeed` is stored in m/s by every sync writer (Intervals.icu, Strava,
+  // Polar, Rouvy, FIT, Garmin, Wahoo), so it is passed through untouched. This used to be
+  // divided by 3.6 as if it were km/h, which told the model the athlete moved 3.6x slower
+  // than they did -- badly corrupting pace commentary for runs (CW-382).
+  if (workout.averageSpeed) data.avg_speed_ms = workout.averageSpeed
 
   // Training metrics
   if (workout.tss) data.tss = workout.tss
