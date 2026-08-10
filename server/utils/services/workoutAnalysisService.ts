@@ -1,4 +1,4 @@
-import { generateCoachAnalysis, generateStructuredAnalysis } from '../gemini'
+import { generateStructuredAnalysis } from '../gemini'
 import { prisma } from '../db'
 import { attachStreamToWorkout } from '../repositories/workoutStreamRepository'
 import { workoutRepository } from '../repositories/workoutRepository'
@@ -11,33 +11,17 @@ import { queueWorkoutInsightEmail } from '../workout-insight-email'
 import { createUserNotification } from '../notifications'
 import { thresholdDetectionService } from './thresholdDetectionService'
 import { pbDetectionService } from './pbDetectionService'
-import { KG_TO_LBS } from '../number'
-import {
-  formatPromptWeight,
-  formatPromptHeight,
-  formatPromptDistance,
-  formatPromptElevation,
-  formatPromptTemperature,
-  formatPromptPace
-} from '../ai-prompt-format'
 import { isWorkoutEligibleForAutomaticInsights } from '../automatic-workout-insights'
-import {
-  buildAnalysisRequestMetricRules,
-  buildMetricPriorityPromptBlock,
-  resolveMetricPriorityContext,
-  shouldCondenseHeartRateSection
-} from '../../../trigger/utils/workout-metric-priority'
-import { formatStructuredPlanForPrompt } from '../../../trigger/utils/planned-workout-targets'
-import {
-  buildWorkoutAnalysisFacts,
-  buildWorkoutAnalysisFactsV2,
-  type WorkoutAnalysisFacts,
-  type WorkoutAnalysisFactsV2
-} from '../workout-analysis-facts'
-import { summarizePowerFromWatts } from '../power-metrics'
-import { resolveProviderIntervalTypes } from '../interval-detection'
-import type { JourneyEventCategory } from '@prisma/client'
+import { buildWorkoutAnalysisFactsV2 } from '../workout-analysis-facts'
+import { buildWorkoutAnalysisData, buildWorkoutAnalysisPrompt } from './workout-analysis-prompt'
 import { registerTaskHandler } from '../task-registry'
+
+// NOTE: the payload/prompt builders now live in ./workout-analysis-prompt so this
+// service and the Trigger.dev task (trigger/analyze-workout.ts) cannot drift apart
+// again (CW-392). They are deliberately NOT re-exported from here: everything under
+// server/utils is Nitro auto-imported, and re-exporting would register the same
+// symbol twice and trigger "Duplicated imports" warnings. Import them from
+// server/utils/services/workout-analysis-prompt instead.
 
 const logger = console
 
@@ -230,406 +214,6 @@ export const analysisSchema = {
   required: ['type', 'title', 'executive_summary', 'sections', 'scores']
 }
 
-export function buildWorkoutAnalysisData(workout: any) {
-  const workoutType = String(workout.type || '')
-  const isRunningWorkout = workoutType.toLowerCase().includes('run')
-  const normalizeRunningCadence = (cadence: number | null | undefined) => {
-    if (!cadence) return cadence
-    return isRunningWorkout && cadence < 120 ? cadence * 2 : cadence
-  }
-
-  const data: any = {
-    id: workout.id,
-    date: workout.date,
-    title: workout.title,
-    description: workout.description,
-    notes: workout.notes,
-    type: workout.type,
-    duration_m: Math.round(workout.durationSec / 60),
-    duration_s: workout.durationSec,
-    distance_m: workout.distanceMeters,
-    elevation_gain: workout.elevationGain
-  }
-  const streamPowerSummary = summarizePowerFromWatts(workout.streams?.watts)
-  const powerZoneTimes = Array.isArray(workout.streams?.powerZoneTimes)
-    ? (workout.streams.powerZoneTimes as number[]).filter((value) => typeof value === 'number')
-    : []
-
-  if (workout.averageWatts) data.avg_power = workout.averageWatts
-  else if (streamPowerSummary?.averageWatts) data.avg_power = streamPowerSummary.averageWatts
-  if (workout.maxWatts) data.max_power = workout.maxWatts
-  else if (streamPowerSummary?.maxWatts) data.max_power = streamPowerSummary.maxWatts
-  if (workout.normalizedPower) data.normalized_power = workout.normalizedPower
-  else if (streamPowerSummary?.normalizedPower)
-    data.normalized_power = streamPowerSummary.normalizedPower
-  if (workout.weightedAvgWatts) data.weighted_avg_power = workout.weightedAvgWatts
-  if (workout.ftp) data.ftp = workout.ftp
-  if (Array.isArray(workout.streams?.watts) && workout.streams.watts.length > 0) {
-    data.has_power_stream = true
-  }
-  if (powerZoneTimes.length > 0 && powerZoneTimes.some((value) => value > 0)) {
-    data.power_zone_times = powerZoneTimes
-  }
-
-  if (workout.averageHr) data.avg_hr = workout.averageHr
-  if (workout.maxHr) data.max_hr = workout.maxHr
-
-  if (workout.averageCadence) {
-    data.avg_cadence = normalizeRunningCadence(workout.averageCadence)
-  }
-  if (workout.maxCadence) {
-    data.max_cadence = normalizeRunningCadence(workout.maxCadence)
-  }
-
-  if (workout.averageSpeed) data.avg_speed_ms = workout.averageSpeed / 3.6
-
-  if (workout.tss) data.tss = workout.tss
-  if (workout.trainingLoad) data.training_load = workout.trainingLoad
-  if (workout.intensity) data.intensity = workout.intensity
-  if (workout.kilojoules) data.kilojoules = workout.kilojoules
-
-  if (workout.variabilityIndex) data.variability_index = workout.variabilityIndex
-  if (workout.powerHrRatio) data.power_hr_ratio = workout.powerHrRatio
-  if (workout.efficiencyFactor) data.efficiency_factor = workout.efficiencyFactor
-  if (workout.decoupling !== null && workout.decoupling !== undefined)
-    data.decoupling = workout.decoupling
-  if (workout.polarizationIndex) data.polarization_index = workout.polarizationIndex
-
-  if (workout.fatigueSensitivity) data.fatigue_sensitivity = workout.fatigueSensitivity
-  if (workout.powerStability) data.power_stability = workout.powerStability
-  if (workout.paceStability) data.pace_stability = workout.paceStability
-  if (workout.recoveryTrend) data.recovery_trend = workout.recoveryTrend
-
-  if (workout.ctl) data.ctl = workout.ctl
-  if (workout.atl) data.atl = workout.atl
-
-  if (workout.rpe) data.rpe = workout.rpe
-  if (workout.sessionRpe) data.session_rpe = workout.sessionRpe
-  if (workout.feel) data.feel = workout.feel
-
-  if (workout.avgTemp !== null && workout.avgTemp !== undefined) data.avg_temp = workout.avgTemp
-  if (workout.trainer !== null && workout.trainer !== undefined) data.trainer = workout.trainer
-
-  if (workout.lrBalance !== null && workout.lrBalance !== undefined)
-    data.lr_balance = workout.lrBalance
-
-  if (workout.exercises && workout.exercises.length > 0) {
-    data.exercises = workout.exercises.map((we: any) => ({
-      name: we.exercise.title,
-      type: we.exercise.type,
-      muscle_group: we.exercise.primaryMuscle,
-      notes: we.notes,
-      sets: we.sets.map((s: any) => ({
-        type: s.type,
-        weight: s.weight,
-        reps: s.reps,
-        rpe: s.rpe,
-        distance: s.distanceMeters,
-        duration: s.durationSec
-      }))
-    }))
-  }
-
-  if (workout.rawJson && typeof workout.rawJson === 'object') {
-    const raw = workout.rawJson as any
-
-    const rawIntervals = Array.isArray(raw.icu_intervals)
-      ? raw.icu_intervals
-      : Array.isArray(raw.intervals)
-        ? raw.intervals
-        : null
-    if (rawIntervals) {
-      // Provider lap labels are unreliable (Intervals.icu marks nearly every
-      // lap WORK); re-derive them so the model does not read recovery jogs as
-      // work reps.
-      const resolvedTypes = resolveProviderIntervalTypes(
-        rawIntervals.map((interval: any) => ({
-          type: interval.type,
-          intensity: Number(interval.intensity),
-          avgPower: Number(interval.average_watts),
-          avgSpeed: Number(interval.average_speed)
-        }))
-      )
-      data.intervals = rawIntervals.map((interval: any, index: number) => ({
-        type: resolvedTypes[index],
-        label: interval.label,
-        duration_s: interval.moving_time ?? interval.elapsed_time,
-        distance_m: interval.distance,
-        avg_power: interval.average_watts,
-        max_power: interval.max_watts,
-        weighted_avg_power: interval.weighted_average_watts,
-        intensity: interval.intensity,
-        avg_hr: interval.average_heartrate,
-        max_hr: interval.max_heartrate,
-        avg_cadence: normalizeRunningCadence(interval.average_cadence),
-        max_cadence: normalizeRunningCadence(interval.max_cadence),
-        avg_speed_ms: interval.average_speed,
-        decoupling: interval.decoupling,
-        variability: interval.w5s_variability,
-        elevation_gain: interval.total_elevation_gain,
-        avg_gradient: interval.average_gradient
-      }))
-    }
-
-    const splits = raw.splits_metric || raw.splits_standard
-    if (splits && Array.isArray(splits) && splits.length > 0) {
-      data.lap_splits = splits.map((split: any, index: number) => {
-        const time = split.moving_time || split.elapsed_time
-        const paceMinPerKm = split.distance > 0 ? time / 60 / (split.distance / 1000) : 0
-        const paceMin = Math.floor(paceMinPerKm)
-        const paceSec = Math.round((paceMinPerKm - paceMin) * 60)
-
-        return {
-          lap: index + 1,
-          distance_m: split.distance,
-          time_s: time,
-          pace_min_per_km: `${paceMin}:${paceSec.toString().padStart(2, '0')}`,
-          avg_speed_ms: split.average_speed,
-          avg_hr: split.average_heartrate
-        }
-      })
-
-      const paces = data.lap_splits.map((s: any) => s.time_s / (s.distance_m / 1000))
-      if (paces.length > 1) {
-        const avgPace = paces.reduce((sum: number, p: number) => sum + p, 0) / paces.length
-        const variance =
-          paces.reduce((sum: number, p: number) => sum + Math.pow(p - avgPace, 2), 0) / paces.length
-        data.pace_variability_seconds = Math.sqrt(variance)
-      }
-    }
-  }
-
-  return data
-}
-
-function getWorkoutTypeGuidance(
-  workoutType: string,
-  isCardio: boolean,
-  isStrength: boolean
-): string {
-  if (isStrength) {
-    return `Focus your analysis on strength training aspects like volume, intensity, rest periods, and exercise selection. 
-Metrics like cadence, power output, and aerobic efficiency are NOT RELEVANT for this workout type - DO NOT analyze them.
-Instead, analyze heart rate in the context of training intensity zones for resistance training.`
-  }
-
-  if (isCardio) {
-    if (workoutType.toLowerCase().includes('run')) {
-      return `This is a running workout. Focus on running-specific metrics like pace, cadence (steps per minute), and heart rate zones.
-Power metrics may not be available and that's normal for running workouts.`
-    }
-    if (workoutType.toLowerCase().includes('ride') || workoutType.toLowerCase().includes('bike')) {
-      return `This is a cycling workout. Analyze power metrics, pacing, cadence (RPM), and pedaling efficiency where available.`
-    }
-    return `This is a cardio workout. Focus on pacing, effort distribution, and aerobic efficiency.
-Power and cadence metrics may not be relevant depending on the specific activity.`
-  }
-
-  return `Focus your analysis on overall effort, volume, and progress relative to athlete goals.`
-}
-
-function getAnalysisSectionsGuidance(
-  workoutType: string,
-  isCardio: boolean,
-  isStrength: boolean
-): string {
-  if (isStrength) {
-    return `
-Provide analysis across the following key areas (create logical section titles):
-1. **Executive Summary**: Overview of strength session goals, overall quality score, key takeaways
-2. **Volume & Load Analysis**: Total tonnage, working sets count, rest interval management
-3. **Intensity & Effort**: RPE, weight progression across sets, proximity to failure (RIR)
-4. **Exercise Selection & Muscle Groups**: Primary muscle targeted, exercise variety, movement balance
-5. **Recovery & Readiness Impact**: Heart rate response during rest, session strain`
-  }
-
-  return `
-Provide analysis across the following key areas (create logical section titles):
-1. **Executive Summary**: High-level recap of the workout performance and overall score
-2. **Pacing & Intensity Distribution**: How well intensity was controlled relative to planned targets or optimal pacing
-3. **Aerobic & Metabolic Response**: Heart rate zones, decoupling/cardiac drift, efficiency factor (EF)
-4. **Biomechanical Execution**: Cadence consistency, power stability, smooth energy output
-5. **Training Load & Fatigue Context**: TSS, CTL/ATL impact, recovery status`
-}
-
-function getFactValueByPath(facts: any, path: string): unknown {
-  if (!facts) return undefined
-  return path
-    .split('.')
-    .reduce((acc, part) => (acc && typeof acc === 'object' ? acc[part] : undefined), facts)
-}
-
-function formatPromptFactValue(value: unknown): string | null {
-  if (value === null || value === undefined) return null
-  if (typeof value === 'boolean') return value ? 'Yes' : 'No'
-  if (typeof value === 'object') return JSON.stringify(value)
-  return String(value)
-}
-
-function buildAnalysisFactsPromptBlock(analysisFacts?: WorkoutAnalysisFactsV2): string {
-  if (!analysisFacts) return ''
-
-  const formatRule = (label: string, path: string, template: string) => {
-    const rawVal = getFactValueByPath(analysisFacts, path)
-    const formattedVal = formatPromptFactValue(rawVal)
-    if (formattedVal === null) return null
-    return `- ${label}: ${template.replace('{value}', formattedVal)}`
-  }
-
-  const lines = [
-    'FACT-BASED COMPUTED DERIVATIONS (MUST OVERRIDE INFERENCE):',
-    formatRule('Session Steadiness', 'steadiness.classification', '{value}'),
-    formatRule(
-      'Decoupling Guardrail',
-      'decouplingGuardrail.applicable',
-      'Pacing Drift Applicable: {value}'
-    ),
-    formatRule(
-      'Decoupling Applicability Reason',
-      'decouplingGuardrail.reason',
-      'Pacing Drift Applicability Reason: {value}'
-    ),
-    formatRule(
-      'Heart Rate Drift Guardrail',
-      'hrDriftGuardrail.applicable',
-      'HR Drift Applicable: {value}'
-    ),
-    formatRule(
-      'Heart Rate Drift Reason',
-      'hrDriftGuardrail.reason',
-      'HR Drift Applicability Reason: {value}'
-    )
-  ].filter((line): line is string => line !== null)
-
-  return lines.join('\n')
-}
-
-function buildAnalysisGuardrailInstructions(
-  workoutType: string,
-  analysisFacts?: WorkoutAnalysisFactsV2
-): string {
-  const instructions: string[] = []
-  const typeLower = workoutType?.toLowerCase() || ''
-  const isSki =
-    typeLower.includes('nordic') || typeLower.includes('ski') || typeLower.includes('xcski')
-
-  if (analysisFacts?.guardrails.archetype.sessionSteadiness === 'stochastic' || isSki) {
-    instructions.push(
-      '- Session Steadiness: stochastic. Do not criticize the athlete for lacking a constant pace or uniform effort.'
-    )
-  }
-
-  if (isSki) {
-    instructions.push(
-      '- Nordic/Skiing Context: Pace fluctuates with terrain and snow conditions; avoid cycling-specific gear advice such as recommending a power meter.'
-    )
-  }
-
-  if (analysisFacts?.performanceSignals.applicability.pacingDrift.applicable === false) {
-    instructions.push(
-      `- Decoupling Guardrail: ${analysisFacts.performanceSignals.applicability.pacingDrift.reason || 'Not applicable for this session type'}`
-    )
-  }
-
-  instructions.push('- Keep recommendations conservative and avoid strong causal claims.')
-
-  if (instructions.length === 0) return ''
-
-  return `\nCRITICAL ANALYSIS GUARDRAILS:\n${instructions.join('\n')}`
-}
-
-function formatMetric(val: number | null | undefined, decimals = 1, unit = ''): string {
-  if (val === null || val === undefined) return 'N/A'
-  return `${val.toFixed(decimals)}${unit}`
-}
-
-export function buildWorkoutAnalysisPrompt(
-  workoutData: any,
-  timezone: string,
-  persona: string = 'Supportive',
-  sportSettings?: any,
-  userProfile?: {
-    age?: number | null
-    sex?: string | null
-    weight?: number | null
-    weightUnits?: string | null
-    height?: number | null
-    heightUnits?: string | null
-    language?: string | null
-    temperatureUnits?: string | null
-    distanceUnits?: string | null
-  },
-  userContext?: string | null,
-  plannedWorkout?: any,
-  analysisFactsV1?: WorkoutAnalysisFacts,
-  analysisFactsV2?: WorkoutAnalysisFactsV2,
-  journeyContext?: {
-    symptoms?: Array<{
-      timestamp: Date
-      category: JourneyEventCategory
-      severity: number
-      description: string | null
-    }>
-  }
-): string {
-  const workoutType = workoutData.type || 'Workout'
-  const isStrength = ['weighttraining', 'strength', 'workout'].includes(workoutType.toLowerCase())
-  const isCardio = ['run', 'ride', 'virtualride', 'nordicski', 'swim', 'rowing'].some((t) =>
-    workoutType.toLowerCase().includes(t)
-  )
-  const coachType = isStrength
-    ? 'Strength & Resistance Training Specialist'
-    : 'Endurance Performance Coach'
-
-  const metricPriorityContext = resolveMetricPriorityContext(
-    sportSettings?.loadPreference,
-    workoutData
-  )
-
-  let prompt = `You are Coach Watts, an expert AI endurance & strength coach.
-Provide a high-quality, structured analysis for this workout.
-
-ATHLETE & SESSION CONTEXT:
-- Persona: ${persona}
-- User Timezone: ${timezone}
-- Date: ${workoutData.date ? formatUserDate(workoutData.date, timezone, "EEEE, MMMM d, yyyy 'at' h:mm a") : 'Unknown Date'}
-- Title: ${workoutData.title || 'Untitled Workout'}
-- Activity Type: ${workoutType}
-- Duration: ${workoutData.duration_m || 0} minutes (${workoutData.duration_s || 0} seconds)
-`
-
-  if (workoutData.distance_m) {
-    prompt += `- Distance: ${formatPromptDistance(workoutData.distance_m, userProfile?.distanceUnits)}\n`
-  }
-  if (workoutData.avg_hr) {
-    prompt += `- Average HR: ${workoutData.avg_hr} bpm (Max: ${workoutData.max_hr || 'N/A'} bpm)\n`
-  }
-  if (workoutData.avg_power) {
-    prompt += `- Average Power: ${workoutData.avg_power} W (NP: ${workoutData.normalized_power || 'N/A'} W)\n`
-  }
-  if (workoutData.tss) {
-    prompt += `- TSS: ${workoutData.tss}\n`
-  }
-  if (workoutData.intensity) {
-    prompt += `- Intensity Factor: ${workoutData.intensity}\n`
-  }
-
-  prompt += `
-${getWorkoutTypeGuidance(workoutType, isCardio, isStrength)}
-
-${getAnalysisSectionsGuidance(workoutType, isCardio, isStrength)}
-
-${buildAnalysisFactsPromptBlock(analysisFactsV2)}
-
-${buildAnalysisGuardrailInstructions(workoutType, analysisFactsV2)}
-
-${buildMetricPriorityPromptBlock(metricPriorityContext)}
-
-Format your analysis according to the requested schema. Provide clear, objective scores (0-100) with single-sentence justifications for overall, technical, effort, pacing, and execution adherence.`
-
-  return prompt
-}
-
 export function convertWorkoutAnalysisToMarkdown(analysis: any): string {
   let markdown = `# ${analysis.title}\n\n`
 
@@ -712,6 +296,7 @@ export async function runWorkoutAnalysis(payload: {
           heightUnits: true,
           language: true,
           temperatureUnits: true,
+          distanceUnits: true,
           aiAutoAnalyzeWorkouts: true
         }
       }),
@@ -786,16 +371,6 @@ export async function runWorkoutAnalysis(payload: {
     )
 
     const workoutData = buildWorkoutAnalysisData(workout)
-    const analysisFacts = buildWorkoutAnalysisFacts({
-      workout,
-      sportSettings,
-      plannedWorkout: workout.plannedWorkout,
-      userProfile: {
-        weight: user?.weight || null,
-        weightUnits: user?.weightUnits || null,
-        language: user?.language || null
-      }
-    })
     const analysisFactsV2 = buildWorkoutAnalysisFactsV2({
       workout,
       sportSettings,
@@ -820,11 +395,11 @@ export async function runWorkoutAnalysis(payload: {
         height: user?.height || null,
         heightUnits: user?.heightUnits || null,
         language: user?.language || null,
-        temperatureUnits: user?.temperatureUnits || null
+        temperatureUnits: user?.temperatureUnits || null,
+        distanceUnits: user?.distanceUnits || null
       },
       aiSettings.aiContext,
       workout.plannedWorkout,
-      analysisFacts,
       analysisFactsV2,
       {
         symptoms: recentJourneyEvents.map((event) => ({
