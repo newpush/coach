@@ -335,6 +335,158 @@ describe('detectIntervals', () => {
         expect(interval.label).toBeUndefined()
       })
   })
+
+  /**
+   * CW-426: segment boundaries are inclusive and disjoint — a block occupying
+   * samples N..M comes back as exactly `start_index: N, end_index: M`, and the
+   * next segment opens at M + 1.
+   *
+   * Both segmentation paths broke this, and they broke it DIFFERENTLY:
+   *   - the candidate/merge pass ended each segment on the first sample of the
+   *     next block, so adjacent segments overlapped on that sample (a 4min rep
+   *     came back as [600..840] and the recovery after it as [840..1020]);
+   *   - `detectIntervalsFromPlannedSteps` used the first sample at or after the
+   *     planned end time as the step's own inclusive end and then started the
+   *     next step at `end + 1`, shifting every segment to [N+1, M+1] — the
+   *     `start_index: 601, end_index: 840` measured on CW-393's fixture.
+   *
+   * Either way every work rep lost its own first sample and/or carried one
+   * sample of the block next door, which is the worst possible contamination
+   * for CW-393's rep-scoped coefficient-of-variation signals.
+   *
+   * `smoothedValues` is passed through verbatim so these assertions measure the
+   * boundary arithmetic and not the lag of the default moving average (a
+   * centred SMA necessarily rounds a sharp edge; that is a separate concern).
+   */
+  describe('segment boundaries (CW-426)', () => {
+    const BLOCKS = [
+      { type: 'WARMUP', watts: 120, seconds: 600 },
+      { type: 'WORK', watts: 280, seconds: 240 },
+      { type: 'RECOVERY', watts: 110, seconds: 180 },
+      { type: 'WORK', watts: 280, seconds: 240 },
+      { type: 'RECOVERY', watts: 110, seconds: 180 },
+      { type: 'WORK', watts: 280, seconds: 240 },
+      { type: 'RECOVERY', watts: 110, seconds: 180 },
+      { type: 'WORK', watts: 280, seconds: 240 },
+      { type: 'COOLDOWN', watts: 100, seconds: 300 }
+    ] as const
+
+    /** The fixture plus the sample range each block genuinely occupies. */
+    const buildSharpBlocks = () => {
+      const watts: number[] = []
+      const expected: { type: string; start: number; end: number }[] = []
+      for (const block of BLOCKS) {
+        const start = watts.length
+        for (let index = 0; index < block.seconds; index++) watts.push(block.watts)
+        expected.push({ type: block.type, start, end: watts.length - 1 })
+      }
+      return { watts, time: watts.map((_, index) => index), expected }
+    }
+
+    const asRanges = (intervals: { type: string; start_index: number; end_index: number }[]) =>
+      intervals.map((interval) => ({
+        type: interval.type,
+        start: interval.start_index,
+        end: interval.end_index
+      }))
+
+    it('returns a block occupying samples N..M as exactly N..M (candidate/merge pass)', () => {
+      const { watts, time, expected } = buildSharpBlocks()
+
+      const intervals = detectIntervals(time, watts, 'power', 250, undefined, watts)
+
+      // Before the fix: WARMUP [0..600], WORK [600..840], RECOVERY [840..1020]...
+      expect(asRanges(intervals)).toEqual(expected)
+    })
+
+    it('returns a block occupying samples N..M as exactly N..M (plan-guided pass)', () => {
+      const { watts, time, expected } = buildSharpBlocks()
+      const plannedSteps = BLOCKS.map((block) => ({
+        type: block.type,
+        durationSeconds: block.seconds,
+        power: { value: block.watts }
+      }))
+
+      const intervals = detectIntervals(time, watts, 'power', 250, plannedSteps, watts)
+
+      // Before the fix: WARMUP [0..600], WORK [601..840], RECOVERY [841..1020]...
+      expect(asRanges(intervals)).toEqual(expected)
+    })
+
+    it('makes the two segmentation paths agree with each other', () => {
+      // They used to disagree, which was a second latent bug: for the identical
+      // 240-sample rep the candidate pass reported [600..840] (duration 240,
+      // overlapping its neighbours) and the plan-guided pass [601..840]
+      // (duration 239, disjoint but shifted). Neither was right.
+      const { watts, time } = buildSharpBlocks()
+      const plannedSteps = BLOCKS.map((block) => ({
+        type: block.type,
+        durationSeconds: block.seconds,
+        power: { value: block.watts }
+      }))
+
+      const fromCandidates = detectIntervals(time, watts, 'power', 250, undefined, watts)
+      const fromPlan = detectIntervals(time, watts, 'power', 250, plannedSteps, watts)
+
+      expect(asRanges(fromCandidates)).toEqual(asRanges(fromPlan))
+      expect(fromCandidates.map((interval) => interval.duration)).toEqual(
+        fromPlan.map((interval) => interval.duration)
+      )
+    })
+
+    it('emits disjoint, contiguous, gap-free segments that cover the stream once', () => {
+      const { watts, time } = buildSharpBlocks()
+
+      const intervals = detectIntervals(time, watts, 'power', 250, undefined, watts)
+
+      expect(intervals[0]?.start_index).toBe(0)
+      expect(intervals.at(-1)?.end_index).toBe(time.length - 1)
+      intervals.slice(1).forEach((interval, index) => {
+        // No shared sample, no skipped sample.
+        expect(interval.start_index).toBe(intervals[index]!.end_index + 1)
+      })
+    })
+
+    it('keeps every per-segment average free of the neighbouring block', () => {
+      // The point of the whole ticket: one foreign sample in a 240-sample rep
+      // dragged the average off its true value and inflated the rep's CoV.
+      const { watts, time } = buildSharpBlocks()
+
+      const intervals = detectIntervals(time, watts, 'power', 250, undefined, watts)
+
+      intervals
+        .filter((interval) => interval.type === 'WORK')
+        .forEach((interval) => {
+          // Exactly 280 W, not the 279.29 W a stray 110 W recovery sample gave.
+          expect(interval.avg_power).toBe(280)
+          expect(interval.max_power).toBe(280)
+        })
+      intervals
+        .filter((interval) => interval.type === 'RECOVERY')
+        .forEach((interval) => expect(interval.avg_power).toBe(110))
+    })
+
+    it('reports each segment duration as its own elapsed span, counting no second twice', () => {
+      const { watts, time } = buildSharpBlocks()
+
+      const intervals = detectIntervals(time, watts, 'power', 250, undefined, watts)
+
+      intervals.forEach((interval) => {
+        expect(interval.end_time - interval.start_time).toBe(interval.duration)
+        // A K-sample block at 1 Hz spans K - 1 seconds, the same arithmetic the
+        // whole-session STEADY block has always reported (2400 samples ->
+        // 2399s). The candidate pass used to report a flat 240 for a 240-sample
+        // rep only because it was measuring out to the FIRST RECOVERY SAMPLE:
+        // that 240 was the off-by-one, not a correct duration.
+        expect(interval.duration).toBe(interval.end_index - interval.start_index)
+      })
+
+      const workDurations = intervals
+        .filter((interval) => interval.type === 'WORK')
+        .map((interval) => interval.duration)
+      expect(workDurations).toEqual([239, 239, 239, 239])
+    })
+  })
 })
 
 describe('resolveHrWorkThreshold', () => {

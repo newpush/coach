@@ -249,6 +249,30 @@ export interface HrZoneRefs {
  * `hrRefs` is the separate, optional channel for the athlete's profile LTHR/max
  * HR. It exists only so HR intervals can be assigned an `intensity_zone`, and is
  * never used for segmentation — see `HrZoneRefs`.
+ *
+ * SEGMENT BOUNDARY CONVENTION (`start_index` / `end_index`):
+ * - **Fully inclusive.** A block occupying samples N..M is returned as
+ *   `start_index: N, end_index: M`. Both endpoints belong to the segment, which
+ *   is why every consumer slices it as `stream.slice(start_index, end_index + 1)`
+ *   (`createIntervalObj`, `computeSegmentAverage`, `calculateStabilityMetrics`,
+ *   the intervals endpoints).
+ * - **Disjoint and contiguous.** Consecutive segments never share a sample:
+ *   `next.start_index === prev.end_index + 1`. No sample is counted twice and
+ *   none is dropped.
+ * - This is the same convention providers use for synced laps
+ *   (Intervals.icu `icu_intervals[].start_index`/`end_index`), and both sources
+ *   are normalised through one code path downstream, so they must agree.
+ * - `start_time`/`end_time` are the timestamps of those two samples and
+ *   `duration` is the elapsed span between them. At 1 Hz a K-sample block is
+ *   therefore `K - 1` seconds long — the same arithmetic the whole-session
+ *   STEADY block has always reported.
+ *
+ * Neither path honoured this before CW-426, and they were broken differently:
+ * the candidate/merge pass below ended each segment on the FIRST sample of the
+ * next block (so adjacent segments overlapped by one sample), while
+ * `detectIntervalsFromPlannedSteps` shifted every segment one sample later at
+ * both ends. Either way a work rep carried one out-of-band sample, which is the
+ * single worst input to a coefficient of variation computed inside that rep.
  */
 export function detectIntervals(
   times: number[],
@@ -326,16 +350,23 @@ export function detectIntervals(
       inInterval = true
       startIndex = i
     } else if (!isWork && inInterval) {
-      // End of potential interval
+      // End of potential interval. `i` is the first sample that is NOT work, so
+      // the last sample the interval owns is `i - 1` — ends are inclusive (see
+      // the boundary convention above). Using `i` handed every work rep the
+      // first sample of the recovery that follows it and left adjacent segments
+      // overlapping on that sample (CW-426).
       inInterval = false
-      const currentTime = times[i]
+      const endIndex = i - 1
+      const currentTime = times[endIndex]
       const startTime = times[startIndex]
 
       if (currentTime !== undefined && startTime !== undefined) {
+        // Gate on the duration of the segment actually emitted, not on the span
+        // out to the first recovery sample.
         const duration = currentTime - startTime
 
         if (duration >= minDuration) {
-          candidates.push({ start: startIndex, end: i })
+          candidates.push({ start: startIndex, end: endIndex })
         }
       }
     }
@@ -385,7 +416,10 @@ export function detectIntervals(
   // Identify warmup (first segment before first work interval)
   // Identify cooldown (segment after last work interval)
 
-  let lastEndIndex = 0
+  // Index of the first sample not yet claimed by an emitted segment. Segments
+  // are inclusive and disjoint, so a filler block runs from here up to the
+  // sample before the next work interval starts (CW-426).
+  let nextSegmentStart = 0
 
   // SPECIAL CASE: If no intervals detected but the duration is long (> 15 min),
   // and average is reasonable (> 40% FTP), classify the whole thing as STEADY.
@@ -421,16 +455,19 @@ export function detectIntervals(
     }
   } else {
     merged.forEach((candidate, index) => {
-      // Add recovery/warmup segment before this work interval
-      if (candidate.start > lastEndIndex) {
+      // Add recovery/warmup segment before this work interval. It ends on the
+      // sample BEFORE the work interval starts: `candidate.start` is the rep's
+      // own first sample and belongs to the rep, not to the block feeding it.
+      const fillerEnd = candidate.start - 1
+      if (fillerEnd >= nextSegmentStart) {
         const type = index === 0 ? 'WARMUP' : 'RECOVERY'
-        if (times[lastEndIndex] !== undefined && times[candidate.start] !== undefined) {
+        if (times[nextSegmentStart] !== undefined && times[fillerEnd] !== undefined) {
           intervals.push(
             createIntervalObj(
               times,
               values,
-              lastEndIndex,
-              candidate.start,
+              nextSegmentStart,
+              fillerEnd,
               type,
               threshold,
               metricType,
@@ -458,20 +495,20 @@ export function detectIntervals(
         )
       }
 
-      lastEndIndex = candidate.end
+      nextSegmentStart = candidate.end + 1
     })
 
     // Add cooldown if there's data after the last interval
     if (
-      lastEndIndex < times.length - 1 &&
-      times[lastEndIndex] !== undefined &&
+      nextSegmentStart <= times.length - 1 &&
+      times[nextSegmentStart] !== undefined &&
       times[times.length - 1] !== undefined
     ) {
       intervals.push(
         createIntervalObj(
           times,
           values,
-          lastEndIndex,
+          nextSegmentStart,
           times.length - 1,
           'COOLDOWN',
           threshold,
@@ -609,11 +646,25 @@ function flattenPlannedStepsForDetection(
   return flattened
 }
 
-function findIndexAtOrAfterTime(times: number[], targetTime: number, fallbackIndex: number) {
+/**
+ * Index of the LAST sample belonging to a step that ends at `targetTime`.
+ *
+ * Segment ends are inclusive (see the boundary convention on `detectIntervals`),
+ * so a step owns every sample recorded strictly before its end time and the
+ * first sample at or after that time is the next step's opening sample. This
+ * used to return that next-step sample instead, which pushed the step's own end
+ * one sample too far and — because the following step then started at
+ * `endIdx + 1` — pushed its start one sample too far as well. Every planned
+ * segment came back as [N+1, M+1] (CW-426).
+ *
+ * Never returns less than `fallbackIndex`, so a step always keeps one sample.
+ */
+function findLastIndexBeforeTime(times: number[], targetTime: number, fallbackIndex: number) {
   for (let index = fallbackIndex; index < times.length; index++) {
     const time = times[index]
-    if (time !== undefined && time >= targetTime) return index
+    if (time !== undefined && time >= targetTime) return Math.max(fallbackIndex, index - 1)
   }
+  // Every remaining sample precedes the target: the step runs to the end.
   return times.length - 1
 }
 
@@ -652,6 +703,12 @@ function normalizeMetricDelta(
   return Math.abs(actualValue - targetValue) / targetValue
 }
 
+/**
+ * Score `candidateIndex` as the INCLUSIVE last sample of `currentStep` — the
+ * "before" window ends on it and the "after" window opens at `candidateIndex + 1`.
+ * This scorer always used the inclusive reading; it was the seed boundary handed
+ * to it that did not (CW-426).
+ */
 function scoreBoundaryCandidate(params: {
   candidateIndex: number
   currentStartIdx: number
@@ -777,7 +834,7 @@ function detectIntervalsFromPlannedSteps(
     const isLast = index === flattened.length - 1
     let endIdx = isLast
       ? times.length - 1
-      : findIndexAtOrAfterTime(times, plannedEndTime, currentStartIdx)
+      : findLastIndexBeforeTime(times, plannedEndTime, currentStartIdx)
     let confidence = 0.7
     let ambiguityNote: string | undefined
 
@@ -1114,6 +1171,16 @@ function resolveZoneNumber(value: number, zones: Zone[]): number | undefined {
   return parseInt(match[1])
 }
 
+/**
+ * Build one segment over the INCLUSIVE sample range [`startIdx`, `endIdx`] —
+ * see the boundary convention on `detectIntervals`. Every average here is taken
+ * over `slice(startIdx, endIdx + 1)`, so both callers must hand in the segment's
+ * own last sample and never the first sample of the block that follows it.
+ *
+ * `duration` is the elapsed span between those two samples. It deliberately does
+ * not reach out to the next block's timestamp: adjacent segments are disjoint,
+ * so the second between them is claimed by exactly one of them.
+ */
 function createIntervalObj(
   times: number[],
   values: number[],
