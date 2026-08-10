@@ -2696,4 +2696,147 @@ describe('actual-interval source arbitration and hard-repeat scale (CW-408)', ()
       )
     ).toBe('raw')
   })
+
+  /**
+   * Nested inside the CW-408 suite to reuse its stream, plan and FTP: this is
+   * the same physical session and the same arbitration, asked one further
+   * question. Nothing above is modified — CW-408 deliberately left the `null`
+   * case unpinned, and these tests are what pin it.
+   *
+   * A provider that cannot compute a lap's intensity sends `intensity: null`.
+   * `Number(null)` is `0` and `0` is finite, so that lap used to arrive
+   * downstream claiming an intensity factor of zero. `getActualHardRepeats`
+   * reads `intensity !== null` as "this lap has a usable intensity signal" and
+   * only falls back to average power when it does not, so the fabricated `0`
+   * short-circuited the fallback and made the lap permanently un-hard — at any
+   * wattage. An ABSENT field never had the problem (`Number(undefined)` is
+   * `NaN`), which is the asymmetry these tests exist to document (CW-439).
+   */
+  describe('provider laps with an explicit null intensity (CW-439)', () => {
+    /**
+     * The same laps as `ACCURATE_PROVIDER_LAPS`, except the provider could not
+     * compute an intensity for the five reps and sent `null` for them.
+     *
+     * Types are stated explicitly rather than left as the provider's blanket
+     * `WORK`, so lap classification here comes from the labels alone and this
+     * test is measuring the hard-repeat predicate rather than the type
+     * re-derivation heuristic.
+     */
+    const NULL_INTENSITY_LAPS: Array<{
+      type: string
+      seconds: number
+      watts: number
+      intensity: number | null
+    }> = [
+      { type: 'WARMUP', seconds: 600, watts: 143, intensity: 55 },
+      { type: 'WORK', seconds: 240, watts: 276, intensity: null },
+      { type: 'RECOVERY', seconds: 180, watts: 135, intensity: 52 },
+      { type: 'WORK', seconds: 240, watts: 273, intensity: null },
+      { type: 'RECOVERY', seconds: 180, watts: 135, intensity: 52 },
+      { type: 'WORK', seconds: 240, watts: 271, intensity: null },
+      { type: 'RECOVERY', seconds: 180, watts: 133, intensity: 51 },
+      { type: 'WORK', seconds: 240, watts: 273, intensity: null },
+      { type: 'RECOVERY', seconds: 180, watts: 135, intensity: 52 },
+      { type: 'WORK', seconds: 240, watts: 268, intensity: null },
+      { type: 'RECOVERY', seconds: 180, watts: 133, intensity: 51 },
+      { type: 'WORK', seconds: 900, watts: 221, intensity: 85 },
+      { type: 'COOLDOWN', seconds: 300, watts: 117, intensity: 45 }
+    ]
+
+    function buildNullIntensityWorkout() {
+      const time: number[] = []
+      const watts: number[] = []
+      let cursor = 0
+      for (const block of ARBITRATION_STREAM_BLOCKS) {
+        for (let index = 0; index < block.seconds; index++) {
+          time.push(cursor)
+          watts.push(block.watts + ((index % 5) - 2))
+          cursor++
+        }
+      }
+
+      return makeWorkout({
+        title: 'VO2 5x4min',
+        type: 'Ride',
+        durationSec: time.length,
+        ftp: ARBITRATION_FIXTURE_FTP,
+        rawJson: {
+          icu_intervals: NULL_INTENSITY_LAPS.map((lap) => ({
+            type: lap.type,
+            moving_time: lap.seconds,
+            average_watts: lap.watts,
+            intensity: lap.intensity
+          }))
+        },
+        streams: { time, watts }
+      })
+    }
+
+    it('keeps a null intensity null instead of coercing it to a zero it never sent', () => {
+      // The unit boundary. `null` is "no intensity signal", exactly as an
+      // absent field already was; it is not an intensity factor of zero.
+      expect(toIntervalIntensityFactor(null)).toBeNull()
+      expect(toIntervalIntensityFactor(undefined)).toBeNull()
+
+      // Every other falsy non-number `Number()` would silently turn into 0.
+      expect(toIntervalIntensityFactor('')).toBeNull()
+      expect(toIntervalIntensityFactor('   ')).toBeNull()
+      expect(toIntervalIntensityFactor(false)).toBeNull()
+      expect(toIntervalIntensityFactor(true)).toBeNull()
+      expect(toIntervalIntensityFactor([])).toBeNull()
+      expect(toIntervalIntensityFactor({})).toBeNull()
+
+      // A real zero on the wire is still a real zero, and numeric strings from
+      // looser providers and older fixtures still convert.
+      expect(toIntervalIntensityFactor(0)).toBe(0)
+      expect(toIntervalIntensityFactor('101')).toBe(1.01)
+      expect(toIntervalIntensityFactor('0.52')).toBe(0.52)
+    })
+
+    it('carries the null through mapping instead of fabricating an intensity factor', () => {
+      const actual = getActualIntervalsForAnalysis(buildNullIntensityWorkout())
+
+      // The five reps and the endurance block are the work laps; the reps
+      // report no intensity, which is the truth the provider sent.
+      expect(workLapsOf(actual).map((interval) => interval.durationSeconds)).toEqual([
+        240, 240, 240, 240, 240, 900
+      ])
+      expect(
+        workLapsOf(actual)
+          .filter((interval) => interval.durationSeconds === 240)
+          .map((interval) => interval.intensity)
+      ).toEqual([null, null, null, null, null])
+
+      // The laps that did carry an intensity are untouched by the guard.
+      expect(actual.find((interval) => interval.durationSeconds === 900)?.intensity).toBe(0.85)
+    })
+
+    it('counts a null-intensity lap as a hard repeat on average power alone', () => {
+      const workout = buildNullIntensityWorkout()
+
+      // `getActualHardRepeats` is private; the arbitration is where its verdict
+      // becomes observable. Accurately lapped reps only beat the engine's
+      // ragged segmentation through `scoreHardRepeatDurationAccuracy`, and that
+      // discriminator needs the raw side to have hard repeats at all. With the
+      // reps' intensity fabricated as `0`, the `avgPower` fallback never ran,
+      // the raw side had zero hard repeats, and this session — whose laps are
+      // timed to the second — lost the arbitration to the detection engine.
+      expect(getActualIntervalsSourceForAnalysis(workout, arbitrationPlan)).toBe('raw')
+
+      // 'raw' means the provider's own laps are what every downstream fact,
+      // the prompt and the athlete's interval chart are built from.
+      const chosen = getActualIntervalsForAnalysis(workout, arbitrationPlan)
+      expect(chosen.map((interval) => interval.durationSeconds)).toEqual(
+        NULL_INTENSITY_LAPS.map((lap) => lap.seconds)
+      )
+
+      // Each rep is well above 0.95 x FTP (247W), which is the whole reason the
+      // power fallback is the right answer for these laps.
+      expect(
+        workLapsOf(chosen)
+          .filter((interval) => interval.durationSeconds === 240)
+          .every((interval) => (interval.avgPower ?? 0) >= ARBITRATION_FIXTURE_FTP * 0.95)
+      ).toBe(true)
+    })
+  })
 })

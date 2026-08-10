@@ -1717,9 +1717,28 @@ function mapProviderIntervalsToActual(intervals: any[]): ActualInterval[] {
  *
  * Engine-detected intervals (`detectIntervals`) carry no intensity field at
  * all, so they stay `null` — there is no second unit to reconcile.
+ *
+ * Non-numeric input is rejected BEFORE coercion rather than after, because
+ * `Number(null)`, `Number('')` and `Number(false)` are all a perfectly finite
+ * `0` that `Number.isFinite` waves through (the same trap `medianOf` guards
+ * against, CW-396). A fabricated `0` is not merely a wrong number here: it is
+ * an intensity signal where the provider stated there is none, and
+ * `getActualHardRepeats` reads `intensity !== null` as "this lap has a usable
+ * intensity" before falling back to average power. So a lap the provider sent
+ * as an explicit `intensity: null` could never be a hard repeat no matter how
+ * many watts it carried, while an ABSENT field (`Number(undefined)` is `NaN`)
+ * behaved correctly — an asymmetry with no defensible meaning (CW-439).
  */
 export function toIntervalIntensityFactor(value: unknown): number | null {
-  const numeric = Number(value)
+  // A numeric string is accepted because fixtures and looser providers send
+  // one; everything else (null, undefined, '', booleans, objects) is "no
+  // intensity", not zero intensity.
+  const numeric =
+    typeof value === 'number'
+      ? value
+      : typeof value === 'string' && value.trim() !== ''
+        ? Number(value)
+        : Number.NaN
   if (!Number.isFinite(numeric)) return null
   return numeric > 5 ? numeric / 100 : numeric
 }
