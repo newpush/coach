@@ -229,7 +229,13 @@
                   >
                     <td class="px-4 py-2.5 text-xs font-black">
                       <span
-                        :class="interval.type === 'WORK' ? 'text-primary-600' : 'text-gray-400'"
+                        :class="
+                          interval.type === 'WORK'
+                            ? 'text-primary-600'
+                            : interval.type === 'STEADY'
+                              ? 'text-cyan-700 dark:text-cyan-400'
+                              : 'text-gray-400'
+                        "
                       >
                         {{ interval.type }}
                       </span>
