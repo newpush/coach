@@ -1,9 +1,11 @@
 import { calculateFatigueSensitivity, calculateStabilityMetrics } from './performance-metrics'
+import { calculateRollingNormalizedPower } from './power-metrics'
 import { toIntensityFactorFromTarget } from './structured-workout-persistence'
 import {
   detectIntervals,
   resolveHrWorkThreshold,
-  resolveProviderIntervalTypes
+  resolveProviderIntervalTypes,
+  type Interval
 } from './interval-detection'
 import { parseLegacyLoadPreference, type MetricTarget } from './workout-target-policy'
 import { formatPromptPace } from './ai-prompt-format'
@@ -1876,18 +1878,72 @@ function resolveComparableTargetValue(
   return planned.targetValue
 }
 
-function buildDetectedIntervals(
+/**
+ * The engine's segmentation of a workout, in the shape `detectIntervals` returns it.
+ *
+ * `metric` is the stream the segmentation was actually derived from, so a caller
+ * can report provenance without re-deriving the choice (the endpoint's
+ * `autoDetectionMetric`). It is `null` exactly when no stream qualified and
+ * `intervals` is empty.
+ */
+export type DetectedIntervalCandidate = {
+  metric: 'power' | 'pace' | 'heartrate' | null
+  intervals: Interval[]
+}
+
+/**
+ * Build the engine's detected-interval candidate for a workout — the ONE
+ * implementation of that choice (CW-434).
+ *
+ * Before this existed, `server/api/workouts/[id]/intervals.get.ts` rebuilt the
+ * candidate itself with a different rule (watts first regardless of sport, a raw
+ * `type === 'Run' || 'Swim'` string match, and no stream-length check), while the
+ * facts layer built its own. CW-430 then had the endpoint ask the facts layer
+ * WHICH source wins — so the arbitration returned a verdict about one set of
+ * intervals and the chart rendered another. Both sides now call this.
+ *
+ * Metric priority, and why:
+ *
+ * 1. **Pace for the run and non-impact-cardio families.** For runs this is the
+ *    facts layer's long-standing rule and is deliberately canonical: CW-384 and
+ *    CW-401 invested specifically in run pace-detection quality, and pace — not
+ *    power — is what a run's structure is prescribed in. Swim/ski/row are in the
+ *    same clause because velocity is their intensity metric too, and because the
+ *    endpoint already segmented swims on pace; leaving them out would have
+ *    dropped those charts to HR.
+ * 2. **Power**, for everything with a usable watts stream (the ride population).
+ * 3. **Heart rate**, as the last resort.
+ *
+ * Every branch requires `stream.length === time.length`. `detectIntervals` rejects
+ * mismatched arrays anyway (returning `[]`), so a looser check does not rescue a
+ * ragged file — it only makes the two sides disagree about which metric was
+ * *attempted*, and hides the fact that nothing was detected behind a confident
+ * `detectionMetric`. Falling through to the next metric is strictly better.
+ *
+ * Family resolution goes through `getWorkoutFamily`, so `VirtualRun`, `TrailRun`
+ * and `Treadmill` are runs here exactly as they are everywhere else.
+ *
+ * Power is smoothed with rolling normalized power rather than the engine's default
+ * centred SMA — that is what the chart endpoint has always used for power
+ * segmentation, and it is the domain-correct smoothing for the metric.
+ */
+export function buildDetectedIntervalCandidate(
   workout: any,
   plannedWorkout?: any,
   refsInput?: AnalysisRefs
-): ActualInterval[] {
+): DetectedIntervalCandidate {
   const refs = resolveAnalysisRefs(workout, refsInput)
   const time = asNumberArray(workout?.streams?.time)
   const power = asNumberArray(workout?.streams?.watts)
   const velocity = asNumberArray(workout?.streams?.velocity)
   const hr = asNumberArray(workout?.streams?.heartrate)
-  const cadence = asNumberArray(workout?.streams?.cadence)
+  const cadenceValues = asNumberArray(workout?.streams?.cadence)
+  const cadence = cadenceValues.length > 0 ? cadenceValues : undefined
   const family = getWorkoutFamily(workout?.type)
+  // The plan has to go through `toDetectionPlannedSteps` — that is what applies the
+  // CW-402 RECOVERY -> WORK promotion for absolute targets and the `hr` / `duration_s`
+  // key aliases. The endpoint used to hand `structuredWorkout.steps` to the engine raw
+  // and silently missed all three (CW-435, folded into CW-434).
   const plannedSteps = toDetectionPlannedSteps(
     getStructuredSteps(
       plannedWorkout?.structuredWorkout || workout?.plannedWorkout?.structuredWorkout
@@ -1895,46 +1951,56 @@ function buildDetectedIntervals(
     refs
   )
 
-  let detected: Array<{
-    type: string
-    duration: number
-    avg_power?: number
-    avg_heartrate?: number
-    avg_pace?: number
-    // Carried through so rep-scoped signals can look inside a rep (CW-393).
-    start_index?: number
-    end_index?: number
-  }> = []
+  // Pace leads for runs — the CW-434 decision — and for swims, which the intervals
+  // endpoint has always segmented on velocity. Deliberately NOT the whole
+  // `nonimpact_cardio` family: that also holds ski and row, which the endpoint left
+  // on the power/HR order. Their speed is terrain- and condition-confounded much
+  // like cycling, and moving them was not part of the decision this change records.
+  // Widen only with evidence.
+  const isSwim = String(workout?.type || '')
+    .toLowerCase()
+    .includes('swim')
+  const paceFirstFamily = family === 'run' || isSwim
 
   if (
     time.length > 0 &&
     velocity.length === time.length &&
     velocity.length > 0 &&
-    family === 'run'
+    paceFirstFamily
   ) {
     // Threshold pace is stored in m/s (same convention as calculatePaceZones), so it can be
     // handed to the detection engine directly as the work/recovery reference.
     const thresholdPace = Number(refs.thresholdPace || 0) || undefined
-    detected = detectIntervals(
-      time,
-      velocity,
-      'pace',
-      thresholdPace,
-      plannedSteps,
-      undefined,
-      cadence
-    )
-  } else if (time.length > 0 && power.length === time.length && power.length > 0) {
-    detected = detectIntervals(
-      time,
-      power,
-      'power',
-      Number(refs.ftp || workout?.ftp || 0) || undefined,
-      plannedSteps,
-      undefined,
-      cadence
-    )
-  } else if (time.length > 0 && hr.length === time.length && hr.length > 0) {
+    return {
+      metric: 'pace',
+      intervals: detectIntervals(
+        time,
+        velocity,
+        'pace',
+        thresholdPace,
+        plannedSteps,
+        undefined,
+        cadence
+      )
+    }
+  }
+
+  if (time.length > 0 && power.length === time.length && power.length > 0) {
+    return {
+      metric: 'power',
+      intervals: detectIntervals(
+        time,
+        power,
+        'power',
+        Number(refs.ftp || workout?.ftp || 0) || undefined,
+        plannedSteps,
+        calculateRollingNormalizedPower(power),
+        cadence
+      )
+    }
+  }
+
+  if (time.length > 0 && hr.length === time.length && hr.length > 0) {
     // Profile-sourced reference, taken from the resolved analysis refs
     // (sportSettings, then the user record) rather than off the workout object,
     // which carries no user/sportSettings relation in the analysis path. This
@@ -1945,18 +2011,35 @@ function buildDetectedIntervals(
       maxHr: refs.maxHr,
       sessionMaxHr: workout?.maxHr
     })
-    detected = detectIntervals(
-      time,
-      hr,
-      'heartrate',
-      hrWorkThreshold,
-      plannedSteps,
-      undefined,
-      cadence
-    )
+    return {
+      metric: 'heartrate',
+      intervals: detectIntervals(
+        time,
+        hr,
+        'heartrate',
+        hrWorkThreshold,
+        plannedSteps,
+        undefined,
+        cadence,
+        // Zone reference, kept separate from the work bar above (CW-400).
+        { lthr: refs.lthr, maxHr: refs.maxHr }
+      )
+    }
   }
 
-  return mapIntervalsToActual(detected)
+  return { metric: null, intervals: [] }
+}
+
+function buildDetectedIntervals(
+  workout: any,
+  plannedWorkout?: any,
+  refsInput?: AnalysisRefs
+): ActualInterval[] {
+  // `start_index`/`end_index` survive the mapping so rep-scoped signals can look
+  // inside a rep (CW-393).
+  return mapIntervalsToActual(
+    buildDetectedIntervalCandidate(workout, plannedWorkout, refsInput).intervals
+  )
 }
 
 /**
