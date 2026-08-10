@@ -422,12 +422,33 @@ function inferPowerSourceType(
   return 'unknown'
 }
 
+/**
+ * Physiological plausibility bounds and thresholds for heart-rate telemetry (CW-395).
+ *
+ * These are deliberately wide. A false "HR unusable" removes decoupling, HR zone times,
+ * EF and durability from the analysis for an athlete whose data was fine, which is worse
+ * than the over-trusting behaviour they replace — so every bound sits outside anything a
+ * human cardiovascular system produces, and only sustained corruption degrades usability.
+ */
+/** Below any adult resting HR; a sub-30 bpm sample mid-activity is a sensor artifact. */
+const HR_MIN_PLAUSIBLE_BPM = 30
+/** Above the ~220-age ceiling for any adult; dry-electrode strap static reads 220-250. */
+const HR_MAX_PLAUSIBLE_BPM = 230
+/** No cardiovascular system ramps this fast; sustained >10 bpm/s is electrical noise. */
+const HR_MAX_DELTA_BPM_PER_SEC = 10
+/** Corruption at 2% of samples is worth flagging but not worth discarding the stream. */
+const HR_CORRUPTION_FLAG_RATIO = 0.02
+/** At 5% the artifacts are systemic, not isolated, and derived HR facts stop being safe. */
+const HR_CORRUPTION_UNUSABLE_RATIO = 0.05
+
 function getHrStats(workout: any) {
   const hrStream = asNumberArray(workout?.streams?.heartrate)
   if (hrStream.length === 0) {
     return {
       zeroRatio: workout?.averageHr ? 0 : null,
       missingRatio: workout?.averageHr ? 0 : null,
+      implausibleRatio: workout?.averageHr ? 0 : null,
+      jumpRatio: workout?.averageHr ? 0 : null,
       artifactFlag: false,
       usable: Boolean(workout?.averageHr)
     }
@@ -438,12 +459,67 @@ function getHrStats(workout: any) {
   const validCount = hrStream.filter((value) => value > 0).length
   const zeroRatio = zeroCount / hrStream.length
   const missingRatio = invalidCount / hrStream.length
-  const artifactFlag = zeroRatio >= 0.05 || missingRatio >= 0.15
-  const usable = validCount >= Math.max(60, hrStream.length * 0.75) && !artifactFlag
+
+  // Dropouts (zero / non-finite) are already counted above; only live readings are judged
+  // for plausibility so a gappy stream is not penalised twice for the same samples.
+  const implausibleCount = hrStream.filter(
+    (value) =>
+      Number.isFinite(value) &&
+      value > 0 &&
+      (value < HR_MIN_PLAUSIBLE_BPM || value > HR_MAX_PLAUSIBLE_BPM)
+  ).length
+  const implausibleRatio = implausibleCount / hrStream.length
+
+  // Rate of change is measured per *second*, not per sample: streams arrive at 1 Hz, 5 s
+  // or 30 s cadence, and treating a legitimate 30 bpm rise across a 5 s gap as a 30 bpm/s
+  // jump is exactly how a healthy interval session would get its HR wrongly suppressed.
+  // Without a usable time stream we assume 1 Hz.
+  //
+  // A pair is only judged when both samples are live and already within the plausible
+  // band. Dropouts are counted by zeroRatio and out-of-range spikes by implausibleRatio;
+  // counting them here too would charge one defect to two ratios and push streams past
+  // the degrade threshold on the strength of a single artifact. The two checks therefore
+  // stay orthogonal: this one catches impossible movement between believable values.
+  const isLivePlausible = (value: number | undefined): value is number =>
+    typeof value === 'number' &&
+    Number.isFinite(value) &&
+    value >= HR_MIN_PLAUSIBLE_BPM &&
+    value <= HR_MAX_PLAUSIBLE_BPM
+  const timeStream = asNumberArray(workout?.streams?.time)
+  const hasAlignedTime = timeStream.length === hrStream.length
+  let jumpCount = 0
+  for (let index = 1; index < hrStream.length; index += 1) {
+    const previous = hrStream[index - 1]
+    const current = hrStream[index]
+    if (!isLivePlausible(previous) || !isLivePlausible(current)) continue
+    const currentTime = timeStream[index]
+    const previousTime = timeStream[index - 1]
+    const rawDelta =
+      hasAlignedTime && typeof currentTime === 'number' && typeof previousTime === 'number'
+        ? currentTime - previousTime
+        : 1
+    const seconds = Number.isFinite(rawDelta) && rawDelta > 0 ? rawDelta : 1
+    if (Math.abs(current - previous) / seconds > HR_MAX_DELTA_BPM_PER_SEC) jumpCount += 1
+  }
+  const jumpRatio = jumpCount / hrStream.length
+
+  const dropoutFlag = zeroRatio >= 0.05 || missingRatio >= 0.15
+  const corruptionFlag =
+    implausibleRatio >= HR_CORRUPTION_FLAG_RATIO || jumpRatio >= HR_CORRUPTION_FLAG_RATIO
+  const corruptionDisqualifying =
+    implausibleRatio >= HR_CORRUPTION_UNUSABLE_RATIO || jumpRatio >= HR_CORRUPTION_UNUSABLE_RATIO
+  const artifactFlag = dropoutFlag || corruptionFlag
+  // Note the asymmetry: dropouts disqualify at the flag threshold (unchanged behaviour),
+  // but corruption only disqualifies at the higher threshold, so a handful of isolated
+  // spikes surfaces as an artifact without deleting an otherwise good stream.
+  const usable =
+    validCount >= Math.max(60, hrStream.length * 0.75) && !dropoutFlag && !corruptionDisqualifying
 
   return {
     zeroRatio: round(zeroRatio, 3),
     missingRatio: round(missingRatio, 3),
+    implausibleRatio: round(implausibleRatio, 3),
+    jumpRatio: round(jumpRatio, 3),
     artifactFlag,
     usable
   }
@@ -1305,10 +1381,17 @@ function getPromptFactValueByPath(value: unknown, path: string) {
 function inferHrArtifactSeverity(stats: ReturnType<typeof getHrStats>): HrArtifactSeverity {
   const zeroRatio = stats.zeroRatio ?? 0
   const missingRatio = stats.missingRatio ?? 0
-  const combined = Math.max(zeroRatio, missingRatio)
-  if (!stats.usable && combined >= 0.2) return 'high'
-  if (!stats.usable && combined >= 0.1) return 'moderate'
-  if (stats.artifactFlag || combined > 0) return 'low'
+  const implausibleRatio = stats.implausibleRatio ?? 0
+  const jumpRatio = stats.jumpRatio ?? 0
+  // Dropouts and corruption are graded on separate ladders because their thresholds
+  // differ: missing samples are tolerated up to 15%, whereas 5% of physiologically
+  // impossible readings already means the sensor was misbehaving for the whole session.
+  const dropoutRatio = Math.max(zeroRatio, missingRatio)
+  const corruptionRatio = Math.max(implausibleRatio, jumpRatio)
+  if (!stats.usable && corruptionRatio >= HR_CORRUPTION_UNUSABLE_RATIO) return 'high'
+  if (!stats.usable && dropoutRatio >= 0.2) return 'high'
+  if (!stats.usable && dropoutRatio >= 0.1) return 'moderate'
+  if (stats.artifactFlag || dropoutRatio > 0 || corruptionRatio > 0) return 'low'
   return 'none'
 }
 

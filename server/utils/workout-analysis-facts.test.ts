@@ -2312,3 +2312,111 @@ describe('Strava estimated ride power provenance (CW-394)', () => {
     expect(facts.guardrails.telemetry.powerSourceType).toBe('unknown')
   })
 })
+
+describe('heart-rate physiological plausibility (CW-395)', () => {
+  // A clean stream reading `usable: true` is the primary acceptance criterion here:
+  // falsely suppressing HR removes decoupling, zone times, EF and durability from the
+  // analysis, which is a worse outcome than the over-trusting behaviour being fixed.
+  function cleanHrStream(length = 3600) {
+    return Array.from({ length }, (_, index) => {
+      const ramp = 120 + (45 * index) / (length - 1)
+      // Deterministic beat-to-beat variation of a few bpm, as a real 1 Hz stream shows.
+      const variation = 2 * Math.sin(index / 7) + 1.5 * Math.sin(index / 3)
+      return Math.round(ramp + variation)
+    })
+  }
+
+  function hrFacts(heartrate: number[]) {
+    return buildWorkoutAnalysisFactsV2({
+      workout: makeWorkout({
+        type: 'Ride',
+        title: 'HR Telemetry Session',
+        durationSec: heartrate.length,
+        averageWatts: 200,
+        streams: {
+          time: heartrate.map((_, index) => index),
+          watts: heartrate.map(() => 200),
+          heartrate
+        }
+      })
+    })
+  }
+
+  it('REGRESSION: a clean ramping stream stays fully usable with no artifact', () => {
+    const facts = hrFacts(cleanHrStream())
+
+    expect(facts.guardrails.telemetry.hrUsable).toBe(true)
+    expect(facts.guardrails.telemetry.hrArtifactSeverity).toBe('none')
+    expect(facts.guardrails.suppressions.join(' ')).not.toContain('Heart-rate-derived')
+  })
+
+  it('REGRESSION: a clean stream sampled at 5 s is not mistaken for impossible jumps', () => {
+    // 30 bpm across a 5 s gap is 6 bpm/s - a real interval onset, not an artifact. The
+    // rate-of-change check reads the time stream precisely so this cannot false-positive.
+    const heartrate = Array.from({ length: 720 }, (_, index) => (index % 120 < 60 ? 165 : 135))
+    const facts = buildWorkoutAnalysisFactsV2({
+      workout: makeWorkout({
+        type: 'Ride',
+        durationSec: 3600,
+        averageWatts: 230,
+        streams: {
+          time: Array.from({ length: 720 }, (_, index) => index * 5),
+          watts: Array.from({ length: 720 }, (_, index) => (index % 120 < 60 ? 320 : 150)),
+          heartrate
+        }
+      })
+    })
+
+    expect(facts.guardrails.telemetry.hrUsable).toBe(true)
+    expect(facts.guardrails.telemetry.hrArtifactSeverity).toBe('none')
+  })
+
+  it('treats a 240 bpm strap-static burst as unusable with high severity', () => {
+    const clean = cleanHrStream(600)
+    const heartrate = clean.map((value, index) => (index < 60 ? 240 : value))
+    const facts = hrFacts(heartrate)
+
+    expect(facts.guardrails.telemetry.hrUsable).toBe(false)
+    expect(facts.guardrails.telemetry.hrArtifactSeverity).toBe('high')
+    expect(facts.guardrails.suppressions.join(' ')).toContain('Heart-rate-derived')
+  })
+
+  it('treats sample-to-sample jumps of 40 bpm as unusable', () => {
+    const heartrate = Array.from({ length: 600 }, (_, index) => (index % 2 === 0 ? 130 : 170))
+    const facts = hrFacts(heartrate)
+
+    expect(facts.guardrails.telemetry.hrUsable).toBe(false)
+    expect(facts.guardrails.telemetry.hrArtifactSeverity).toBe('high')
+  })
+
+  it('flags a handful of isolated out-of-range samples without discarding the stream', () => {
+    const clean = cleanHrStream(1200)
+    // 37 samples ~= 3.1% of the stream: past the 2% flag line, short of the 5% degrade
+    // line, so the artifact is reported but the stream survives.
+    const heartrate = clean.map((value, index) => (index % 33 === 0 ? 245 : value))
+    const facts = hrFacts(heartrate)
+    const v1 = buildWorkoutAnalysisFacts({
+      workout: makeWorkout({
+        type: 'Ride',
+        durationSec: heartrate.length,
+        streams: { time: heartrate.map((_, index) => index), heartrate }
+      })
+    })
+
+    expect(facts.guardrails.telemetry.hrUsable).toBe(true)
+    expect(facts.guardrails.telemetry.hrArtifactSeverity).toBe('low')
+    expect(v1.telemetry.hrArtifactFlag).toBe(true)
+    expect(v1.telemetry.hrUsable).toBe(true)
+  })
+
+  it('does not double-penalise dropout samples as implausible or as jumps', () => {
+    // A stream whose only defect is a 4% dropout must behave exactly as it did before
+    // the plausibility checks existed: flagged nowhere, still usable.
+    const clean = cleanHrStream(1000)
+    const heartrate = clean.map((value, index) => (index % 25 === 0 ? 0 : value))
+    const facts = hrFacts(heartrate)
+
+    expect(facts.guardrails.telemetry.hrUsable).toBe(true)
+    expect(facts.guardrails.telemetry.hrZeroRatio).toBe(0.04)
+  })
+})
