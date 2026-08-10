@@ -861,6 +861,22 @@ describe('analysisSchema matches the prompt it is handed with', () => {
     expect(triggerSource).not.toContain('const analysisSchema')
     expect(serviceSource).not.toContain('interface StructuredAnalysis')
     expect(triggerSource).not.toContain('interface StructuredAnalysis')
+
+    // ...and neither by any of the three report tasks, which carried their own
+    // near-copies of the same shape until CW-425.
+    for (const reportTask of [
+      'generate-weekly-report.ts',
+      'generate-custom-report.ts',
+      'analyze-last-3-workouts.ts'
+    ]) {
+      const reportSource = fs.readFileSync(
+        new URL(`../../../trigger/${reportTask}`, import.meta.url),
+        'utf-8'
+      )
+      expect(reportSource, reportTask).not.toContain('const analysisSchema')
+      expect(reportSource, reportTask).not.toContain('interface StructuredAnalysis')
+    }
+
     // The service must import, never re-export: server/utils is Nitro auto-imported and
     // re-exporting produces "Duplicated imports" warnings (CW-392 NOTE, CW-404).
     expect(serviceSource).not.toMatch(/^export \{/m)
@@ -1118,5 +1134,217 @@ describe('interval segmentation provenance (CW-391)', () => {
       USER_PROFILE
     )
     expect(ridePrompt).not.toContain('- Avg Pace:')
+  })
+})
+
+/**
+ * CW-425 regression coverage: the three report tasks.
+ *
+ * `trigger/generate-weekly-report.ts`, `trigger/generate-custom-report.ts` and
+ * `trigger/analyze-last-3-workouts.ts` each carried their own inline
+ * `const analysisSchema = { ... }`, restating the section-status vocabulary and
+ * the score bounds as literals. They happened to agree with their prompts, but
+ * nothing held them there -- which is precisely the state the workout schema was
+ * in before CW-403 broke it.
+ *
+ * They now build from `buildReportAnalysisSchema`, so the enum and the bounds
+ * come from `ANALYSIS_SECTION_STATUSES` / `ANALYSIS_SCORE_MIN|MAX`. A shared
+ * schema that can still drift from its prompt has only moved the problem, so
+ * these tests extend the CW-403 technique to each report: they read the status
+ * vocabulary and the score scale back out of each task's own *prompt source*
+ * and compare them to the schema that task actually hands Gemini.
+ */
+describe('report analysis schemas match the prompts they are handed with (CW-425)', () => {
+  const REPORT_TASKS = [
+    { file: 'generate-weekly-report.ts', schemaExport: 'weeklyReportAnalysisSchema' },
+    { file: 'generate-custom-report.ts', schemaExport: 'customReportAnalysisSchema' },
+    { file: 'analyze-last-3-workouts.ts', schemaExport: 'lastThreeWorkoutsAnalysisSchema' }
+  ] as const
+
+  async function loadReportTask(task: (typeof REPORT_TASKS)[number]) {
+    const fs = await import('node:fs')
+    const source = fs.readFileSync(
+      new URL(`../../../trigger/${task.file}`, import.meta.url),
+      'utf-8'
+    )
+    const mod: Record<string, any> = await import(`../../../trigger/${task.file.slice(0, -3)}`)
+    return { source, schema: mod[task.schemaExport] as any }
+  }
+
+  /** Human label for a score key, as the prompts spell it ("training_load" -> "Training Load"). */
+  function scoreLabel(key: string): string {
+    return key
+      .split('_')
+      .map((word) => `${word[0]!.toUpperCase()}${word.slice(1)}`)
+      .join(' ')
+  }
+
+  it('builds from the shared builder instead of an inline literal', async () => {
+    for (const task of REPORT_TASKS) {
+      const { source, schema } = await loadReportTask(task)
+
+      expect(source, task.file).toContain('buildReportAnalysisSchema({')
+      // No re-declared vocabulary or bounds: those may only reach the schema
+      // through ANALYSIS_SECTION_STATUSES / ANALYSIS_SCORE_MIN|MAX.
+      expect(source, task.file).not.toContain("'needs_improvement'")
+      expect(source, task.file).not.toMatch(/^\s*minimum: \d+,$/m)
+      expect(source, task.file).not.toMatch(/^\s*maximum: \d+$/m)
+
+      expect(schema, task.file).toBeTruthy()
+      expect(schema.type, task.file).toBe('object')
+    }
+  })
+
+  it('hands that exact schema to generateStructuredAnalysis', async () => {
+    for (const task of REPORT_TASKS) {
+      const { source } = await loadReportTask(task)
+
+      const call = source.match(/generateStructuredAnalysis(?:<[^>]*>)?\(([\s\S]{0,200})/)
+      expect(call, task.file).not.toBeNull()
+      expect(call![1], task.file).toContain(task.schemaExport)
+    }
+  })
+
+  it('declares the shared section-status enum, and never the retired vocabulary', async () => {
+    for (const task of REPORT_TASKS) {
+      const { schema } = await loadReportTask(task)
+      const statusEnum = schema.properties.sections.items.properties.status.enum
+
+      expect(statusEnum, task.file).toEqual([...ANALYSIS_SECTION_STATUSES])
+      // The CW-403 failure mode: an enum the UI status->colour mappers do not
+      // understand, so problem sections render grey instead of red.
+      expect(statusEnum, task.file).not.toContain('fair')
+      expect(statusEnum, task.file).not.toContain('needs_attention')
+      expect(statusEnum, task.file).not.toContain('info')
+    }
+  })
+
+  it('declares the status vocabulary its own prompt instructs', async () => {
+    let vocabulariesFound = 0
+
+    for (const task of REPORT_TASKS) {
+      const { source, schema } = await loadReportTask(task)
+      const statusEnum = schema.properties.sections.items.properties.status.enum
+
+      // e.g. "- Provide a status assessment (excellent/good/moderate/needs_improvement/poor)"
+      for (const match of source.matchAll(/status assessment \(([a-z_/]+)\)/g)) {
+        vocabulariesFound += 1
+        expect(match[1]!.split('/'), task.file).toEqual(statusEnum)
+      }
+    }
+
+    // If every prompt stops naming the vocabulary this guard quietly stops
+    // guarding, so require that at least one still states it.
+    expect(vocabulariesFound).toBeGreaterThan(0)
+  })
+
+  it('declares scores exactly when its own prompt asks for them', async () => {
+    for (const task of REPORT_TASKS) {
+      const { source, schema } = await loadReportTask(task)
+
+      // A schema that declares scores the prompt never asks for makes Gemini
+      // invent numbers with no basis; a prompt that asks for scores the schema
+      // does not declare gets them silently dropped from the response.
+      expect(Boolean(schema.properties.scores), task.file).toBe(
+        source.includes('Performance Scores')
+      )
+      // ...and the top-level `required` may only demand scores that exist.
+      if (schema.required.includes('scores')) {
+        expect(schema.properties.scores, task.file).toBeTruthy()
+      }
+    }
+  })
+
+  it('declares the score scale its own prompt states', async () => {
+    let scalesFound = 0
+
+    for (const task of REPORT_TASKS) {
+      const { source, schema } = await loadReportTask(task)
+
+      // e.g. "**Performance Scores** (1-10 scale for tracking progress over time)"
+      for (const match of source.matchAll(/Performance Scores\*{0,2} \((\d+)-(\d+) scale/g)) {
+        scalesFound += 1
+        expect(Number(match[1]), task.file).toBe(ANALYSIS_SCORE_MIN)
+        expect(Number(match[2]), task.file).toBe(ANALYSIS_SCORE_MAX)
+      }
+
+      if (!schema.properties.scores) continue
+
+      for (const [key, prop] of Object.entries<any>(schema.properties.scores.properties)) {
+        if (key.endsWith('_explanation')) continue
+        expect(prop.minimum, `${task.file}:${key}`).toBe(ANALYSIS_SCORE_MIN)
+        expect(prop.maximum, `${task.file}:${key}`).toBe(ANALYSIS_SCORE_MAX)
+        expect(prop.description, `${task.file}:${key}`).toContain(
+          `(${ANALYSIS_SCORE_MIN}-${ANALYSIS_SCORE_MAX})`
+        )
+      }
+      expect(schema.properties.scores.description, task.file).toContain(
+        `${ANALYSIS_SCORE_MIN}-${ANALYSIS_SCORE_MAX} scale`
+      )
+    }
+
+    expect(scalesFound).toBeGreaterThan(0)
+  })
+
+  it('names in the prompt every score dimension its schema declares', async () => {
+    for (const task of REPORT_TASKS) {
+      const { source, schema } = await loadReportTask(task)
+      if (!schema.properties.scores) continue
+
+      for (const key of Object.keys(schema.properties.scores.properties)) {
+        if (key.endsWith('_explanation')) continue
+        expect(source, `${task.file}:${key}`).toContain(scoreLabel(key))
+      }
+    }
+  })
+
+  it('keeps the per-report differences the tasks depend on', async () => {
+    const byFile = new Map<string, any>()
+    for (const task of REPORT_TASKS) {
+      byFile.set(task.file, (await loadReportTask(task)).schema)
+    }
+
+    for (const [file, schema] of byFile) {
+      // Reports render `status_label` directly (see each task's markdown
+      // converter), so unlike the workout schema it must be required.
+      expect(schema.properties.sections.items.required, file).toEqual([
+        'title',
+        'status',
+        'status_label',
+        'analysis_points'
+      ])
+      expect(schema.properties.recommendations.items.required, file).toEqual([
+        'title',
+        'priority',
+        'description'
+      ])
+    }
+
+    // Only the weekly report is invalid without scores.
+    expect(byFile.get('generate-weekly-report.ts').required).toEqual([
+      'type',
+      'title',
+      'executive_summary',
+      'sections',
+      'scores'
+    ])
+    // A nutrition-only custom report legitimately has none.
+    expect(byFile.get('generate-custom-report.ts').required).toEqual([
+      'type',
+      'title',
+      'executive_summary',
+      'sections'
+    ])
+    expect(byFile.get('generate-custom-report.ts').properties.scores.required).toBeUndefined()
+    // The three-workout comparison asks for no scores at all.
+    expect(byFile.get('analyze-last-3-workouts.ts').properties.scores).toBeUndefined()
+
+    // Nutrition metrics belong to the custom report only.
+    expect(
+      Object.keys(byFile.get('generate-custom-report.ts').properties.metrics_summary.properties)
+    ).toContain('avg_protein_g')
+    expect(
+      Object.keys(byFile.get('generate-weekly-report.ts').properties.metrics_summary.properties)
+    ).not.toContain('avg_protein_g')
   })
 })
