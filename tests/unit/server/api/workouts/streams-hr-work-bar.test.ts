@@ -73,8 +73,12 @@ function makeStream() {
   }
 }
 
+// The LAST heart-rate detection is the endpoint's own. Since CW-436 the endpoint also
+// builds the v2 analysis facts (to gate the pacing verdict on session shape), and that
+// builder runs its own interval detection over the same streams -- so the first
+// heart-rate call is the builder's, not the one under test here.
 function hrCall() {
-  return detectIntervals.mock.calls.find((call: any[]) => call[2] === 'heartrate')
+  return detectIntervals.mock.calls.filter((call: any[]) => call[2] === 'heartrate').at(-1)
 }
 
 describe('GET /api/workouts/[id]/streams heart-rate work bar (CW-418)', () => {

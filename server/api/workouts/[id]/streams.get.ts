@@ -10,6 +10,10 @@ import { sportSettingsRepository } from '../../../utils/repositories/sportSettin
 import { detectIntervals, resolveHrWorkThreshold } from '../../../utils/interval-detection'
 import { detectClimbs } from '../../../utils/climb-detection'
 import { formatPromptPace } from '../../../utils/ai-prompt-format'
+import {
+  buildWorkoutAnalysisFactsV2,
+  type WorkoutAnalysisFactsV2
+} from '../../../utils/workout-analysis-facts'
 
 defineRouteMeta({
   openAPI: {
@@ -72,12 +76,19 @@ export default defineEventHandler(async (event) => {
         userId: authUser.id
       },
       include: {
+        // The pacing verdict is gated on the same v2 analysis facts the AI prompt
+        // uses (CW-436), so the facts builder needs the plan and athlete profile
+        // fields alongside the stream.
+        plannedWorkout: true,
         user: {
           select: {
             ftp: true,
             maxHr: true,
             lthr: true,
-            distanceUnits: true
+            distanceUnits: true,
+            weight: true,
+            weightUnits: true,
+            language: true
           }
         }
       }
@@ -93,6 +104,35 @@ export default defineEventHandler(async (event) => {
     const user = workout.user
 
     const workoutStream = await workoutStreamRepository.findByWorkoutId(workoutId)
+
+    // CW-436: the pacing card and the AI analysis must agree about whether this
+    // session's pacing was gradeable at all, so both are gated on the same v2
+    // analysis facts, built with the same builder the workout detail endpoint uses.
+    //
+    // Built lazily and memoised: the builder runs its own interval detection over
+    // the full streams, so a request that has no splits to grade must not pay for
+    // it. A failure here must never take the pacing card down -- returning
+    // undefined leaves the verdict applicable, i.e. the pre-CW-436 behaviour.
+    let analysisFactsV2Resolved = false
+    let analysisFactsV2: WorkoutAnalysisFactsV2 | undefined
+    const resolveAnalysisFactsV2 = async (): Promise<WorkoutAnalysisFactsV2 | undefined> => {
+      if (analysisFactsV2Resolved) return analysisFactsV2
+      analysisFactsV2Resolved = true
+      try {
+        analysisFactsV2 = buildWorkoutAnalysisFactsV2({
+          workout: { ...workout, streams: workoutStream } as any,
+          sportSettings: await sportSettingsRepository.getForActivityType(
+            workout.userId,
+            workout.type || ''
+          ),
+          plannedWorkout: (workout as any).plannedWorkout,
+          userProfile: user || undefined
+        })
+      } catch (factsError) {
+        console.error('[API] streams.get: failed to build analysis facts v2:', factsError)
+      }
+      return analysisFactsV2
+    }
 
     if (workoutStream) {
       // ON-THE-FLY ZONE CALCULATION (Backfill)
@@ -261,7 +301,10 @@ export default defineEventHandler(async (event) => {
       // if the necessary data (lapSplits) is present in the stream.
 
       if (workoutStream.lapSplits && Array.isArray(workoutStream.lapSplits)) {
-        const strategy = analyzePacingStrategy(workoutStream.lapSplits)
+        const strategy = analyzePacingStrategy(
+          workoutStream.lapSplits,
+          await resolveAnalysisFactsV2()
+        )
 
         // Downsample high-frequency streams to reduce payload size (Fixes COACH-WATTS-B)
         const TARGET_POINTS = 2000
@@ -502,7 +545,7 @@ export default defineEventHandler(async (event) => {
             : 0
 
         // Use shared utility for consistent pacing analysis
-        const pacingStrategy = analyzePacingStrategy(lapSplits)
+        const pacingStrategy = analyzePacingStrategy(lapSplits, await resolveAnalysisFactsV2())
 
         return {
           workoutId: workout.id,
