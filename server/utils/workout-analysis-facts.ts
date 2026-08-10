@@ -377,6 +377,27 @@ function inferImpactProfile(
   return 'medium'
 }
 
+/**
+ * Strava sets `device_watts: false` on rides whose watts it *estimated* from speed,
+ * gradient and rider weight rather than read off a power meter. Those numbers can be
+ * 10-30% off, so they must not earn absolute-power benchmarking rights.
+ *
+ * Returns `true` (real power meter), `false` (Strava-estimated) or `null` when the flag
+ * is absent — `null` deliberately preserves today's behaviour for Intervals.icu rows,
+ * FIT uploads and older Strava rows that predate the field.
+ *
+ * The lap-level fallback mirrors what `scripts/debug-workout-load.ts` already reads:
+ * some activity payloads carry the flag only on the laps.
+ */
+function inferStravaDeviceWatts(workout: any): boolean | null {
+  const raw = workout?.rawJson as any
+  if (!raw || typeof raw !== 'object') return null
+  if (typeof raw.device_watts === 'boolean') return raw.device_watts
+  const lapDeviceWatts = Array.isArray(raw.laps) ? raw.laps[0]?.device_watts : undefined
+  if (typeof lapDeviceWatts === 'boolean') return lapDeviceWatts
+  return null
+}
+
 function inferPowerSourceType(
   workout: any,
   family: ReturnType<typeof getWorkoutFamily>
@@ -394,7 +415,10 @@ function inferPowerSourceType(
       .includes('ski')
   )
     return 'estimated'
-  if (family === 'ride') return 'measured'
+  if (family === 'ride') {
+    // Only an explicit `false` downgrades the ride; absent/undefined stays 'measured'.
+    return inferStravaDeviceWatts(workout) === false ? 'estimated' : 'measured'
+  }
   return 'unknown'
 }
 

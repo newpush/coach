@@ -2241,3 +2241,74 @@ describe('archetype classification robustness (CW-396)', () => {
     expect(facts.guardrails.archetype.primaryArchetype).toBe('threshold')
   })
 })
+
+describe('Strava estimated ride power provenance (CW-394)', () => {
+  // Strava synthesises watts from speed/gradient/weight when there is no power meter and
+  // marks that with `device_watts: false`. Those numbers must not earn absolute-power
+  // benchmarking rights, so they route into the same 'estimated' path as run/ski power.
+  function estimatedPowerRide(rawJson: Record<string, unknown>) {
+    return buildWorkoutAnalysisFactsV2({
+      workout: makeWorkout({
+        type: 'Ride',
+        title: 'Outdoor Ride',
+        durationSec: 3600,
+        averageWatts: 198,
+        normalizedPower: 214,
+        rawJson
+      })
+    })
+  }
+
+  it('treats a ride with device_watts:false as estimated and suppresses absolute power', () => {
+    const facts = estimatedPowerRide({ device_watts: false })
+
+    expect(facts.guardrails.telemetry.powerSourceType).toBe('estimated')
+    expect(facts.guardrails.telemetry.powerAbsoluteUsable).toBe(false)
+    expect(facts.guardrails.telemetry.powerRelativeUsable).toBe(true)
+    expect(facts.guardrails.suppressions.join(' ')).toContain(
+      'Absolute power benchmarking suppressed'
+    )
+  })
+
+  it('honours the lap-level device_watts fallback', () => {
+    const facts = estimatedPowerRide({ laps: [{ device_watts: false }, { device_watts: false }] })
+
+    expect(facts.guardrails.telemetry.powerSourceType).toBe('estimated')
+    expect(facts.guardrails.telemetry.powerAbsoluteUsable).toBe(false)
+  })
+
+  it('keeps device_watts:true rides on measured absolute power', () => {
+    const facts = estimatedPowerRide({ device_watts: true })
+
+    expect(facts.guardrails.telemetry.powerSourceType).toBe('measured')
+    expect(facts.guardrails.telemetry.powerAbsoluteUsable).toBe(true)
+    expect(facts.guardrails.suppressions.join(' ')).not.toContain(
+      'Absolute power benchmarking suppressed'
+    )
+  })
+
+  it('leaves rides with no device_watts flag on measured (Intervals.icu, FIT, legacy rows)', () => {
+    const withoutFlag = estimatedPowerRide({ icu_intervals: [] })
+    const withoutRawJson = buildWorkoutAnalysisFactsV2({
+      workout: makeWorkout({ type: 'Ride', averageWatts: 198 })
+    })
+
+    expect(withoutFlag.guardrails.telemetry.powerSourceType).toBe('measured')
+    expect(withoutFlag.guardrails.telemetry.powerAbsoluteUsable).toBe(true)
+    expect(withoutRawJson.guardrails.telemetry.powerSourceType).toBe('measured')
+    expect(withoutRawJson.guardrails.telemetry.powerAbsoluteUsable).toBe(true)
+  })
+
+  it('does not claim power provenance for a ride carrying no power at all', () => {
+    const facts = buildWorkoutAnalysisFactsV2({
+      workout: makeWorkout({
+        type: 'Ride',
+        averageWatts: null,
+        normalizedPower: null,
+        rawJson: { device_watts: false }
+      })
+    })
+
+    expect(facts.guardrails.telemetry.powerSourceType).toBe('unknown')
+  })
+})
