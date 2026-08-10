@@ -414,7 +414,7 @@ export function detectIntervals(
           'STEADY',
           threshold,
           metricType,
-          undefined,
+          cadenceValues,
           hrRefs
         )
       ]

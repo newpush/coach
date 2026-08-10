@@ -260,6 +260,37 @@ describe('detectIntervals', () => {
     expect(intervals[0]?.type).toBe('STEADY')
   })
 
+  // CW-417: the STEADY branch was the only createIntervalObj call site that
+  // passed `undefined` instead of the cadence stream, so exactly the session
+  // type where one steady cadence figure means the most reported none.
+  it('carries the cadence stream onto a STEADY interval', () => {
+    const watts = Array.from({ length: 2400 }, (_, index) => 130 + (index % 5))
+    const time = watts.map((_, index) => index)
+    const cadence = Array.from({ length: 2400 }, (_, index) => 88 + (index % 3))
+
+    const intervals = detectIntervals(time, watts, 'power', 250, undefined, undefined, cadence)
+
+    expect(intervals).toHaveLength(1)
+    expect(intervals[0]?.type).toBe('STEADY')
+    // Cadence cycles 88/89/90 across the whole session, so the mean is 89.
+    expect(intervals[0]?.avg_cadence).toBeCloseTo(89, 5)
+    expect(intervals[0]?.cadence_start).toBe(88)
+    expect(intervals[0]?.cadence_end).toBe(cadence[cadence.length - 1])
+  })
+
+  it('leaves STEADY cadence fields absent when no cadence stream is supplied', () => {
+    const watts = Array.from({ length: 2400 }, (_, index) => 130 + (index % 5))
+    const time = watts.map((_, index) => index)
+
+    const intervals = detectIntervals(time, watts, 'power', 250)
+
+    expect(intervals).toHaveLength(1)
+    expect(intervals[0]?.type).toBe('STEADY')
+    expect(intervals[0]?.avg_cadence).toBeUndefined()
+    expect(intervals[0]?.cadence_start).toBeUndefined()
+    expect(intervals[0]?.cadence_end).toBeUndefined()
+  })
+
   // CW-400: plan-guided labelling paired planned WORK steps with detected WORK
   // intervals only, so a STEADY session (which has no WORK interval at all) came
   // back unlabelled even with a planned workout linked to it.
