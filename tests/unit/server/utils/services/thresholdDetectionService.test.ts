@@ -2,10 +2,16 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { prisma } from '../../../../../server/utils/db'
 import { sportSettingsRepository } from '../../../../../server/utils/repositories/sportSettingsRepository'
-import { findPeakEfforts } from '../../../../../server/utils/interval-detection'
+import {
+  DEFAULT_PEAK_DURATIONS,
+  findPeakEfforts
+} from '../../../../../server/utils/interval-detection'
 import { createUserNotification } from '../../../../../server/utils/notifications'
 import { queueThresholdUpdateEmail } from '../../../../../server/utils/workout-insight-email'
-import { thresholdDetectionService } from '../../../../../server/utils/services/thresholdDetectionService'
+import {
+  THRESHOLD_PACE_PEAK_DURATION_SEC,
+  thresholdDetectionService
+} from '../../../../../server/utils/services/thresholdDetectionService'
 
 vi.mock('../../../../../server/utils/db', () => ({
   prisma: {
@@ -27,9 +33,12 @@ vi.mock('../../../../../server/utils/repositories/sportSettingsRepository', () =
   }
 }))
 
-vi.mock('../../../../../server/utils/interval-detection', () => ({
-  findPeakEfforts: vi.fn()
-}))
+// `interval-detection` is deliberately NOT mocked. It used to be, and the stub
+// handed the service a synthetic `{ duration: 2400 }` peak bucket that the real
+// `findPeakEfforts` never produced — so threshold pace detection was dead code
+// for every athlete while the suite stayed green (CW-405). Driving the service
+// with real streams through the real implementation is what keeps the bucket
+// the service asks for and the bucket the detector emits from drifting apart.
 
 vi.mock('../../../../../server/utils/notifications', () => ({
   createUserNotification: vi.fn()
@@ -46,6 +55,33 @@ vi.mock('@trigger.dev/sdk/v3', () => ({
   }
 }))
 
+/** A 1Hz stream: `warmupSec` seconds easy, then `effortSec` seconds steady. */
+function steadyEffortStream(options: {
+  warmupSec: number
+  warmupValue: number
+  effortSec: number
+  effortValue: number
+}) {
+  const time: number[] = []
+  const values: number[] = []
+  for (let t = 0; t <= options.warmupSec + options.effortSec; t++) {
+    time.push(t)
+    values.push(t <= options.warmupSec ? options.warmupValue : options.effortValue)
+  }
+  return { time, values }
+}
+
+/** A run whose best sustained 40 minutes average exactly `velocity` m/s. */
+function runWithSustained40mEffort(velocity: number) {
+  const { time, values } = steadyEffortStream({
+    warmupSec: 300,
+    warmupValue: 2.5,
+    effortSec: THRESHOLD_PACE_PEAK_DURATION_SEC,
+    effortValue: velocity
+  })
+  return { time, velocity: values }
+}
+
 describe('thresholdDetectionService', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -55,6 +91,25 @@ describe('thresholdDetectionService', () => {
     vi.mocked(prisma.metricHistory.createMany).mockResolvedValue({ count: 0 } as any)
   })
 
+  it('asks for a pace bucket the real findPeakEfforts actually produces', () => {
+    const { time, velocity } = runWithSustained40mEffort(4)
+
+    // The bucket the service requests is real...
+    const requested = findPeakEfforts(time, velocity, 'pace', [
+      { sec: THRESHOLD_PACE_PEAK_DURATION_SEC, label: '40m' }
+    ])
+    expect(requested.find((p) => p.duration === THRESHOLD_PACE_PEAK_DURATION_SEC)?.value).toBe(4)
+
+    // ...and it stays off the shared default list, so no POWER_40M personal-best
+    // type and no extra "40m" row in the UI peaks table appear as a side effect.
+    expect(DEFAULT_PEAK_DURATIONS.map((d) => d.sec)).not.toContain(THRESHOLD_PACE_PEAK_DURATION_SEC)
+    expect(
+      findPeakEfforts(time, velocity, 'pace').find(
+        (p) => p.duration === THRESHOLD_PACE_PEAK_DURATION_SEC
+      )
+    ).toBeUndefined()
+  })
+
   it('logs FTP history on the triggering workout date and stores the sport profile', async () => {
     const workoutDate = new Date('2025-02-05T10:00:00Z')
 
@@ -62,7 +117,13 @@ describe('thresholdDetectionService', () => {
       name: 'Cycling',
       ftp: 250
     } as any)
-    vi.mocked(findPeakEfforts).mockReturnValue([{ duration: 1200, value: 280 } as any])
+
+    const { time, values } = steadyEffortStream({
+      warmupSec: 300,
+      warmupValue: 150,
+      effortSec: 1200,
+      effortValue: 280
+    })
 
     await thresholdDetectionService.detectThresholdIncreases({
       id: 'workout-1',
@@ -72,8 +133,8 @@ describe('thresholdDetectionService', () => {
       durationSec: 3600,
       date: workoutDate,
       streams: {
-        watts: [200, 260, 300],
-        time: [0, 600, 1200]
+        watts: values,
+        time
       },
       user: {
         ftp: 250
@@ -104,6 +165,92 @@ describe('thresholdDetectionService', () => {
     )
   })
 
+  it('detects a threshold pace improvement from a real 40 minute effort', async () => {
+    const workoutDate = new Date('2025-01-10T07:30:00Z')
+
+    vi.mocked(sportSettingsRepository.getForActivityType).mockResolvedValue({
+      name: 'Running',
+      thresholdPace: 300
+    } as any)
+
+    const results = await thresholdDetectionService.detectThresholdIncreases({
+      id: 'workout-2a',
+      userId: 'user-1',
+      type: 'Run',
+      title: 'Threshold Run',
+      durationSec: 2700,
+      date: workoutDate,
+      streams: runWithSustained40mEffort(4),
+      user: {}
+    })
+
+    // 4 m/s sustained for 40 minutes is 250 s/km, comfortably faster than the
+    // athlete's stored 300 s/km threshold pace.
+    expect(results?.thresholdPace?.detected).toBe(true)
+    expect(results?.thresholdPace?.old).toBe(300)
+    expect(results?.thresholdPace?.new).toBeCloseTo(250, 5)
+    expect(prisma.recommendation.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ metric: 'THRESHOLD_PACE' })
+    })
+  })
+
+  it('does not detect a threshold pace when no 40 minute effort exists', async () => {
+    const workoutDate = new Date('2025-01-11T07:30:00Z')
+
+    vi.mocked(sportSettingsRepository.getForActivityType).mockResolvedValue({
+      name: 'Running',
+      thresholdPace: 300
+    } as any)
+
+    // A brisk 35 minute run: fast enough to beat the stored threshold pace, but
+    // too short to hold a 40 minute effort.
+    const { time, values } = steadyEffortStream({
+      warmupSec: 300,
+      warmupValue: 2.5,
+      effortSec: 1800,
+      effortValue: 4.5
+    })
+
+    const results = await thresholdDetectionService.detectThresholdIncreases({
+      id: 'workout-2b',
+      userId: 'user-1',
+      type: 'Run',
+      title: 'Short Tempo',
+      durationSec: 2100,
+      date: workoutDate,
+      streams: { time, velocity: values },
+      user: {}
+    })
+
+    expect(results?.thresholdPace).toBeNull()
+    expect(prisma.recommendation.create).not.toHaveBeenCalled()
+    expect(prisma.metricHistory.create).not.toHaveBeenCalled()
+  })
+
+  it('reports no improvement when the 40 minute effort is slower than the stored pace', async () => {
+    const workoutDate = new Date('2025-01-12T07:30:00Z')
+
+    vi.mocked(sportSettingsRepository.getForActivityType).mockResolvedValue({
+      name: 'Running',
+      thresholdPace: 240
+    } as any)
+
+    // 3.2 m/s over 40 minutes is 312.5 s/km, slower than the stored 240 s/km.
+    const results = await thresholdDetectionService.detectThresholdIncreases({
+      id: 'workout-2c',
+      userId: 'user-1',
+      type: 'Run',
+      title: 'Easy Long Run',
+      durationSec: 2700,
+      date: workoutDate,
+      streams: runWithSustained40mEffort(3.2),
+      user: {}
+    })
+
+    expect(results?.thresholdPace?.detected).toBe(false)
+    expect(prisma.recommendation.create).not.toHaveBeenCalled()
+  })
+
   it('logs running threshold pace history on the workout date', async () => {
     const workoutDate = new Date('2025-01-10T07:30:00Z')
 
@@ -111,7 +258,6 @@ describe('thresholdDetectionService', () => {
       name: 'Running',
       thresholdPace: 260
     } as any)
-    vi.mocked(findPeakEfforts).mockReturnValue([{ duration: 2400, value: 4 } as any])
 
     await thresholdDetectionService.detectThresholdIncreases({
       id: 'workout-2',
@@ -120,10 +266,7 @@ describe('thresholdDetectionService', () => {
       title: 'Tempo Run',
       durationSec: 3600,
       date: workoutDate,
-      streams: {
-        velocity: [3.8, 4, 4.1],
-        time: [0, 1200, 2400]
-      },
+      streams: runWithSustained40mEffort(4),
       user: {}
     })
 
@@ -143,7 +286,6 @@ describe('thresholdDetectionService', () => {
       name: 'Running',
       thresholdPace: 260
     } as any)
-    vi.mocked(findPeakEfforts).mockReturnValue([{ duration: 2400, value: 4 } as any])
 
     await thresholdDetectionService.detectThresholdIncreases({
       id: 'workout-3',
@@ -152,10 +294,7 @@ describe('thresholdDetectionService', () => {
       title: 'Tempo Run',
       durationSec: 3600,
       date: workoutDate,
-      streams: {
-        velocity: [3.8, 4, 4.1],
-        time: [0, 1200, 2400]
-      },
+      streams: runWithSustained40mEffort(4),
       user: { distanceUnits: 'Kilometers' }
     })
 
@@ -174,7 +313,6 @@ describe('thresholdDetectionService', () => {
       name: 'Running',
       thresholdPace: 260
     } as any)
-    vi.mocked(findPeakEfforts).mockReturnValue([{ duration: 2400, value: 4 } as any])
 
     await thresholdDetectionService.detectThresholdIncreases({
       id: 'workout-4',
@@ -183,10 +321,7 @@ describe('thresholdDetectionService', () => {
       title: 'Tempo Run',
       durationSec: 3600,
       date: workoutDate,
-      streams: {
-        velocity: [3.8, 4, 4.1],
-        time: [0, 1200, 2400]
-      },
+      streams: runWithSustained40mEffort(4),
       user: {}
     })
 
@@ -205,7 +340,6 @@ describe('thresholdDetectionService', () => {
       name: 'Running',
       thresholdPace: 260
     } as any)
-    vi.mocked(findPeakEfforts).mockReturnValue([{ duration: 2400, value: 4 } as any])
 
     await thresholdDetectionService.detectThresholdIncreases({
       id: 'workout-5',
@@ -214,10 +348,7 @@ describe('thresholdDetectionService', () => {
       title: 'Tempo Run',
       durationSec: 3600,
       date: workoutDate,
-      streams: {
-        velocity: [3.8, 4, 4.1],
-        time: [0, 1200, 2400]
-      },
+      streams: runWithSustained40mEffort(4),
       user: { distanceUnits: 'Miles' }
     })
 

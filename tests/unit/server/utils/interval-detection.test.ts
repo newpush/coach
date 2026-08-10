@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  DEFAULT_PEAK_DURATIONS,
   detectIntervals,
   findPeakEfforts,
   resolveHrWorkThreshold,
@@ -447,5 +448,58 @@ describe('findPeakEfforts', () => {
   it('returns nothing for streams that are too short or empty', () => {
     expect(findPeakEfforts([], [], 'power')).toEqual([])
     expect(findPeakEfforts([0, 1, 2], [200, 200, 200], 'power')).toEqual([])
+  })
+
+  it('emits exactly the shared default buckets when no durations are requested', () => {
+    // pbDetectionService mints a POWER_<LABEL> personal-best type per bucket and
+    // both intervals endpoints render one peaks-table row per bucket, so this
+    // list is a product contract: changing it invents PB types and UI rows.
+    const times = Array.from({ length: 3601 }, (_, index) => index)
+    const watts = times.map(() => 250)
+
+    const peaks = findPeakEfforts(times, watts, 'power')
+
+    expect(peaks.map((p) => p.duration)).toEqual([5, 30, 60, 300, 600, 1200, 3600])
+    expect(peaks.map((p) => p.duration_label)).toEqual([
+      '5s',
+      '30s',
+      '1m',
+      '5m',
+      '10m',
+      '20m',
+      '60m'
+    ])
+    expect(DEFAULT_PEAK_DURATIONS.map((d) => d.sec)).toEqual([5, 30, 60, 300, 600, 1200, 3600])
+
+    // The 40 minute bucket thresholdDetectionService asks for must stay opt-in.
+    expect(peaks.find((p) => p.duration === 2400)).toBeUndefined()
+  })
+
+  it('emits only the requested buckets when durations are passed explicitly', () => {
+    const times = Array.from({ length: 2401 }, (_, index) => index)
+    const velocity = times.map(() => 4)
+
+    const peaks = findPeakEfforts(times, velocity, 'pace', [{ sec: 2400, label: '40m' }])
+
+    expect(peaks).toHaveLength(1)
+    expect(peaks[0]).toMatchObject({ duration: 2400, duration_label: '40m', metric: 'pace' })
+    expect(peaks[0]?.value).toBeCloseTo(4, 5)
+  })
+
+  it('applies the same pause and time-weighting rules to a requested bucket', () => {
+    // 20 minutes at 4 m/s, a 10 minute recording pause, then 20 more minutes.
+    // The activity spans 50 minutes of wall time but holds no continuous 40.
+    const times: number[] = []
+    const velocity: number[] = []
+    for (let t = 0; t <= 1199; t++) {
+      times.push(t)
+      velocity.push(4)
+    }
+    for (let t = 1800; t <= 2999; t++) {
+      times.push(t)
+      velocity.push(4)
+    }
+
+    expect(findPeakEfforts(times, velocity, 'pace', [{ sec: 2400, label: '40m' }])).toEqual([])
   })
 })

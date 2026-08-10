@@ -7,6 +7,12 @@ import { logger } from '@trigger.dev/sdk/v3'
 import { workoutStreamRepository } from '../repositories/workoutStreamRepository'
 import { formatPromptPace } from '../ai-prompt-format'
 
+/**
+ * Threshold pace is taken directly off the best sustained 40 minute effort (no
+ * scaling coefficient, unlike the 20 minute HR/power branches).
+ */
+export const THRESHOLD_PACE_PEAK_DURATION_SEC = 2400
+
 export const thresholdDetectionService = {
   /**
    * Detect potential new thresholds (LTHR, FTP) from workout data
@@ -281,12 +287,19 @@ export const thresholdDetectionService = {
       Array.isArray(workout.streams.velocity) &&
       Array.isArray(workout.streams.time)
     ) {
+      // Threshold pace is read off a 40 minute effort, which is deliberately not
+      // one of the shared DEFAULT_PEAK_DURATIONS buckets: adding it there would
+      // mint a POWER_40M personal-best type and a "40m" row in the UI peaks
+      // table. Ask for the one bucket this branch consumes instead.
       const pacePeaks = findPeakEfforts(
         workout.streams.time as number[],
         workout.streams.velocity as number[],
-        'pace'
+        'pace',
+        [{ sec: THRESHOLD_PACE_PEAK_DURATION_SEC, label: '40m' }]
       )
-      const peak40mPace = pacePeaks.find((p) => p.duration === 2400)?.value // 40m
+      const peak40mPace = pacePeaks.find(
+        (p) => p.duration === THRESHOLD_PACE_PEAK_DURATION_SEC
+      )?.value // 40m
 
       if (peak40mPace) {
         const detectedPacePerKm = 1000 / peak40mPace // s/km
