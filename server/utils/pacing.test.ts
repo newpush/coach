@@ -148,6 +148,75 @@ describe('Pacing Utils', () => {
     })
   })
 
+  // CW-436: the pacing card reads this function, so the session-shape gate CW-389
+  // applied to the AI prompt has to bite here too, or the two surfaces contradict
+  // each other on the same page.
+  describe('analyzePacingStrategy split-verdict gate', () => {
+    const withSteadiness = (sessionSteadiness: string) =>
+      ({ guardrails: { archetype: { sessionSteadiness, primaryArchetype: 'endurance' } } }) as any
+
+    // A textbook positive split, so any surviving verdict would be unmistakable.
+    const SLOWING_SPLITS = [
+      { paceSeconds: 240 },
+      { paceSeconds: 250 },
+      { paceSeconds: 260 },
+      { paceSeconds: 270 }
+    ]
+
+    it.each(['intervalled', 'stochastic'])(
+      'withholds the verdict for a %s session and explains why',
+      (steadiness) => {
+        const result = analyzePacingStrategy(SLOWING_SPLITS, withSteadiness(steadiness))
+
+        expect(result.verdictApplicable).toBe(false)
+        expect(result.strategy).toBe('not_graded')
+        // No "you slowed down" narrative anywhere in the payload.
+        expect(result.strategy).not.toBe('positive_split')
+        expect(result.description).not.toMatch(/slowed down/i)
+        // Nor the numbers the narrative is drawn from, nor the evenness grade.
+        expect(result.firstHalfPace).toBeUndefined()
+        expect(result.secondHalfPace).toBeUndefined()
+        expect(result.paceDifference).toBeUndefined()
+        expect(result.evenness).toBeUndefined()
+        // The athlete gets a plain-language explanation, not a silent gap.
+        expect(result.description.length).toBeGreaterThan(0)
+        expect(result.verdictWithheldReason).toContain(`session steadiness is ${steadiness}`)
+      }
+    )
+
+    it.each(['steady', 'rolling'])(
+      'leaves a %s session byte-identical to the ungated result',
+      (steadiness) => {
+        const gated = analyzePacingStrategy(SLOWING_SPLITS, withSteadiness(steadiness))
+        const ungated = analyzePacingStrategy(SLOWING_SPLITS)
+
+        expect(gated).toEqual(ungated)
+        expect(gated.verdictApplicable).toBe(true)
+        expect(gated.verdictWithheldReason).toBeNull()
+        expect(gated.strategy).toBe('positive_split')
+        expect(gated.description).toBe('Started fast and slowed down (positive split)')
+        expect(gated.firstHalfPace).toBe(245)
+        expect(gated.secondHalfPace).toBe(265)
+        expect(gated.paceDifference).toBe(20)
+      }
+    )
+
+    it('keeps ingestion-time callers (no facts available) on the graded path', () => {
+      const result = analyzePacingStrategy(SLOWING_SPLITS, undefined)
+
+      expect(result.verdictApplicable).toBe(true)
+      expect(result.strategy).toBe('positive_split')
+      expect(result.evenness).toBeGreaterThan(0)
+    })
+
+    it('reports insufficient data before it reports a withheld verdict', () => {
+      const result = analyzePacingStrategy([{ paceSeconds: 240 }], withSteadiness('intervalled'))
+
+      expect(result.strategy).toBe('insufficient_data')
+      expect(result.verdictApplicable).toBe(false)
+    })
+  })
+
   describe('formatPace', () => {
     it('formats 4:30/km correctly', () => {
       // 4.5 minutes = 4:30
