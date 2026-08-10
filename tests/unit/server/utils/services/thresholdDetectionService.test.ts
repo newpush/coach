@@ -9,6 +9,7 @@ import {
 import { createUserNotification } from '../../../../../server/utils/notifications'
 import { queueThresholdUpdateEmail } from '../../../../../server/utils/workout-insight-email'
 import {
+  corroborateThresholdEffortWithHr,
   THRESHOLD_PACE_PEAK_DURATION_SEC,
   thresholdDetectionService
 } from '../../../../../server/utils/services/thresholdDetectionService'
@@ -80,6 +81,20 @@ function runWithSustained40mEffort(velocity: number) {
     effortValue: velocity
   })
   return { time, velocity: values }
+}
+
+/**
+ * The same run, with a heart rate stream that holds `effortHr` over exactly the
+ * 40 minutes the pace peak is read from.
+ */
+function runWithSustained40mEffortAndHr(options: {
+  velocity: number
+  warmupHr: number
+  effortHr: number
+}) {
+  const { time, velocity } = runWithSustained40mEffort(options.velocity)
+  const heartrate = time.map((t) => (t <= 300 ? options.warmupHr : options.effortHr))
+  return { time, velocity, heartrate }
 }
 
 describe('thresholdDetectionService', () => {
@@ -249,6 +264,180 @@ describe('thresholdDetectionService', () => {
 
     expect(results?.thresholdPace?.detected).toBe(false)
     expect(prisma.recommendation.create).not.toHaveBeenCalled()
+  })
+
+  // The athlete with no stored threshold pace has nothing for the 2 s/km
+  // improvement test to compare against, so before CW-413 any 40 minute stretch
+  // — including the steady middle of a long easy run — nominated a threshold
+  // pace. That value then feeds interval detection's pace work bar
+  // (0.8 x thresholdPace), so a too-slow nomination pushes recovery jogs back
+  // into WORK. The first nomination now has to be corroborated by heart rate.
+  describe('first threshold pace nomination (athlete has none)', () => {
+    it('does not nominate one from a long easy run', async () => {
+      vi.mocked(sportSettingsRepository.getForActivityType).mockResolvedValue({
+        name: 'Running',
+        lthr: 170
+      } as any)
+
+      // 3 m/s for 40 minutes is 333 s/km at 132 bpm — 78% of LTHR, an easy
+      // aerobic heart rate nowhere near the Z4 band floor (159 bpm).
+      const results = await thresholdDetectionService.detectThresholdIncreases({
+        id: 'workout-6',
+        userId: 'user-1',
+        type: 'Run',
+        title: 'Long Easy Run',
+        durationSec: 5400,
+        date: new Date('2025-03-01T07:30:00Z'),
+        streams: runWithSustained40mEffortAndHr({ velocity: 3, warmupHr: 110, effortHr: 132 }),
+        user: {}
+      })
+
+      expect(results?.thresholdPace?.detected).toBe(false)
+      expect(results?.thresholdPace?.old).toBe(0)
+      expect(prisma.recommendation.create).not.toHaveBeenCalled()
+      expect(prisma.metricHistory.create).not.toHaveBeenCalled()
+    })
+
+    it('nominates one from a sustained 40 minute effort at threshold heart rate', async () => {
+      const workoutDate = new Date('2025-03-02T07:30:00Z')
+
+      vi.mocked(sportSettingsRepository.getForActivityType).mockResolvedValue({
+        name: 'Running',
+        lthr: 170
+      } as any)
+
+      // 4 m/s for 40 minutes is 250 s/km at 168 bpm — 99% of LTHR, comfortably
+      // inside the Z4 threshold band.
+      const results = await thresholdDetectionService.detectThresholdIncreases({
+        id: 'workout-7',
+        userId: 'user-1',
+        type: 'Run',
+        title: 'Threshold Test',
+        durationSec: 3000,
+        date: workoutDate,
+        streams: runWithSustained40mEffortAndHr({ velocity: 4, warmupHr: 120, effortHr: 168 }),
+        user: {}
+      })
+
+      expect(results?.thresholdPace?.detected).toBe(true)
+      expect(results?.thresholdPace?.new).toBeCloseTo(250, 5)
+      expect(prisma.recommendation.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ metric: 'THRESHOLD_PACE' })
+      })
+    })
+
+    it('does not nominate one when the run carries no heart rate stream', async () => {
+      vi.mocked(sportSettingsRepository.getForActivityType).mockResolvedValue({
+        name: 'Running',
+        lthr: 170
+      } as any)
+
+      const results = await thresholdDetectionService.detectThresholdIncreases({
+        id: 'workout-8',
+        userId: 'user-1',
+        type: 'Run',
+        title: 'Unstrapped Run',
+        durationSec: 3000,
+        date: new Date('2025-03-03T07:30:00Z'),
+        streams: runWithSustained40mEffort(4),
+        user: {}
+      })
+
+      expect(results?.thresholdPace?.detected).toBe(false)
+      expect(prisma.recommendation.create).not.toHaveBeenCalled()
+    })
+
+    it('does not nominate one when the athlete has no LTHR or max HR reference', async () => {
+      vi.mocked(sportSettingsRepository.getForActivityType).mockResolvedValue({
+        name: 'Running'
+      } as any)
+
+      const results = await thresholdDetectionService.detectThresholdIncreases({
+        id: 'workout-9',
+        userId: 'user-1',
+        type: 'Run',
+        title: 'Hard Run, No Profile',
+        durationSec: 3000,
+        date: new Date('2025-03-04T07:30:00Z'),
+        streams: runWithSustained40mEffortAndHr({ velocity: 4, warmupHr: 120, effortHr: 168 }),
+        user: {}
+      })
+
+      expect(results?.thresholdPace?.detected).toBe(false)
+      expect(prisma.recommendation.create).not.toHaveBeenCalled()
+    })
+
+    it('leaves the improvement path ungated for an athlete who already has a pace', async () => {
+      vi.mocked(sportSettingsRepository.getForActivityType).mockResolvedValue({
+        name: 'Running',
+        lthr: 170,
+        thresholdPace: 300
+      } as any)
+
+      // Easy heart rate, but 250 s/km beats the stored 300 s/km by far more than
+      // 2 s/km. Holding 40 minutes faster than a known threshold pace is its own
+      // evidence, so the HR gate deliberately does not apply here.
+      const results = await thresholdDetectionService.detectThresholdIncreases({
+        id: 'workout-10',
+        userId: 'user-1',
+        type: 'Run',
+        title: 'Steady Run',
+        durationSec: 3000,
+        date: new Date('2025-03-05T07:30:00Z'),
+        streams: runWithSustained40mEffortAndHr({ velocity: 4, warmupHr: 110, effortHr: 130 }),
+        user: {}
+      })
+
+      expect(results?.thresholdPace?.detected).toBe(true)
+      expect(results?.thresholdPace?.old).toBe(300)
+      expect(prisma.recommendation.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ metric: 'THRESHOLD_PACE' })
+      })
+    })
+  })
+
+  describe('corroborateThresholdEffortWithHr', () => {
+    const times = Array.from({ length: 601 }, (_, i) => i)
+
+    it('rejects a window whose heart rate mostly dropped out', () => {
+      // 160 bpm where it recorded — but only over a fifth of the window.
+      const heartrate = times.map((t) => (t > 480 ? 160 : 0))
+
+      expect(
+        corroborateThresholdEffortWithHr({
+          times,
+          heartrate,
+          startSec: 0,
+          endSec: 600,
+          lthr: 170
+        })
+      ).toMatchObject({ corroborated: false, reason: 'insufficient_hr_coverage' })
+    })
+
+    it('falls back to the max HR band when no LTHR is known', () => {
+      const maxHr = 190
+
+      // Z4 for a max-HR athlete starts at 0.8 x max HR (153 bpm).
+      expect(
+        corroborateThresholdEffortWithHr({
+          times,
+          heartrate: times.map(() => 165),
+          startSec: 0,
+          endSec: 600,
+          maxHr
+        })
+      ).toMatchObject({ corroborated: true, reason: 'in_threshold_band' })
+
+      expect(
+        corroborateThresholdEffortWithHr({
+          times,
+          heartrate: times.map(() => 140),
+          startSec: 0,
+          endSec: 600,
+          maxHr
+        })
+      ).toMatchObject({ corroborated: false, reason: 'below_threshold_band' })
+    })
   })
 
   it('logs running threshold pace history on the workout date', async () => {

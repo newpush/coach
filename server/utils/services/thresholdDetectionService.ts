@@ -6,12 +6,109 @@ import { queueThresholdUpdateEmail } from '../workout-insight-email'
 import { logger } from '@trigger.dev/sdk/v3'
 import { workoutStreamRepository } from '../repositories/workoutStreamRepository'
 import { formatPromptPace } from '../ai-prompt-format'
+import { calculateHrZones } from '../zones'
 
 /**
  * Threshold pace is taken directly off the best sustained 40 minute effort (no
  * scaling coefficient, unlike the 20 minute HR/power branches).
+ *
+ * The missing coefficient is deliberate and stays that way (CW-413 reviewed it):
+ * the 20 minute buckets are scaled by 0.95 because a maximal 20 minute effort
+ * sits *above* threshold, whereas an effort held at threshold intensity for 40
+ * minutes is, by definition, threshold pace. What the raw formula needs is not a
+ * discount but proof that the 40 minutes really were at threshold intensity —
+ * see `corroborateThresholdEffortWithHr`. Scaling instead would have been a
+ * blanket pessimism applied equally to real threshold efforts and to easy runs.
  */
 export const THRESHOLD_PACE_PEAK_DURATION_SEC = 2400
+
+/**
+ * Share of the peak window's samples that must carry a usable heart rate before
+ * the average is treated as evidence. A strap that dropped out for most of the
+ * effort corroborates nothing.
+ */
+const THRESHOLD_PACE_HR_COVERAGE_MIN = 0.8
+
+export interface ThresholdEffortHrEvidence {
+  corroborated: boolean
+  /** Machine-readable reason, for logs. */
+  reason:
+    | 'no_hr_stream'
+    | 'no_hr_reference'
+    | 'insufficient_hr_coverage'
+    | 'below_threshold_band'
+    | 'in_threshold_band'
+  avgHr?: number
+  floorHr?: number
+}
+
+/**
+ * Does the heart rate recorded over a peak effort's own window show the athlete
+ * was actually working at threshold?
+ *
+ * The bar is the floor of the athlete's Z4 band as `calculateHrZones` already
+ * defines it (0.93 x LTHR, or 0.8 x max HR when no LTHR is known) — no new
+ * coefficient is invented here. Note this is deliberately *not*
+ * `resolveHrWorkThreshold`: that is interval detection's easy/work boundary
+ * (0.82 x LTHR / 0.7 x max HR), which a steady easy run clears comfortably.
+ *
+ * The session's own max HR is likewise not accepted as a reference. On an easy
+ * run the session max is itself an easy heart rate, so anything measured
+ * relative to it passes — the gate would fail open exactly where it matters.
+ *
+ * Every "we cannot tell" path returns `corroborated: false`: a missing
+ * recommendation is invisible, a wrong one moves the athlete's training zones.
+ */
+export function corroborateThresholdEffortWithHr(args: {
+  times: number[]
+  heartrate?: number[] | null
+  startSec: number
+  endSec: number
+  lthr?: number | null
+  maxHr?: number | null
+}): ThresholdEffortHrEvidence {
+  const { times, heartrate, startSec, endSec, lthr, maxHr } = args
+
+  if (!Array.isArray(heartrate) || heartrate.length === 0) {
+    return { corroborated: false, reason: 'no_hr_stream' }
+  }
+
+  const floorHr = calculateHrZones(lthr || null, maxHr || null).find((zone) =>
+    zone.name.startsWith('Z4')
+  )?.min
+
+  if (!floorHr || floorHr <= 0) {
+    return { corroborated: false, reason: 'no_hr_reference' }
+  }
+
+  let inWindow = 0
+  let usable = 0
+  let sum = 0
+
+  for (let i = 0; i < times.length; i++) {
+    const t = times[i]
+    if (t === undefined || t < startSec || t > endSec) continue
+    inWindow++
+    const hr = heartrate[i]
+    if (typeof hr === 'number' && Number.isFinite(hr) && hr > 0) {
+      usable++
+      sum += hr
+    }
+  }
+
+  if (inWindow === 0 || usable / inWindow < THRESHOLD_PACE_HR_COVERAGE_MIN) {
+    return { corroborated: false, reason: 'insufficient_hr_coverage', floorHr }
+  }
+
+  const avgHr = sum / usable
+
+  return {
+    corroborated: avgHr >= floorHr,
+    reason: avgHr >= floorHr ? 'in_threshold_band' : 'below_threshold_band',
+    avgHr,
+    floorHr
+  }
+}
 
 export const thresholdDetectionService = {
   /**
@@ -297,17 +394,53 @@ export const thresholdDetectionService = {
         'pace',
         [{ sec: THRESHOLD_PACE_PEAK_DURATION_SEC, label: '40m' }]
       )
-      const peak40mPace = pacePeaks.find(
-        (p) => p.duration === THRESHOLD_PACE_PEAK_DURATION_SEC
-      )?.value // 40m
+      const peak40m = pacePeaks.find((p) => p.duration === THRESHOLD_PACE_PEAK_DURATION_SEC) // 40m
+      const peak40mPace = peak40m?.value
 
-      if (peak40mPace) {
+      if (peak40m && peak40mPace) {
         const detectedPacePerKm = 1000 / peak40mPace // s/km
         const effectiveOldPace =
           currentThresholdPace || (castWorkout.thresholdPace ? castWorkout.thresholdPace : null)
 
-        if (!effectiveOldPace || detectedPacePerKm < effectiveOldPace - 2) {
-          // 2s improvement
+        // Two different questions, so two different tests.
+        //
+        // The athlete who already has a threshold pace is vouched for by the
+        // improvement test: 40 minutes held faster than their known threshold is
+        // itself the evidence, and the value only ever ratchets upward.
+        //
+        // The first nomination has nothing to beat, so that test degenerates to
+        // "any 40 minute stretch qualifies" — and the longest steady stretch of a
+        // long *easy* run qualifies just as readily as a threshold effort. Since
+        // CW-384/CW-401 that would also drag interval detection's pace work bar
+        // (0.8 x thresholdPace) down with it. Make the first nomination prove the
+        // effort was near threshold before it counts (CW-413).
+        let accepted: boolean
+
+        if (effectiveOldPace) {
+          accepted = detectedPacePerKm < effectiveOldPace - 2 // 2s improvement
+        } else {
+          const evidence = corroborateThresholdEffortWithHr({
+            times: workout.streams.time as number[],
+            heartrate: workout.streams.heartrate as number[] | null,
+            startSec: peak40m.start_time,
+            endSec: peak40m.end_time,
+            lthr: currentLthr,
+            maxHr: currentMaxHr
+          })
+          accepted = evidence.corroborated
+
+          if (!accepted) {
+            logger.log('Threshold pace nomination rejected: no threshold-intensity evidence', {
+              workoutId: workout.id,
+              reason: evidence.reason,
+              avgHr: evidence.avgHr,
+              floorHr: evidence.floorHr,
+              detectedPacePerKm
+            })
+          }
+        }
+
+        if (accepted) {
           results.thresholdPace = {
             old: effectiveOldPace || 0,
             new: detectedPacePerKm,
@@ -329,7 +462,11 @@ export const thresholdDetectionService = {
             )
           }
         } else {
-          results.thresholdPace = { old: effectiveOldPace, new: detectedPacePerKm, detected: false }
+          results.thresholdPace = {
+            old: effectiveOldPace || 0,
+            new: detectedPacePerKm,
+            detected: false
+          }
         }
       }
     }
