@@ -134,6 +134,19 @@ function sessionWith20mEffort(options: {
   return streams
 }
 
+/** The metrics one run of the service actually recommended, and logged. */
+function recommendedMetrics(): unknown[] {
+  return vi
+    .mocked(prisma.recommendation.create)
+    .mock.calls.map((call) => (call[0] as any)?.data?.metric)
+}
+
+function loggedMetrics(): unknown[] {
+  return vi
+    .mocked(prisma.metricHistory.create)
+    .mock.calls.map((call) => (call[0] as any)?.data?.type)
+}
+
 describe('thresholdDetectionService', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -814,6 +827,283 @@ describe('thresholdDetectionService', () => {
       expect(results?.minDurationMet).toBe(false)
       expect(results?.lthr?.detected).toBe(false)
       expect(prisma.recommendation.create).not.toHaveBeenCalled()
+    })
+  })
+
+  // Max HR was the third branch guarded by `currentMaxHr &&`, so an athlete with
+  // no stored max HR never received a first detection (CW-446). It is fixed
+  // without the effort *corroboration* LTHR and FTP needed — a max HR is
+  // observed, not inferred — but a first nomination still has to clear two
+  // gates: the telemetry has to be trustworthy (CW-395), and the session peak
+  // has to be near-maximal, because what a stream observes is the maximum of one
+  // session and only a near-maximal session makes that the athlete's maximum.
+  //
+  // A 40 year old's age-predicted max is 180 bpm, so the floor these fixtures
+  // are measured against is 162 bpm.
+  describe('first max HR nomination (athlete has none)', () => {
+    /** A flat 1Hz heart rate stream, with artifacts spliced in by timestamp. */
+    function flatHrSession(options: {
+      sec: number
+      bpm: number
+      artifacts?: Record<number, number>
+    }) {
+      const time: number[] = []
+      const heartrate: number[] = []
+      for (let t = 0; t <= options.sec; t++) {
+        time.push(t)
+        heartrate.push(options.artifacts?.[t] ?? options.bpm)
+      }
+      return { time, heartrate }
+    }
+
+    /**
+     * A date of birth that makes the athlete exactly `years` old today. Derived
+     * from the clock rather than hard-coded, because `calculateAge` reads the
+     * current date and a fixed date of birth would drift into a different age —
+     * and a different floor — as the suite ages.
+     */
+    function dobForAge(years: number) {
+      const dob = new Date()
+      dob.setFullYear(dob.getFullYear() - years)
+      // A day clear of the birthday, so a leap year cannot round the age down.
+      dob.setDate(dob.getDate() - 1)
+      return dob
+    }
+
+    it('nominates one from a clean, near-maximal heart rate stream', async () => {
+      const workoutDate = new Date('2025-06-01T06:00:00Z')
+
+      vi.mocked(sportSettingsRepository.getForActivityType).mockResolvedValue({
+        name: 'Cycling'
+      } as any)
+
+      // The 115 -> 178 bpm step into the effort is far faster than any real
+      // heart rate ramps, but it is then *held*, so it is a hard interval and
+      // not an artifact. 178 also clears the 162 bpm floor comfortably, which is
+      // what makes it evidence of a maximum rather than of one hard session.
+      const results = await thresholdDetectionService.detectThresholdIncreases({
+        id: 'workout-maxhr-first',
+        userId: 'user-1',
+        type: 'Ride',
+        title: 'Hill Repeats',
+        durationSec: 1800,
+        date: workoutDate,
+        streams: sessionWith20mEffort({ warmupHr: 115, effortHr: 178 }),
+        user: { dob: dobForAge(40) }
+      })
+
+      expect(results?.maxHr).toMatchObject({ old: 0, new: 178, detected: true })
+      expect(prisma.recommendation.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          metric: 'MAX_HR',
+          description: 'We detected your max heart rate: 178 bpm.'
+        })
+      })
+      expect(createUserNotification).toHaveBeenCalledWith(
+        'user-1',
+        expect.objectContaining({
+          title: 'New Max Heart Rate Detected (Cycling)',
+          message:
+            'We detected your Cycling profile max heart rate: 178 bpm, based on "Hill Repeats".'
+        })
+      )
+      // Nothing is written to the athlete's profile or sport settings; the
+      // recommendation is theirs to confirm.
+      expect(prisma.metricHistory.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ type: 'MAX_HR', value: 178, oldValue: 0 })
+      })
+    })
+
+    it('does not nominate one from artifact-flagged heart rate telemetry', async () => {
+      vi.mocked(sportSettingsRepository.getForActivityType).mockResolvedValue({
+        name: 'Cycling'
+      } as any)
+
+      // 100 of 1801 samples read 250 bpm — dry-electrode strap static. That is
+      // 5.5% of the stream, past CW-395's unusable ratio, so `getHrStats` marks
+      // the telemetry untrustworthy and no max HR is nominated at all: not the
+      // 250, and not the 165 the rest of the stream held either.
+      const artifacts: Record<number, number> = {}
+      for (let t = 100; t < 200; t++) artifacts[t] = 250
+
+      const results = await thresholdDetectionService.detectThresholdIncreases({
+        id: 'workout-maxhr-artifact',
+        userId: 'user-1',
+        type: 'Ride',
+        title: 'Noisy Strap',
+        durationSec: 1800,
+        date: new Date('2025-06-02T06:00:00Z'),
+        streams: flatHrSession({ sec: 1800, bpm: 165, artifacts }),
+        user: { dob: dobForAge(40) }
+      })
+
+      expect(results?.maxHr).toBeNull()
+      expect(recommendedMetrics()).not.toContain('MAX_HR')
+      expect(loggedMetrics()).not.toContain('MAX_HR')
+    })
+
+    it('does not nominate an out-of-band spike the stream is otherwise clean around', async () => {
+      vi.mocked(sportSettingsRepository.getForActivityType).mockResolvedValue({
+        name: 'Cycling'
+      } as any)
+
+      // One 240 bpm sample in half an hour moves no ratio in `getHrStats` past
+      // its threshold, so the stream stays usable — which is exactly why the
+      // nominated value cannot be the raw `Math.max`.
+      const results = await thresholdDetectionService.detectThresholdIncreases({
+        id: 'workout-maxhr-spike',
+        userId: 'user-1',
+        type: 'Ride',
+        title: 'One Bad Sample',
+        durationSec: 1800,
+        date: new Date('2025-06-03T06:00:00Z'),
+        streams: flatHrSession({ sec: 1800, bpm: 165, artifacts: { 900: 240 } }),
+        user: { dob: dobForAge(40) }
+      })
+
+      expect(results?.maxHr).toMatchObject({ old: 0, new: 165, detected: true })
+      expect(prisma.recommendation.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          metric: 'MAX_HR',
+          description: 'We detected your max heart rate: 165 bpm.'
+        })
+      })
+    })
+
+    it('does not nominate an isolated in-band spike either', async () => {
+      vi.mocked(sportSettingsRepository.getForActivityType).mockResolvedValue({
+        name: 'Cycling'
+      } as any)
+
+      // 205 bpm is inside the plausible band, so the band alone would take it.
+      // The stream jumps to it and straight back off it at 40 bpm/s, which is
+      // the rate-of-change rule CW-395 already counts corruption by.
+      const results = await thresholdDetectionService.detectThresholdIncreases({
+        id: 'workout-maxhr-inband-spike',
+        userId: 'user-1',
+        type: 'Ride',
+        title: 'Cadence Lock-On',
+        durationSec: 1800,
+        date: new Date('2025-06-04T06:00:00Z'),
+        streams: flatHrSession({ sec: 1800, bpm: 165, artifacts: { 900: 205 } }),
+        user: { dob: dobForAge(40) }
+      })
+
+      expect(results?.maxHr).toMatchObject({ old: 0, new: 165, detected: true })
+    })
+
+    // The case this gate exists for. Before it, a recovery spin's peak was
+    // nominated and the copy asserted it as "your max heart rate" — an athlete
+    // with no reason to doubt it would confirm zones computed from 142 bpm, and
+    // since CW-383 that number also sets interval detection's work bar.
+    it('does not nominate a peak that never came near a maximal effort', async () => {
+      vi.mocked(sportSettingsRepository.getForActivityType).mockResolvedValue({
+        name: 'Cycling'
+      } as any)
+
+      // Clean telemetry, nothing artifact-flagged, nothing spiky — the stream is
+      // beyond reproach. It is the *session* that is not evidence: 142 bpm is
+      // 79% of a 40 year old's age-predicted maximum, an easy aerobic ride.
+      const results = await thresholdDetectionService.detectThresholdIncreases({
+        id: 'workout-maxhr-easy',
+        userId: 'user-1',
+        type: 'Ride',
+        title: 'Recovery Spin',
+        durationSec: 1800,
+        date: new Date('2025-06-05T06:00:00Z'),
+        streams: flatHrSession({ sec: 1800, bpm: 142 }),
+        user: { dob: dobForAge(40) }
+      })
+
+      expect(results?.maxHr).toBeNull()
+      expect(recommendedMetrics()).not.toContain('MAX_HR')
+      expect(loggedMetrics()).not.toContain('MAX_HR')
+      expect(createUserNotification).not.toHaveBeenCalled()
+    })
+
+    it('does not nominate one when the athlete has no date of birth', async () => {
+      vi.mocked(sportSettingsRepository.getForActivityType).mockResolvedValue({
+        name: 'Cycling'
+      } as any)
+
+      // The same session that nominates 178 bpm for a 40 year old. Without a
+      // date of birth there is no reference the floor can be built from that is
+      // not derived from the athlete's own heart rate — and a reference derived
+      // from their heart rate would be vouching for the number with itself. No
+      // reference, no nomination.
+      const results = await thresholdDetectionService.detectThresholdIncreases({
+        id: 'workout-maxhr-no-dob',
+        userId: 'user-1',
+        type: 'Ride',
+        title: 'Hill Repeats',
+        durationSec: 1800,
+        date: new Date('2025-06-06T06:00:00Z'),
+        streams: sessionWith20mEffort({ warmupHr: 115, effortHr: 178 }),
+        user: {}
+      })
+
+      expect(results?.maxHr).toBeNull()
+      expect(recommendedMetrics()).not.toContain('MAX_HR')
+    })
+
+    it('leaves the improvement path ungated for an athlete who already has a max HR', async () => {
+      vi.mocked(sportSettingsRepository.getForActivityType).mockResolvedValue({
+        name: 'Cycling',
+        maxHr: 180
+      } as any)
+
+      // The improvement path is untouched by CW-446: it still reads the
+      // device-reported maximum ahead of the stream, and still frames the copy
+      // as beating a previous value. Note the deliberate absence of a date of
+      // birth — neither the near-maximal floor nor the plausibility filter
+      // applies here, because the stored value it has to beat is the check.
+      const results = await thresholdDetectionService.detectThresholdIncreases({
+        id: 'workout-maxhr-improve',
+        userId: 'user-1',
+        type: 'Ride',
+        title: 'Race Day',
+        durationSec: 1800,
+        date: new Date('2025-06-05T06:00:00Z'),
+        maxHr: 191,
+        streams: flatHrSession({ sec: 1800, bpm: 165 }),
+        user: { maxHr: 180 }
+      })
+
+      expect(results?.maxHr).toMatchObject({ old: 180, new: 191, detected: true })
+      expect(prisma.recommendation.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          metric: 'MAX_HR',
+          description: 'We detected a new max heart rate of 191 bpm (previous: 180 bpm).'
+        })
+      })
+      expect(createUserNotification).toHaveBeenCalledWith(
+        'user-1',
+        expect.objectContaining({
+          message:
+            'We detected a new peak heart rate of 191 bpm for your Cycling profile during "Race Day".'
+        })
+      )
+    })
+
+    it('still reports no improvement when the session did not beat the stored max HR', async () => {
+      vi.mocked(sportSettingsRepository.getForActivityType).mockResolvedValue({
+        name: 'Cycling',
+        maxHr: 190
+      } as any)
+
+      const results = await thresholdDetectionService.detectThresholdIncreases({
+        id: 'workout-maxhr-no-improve',
+        userId: 'user-1',
+        type: 'Ride',
+        title: 'Endurance Ride',
+        durationSec: 1800,
+        date: new Date('2025-06-06T06:00:00Z'),
+        streams: flatHrSession({ sec: 1800, bpm: 165 }),
+        user: { maxHr: 190 }
+      })
+
+      expect(results?.maxHr).toBeNull()
+      expect(recommendedMetrics()).not.toContain('MAX_HR')
     })
   })
 
