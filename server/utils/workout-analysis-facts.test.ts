@@ -8,8 +8,10 @@ import {
   getActualIntervalsForAnalysis,
   getActualIntervalsSourceForAnalysis,
   resolveCadenceUnit,
-  toCanonicalCadence
+  toCanonicalCadence,
+  toIntervalIntensityFactor
 } from './workout-analysis-facts'
+import type { ActualIntervalForAnalysis } from './workout-analysis-facts'
 
 function makeWorkout(overrides: Record<string, unknown> = {}) {
   return {
@@ -2418,5 +2420,280 @@ describe('heart-rate physiological plausibility (CW-395)', () => {
 
     expect(facts.guardrails.telemetry.hrUsable).toBe(true)
     expect(facts.guardrails.telemetry.hrZeroRatio).toBe(0.04)
+  })
+})
+
+/**
+ * `chooseActualIntervalsSource` decides whether the provider's own laps or the
+ * engine-detected segmentation becomes the athlete's actual intervals. That one
+ * choice feeds the adherence facts, the AI prompt, every rep-scoped durability
+ * signal, and the interval chart the athlete looks at (CW-430) — so it needs a
+ * regression floor of its own.
+ *
+ * Its first discriminator is `scoreHardRepeatDurationAccuracy`, which asks
+ * `getActualHardRepeats` which laps were hard, and that filters on
+ * `interval.intensity >= 0.95`. The comparison is only meaningful because
+ * `mapIntervalsToActual` normalises the provider's percentage-of-threshold
+ * `intensity` onto the intensity-factor scale via `toIntervalIntensityFactor`.
+ * Until CW-385 it did not: `101` went through verbatim, `>= 0.95` was true of
+ * every work lap, and the hard-repeat count — the input to the whole
+ * arbitration — was noise. These tests pin both the scale and both branches of
+ * the arbitration so that class of regression fails loudly here (CW-408).
+ */
+describe('actual-interval source arbitration and hard-repeat scale (CW-408)', () => {
+  const ARBITRATION_FIXTURE_FTP = 260
+
+  /**
+   * The physical session, as a power stream: warmup, 5 x ~4min at ~105% of FTP
+   * with recovery jogs between them, a long sub-threshold endurance block, and
+   * a cooldown.
+   *
+   * The rep boundaries in the stream are deliberately ragged (196s to 298s for
+   * what the athlete rode as a 240s rep) the way a real outdoor effort is, so
+   * the detection engine cannot time the reps as well as an accurately lapped
+   * head unit can. That is what makes the `'raw'` branch reachable below.
+   */
+  const ARBITRATION_STREAM_BLOCKS = [
+    { seconds: 600, watts: 143 },
+    { seconds: 196, watts: 276 },
+    { seconds: 224, watts: 135 },
+    { seconds: 298, watts: 273 },
+    { seconds: 122, watts: 135 },
+    { seconds: 203, watts: 271 },
+    { seconds: 217, watts: 133 },
+    { seconds: 287, watts: 273 },
+    { seconds: 133, watts: 135 },
+    { seconds: 241, watts: 268 },
+    { seconds: 179, watts: 133 },
+    { seconds: 900, watts: 221 },
+    { seconds: 300, watts: 117 }
+  ]
+
+  type FixtureLap = { seconds: number; watts: number; intensity: number }
+
+  /**
+   * Well-lapped provider laps: each rep timed at the prescribed 240s. The
+   * endurance block is the load-bearing lap — it is work-classified (the
+   * provider labels it WORK and `resolveProviderIntervalTypes` leaves it as
+   * work, because 0.85 sits inside the session's work band) but at 85% of
+   * threshold it is emphatically NOT a hard repeat.
+   */
+  const ACCURATE_PROVIDER_LAPS: FixtureLap[] = [
+    { seconds: 600, watts: 143, intensity: 0.55 },
+    { seconds: 240, watts: 276, intensity: 1.06 },
+    { seconds: 180, watts: 135, intensity: 0.52 },
+    { seconds: 240, watts: 273, intensity: 1.05 },
+    { seconds: 180, watts: 135, intensity: 0.52 },
+    { seconds: 240, watts: 271, intensity: 1.04 },
+    { seconds: 180, watts: 133, intensity: 0.51 },
+    { seconds: 240, watts: 273, intensity: 1.05 },
+    { seconds: 180, watts: 135, intensity: 0.52 },
+    { seconds: 240, watts: 268, intensity: 1.03 },
+    { seconds: 180, watts: 133, intensity: 0.51 },
+    { seconds: 900, watts: 221, intensity: 0.85 },
+    { seconds: 300, watts: 117, intensity: 0.45 }
+  ]
+
+  /**
+   * The same session, degraded: the head unit swallowed two lap presses, so
+   * laps 2 and 4 each fold `rep + jog + rep` into one 660s block averaged
+   * down to ~91% of threshold. Only the fifth rep survives as its own lap.
+   */
+  const MERGED_PROVIDER_LAPS: FixtureLap[] = [
+    { seconds: 600, watts: 143, intensity: 0.55 },
+    { seconds: 660, watts: 236, intensity: 0.91 },
+    { seconds: 180, watts: 135, intensity: 0.52 },
+    { seconds: 660, watts: 235, intensity: 0.9 },
+    { seconds: 180, watts: 135, intensity: 0.52 },
+    { seconds: 240, watts: 268, intensity: 1.03 },
+    { seconds: 180, watts: 133, intensity: 0.51 },
+    { seconds: 900, watts: 221, intensity: 0.85 },
+    { seconds: 300, watts: 117, intensity: 0.45 }
+  ]
+
+  /**
+   * @param intensityScale `'factor'` writes the fraction of threshold that
+   * `ActualInterval.intensity` is documented to carry; `'percent'` writes what
+   * Intervals.icu actually puts on the wire (`icu_intervals[].intensity` is a
+   * percentage), which `mapIntervalsToActual` has to normalise.
+   */
+  function buildArbitrationWorkout(
+    laps: FixtureLap[],
+    intensityScale: 'factor' | 'percent' = 'factor'
+  ) {
+    const time: number[] = []
+    const watts: number[] = []
+    let cursor = 0
+    for (const block of ARBITRATION_STREAM_BLOCKS) {
+      for (let index = 0; index < block.seconds; index++) {
+        time.push(cursor)
+        // Deterministic jitter so the stream is not a perfect square wave.
+        watts.push(block.watts + ((index % 5) - 2))
+        cursor++
+      }
+    }
+
+    return makeWorkout({
+      title: 'VO2 5x4min',
+      type: 'Ride',
+      durationSec: time.length,
+      ftp: ARBITRATION_FIXTURE_FTP,
+      rawJson: {
+        // Intervals.icu labels nearly every lap WORK, warmup and jogs included.
+        icu_intervals: laps.map((lap) => ({
+          type: 'WORK',
+          moving_time: lap.seconds,
+          average_watts: lap.watts,
+          intensity: intensityScale === 'percent' ? Math.round(lap.intensity * 100) : lap.intensity
+        }))
+      },
+      streams: { time, watts }
+    })
+  }
+
+  const arbitrationPlan = {
+    structuredWorkout: {
+      steps: [
+        { type: 'Warmup', durationSeconds: 600, power: { value: 55, units: '%' } },
+        { type: 'Interval', durationSeconds: 240, power: { value: 105, units: '%' } },
+        { type: 'Rest', durationSeconds: 180, power: { value: 52, units: '%' } },
+        { type: 'Interval', durationSeconds: 240, power: { value: 105, units: '%' } },
+        { type: 'Rest', durationSeconds: 180, power: { value: 52, units: '%' } },
+        { type: 'Interval', durationSeconds: 240, power: { value: 105, units: '%' } },
+        { type: 'Rest', durationSeconds: 180, power: { value: 52, units: '%' } },
+        { type: 'Interval', durationSeconds: 240, power: { value: 105, units: '%' } },
+        { type: 'Rest', durationSeconds: 180, power: { value: 52, units: '%' } },
+        { type: 'Interval', durationSeconds: 240, power: { value: 105, units: '%' } },
+        { type: 'Rest', durationSeconds: 180, power: { value: 52, units: '%' } },
+        // Prescribed, work-classified, and not a hard repeat.
+        { type: 'Interval', durationSeconds: 900, power: { value: 85, units: '%' } },
+        { type: 'Cooldown', durationSeconds: 300, power: { value: 45, units: '%' } }
+      ]
+    }
+  }
+
+  const workLapsOf = (intervals: ActualIntervalForAnalysis[]) =>
+    intervals.filter((interval) => interval.classification === 'work')
+
+  /**
+   * `getActualHardRepeats` is private, so its predicate is mirrored here and
+   * applied to the very objects it filters — the intervals
+   * `getActualIntervalsForAnalysis` hands to the arbitration and to every
+   * downstream fact. `>= 0.95` means "95% of threshold" ONLY on the intensity
+   * factor scale; on the provider's percentage scale it means 0.95%, which is
+   * true of every lap in every workout ever ridden.
+   */
+  const hardRepeatsOf = (intervals: ActualIntervalForAnalysis[]) =>
+    workLapsOf(intervals).filter(
+      (interval) => interval.intensity !== null && interval.intensity >= 0.95
+    )
+
+  it('counts only genuinely hard laps as hard repeats, not every work lap', () => {
+    // Built on the percentage scale because that is what Intervals.icu puts on
+    // the wire — the exact input the pre-CW-385 code got wrong. No planned
+    // workout, so `extractActualIntervals` short-circuits to the raw provider
+    // laps and this test sees exactly what the arbitration scores.
+    const actual = getActualIntervalsForAnalysis(
+      buildArbitrationWorkout(ACCURATE_PROVIDER_LAPS, 'percent')
+    )
+
+    // Six laps survive as work: the five reps plus the endurance block.
+    expect(workLapsOf(actual).map((interval) => interval.durationSeconds)).toEqual([
+      240, 240, 240, 240, 240, 900
+    ])
+
+    // But only five of them are hard repeats. This is the assertion that would
+    // have failed on the pre-CW-385 code: with the provider's `85` left
+    // unnormalised, the 900s endurance block reads as `85 >= 0.95` and the
+    // count becomes six — the number of work laps, not the number of reps.
+    const hardRepeats = hardRepeatsOf(actual)
+    expect(hardRepeats).toHaveLength(5)
+    expect(hardRepeats.map((interval) => interval.durationSeconds)).toEqual([
+      240, 240, 240, 240, 240
+    ])
+    expect(hardRepeats.every((interval) => (interval.avgPower ?? 0) >= 268)).toBe(true)
+
+    const enduranceBlock = actual.find((interval) => interval.durationSeconds === 900)
+    expect(enduranceBlock?.classification).toBe('work')
+    expect(enduranceBlock?.intensity).toBe(0.85)
+    expect(hardRepeats).not.toContain(enduranceBlock)
+  })
+
+  it('normalises provider intensity off the percentage scale before the arbitration reads it', () => {
+    // The unit boundary itself: Intervals.icu percentages are divided by 100,
+    // values already on the factor scale pass through untouched.
+    expect(toIntervalIntensityFactor(101)).toBe(1.01)
+    expect(toIntervalIntensityFactor(52)).toBe(0.52)
+    expect(toIntervalIntensityFactor(1.01)).toBe(1.01)
+    expect(toIntervalIntensityFactor(0.52)).toBe(0.52)
+    // A lap with no intensity field at all (and every engine-detected
+    // interval) has no second unit to reconcile and stays null.
+    expect(toIntervalIntensityFactor(undefined)).toBeNull()
+    expect(toIntervalIntensityFactor('not a number')).toBeNull()
+
+    const asFactor = getActualIntervalsForAnalysis(
+      buildArbitrationWorkout(ACCURATE_PROVIDER_LAPS, 'factor')
+    )
+    const asPercent = getActualIntervalsForAnalysis(
+      buildArbitrationWorkout(ACCURATE_PROVIDER_LAPS, 'percent')
+    )
+
+    // Same session on the wire two different ways, one scale downstream.
+    expect(asPercent.map((interval) => interval.intensity)).toEqual(
+      asFactor.map((interval) => interval.intensity)
+    )
+    expect(asPercent.map((interval) => interval.intensity)).toEqual([
+      0.55, 1.06, 0.52, 1.05, 0.52, 1.04, 0.51, 1.05, 0.52, 1.03, 0.51, 0.85, 0.45
+    ])
+    expect(hardRepeatsOf(asPercent)).toHaveLength(5)
+  })
+
+  it('pins the arbitration outcome when provider intensity arrives as a percentage', () => {
+    const asFactor = buildArbitrationWorkout(ACCURATE_PROVIDER_LAPS, 'factor')
+    const asPercent = buildArbitrationWorkout(ACCURATE_PROVIDER_LAPS, 'percent')
+
+    // Accurately lapped reps beat a segmentation the engine had to infer from a
+    // ragged stream — and the percentage-scale copy of the same session must
+    // reach the identical verdict. If `toIntervalIntensityFactor` regresses, the
+    // percentage side stops describing the same workout as the factor side.
+    expect(getActualIntervalsSourceForAnalysis(asFactor, arbitrationPlan)).toBe('raw')
+    expect(getActualIntervalsSourceForAnalysis(asPercent, arbitrationPlan)).toBe('raw')
+
+    // 'raw' means the provider laps are what everything downstream sees.
+    const chosen = getActualIntervalsForAnalysis(asPercent, arbitrationPlan)
+    expect(chosen.map((interval) => interval.durationSeconds)).toEqual(
+      ACCURATE_PROVIDER_LAPS.map((lap) => lap.seconds)
+    )
+  })
+
+  it('prefers the detected segmentation when provider laps merge two planned reps into one', () => {
+    const workout = buildArbitrationWorkout(MERGED_PROVIDER_LAPS, 'percent')
+
+    // What the arbitration is being offered on the raw side: two 660s blocks
+    // averaged below threshold, so only one rep still reads as a hard repeat
+    // against a plan that prescribes five.
+    const rawLaps = getActualIntervalsForAnalysis(workout)
+    expect(workLapsOf(rawLaps).map((interval) => interval.durationSeconds)).toEqual([
+      660, 660, 240, 900
+    ])
+    expect(hardRepeatsOf(rawLaps).map((interval) => interval.durationSeconds)).toEqual([240])
+
+    expect(getActualIntervalsSourceForAnalysis(workout, arbitrationPlan)).toBe('detected')
+
+    // The chosen intervals are the engine's, not the provider's: detected
+    // intervals carry no provider intensity, and none of them is a merged block.
+    const chosen = getActualIntervalsForAnalysis(workout, arbitrationPlan)
+    expect(chosen.every((interval) => interval.intensity === null)).toBe(true)
+    expect(chosen.some((interval) => interval.durationSeconds === 660)).toBe(false)
+    expect(workLapsOf(chosen).filter((interval) => interval.durationSeconds < 400)).toHaveLength(5)
+
+    // The stream is byte-for-byte the fixture that returns 'raw' above, so the
+    // degraded laps are the only thing that moved the verdict.
+    expect(
+      getActualIntervalsSourceForAnalysis(
+        buildArbitrationWorkout(ACCURATE_PROVIDER_LAPS, 'percent'),
+        arbitrationPlan
+      )
+    ).toBe('raw')
   })
 })
