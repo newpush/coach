@@ -63,6 +63,88 @@ The import process automatically **sanitizes** sensitive production data:
 
 ---
 
+## Developer Workflow: Prod-to-Testing Transfer
+
+The export/import pair above always creates a **new** user from a file. To load production data onto a user that **already exists** on another instance — typically your account on `testing.coachwatts.com` — use `users data transfer`. It copies straight from one database to the other, remaps every `userId` onto the target user, and can be narrowed to the sections and date range you actually need.
+
+### 1. Prerequisites
+
+- Network access to both databases.
+- `DATABASE_URL_PROD` and `DATABASE_URL_TESTING` in `.env` (either option also accepts a literal `postgresql://…` URL).
+- The target user must already exist on the target instance. Sign in there once, then look up the id:
+
+```bash
+pnpm cw:cli users search you@example.com
+```
+
+### 2. See what would move
+
+```bash
+pnpm cw:cli users data transfer --user you@example.com --target-user <target-user-id> --dry-run
+```
+
+Nothing is written; you get a per-table row count for the selected sections.
+
+### 3. Run it
+
+```bash
+pnpm cw:cli users data transfer --user you@example.com --target-user <target-user-id>
+```
+
+The command prints source, target, sections and date range, then asks for confirmation (`--yes` skips it). Inserts use `skipDuplicates`, so **re-running is safe** — a second run copies only what is new.
+
+### Options
+
+| Option                      | Default                | Description                                                                    |
+| :-------------------------- | :--------------------- | :----------------------------------------------------------------------------- |
+| `--user <email\|id>`        | —                      | Source user (required).                                                        |
+| `--target-user <id\|email>` | same id as source      | User in the target database that receives the data.                            |
+| `--from <envVar\|url>`      | `DATABASE_URL_PROD`    | Source database.                                                               |
+| `--to <envVar\|url>`        | `DATABASE_URL_TESTING` | Target database.                                                               |
+| `--sections <list>`         | everything but opt-ins | Comma-separated section keys, or `all`.                                        |
+| `--skip <list>`             | —                      | Sections to exclude from the selection.                                        |
+| `--since` / `--until`       | —                      | Bound date-ranged tables (`YYYY-MM-DD`).                                       |
+| `--replace`                 | off                    | Delete the target user's rows in the selected sections (and date range) first. |
+| `--dry-run`                 | off                    | Count only, write nothing.                                                     |
+| `--list-sections`           | —                      | Print sections and what is never transferred.                                  |
+| `-y, --yes`                 | off                    | Skip the confirmation prompt.                                                  |
+
+### Sections
+
+`profile`, `settings`, `goals`, `events`, `plans`, `planned`, `workouts`, `streams`, `wellness`, `metrics`, `nutrition`, `calendar`, `memories`, `ai` are transferred by default. `fitfiles` (raw `.fit` blobs) and `chat` (full AI conversation history) are **opt-in** because of their size:
+
+```bash
+# Last three months of training data only
+pnpm cw:cli users data transfer --user you@example.com --target-user <id> \
+  --sections workouts,streams,planned,wellness --since 2026-05-01
+
+# Everything, including chat history and FIT files
+pnpm cw:cli users data transfer --user you@example.com --target-user <id> --sections all
+```
+
+Run `--list-sections` for the full table.
+
+### Safety
+
+- **Never writes to the source**, and refuses to run if the target resolves to `DATABASE_URL_PROD` or to the same URL as the source.
+- Credentials are never printed — only `host:port/database`.
+- Auth material (`Account`, `Session`, `ApiKey`, OAuth tables), provider tokens (`Integration`), push tokens, billing rows and operational logs are **not** transferred. Re-connect integrations on the target instance if you need live syncing there.
+- The profile section copies training and preference columns only. Email, name, admin flag, subscription state and public profile slugs on the target user are left untouched.
+- Globally unique artefacts are cleared on the way in: workout and planned-workout share tokens, and training plan slugs (transferred plans also arrive as non-public).
+
+### How partial selections stay consistent
+
+Skipping a section, or applying a date range, can leave foreign keys pointing at rows that are not in the target. Each is handled explicitly:
+
+- Optional references are **nulled** — a workout whose planned workout was not transferred simply arrives unlinked.
+- Required references cause the row to be **dropped**, and the count shows up in the `Dropped` column.
+- Rows that already exist in the target (from an earlier run) still satisfy references, so incremental runs link up correctly.
+- The strength `Exercise` library is shared reference data; entries your workouts need are copied automatically if the target lacks them.
+
+`WorkoutStreamV2` is copied with plain SQL rather than Prisma: production rows contain NULL elements inside the `Int[]` / `Float[]` time-series columns, which the Prisma client refuses to decode.
+
+---
+
 ## User Feature: Self-Service Export
 
 Regular users can download their data directly from the application for portability or compliance (GDPR).
@@ -78,11 +160,12 @@ Regular users can download their data directly from the application for portabil
 
 ## CLI Reference: `cw:cli users data`
 
-| Command    | Arguments | Options                       | Description                                              |
-| :--------- | :-------- | :---------------------------- | :------------------------------------------------------- |
-| `export`   | `<id>`    | `--prod`, `--output`          | Direct DB export to a local file. Supports `.gz`.        |
-| `api-pull` |           | `--key`, `--host`, `--output` | API-based export from a remote instance. Supports `.gz`. |
-| `import`   | `<path>`  | `--clear`, `--email`          | Injects an export package into the local database.       |
+| Command    | Arguments | Options                                                                                                                                         | Description                                                                 |
+| :--------- | :-------- | :---------------------------------------------------------------------------------------------------------------------------------------------- | :-------------------------------------------------------------------------- |
+| `export`   | `<id>`    | `--prod`, `--output`                                                                                                                            | Direct DB export to a local file. Supports `.gz`.                           |
+| `api-pull` |           | `--key`, `--host`, `--output`                                                                                                                   | API-based export from a remote instance. Supports `.gz`.                    |
+| `import`   | `<path>`  | `--clear`, `--email`                                                                                                                            | Injects an export package into the local database.                          |
+| `transfer` |           | `--user`, `--target-user`, `--from`, `--to`, `--sections`, `--skip`, `--since`, `--until`, `--replace`, `--dry-run`, `--list-sections`, `--yes` | Selective database-to-database copy onto an existing user (prod → testing). |
 
 ---
 
