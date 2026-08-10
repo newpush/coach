@@ -668,6 +668,114 @@ describe('buildWorkoutAnalysisFacts', () => {
     expect(facts.adherence.executionClassification).toBe('as_prescribed')
   })
 
+  it('scores RPE-target plans against provider laps on a single intensity scale', () => {
+    const facts = buildWorkoutAnalysisFactsV2({
+      workout: makeWorkout({
+        title: 'RPE Tempo Session',
+        type: 'Ride',
+        durationSec: 3600,
+        rawJson: {
+          // Intervals.icu reports lap `intensity` as a percent of threshold.
+          icu_intervals: [
+            { type: 'WORK', moving_time: 600, average_watts: 228, intensity: 91 },
+            { type: 'REST', moving_time: 300, average_watts: 125, intensity: 50 },
+            { type: 'WORK', moving_time: 600, average_watts: 230, intensity: 92 }
+          ]
+        }
+      }),
+      sportSettings: { ftp: 250 },
+      plannedWorkout: {
+        structuredWorkout: {
+          steps: [
+            { type: 'Interval', durationSeconds: 600, rpe: 9 },
+            { type: 'Rest', durationSeconds: 300, rpe: 5 },
+            { type: 'Interval', durationSeconds: 600, rpe: 9 }
+          ]
+        },
+        durationSec: 3600
+      }
+    })
+
+    expect(facts.adherence.adherenceAssessable).toBe(true)
+    expect(facts.adherence.structureMatched).toBe(true)
+    expect(facts.adherence.workIntervalHitRate).toBe(100)
+    expect(facts.adherence.recoveryHitRate).toBe(100)
+    // ~1-2% over an intensity factor of 0.9, not the ~11,000% the percent-vs-
+    // ratio comparison used to produce.
+    expect(facts.adherence.targetOvershootPct).not.toBeNull()
+    expect(facts.adherence.targetOvershootPct!).toBeLessThan(10)
+    expect(facts.adherence.targetUndershootPct).toBeNull()
+  })
+
+  it('does not call an on-target RPE session intensity_inflated', () => {
+    const facts = buildWorkoutAnalysisFactsV2({
+      workout: makeWorkout({
+        title: 'RPE Threshold Session',
+        type: 'Ride',
+        durationSec: 3600,
+        rawJson: {
+          icu_intervals: [
+            { type: 'WORK', moving_time: 600, average_watts: 250, intensity: 100 },
+            { type: 'REST', moving_time: 300, average_watts: 150, intensity: 60 },
+            { type: 'WORK', moving_time: 600, average_watts: 250, intensity: 100 }
+          ]
+        }
+      }),
+      sportSettings: { ftp: 250 },
+      plannedWorkout: {
+        structuredWorkout: {
+          steps: [
+            { type: 'Interval', durationSeconds: 600, rpe: 10 },
+            { type: 'Rest', durationSeconds: 300, rpe: 6 },
+            { type: 'Interval', durationSeconds: 600, rpe: 10 }
+          ]
+        },
+        durationSec: 3600
+      }
+    })
+
+    expect(facts.adherence.executionClassification).not.toBe('intensity_inflated')
+    expect(facts.adherence.executionClassification).toBe('as_prescribed')
+    expect(facts.adherence.targetOvershootPct).toBeNull()
+    expect(facts.adherence.workIntervalHitRate).toBe(100)
+  })
+
+  it('excludes RPE steps with no measurable intensity from the hit rate instead of scoring them as misses', () => {
+    const facts = buildWorkoutAnalysisFactsV2({
+      workout: makeWorkout({
+        title: 'RPE Session Without Lap Intensity',
+        type: 'Ride',
+        durationSec: 3600,
+        rawJson: {
+          // Laps carry no `intensity` at all — the same situation as
+          // engine-detected intervals, which never populate the field.
+          icu_intervals: [
+            { type: 'WORK', moving_time: 600, average_watts: 228 },
+            { type: 'REST', moving_time: 300, average_watts: 125 },
+            { type: 'WORK', moving_time: 600, average_watts: 230 }
+          ]
+        }
+      }),
+      sportSettings: { ftp: 250 },
+      plannedWorkout: {
+        structuredWorkout: {
+          steps: [
+            { type: 'Interval', durationSeconds: 600, rpe: 9 },
+            { type: 'Rest', durationSeconds: 300, rpe: 5 },
+            { type: 'Interval', durationSeconds: 600, rpe: 9 }
+          ]
+        },
+        durationSec: 3600
+      }
+    })
+
+    expect(facts.adherence.workIntervalHitRate).toBeNull()
+    expect(facts.adherence.recoveryHitRate).toBeNull()
+    expect(facts.adherence.targetOvershootPct).toBeNull()
+    expect(facts.adherence.targetUndershootPct).toBeNull()
+    expect(facts.adherence.executionClassification).not.toBe('intensity_inflated')
+  })
+
   it('falls back to stream-detected intervals when synced intervals are missing', () => {
     const facts = buildWorkoutAnalysisFactsV2({
       workout: makeWorkout({

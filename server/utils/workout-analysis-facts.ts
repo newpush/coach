@@ -1114,6 +1114,13 @@ type ActualInterval = {
   avgHr: number | null
   avgSpeed: number | null
   avgCadence: number | null
+  /**
+   * Intensity factor — a fraction of threshold (~0.3–1.5), the same scale as
+   * `FlattenedPlannedStep.intensityFactor`. Normalised in `mapIntervalsToActual`
+   * (see `toIntervalIntensityFactor`); `null` when the source carries no
+   * intensity signal at all, which is always the case for engine-detected
+   * intervals.
+   */
   intensity: number | null
   matchScore: number | null
   confidence: number | null
@@ -1392,6 +1399,31 @@ function mapProviderIntervalsToActual(intervals: any[]): ActualInterval[] {
   )
 }
 
+/**
+ * Normalise a source interval's intensity onto ONE documented scale: an
+ * intensity factor (fraction of threshold, ~0.3–1.5).
+ *
+ * Provider laps keep Intervals.icu's `icu_intervals[].intensity` verbatim off
+ * `rawJson`, and that field is a PERCENTAGE of threshold (e.g. `101` for a lap
+ * ridden at 101% of FTP). The planned side of adherence is an intensity factor
+ * (`toIntensityFactorFromTarget`, and `rpe / 10` for RPE steps), so the two
+ * only compare if the provider percentage is divided by 100 first.
+ *
+ * The `> 5` heuristic is the same one the activity-level sync already applies
+ * (`normalizeIntensityValue` in `services/intervalsService.ts`): no lap sits at
+ * 500% of threshold, and no lap is meaningfully described as 5% of it, so the
+ * gap is unambiguous. Values already on the factor scale (older fixtures,
+ * providers that hand us a ratio) pass through untouched.
+ *
+ * Engine-detected intervals (`detectIntervals`) carry no intensity field at
+ * all, so they stay `null` — there is no second unit to reconcile.
+ */
+function toIntervalIntensityFactor(value: unknown): number | null {
+  const numeric = Number(value)
+  if (!Number.isFinite(numeric)) return null
+  return numeric > 5 ? numeric / 100 : numeric
+}
+
 function mapIntervalsToActual(intervals: any[]): ActualInterval[] {
   return intervals
     .map((interval) => {
@@ -1428,7 +1460,7 @@ function mapIntervalsToActual(intervals: any[]): ActualInterval[] {
         avgCadence: Number.isFinite(Number(interval?.average_cadence ?? interval?.avg_cadence))
           ? Number(interval?.average_cadence ?? interval?.avg_cadence)
           : null,
-        intensity: Number.isFinite(Number(interval?.intensity)) ? Number(interval.intensity) : null,
+        intensity: toIntervalIntensityFactor(interval?.intensity),
         matchScore: Number.isFinite(Number(interval?.match_score))
           ? Number(interval.match_score)
           : null,
@@ -1796,6 +1828,7 @@ function getPlannedHardRepeats(plannedSteps: FlattenedPlannedStep[], refs: Analy
 function getActualHardRepeats(actualIntervals: ActualInterval[], refs: AnalysisRefs) {
   return actualIntervals.filter((interval) => {
     if (interval.classification !== 'work') return false
+    // `intensity` is an intensity factor, so 0.95 is 95% of threshold.
     if (interval.intensity !== null) return interval.intensity >= 0.95
     if (interval.avgPower !== null && refs.ftp > 0) return interval.avgPower >= refs.ftp * 0.95
     return false
@@ -2358,6 +2391,9 @@ function deriveDurabilitySignals(params: {
   if (actualIntervals.length >= 2) {
     const first = actualIntervals[0]!
     const last = actualIntervals[actualIntervals.length - 1]!
+    // The delta below is a ratio, so the units only need to agree between the
+    // two ends: an intensity factor scaled to a percent-of-threshold stands in
+    // when watts are missing.
     const firstMetric =
       family === 'run'
         ? (first.avgSpeed ?? null)
@@ -2634,23 +2670,28 @@ function deriveAdherence(params: {
   const cadencePlanned = plannedSteps.filter((step) => step.cadence !== null)
   const pairMetric = (
     planned: FlattenedPlannedStep,
-    actual: ActualInterval
-  ): { deltaPct: number | null; hit: boolean } => {
+    actual: ActualInterval | null
+  ): { deltaPct: number | null; hit: boolean; comparable: boolean } => {
     const target = resolveComparableTargetValue(planned, refs)
     const bounds = resolveComparableTargetBounds(planned, refs)
     let actualValue: number | null = null
     let threshold = 10
 
     if (planned.metric === 'power') {
-      actualValue = actual.avgPower
+      actualValue = actual?.avgPower ?? null
     } else if (planned.metric === 'pace') {
-      actualValue = actual.avgSpeed
+      actualValue = actual?.avgSpeed ?? null
       threshold = 8
     } else if (planned.metric === 'heartRate') {
-      actualValue = actual.avgHr
+      actualValue = actual?.avgHr ?? null
       threshold = 6
     } else if (planned.metric === 'rpe') {
-      actualValue = actual.intensity
+      // Both sides are intensity factors: `resolveComparableTargetValue`
+      // returns `planned.intensityFactor` (rpe / 10, clamped) and
+      // `ActualInterval.intensity` is normalised to the same fraction-of-
+      // threshold scale in `mapIntervalsToActual`. Comparing the raw provider
+      // percentage here produced deltas in the thousands of percent.
+      actualValue = actual?.intensity ?? null
       threshold = 10
     }
 
@@ -2662,12 +2703,12 @@ function deriveAdherence(params: {
       bounds.end > 0
     ) {
       if (actualValue >= bounds.start && actualValue <= bounds.end) {
-        return { deltaPct: 0, hit: true }
+        return { deltaPct: 0, hit: true, comparable: true }
       }
 
       const reference = actualValue < bounds.start ? bounds.start : bounds.end
       const deltaPct = ((actualValue - reference) / reference) * 100
-      return { deltaPct, hit: false }
+      return { deltaPct, hit: false, comparable: true }
     }
 
     if (
@@ -2675,30 +2716,60 @@ function deriveAdherence(params: {
       !Number.isFinite(target) ||
       target <= 0 ||
       actualValue === null ||
+      !Number.isFinite(actualValue) ||
       actualValue <= 0
     ) {
-      return { deltaPct: null, hit: false }
+      return { deltaPct: null, hit: false, comparable: false }
     }
 
     const deltaPct = ((actualValue - target) / target) * 100
-    return { deltaPct, hit: Math.abs(deltaPct) <= threshold }
+    return { deltaPct, hit: Math.abs(deltaPct) <= threshold, comparable: true }
   }
+
+  /**
+   * An RPE-planned step can only be scored when the actual side carries an
+   * intensity signal — engine-detected intervals never do, and not every
+   * provider lap does either. A missing measurement is not evidence of poor
+   * execution, so those steps drop out of the hit-rate denominator instead of
+   * being counted as misses. Other metrics keep their existing behaviour: an
+   * unmeasured power/pace/HR step still counts against the athlete.
+   */
+  const isUnmeasurableRpeStep = (planned: FlattenedPlannedStep, result: { comparable: boolean }) =>
+    planned.metric === 'rpe' && !result.comparable
 
   let workHits = 0
   let recoveryHits = 0
   let cadenceHits = 0
+  // Denominators start at every planned step and shrink only when an RPE step
+  // turns out to be unmeasurable (see `isUnmeasurableRpeStep`).
+  let scorableWorkSteps = plannedWork.length
+  let scorableRecoverySteps = plannedRecovery.length
   const overshoots: number[] = []
   const undershoots: number[] = []
 
-  for (let index = 0; index < workPairs; index++) {
-    const result = pairMetric(plannedWork[index]!, actualWork[index]!)
+  // Pairing stays index-based on purpose — reworking it is a separate concern.
+  // Planned steps past the end of the actual list simply have no counterpart.
+  for (let index = 0; index < plannedWork.length; index++) {
+    const planned = plannedWork[index]!
+    const actual = index < workPairs ? actualWork[index]! : null
+    const result = pairMetric(planned, actual)
+    if (isUnmeasurableRpeStep(planned, result)) {
+      scorableWorkSteps--
+      continue
+    }
     if (result.hit) workHits++
     if (result.deltaPct !== null && result.deltaPct > 0) overshoots.push(result.deltaPct)
     if (result.deltaPct !== null && result.deltaPct < 0) undershoots.push(Math.abs(result.deltaPct))
   }
 
-  for (let index = 0; index < recoveryPairs; index++) {
-    const result = pairMetric(plannedRecovery[index]!, actualRecovery[index]!)
+  for (let index = 0; index < plannedRecovery.length; index++) {
+    const planned = plannedRecovery[index]!
+    const actual = index < recoveryPairs ? actualRecovery[index]! : null
+    const result = pairMetric(planned, actual)
+    if (isUnmeasurableRpeStep(planned, result)) {
+      scorableRecoverySteps--
+      continue
+    }
     if (result.hit) recoveryHits++
   }
 
@@ -2712,9 +2783,9 @@ function deriveAdherence(params: {
   }
 
   const workIntervalHitRate =
-    plannedWork.length > 0 ? round((workHits / plannedWork.length) * 100, 1) : null
+    scorableWorkSteps > 0 ? round((workHits / scorableWorkSteps) * 100, 1) : null
   const recoveryHitRate =
-    plannedRecovery.length > 0 ? round((recoveryHits / plannedRecovery.length) * 100, 1) : null
+    scorableRecoverySteps > 0 ? round((recoveryHits / scorableRecoverySteps) * 100, 1) : null
   const cadenceHitRate =
     cadencePlanned.length > 0 ? round((cadenceHits / cadencePlanned.length) * 100, 1) : null
   const structureMatched =
