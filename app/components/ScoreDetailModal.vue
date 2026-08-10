@@ -182,6 +182,8 @@
 </template>
 
 <script setup lang="ts">
+  import { getAnalysisStatusColor } from '~/utils/analysis-status'
+
   interface AnalysisData {
     executive_summary?: string
     sections?: Array<{
@@ -247,21 +249,8 @@
   })
 
   // Status helpers
-  const getStatusColor = (
-    status: string
-  ): 'neutral' | 'primary' | 'secondary' | 'success' | 'info' | 'warning' | 'error' => {
-    if (!status) return 'neutral'
-    const map: Record<
-      string,
-      'neutral' | 'primary' | 'secondary' | 'success' | 'info' | 'warning' | 'error'
-    > = {
-      excellent: 'success',
-      good: 'primary',
-      moderate: 'warning',
-      needs_improvement: 'error'
-    }
-    return map[status] || 'neutral'
-  }
+  /** Shared with the workout, report and share surfaces (CW-424). */
+  const getStatusColor = (status?: string | null) => getAnalysisStatusColor(status)
 
   const getStatusLabel = (status: string) => {
     if (!status) return 'Unknown'

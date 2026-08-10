@@ -118,6 +118,8 @@
                       :color="
                         getStatusBadgeColor(report.analysisJson.current_fitness.status) as any
                       "
+                      :class="getStatusBadgeClass(report.analysisJson.current_fitness.status)"
+                      variant="subtle"
                       size="lg"
                     >
                       {{ report.analysisJson.current_fitness.status_label }}
@@ -494,7 +496,12 @@
                 <template #header>
                   <div class="flex items-center justify-between">
                     <h3 class="text-xl font-semibold">{{ section.title }}</h3>
-                    <UBadge :color="getStatusBadgeColor(section.status) as any" size="lg">
+                    <UBadge
+                      :color="getStatusBadgeColor(section.status) as any"
+                      :class="getStatusBadgeClass(section.status)"
+                      variant="subtle"
+                      size="lg"
+                    >
                       {{ section.status_label }}
                     </UBadge>
                   </div>
@@ -823,6 +830,7 @@
 <script setup lang="ts">
   import { formatDistance as formatDist } from '~/utils/metrics'
   import { mobileListCardUi } from '~/utils/mobile-surface-ui'
+  import { getAnalysisStatusColor } from '~/utils/analysis-status'
 
   const route = useRoute()
   const { formatDate: baseFormatDate, formatDateTime, formatShortDate } = useFormat()
@@ -920,15 +928,32 @@
     return colors[report.value.status] || 'neutral'
   })
 
-  const getStatusBadgeColor = (status: string) => {
-    const colors: Record<string, string> = {
-      excellent: 'success',
-      good: 'info',
-      moderate: 'warning',
-      needs_improvement: 'warning',
-      poor: 'error'
+  /**
+   * AI analysis *section* status -> colour. Shared with the workout page, the share
+   * page and the score modal (CW-424). Not to be confused with `statusColor` above,
+   * which colours the report's own PENDING/PROCESSING/COMPLETED/FAILED lifecycle.
+   */
+  const getStatusBadgeColor = (status?: string | null) => getAnalysisStatusColor(status)
+
+  /**
+   * Text colour for the status badges. Nuxt UI's `subtle` variant resolves the label to
+   * the base 500-level token in *both* themes and only flips the backdrop, which reads
+   * fine on a dark tint but drops to ~2:1 on the light one. Pinning an explicit
+   * light/dark pair is the same thing the share page and the workout pill do.
+   */
+  const getStatusBadgeClass = (status?: string | null) => {
+    switch (getAnalysisStatusColor(status)) {
+      case 'success':
+        return 'text-emerald-800 dark:text-emerald-300'
+      case 'warning':
+        return 'text-amber-800 dark:text-amber-300'
+      case 'error':
+        return 'text-red-800 dark:text-red-300'
+      case 'info':
+        return 'text-blue-800 dark:text-blue-300'
+      default:
+        return 'text-zinc-800 dark:text-zinc-300'
     }
-    return colors[status] || 'neutral'
   }
 
   const getPriorityBadgeColor = (priority: string) => {
