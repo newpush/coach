@@ -16,7 +16,6 @@ import {
   formatPromptTemperature,
   formatPromptPace
 } from '../ai-prompt-format'
-import { resolveProviderIntervalTypes } from '../interval-detection'
 import {
   buildAnalysisRequestMetricRules,
   buildMetricPriorityPromptBlock,
@@ -26,9 +25,10 @@ import {
 import { formatStructuredPlanForPrompt } from '../../../trigger/utils/planned-workout-targets'
 import {
   formatCadenceWithUnit,
+  getActualIntervalsForAnalysis,
+  getActualIntervalsSourceForAnalysis,
   isRunningCadenceFamily,
   toCanonicalCadence,
-  toIntervalIntensityFactor,
   type WorkoutAnalysisFactsV2
 } from '../workout-analysis-facts'
 import { summarizePowerFromWatts } from '../power-metrics'
@@ -353,7 +353,47 @@ export function normalizeRunningCadence(
   return toCanonicalCadence(cadence, isRunningWorkout)
 }
 
-export function buildWorkoutAnalysisData(workout: any) {
+/**
+ * Everything `buildWorkoutAnalysisData` needs beyond the workout row itself to
+ * segment the session the same way the v2 facts do.
+ *
+ * Both are optional so the payload builder still works from a bare workout row
+ * (scripts, older tests), but the two production entry points
+ * (`trigger/analyze-workout.ts`, `services/workoutAnalysisService.ts`) must pass
+ * them: without the athlete's real references the arbitration between provider
+ * laps and engine detection can resolve differently here than it does inside
+ * `buildWorkoutAnalysisFactsV2`, which is exactly the split this payload exists
+ * to close (CW-391, and CW-384 on why zeroed refs are a bug in their own right).
+ */
+export interface WorkoutAnalysisDataOptions {
+  plannedWorkout?: any
+  sportSettings?: any
+}
+
+/**
+ * Resolve the athlete's reference values for interval arbitration.
+ *
+ * Deliberately identical to the `refs` literal in `buildWorkoutAnalysisFactsV2`
+ * (`server/utils/workout-analysis-facts.ts`): profile-level sport settings
+ * first, `workout.ftp` only as the documented FTP fallback, and the session's
+ * own max HR never used as a stand-in for the athlete's ceiling. The facts
+ * module does not export its resolver, so this mirror carries the invariant --
+ * if that literal changes, this one has to change with it or the prompt and the
+ * facts can once again disagree about which segmentation won.
+ */
+function resolveIntervalArbitrationRefs(workout: any, sportSettings: any) {
+  return {
+    ftp: Number(sportSettings?.ftp || workout?.ftp || 0),
+    lthr: Number(sportSettings?.lthr || 0),
+    maxHr: Number(sportSettings?.maxHr || 0),
+    thresholdPace: Number(sportSettings?.thresholdPace || 0),
+    hrZones: sportSettings?.hrZones || [],
+    powerZones: sportSettings?.powerZones || [],
+    paceZones: sportSettings?.paceZones || []
+  }
+}
+
+export function buildWorkoutAnalysisData(workout: any, options: WorkoutAnalysisDataOptions = {}) {
   const workoutType = String(workout.type || '')
   const isRunningWorkout = isRunningCadenceFamily(workoutType)
   // The ONLY place session and interval cadence gets converted to the canonical
@@ -472,54 +512,54 @@ export function buildWorkoutAnalysisData(workout: any) {
     }))
   }
 
-  // Extract intervals and pacing splits from rawJson if available
+  // Interval segmentation.
+  //
+  // ONE segmentation per prompt. This used to read `rawJson.icu_intervals`
+  // directly, so the "## Interval Breakdown" table could enumerate a different
+  // set of reps than the "## Calculated Workout Facts v2" block printed above
+  // it -- the hit rates, `firstVsLastIntervalDeltaPct` and every rep-scoped
+  // CW-393 signal are computed over the arbitrated set, while the table the
+  // model actually quotes was the provider laps. When the two disagreed the
+  // model did silent arithmetic across mismatched rows and no claim could be
+  // traced back to a segmentation (CW-391).
+  //
+  // `getActualIntervalsForAnalysis` is the single arbitration point
+  // (`extractActualIntervals`): provider laps with re-derived labels (CW-376)
+  // when they describe the session better, engine detection when they do not.
+  const plannedWorkout = options.plannedWorkout ?? workout?.plannedWorkout
+  const arbitrationRefs = resolveIntervalArbitrationRefs(workout, options.sportSettings)
+  const actualIntervals = getActualIntervalsForAnalysis(workout, plannedWorkout, arbitrationRefs)
+  if (actualIntervals.length > 0) {
+    data.interval_segmentation_source = getActualIntervalsSourceForAnalysis(
+      workout,
+      plannedWorkout,
+      arbitrationRefs
+    )
+    data.intervals = actualIntervals.map((interval) => ({
+      type: interval.type,
+      classification: interval.classification,
+      duration_s: interval.durationSeconds,
+      avg_power: interval.avgPower,
+      // Already an intensity FACTOR: `mapIntervalsToActual` runs the shared
+      // CW-385 heuristic (`toIntervalIntensityFactor`) over the provider's
+      // percentage, and engine-detected segments carry no intensity at all. The
+      // renderer may only label it (CW-388).
+      intensity: interval.intensity,
+      avg_hr: interval.avgHr,
+      avg_cadence: normalizeCadence(interval.avgCadence),
+      avg_speed_ms: interval.avgSpeed,
+      confidence: interval.confidence,
+      ambiguity_note: interval.ambiguityNote,
+      // Stream offsets, so a claim about "your fourth rep" can be reconciled
+      // against the chart afterwards. Null for sources that carry none.
+      start_index: interval.startIndex,
+      end_index: interval.endIndex
+    }))
+  }
+
+  // Extract pacing splits from rawJson if available
   if (workout.rawJson && typeof workout.rawJson === 'object') {
     const raw = workout.rawJson as any
-
-    // Intervals.icu intervals
-    const rawIntervals = Array.isArray(raw.icu_intervals)
-      ? raw.icu_intervals
-      : Array.isArray(raw.intervals)
-        ? raw.intervals
-        : null
-    if (rawIntervals) {
-      // Provider lap labels are unreliable (Intervals.icu marks nearly every
-      // lap WORK); re-derive them so the model does not read recovery jogs as
-      // work reps.
-      const resolvedTypes = resolveProviderIntervalTypes(
-        rawIntervals.map((interval: any) => ({
-          type: interval.type,
-          intensity: Number(interval.intensity),
-          avgPower: Number(interval.average_watts),
-          avgSpeed: Number(interval.average_speed)
-        }))
-      )
-      data.intervals = rawIntervals.map((interval: any, index: number) => ({
-        type: resolvedTypes[index],
-        label: interval.label,
-        // Prefer moving time for pace analysis (elapsed_time can include pauses/stops and distort run interval pace).
-        duration_s: interval.moving_time ?? interval.elapsed_time,
-        distance_m: interval.distance,
-        avg_power: interval.average_watts,
-        max_power: interval.max_watts,
-        weighted_avg_power: interval.weighted_average_watts,
-        // The ONLY place interval intensity gets put on a scale. Provider laps
-        // carry Intervals.icu's PERCENTAGE of threshold (e.g. 101), while the
-        // session-level `intensity` line is an intensity factor (0.83), so the
-        // two collided in one prompt. Reuse the shared CW-385 heuristic rather
-        // than a second copy of it; the renderer may only label (CW-388).
-        intensity: toIntervalIntensityFactor(interval.intensity),
-        avg_hr: interval.average_heartrate,
-        max_hr: interval.max_heartrate,
-        avg_cadence: normalizeCadence(interval.average_cadence),
-        max_cadence: normalizeCadence(interval.max_cadence),
-        avg_speed_ms: interval.average_speed,
-        decoupling: interval.decoupling,
-        variability: interval.w5s_variability,
-        elevation_gain: interval.total_elevation_gain,
-        avg_gradient: interval.average_gradient
-      }))
-    }
 
     // Strava splits (lap pacing data)
     const splits = raw.splits_metric || raw.splits_standard
@@ -690,11 +730,50 @@ function formatPromptFactValue(value: unknown): string | null {
   return String(value)
 }
 
-export function buildAnalysisFactsPromptBlock(analysisFacts?: WorkoutAnalysisFactsV2): string {
+/**
+ * Say which segmentation the whole prompt is built on, in human terms.
+ *
+ * `getActualIntervalsSourceForAnalysis` returns the arbitration verdict as
+ * `'raw' | 'detected' | 'none'`, which means nothing to the model. Naming it in
+ * the prompt is what lets an AI claim about "your fourth rep" be reconciled
+ * against the chart afterwards (CW-391). `'none'` renders as `null` -- with no
+ * segments there is no source to report and the interval section is omitted
+ * entirely.
+ */
+export function describeIntervalSegmentationSource(
+  source: 'raw' | 'detected' | 'none' | null | undefined
+): string | null {
+  if (source === 'raw') return 'provider laps (labels re-derived)'
+  if (source === 'detected') return 'engine detection over the recorded streams'
+  return null
+}
+
+export interface AnalysisFactsPromptBlockOptions {
+  /** Arbitration verdict from `getActualIntervalsSourceForAnalysis`. */
+  intervalSegmentationSource?: 'raw' | 'detected' | 'none' | null
+}
+
+/**
+ * A row of the facts block.
+ *
+ * `path` reads a value out of the facts object and is gated on that path's
+ * `promptDecisions` entry. `value` carries an already-resolved string for facts
+ * that are not part of `WorkoutAnalysisFactsV2` itself -- currently only the
+ * interval-segmentation provenance, which is computed in the payload builder
+ * because that is where the workout row (and therefore the streams) is in
+ * scope. Such rows render whenever the value is non-null; there is no
+ * `promptDecisions` entry to gate them on.
+ */
+type AnalysisFactItem = { label: string; path?: string; value?: string | null }
+
+export function buildAnalysisFactsPromptBlock(
+  analysisFacts?: WorkoutAnalysisFactsV2,
+  options: AnalysisFactsPromptBlockOptions = {}
+): string {
   if (!analysisFacts) return ''
 
   const promptDecisions = analysisFacts.confidence.debugMeta.promptDecisions || {}
-  const groups: Array<{ title: string; items: Array<{ path: string; label: string }> }> = [
+  const groups: Array<{ title: string; items: AnalysisFactItem[] }> = [
     {
       title: 'Guardrails',
       items: [
@@ -714,7 +793,11 @@ export function buildAnalysisFactsPromptBlock(analysisFacts?: WorkoutAnalysisFac
         { path: 'guardrails.telemetry.lrInterpretationMode', label: 'L/R Interpretation Mode' },
         { path: 'guardrails.erg.detected', label: 'ERG Detected' },
         { path: 'guardrails.erg.powerControlMode', label: 'Power Control Mode' },
-        { path: 'guardrails.suppressions', label: 'Suppressions' }
+        { path: 'guardrails.suppressions', label: 'Suppressions' },
+        {
+          label: 'Interval Segmentation Source',
+          value: describeIntervalSegmentationSource(options.intervalSegmentationSource)
+        }
       ]
     },
     {
@@ -830,8 +913,11 @@ export function buildAnalysisFactsPromptBlock(analysisFacts?: WorkoutAnalysisFac
   const sections = groups
     .map((group) => {
       const lines = group.items
-        .filter((item) => promptDecisions[item.path]?.include)
         .map((item) => {
+          if (item.path === undefined) {
+            return item.value ? `- ${item.label}: ${item.value}` : null
+          }
+          if (!promptDecisions[item.path]?.include) return null
           const rawValue = getFactValueByPath(analysisFacts, item.path)
           const formatted = formatPromptFactValue(rawValue)
           return formatted ? `- ${item.label}: ${formatted}` : null
@@ -1124,7 +1210,9 @@ ${
     : ''
 }
 
-${buildAnalysisFactsPromptBlock(analysisFactsV2)}
+${buildAnalysisFactsPromptBlock(analysisFactsV2, {
+  intervalSegmentationSource: workoutData.interval_segmentation_source
+})}
 
 
 
@@ -1494,24 +1582,51 @@ When analyzing "Execution" and "Effort", specifically reference how well the ath
     prompt += '\n'
   }
 
-  // Add interval analysis if available
+  // Add interval analysis if available.
+  //
+  // These rows ARE the arbitrated segmentation -- the same `ActualInterval[]`
+  // the v2 facts block above is computed over, resolved once in
+  // `buildWorkoutAnalysisData` (CW-391). The renderer only labels; it never
+  // re-derives boundaries and never re-scales a value.
   if (workoutData.intervals && workoutData.intervals.length > 0) {
+    const segmentationSource = describeIntervalSegmentationSource(
+      workoutData.interval_segmentation_source
+    )
+    // Pace is the leading metric for runs and noise for power-primary rides and
+    // indoor/strength work. Gated on the exported running-family predicate
+    // rather than on a second copy of the facts module's family table: narrower
+    // than `formatActualIntervalsForPrompt`'s rule, but exact, and runs are the
+    // family where a per-rep pace is what the athlete is actually judged on.
+    const paceCapable = isRunningCadenceFamily(workoutType)
+
     prompt += '\n## Interval Breakdown\n'
+    if (segmentationSource) {
+      prompt += `Segmentation source: ${segmentationSource}. These are the same segments the Calculated Workout Facts v2 block above is computed over -- quote reps from this table only.\n`
+    }
     workoutData.intervals.forEach((interval: any, index: number) => {
-      prompt += `\n### Interval ${index + 1}: ${interval.label || interval.type || 'Unnamed'}\n`
+      // Headed by the RESOLVED type, not the provider's lap label: the label
+      // only exists for provider laps, it is the untrusted field CW-376 stopped
+      // believing, and it would have read "Rest 1" over a segment the engine
+      // classified as work.
+      prompt += `\n### Interval ${index + 1}: ${interval.type || 'Unnamed'}\n`
       if (interval.duration_s)
         prompt += `- Duration: ${formatIntervalDuration(interval.duration_s)}\n`
-      if (interval.avg_power) prompt += `- Avg Power: ${interval.avg_power}W\n`
+      if (interval.avg_power) prompt += `- Avg Power: ${Math.round(interval.avg_power)}W\n`
       if (interval.intensity)
         prompt += `- Intensity: ${formatIntervalIntensity(Number(interval.intensity))}\n`
-      if (interval.avg_hr) prompt += `- Avg HR: ${interval.avg_hr} bpm\n`
+      if (interval.avg_hr) prompt += `- Avg HR: ${Math.round(interval.avg_hr)} bpm\n`
       // Values are already canonical (buildWorkoutAnalysisData normalised them);
       // this only attaches the unit the workout family uses, so a run no longer
       // reads "177 rpm" (CW-387).
       if (interval.avg_cadence)
         prompt += `- Avg Cadence: ${formatCadenceWithUnit(interval.avg_cadence, workoutType)}\n`
-      if (interval.variability)
-        prompt += `- Power Variability: ${formatMetric(interval.variability, 2)}\n`
+      // `avg_speed_ms` is m/s; 1000 / (m/s) is seconds per km, which
+      // `formatPromptPace` then puts in the athlete's distance units.
+      if (paceCapable && interval.avg_speed_ms > 0)
+        prompt += `- Avg Pace: ${formatPromptPace(1000 / interval.avg_speed_ms, userProfile?.distanceUnits)}\n`
+      if (interval.confidence != null)
+        prompt += `- Detection Confidence: ${Math.round(interval.confidence * 100)}%\n`
+      if (interval.ambiguity_note) prompt += `- Note: ${interval.ambiguity_note}\n`
     })
   }
 

@@ -192,7 +192,12 @@ export async function runWorkoutAnalysis(payload: {
       workout.type || ''
     )
 
-    const workoutData = buildWorkoutAnalysisData(workout)
+    // Plan + sport settings so the payload's interval segmentation is arbitrated
+    // against the same athlete references as the v2 facts below (CW-391).
+    const workoutData = buildWorkoutAnalysisData(workout, {
+      plannedWorkout: workout.plannedWorkout,
+      sportSettings
+    })
     const analysisFactsV2 = buildWorkoutAnalysisFactsV2({
       workout,
       sportSettings,

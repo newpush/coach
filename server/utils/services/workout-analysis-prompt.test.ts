@@ -15,7 +15,11 @@ import {
   resolveSplitPacingVerdictApplicability
 } from './workout-analysis-prompt'
 import * as analyzeWorkoutTrigger from '../../../trigger/analyze-workout'
-import { buildWorkoutAnalysisFactsV2 } from '../workout-analysis-facts'
+import {
+  buildWorkoutAnalysisFactsV2,
+  getActualIntervalsForAnalysis,
+  getActualIntervalsSourceForAnalysis
+} from '../workout-analysis-facts'
 
 /**
  * CW-392 regression coverage.
@@ -817,5 +821,223 @@ describe('clampAnalysisScore', () => {
     expect(clampAnalysisScore(null)).toBeNull()
     expect(clampAnalysisScore(undefined)).toBeNull()
     expect(clampAnalysisScore(Number.NaN)).toBeNull()
+  })
+})
+
+/**
+ * CW-391 regression coverage: ONE segmentation per prompt.
+ *
+ * `buildWorkoutAnalysisData` used to read `rawJson.icu_intervals` directly, so
+ * the "## Interval Breakdown" table could enumerate a different set of reps
+ * than the "## Calculated Workout Facts v2" block printed above it. The v2
+ * hit rates, `firstVsLastIntervalDeltaPct` and the rep-scoped CW-393 signals
+ * are all computed over the arbitrated set returned by
+ * `getActualIntervalsForAnalysis`; the table the model quotes has to be the
+ * same set or every cross-reference the model makes is arithmetic over
+ * mismatched rows.
+ */
+describe('interval segmentation provenance (CW-391)', () => {
+  const SEGMENTATION_SPORT_SETTINGS = { ftp: 250, loadPreference: 'POWER' }
+
+  /**
+   * A session where the provider laps and the engine disagree as loudly as
+   * possible: the file arrived with ONE lap covering the whole ride, while the
+   * power stream and the linked plan both describe 4 x 5 min at ~115% of FTP.
+   */
+  const DISAGREEING_WORKOUT = {
+    id: 'workout-fixture-segmentation',
+    date: new Date('2026-03-19T06:00:00Z'),
+    title: '4x5 VO2',
+    type: 'Ride',
+    durationSec: 3600,
+    ftp: 250,
+    averageWatts: 190,
+    streams: {
+      time: Array.from({ length: 3600 }, (_, index) => index),
+      watts: [
+        ...Array.from({ length: 600 }, () => 150),
+        ...Array.from({ length: 4 }, () => [
+          ...Array.from({ length: 300 }, () => 285),
+          ...Array.from({ length: 300 }, () => 120)
+        ]).flat(),
+        ...Array.from({ length: 600 }, () => 130)
+      ]
+    },
+    rawJson: {
+      icu_intervals: [
+        { type: 'WORK', label: 'Whole ride', moving_time: 3600, average_watts: 190, intensity: 76 }
+      ]
+    }
+  }
+
+  const DISAGREEING_PLAN = {
+    title: '4x5 VO2',
+    durationSec: 3600,
+    structuredWorkout: {
+      steps: [
+        { type: 'Warmup', durationSeconds: 600, power: { range: { start: 0.55, end: 0.62 } } },
+        ...Array.from({ length: 4 }, () => [
+          { type: 'Active', durationSeconds: 300, power: { range: { start: 1.1, end: 1.18 } } },
+          { type: 'Rest', durationSeconds: 300, power: { range: { start: 0.45, end: 0.52 } } }
+        ]).flat(),
+        { type: 'Cooldown', durationSeconds: 600, power: { range: { start: 0.55, end: 0.45 } } }
+      ]
+    }
+  }
+
+  const buildDisagreeingPrompt = () => {
+    const workoutData = buildWorkoutAnalysisData(DISAGREEING_WORKOUT, {
+      plannedWorkout: DISAGREEING_PLAN,
+      sportSettings: SEGMENTATION_SPORT_SETTINGS
+    })
+    const facts = buildWorkoutAnalysisFactsV2({
+      workout: DISAGREEING_WORKOUT,
+      sportSettings: SEGMENTATION_SPORT_SETTINGS,
+      plannedWorkout: DISAGREEING_PLAN
+    })
+    const prompt = buildWorkoutAnalysisPrompt(
+      workoutData,
+      'Europe/Budapest',
+      'Supportive',
+      SEGMENTATION_SPORT_SETTINGS,
+      USER_PROFILE,
+      undefined,
+      DISAGREEING_PLAN,
+      facts
+    )
+    return { workoutData, facts, prompt }
+  }
+
+  it('is the fixture the whole ticket is about: laps and detection disagree', () => {
+    // Guard the guard. If a future arbitration change makes the provider lap
+    // win here, this suite stops testing anything and has to be re-fixtured.
+    expect(
+      getActualIntervalsSourceForAnalysis(
+        DISAGREEING_WORKOUT,
+        DISAGREEING_PLAN,
+        SEGMENTATION_SPORT_SETTINGS as any
+      )
+    ).toBe('detected')
+    expect(DISAGREEING_WORKOUT.rawJson.icu_intervals).toHaveLength(1)
+  })
+
+  it('renders the interval table from the arbitrated set, not the provider laps', () => {
+    const { workoutData, prompt } = buildDisagreeingPrompt()
+    const arbitrated = getActualIntervalsForAnalysis(
+      DISAGREEING_WORKOUT,
+      DISAGREEING_PLAN,
+      SEGMENTATION_SPORT_SETTINGS as any
+    )
+
+    // Same rep COUNT as the facts are computed over -- and not the single lap.
+    expect(arbitrated.length).toBeGreaterThan(1)
+    expect(workoutData.intervals).toHaveLength(arbitrated.length)
+    expect(prompt.match(/^### Interval \d+: /gm) || []).toHaveLength(arbitrated.length)
+
+    // Same rep BOUNDARIES: durations and stream offsets, in order.
+    expect(workoutData.intervals.map((i: any) => i.duration_s)).toEqual(
+      arbitrated.map((i) => i.durationSeconds)
+    )
+    expect(workoutData.intervals.map((i: any) => i.start_index)).toEqual(
+      arbitrated.map((i) => i.startIndex)
+    )
+    expect(workoutData.intervals.map((i: any) => i.end_index)).toEqual(
+      arbitrated.map((i) => i.endIndex)
+    )
+    for (const interval of arbitrated) {
+      const minutes = Math.floor(interval.durationSeconds / 60)
+      const seconds = interval.durationSeconds % 60
+      expect(prompt).toContain(`- Duration: ${minutes}m ${seconds}s`)
+    }
+
+    // The provider's lap label and its whole-ride row must not reach the model.
+    expect(prompt).not.toContain('Whole ride')
+    expect(prompt).not.toContain('- Duration: 60m 0s')
+  })
+
+  it('names the segmentation source in the facts block and above the table', () => {
+    const { prompt } = buildDisagreeingPrompt()
+
+    expect(prompt).toContain(
+      '- Interval Segmentation Source: engine detection over the recorded streams'
+    )
+    expect(prompt).toContain(
+      'Segmentation source: engine detection over the recorded streams. These are the same segments the Calculated Workout Facts v2 block above is computed over'
+    )
+  })
+
+  it('reports provider laps as the source when they win the arbitration', () => {
+    const data = buildWorkoutAnalysisData(RIDE_WORKOUT)
+    expect(data.interval_segmentation_source).toBe('raw')
+
+    const prompt = buildWorkoutAnalysisPrompt(
+      data,
+      'Europe/Budapest',
+      'Supportive',
+      { loadPreference: 'POWER' },
+      USER_PROFILE
+    )
+    expect(prompt).toContain('Segmentation source: provider laps (labels re-derived)')
+  })
+
+  it('omits the section entirely when there are no laps and nothing detected', () => {
+    const data = buildWorkoutAnalysisData({
+      id: 'workout-fixture-no-intervals',
+      date: new Date('2026-03-20T06:00:00Z'),
+      title: 'Easy spin',
+      type: 'Ride',
+      durationSec: 1800,
+      averageWatts: 140
+    })
+
+    expect(data.intervals).toBeUndefined()
+    expect(data.interval_segmentation_source).toBeUndefined()
+
+    const prompt = buildWorkoutAnalysisPrompt(
+      data,
+      'Europe/Budapest',
+      'Supportive',
+      { loadPreference: 'POWER' },
+      USER_PROFILE
+    )
+    expect(prompt).not.toContain('## Interval Breakdown')
+    expect(prompt).not.toContain('Segmentation source:')
+  })
+
+  it('prints a per-rep pace for a run and never for a ride', () => {
+    const runPrompt = buildWorkoutAnalysisPrompt(
+      buildWorkoutAnalysisData({
+        id: 'workout-fixture-run-interval-pace',
+        date: new Date('2026-03-21T06:00:00Z'),
+        title: '3 x 1km',
+        type: 'Run',
+        durationSec: 3000,
+        distanceMeters: 9000,
+        averageSpeed: 3.0,
+        rawJson: {
+          icu_intervals: [
+            { type: 'WORK', moving_time: 240, distance: 1000, average_speed: 4.1667 },
+            { type: 'RECOVERY', moving_time: 120, distance: 400, average_speed: 3.3333 }
+          ]
+        }
+      }),
+      'Europe/Budapest',
+      'Supportive',
+      { loadPreference: 'PACE' },
+      USER_PROFILE
+    )
+
+    // 4.1667 m/s = 240 s/km = 4:00/km; 3.3333 m/s = 300 s/km = 5:00/km.
+    expect(runPrompt).toContain('- Avg Pace: 4:00/km')
+    expect(runPrompt).toContain('- Avg Pace: 5:00/km')
+
+    const ridePrompt = buildWorkoutAnalysisPrompt(
+      buildWorkoutAnalysisData(RIDE_WORKOUT),
+      'Europe/Budapest',
+      'Supportive',
+      { loadPreference: 'POWER' },
+      USER_PROFILE
+    )
+    expect(ridePrompt).not.toContain('- Avg Pace:')
   })
 })
