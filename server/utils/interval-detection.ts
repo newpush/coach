@@ -1,4 +1,4 @@
-import { calculatePowerZones, calculateHrZones, identifyZone } from './zones'
+import { calculatePowerZones, calculateHrZones, identifyZone, type Zone } from './zones'
 
 /**
  * Utility for detecting intervals and peak efforts in workout stream data
@@ -207,6 +207,25 @@ export function resolveHrWorkThreshold(refs: {
 }
 
 /**
+ * The athlete's PROFILE heart-rate references, used to build HR training zones.
+ *
+ * Deliberately separate from the `threshold` argument. For `heartrate` that
+ * argument is the final work BAR in bpm (`resolveHrWorkThreshold`: 0.82 * LTHR
+ * or 0.7 * max HR), which is a segmentation bar, not a zone reference —
+ * `calculateHrZones` wants LTHR/max HR themselves. The bar cannot be turned
+ * back into them either: it carries no record of which of the two fractions
+ * produced it, so dividing by one of them would silently invent the other
+ * athlete's physiology (CW-400).
+ *
+ * Optional throughout: with neither value the HR zone stays `undefined` rather
+ * than being guessed off the work bar.
+ */
+export interface HrZoneRefs {
+  lthr?: number | null
+  maxHr?: number | null
+}
+
+/**
  * Detect intervals in a workout based on power or heart rate data
  * Uses a moving average and threshold-based approach
  *
@@ -226,6 +245,10 @@ export function resolveHrWorkThreshold(refs: {
  *                into a function that multiplied by 0.65 again, putting the work
  *                bar at ~46% of max HR: every sample read as work and the merge
  *                pass welded whole sessions into one interval (CW-383).
+ *
+ * `hrRefs` is the separate, optional channel for the athlete's profile LTHR/max
+ * HR. It exists only so HR intervals can be assigned an `intensity_zone`, and is
+ * never used for segmentation — see `HrZoneRefs`.
  */
 export function detectIntervals(
   times: number[],
@@ -234,7 +257,8 @@ export function detectIntervals(
   threshold?: number, // FTP, reference pace, or the final HR work bar in bpm
   plannedSteps?: PlannedStep[],
   smoothedValues?: number[],
-  cadenceValues?: number[]
+  cadenceValues?: number[],
+  hrRefs?: HrZoneRefs
 ): Interval[] {
   if (!times || !values || times.length !== values.length || times.length === 0) {
     return []
@@ -251,7 +275,8 @@ export function detectIntervals(
     threshold,
     plannedSteps,
     smoothed,
-    cadenceValues
+    cadenceValues,
+    hrRefs
   )
   if (plannedGuided.length > 0) {
     return plannedGuided
@@ -381,7 +406,17 @@ export function detectIntervals(
       // Downstream consumers that count reps filter on `type === 'WORK'`, and
       // labelling this WORK made every endurance session look like a 1x session.
       intervals = [
-        createIntervalObj(times, values, 0, times.length - 1, 'STEADY', threshold, metricType)
+        createIntervalObj(
+          times,
+          values,
+          0,
+          times.length - 1,
+          'STEADY',
+          threshold,
+          metricType,
+          undefined,
+          hrRefs
+        )
       ]
     }
   } else {
@@ -399,7 +434,8 @@ export function detectIntervals(
               type,
               threshold,
               metricType,
-              cadenceValues
+              cadenceValues,
+              hrRefs
             )
           )
         }
@@ -416,7 +452,8 @@ export function detectIntervals(
             'WORK',
             threshold,
             metricType,
-            cadenceValues
+            cadenceValues,
+            hrRefs
           )
         )
       }
@@ -439,7 +476,8 @@ export function detectIntervals(
           'COOLDOWN',
           threshold,
           metricType,
-          cadenceValues
+          cadenceValues,
+          hrRefs
         )
       )
     }
@@ -451,9 +489,18 @@ export function detectIntervals(
     const plannedWorkSteps = plannedSteps.filter((s) => s.type === 'WORK' || !s.type)
     const detectedWorkIntervals = intervals.filter((i) => i.type === 'WORK')
 
-    if (plannedWorkSteps.length > 0 && detectedWorkIntervals.length > 0) {
-      detectedWorkIntervals.forEach((interval, idx) => {
-        const plannedStep = plannedWorkSteps[idx]
+    // A STEADY session has no WORK interval at all, so the WORK-only pairing
+    // above left it with no label and no match score even when the athlete had
+    // linked a planned workout. Fall back to the unfiltered lists whenever
+    // either side of the WORK pairing is empty — when both sides have WORK the
+    // pairing is unchanged (CW-400).
+    const canPairWork = plannedWorkSteps.length > 0 && detectedWorkIntervals.length > 0
+    const stepsToMatch = canPairWork ? plannedWorkSteps : plannedSteps
+    const intervalsToMatch = canPairWork ? detectedWorkIntervals : intervals
+
+    if (stepsToMatch.length > 0 && intervalsToMatch.length > 0) {
+      intervalsToMatch.forEach((interval, idx) => {
+        const plannedStep = stepsToMatch[idx]
         if (plannedStep) {
           interval.label = plannedStep.name
           // Calculate match score based on duration
@@ -704,7 +751,8 @@ function detectIntervalsFromPlannedSteps(
   threshold?: number,
   plannedSteps?: PlannedStep[],
   smoothedValues?: number[],
-  cadenceValues?: number[]
+  cadenceValues?: number[],
+  hrRefs?: HrZoneRefs
 ): Interval[] {
   const flattened = flattenPlannedStepsForDetection(plannedSteps, metricType)
   if (flattened.length < 2) return []
@@ -792,7 +840,8 @@ function detectIntervalsFromPlannedSteps(
       step.type,
       threshold,
       metricType,
-      cadenceValues
+      cadenceValues,
+      hrRefs
     )
     interval.label = step.name
     interval.planned_step_id = step.id
@@ -1052,6 +1101,19 @@ function calculateBaseline(data: number[]): number {
   return median !== undefined ? median : 0
 }
 
+/**
+ * Zone number from a zone definition list: "Z2 Endurance" -> 2. HR zones split
+ * the top zone into Z5a/Z5b/Z5c, which all collapse to 5. Returns `undefined`
+ * for an empty zone list or a value outside every band.
+ */
+function resolveZoneNumber(value: number, zones: Zone[]): number | undefined {
+  const zone = identifyZone(value, zones)
+  if (!zone) return undefined
+  const match = zone.name.match(/^Z(\d+)/)
+  if (!match || !match[1]) return undefined
+  return parseInt(match[1])
+}
+
 function createIntervalObj(
   times: number[],
   values: number[],
@@ -1060,7 +1122,8 @@ function createIntervalObj(
   type: Interval['type'],
   threshold?: number,
   metricType?: 'power' | 'heartrate' | 'pace',
-  cadenceValues?: number[]
+  cadenceValues?: number[],
+  hrRefs?: HrZoneRefs
 ): Interval {
   const segmentValues = values.slice(startIdx, endIdx + 1)
   const sum = segmentValues.reduce((a, b) => a + (b || 0), 0)
@@ -1076,24 +1139,18 @@ function createIntervalObj(
 
   let intensity_zone: number | undefined
 
-  if (threshold && metricType) {
-    if (metricType === 'power') {
-      const zones = calculatePowerZones(threshold)
-      const zone = identifyZone(avg, zones)
-      if (zone) {
-        // Extract zone number from name "Z2 Endurance" -> 2
-        const match = zone.name.match(/^Z(\d+)/)
-        if (match && match[1]) intensity_zone = parseInt(match[1])
-      }
-    } else if (metricType === 'heartrate') {
-      // Estimate maxHR roughly if threshold is LTHR
-      // Or assume threshold passed IS MaxHR? The function signature says "FTP or Threshold Pace/HR"
-      // Let's assume for HR detection, threshold passed is usually MaxHR or LTHR.
-      // The identifyZone logic expects LTHR for HrZones usually.
-      // This is a bit ambiguous in the original code.
-      // For now, let's skip zone detection for HR here to avoid breakage,
-      // or implement a simple check if we want.
-    }
+  if (metricType === 'power' && threshold) {
+    // `threshold` is the athlete's FTP here, which IS the power zone reference.
+    intensity_zone = resolveZoneNumber(avg, calculatePowerZones(threshold))
+  } else if (metricType === 'heartrate') {
+    // HR zones do NOT come from `threshold`: for heartrate that argument is the
+    // final work bar in bpm (CW-383), a segmentation bar rather than a zone
+    // reference. Zones come from the athlete's profile LTHR/max HR, handed in
+    // separately as `hrRefs`. With neither available `calculateHrZones` returns
+    // an empty list and the zone stays undefined - the work bar is never used
+    // as a stand-in for LTHR (CW-400).
+    const zones = calculateHrZones(hrRefs?.lthr ?? null, hrRefs?.maxHr ?? null)
+    if (zones.length > 0) intensity_zone = resolveZoneNumber(avg, zones)
   }
 
   const startTimeValue = times[startIdx] || 0

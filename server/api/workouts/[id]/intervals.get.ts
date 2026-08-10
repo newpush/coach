@@ -264,9 +264,12 @@ export default defineEventHandler(async (event) => {
     // HR would make the bar self-referential and drift session to session, so it
     // is only reached as an explicit last resort inside `resolveHrWorkThreshold`
     // when the profile carries neither LTHR nor max HR.
-    const threshold = resolveHrWorkThreshold({
+    const hrRefs = {
       lthr: sportSettings?.lthr ?? user.lthr,
-      maxHr: sportSettings?.maxHr ?? user.maxHr,
+      maxHr: sportSettings?.maxHr ?? user.maxHr
+    }
+    const threshold = resolveHrWorkThreshold({
+      ...hrRefs,
       sessionMaxHr: workout.maxHr
     })
     detectedEngineIntervals = detectIntervals(
@@ -276,7 +279,9 @@ export default defineEventHandler(async (event) => {
       threshold,
       plannedSteps,
       undefined,
-      cadenceStream || undefined
+      cadenceStream || undefined,
+      // Zone reference, kept separate from the work bar above (CW-400).
+      hrRefs
     )
   }
 

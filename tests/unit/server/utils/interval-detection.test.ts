@@ -160,6 +160,96 @@ describe('detectIntervals', () => {
     expect(intervals[0]?.duration).toBe(2399)
   })
 
+  // CW-400: the HR branch of createIntervalObj used to be an empty block, so
+  // every HR-detected interval came back with intensity_zone undefined. Zones
+  // come from the PROFILE refs, never from the work bar (which is already
+  // scaled - 0.82 * LTHR - and would put every effort a zone or two too high).
+  describe('heart-rate intensity zones', () => {
+    const block = (bpm: number, seconds: number) => Array.from({ length: seconds }, () => bpm)
+    const heartrate = [
+      ...block(112, 300), // warmup
+      ...block(155, 240), // work 1
+      ...block(115, 180), // recovery 1
+      ...block(155, 240), // work 2
+      ...block(115, 180), // recovery 2
+      ...block(155, 240), // work 3
+      ...block(105, 300) // cooldown
+    ]
+    const time = heartrate.map((_, index) => index)
+    const LTHR = 160
+    const threshold = resolveHrWorkThreshold({ lthr: LTHR })
+
+    it('assigns zones from a profile LTHR, not from the work bar', () => {
+      const intervals = detectIntervals(
+        time,
+        heartrate,
+        'heartrate',
+        threshold,
+        undefined,
+        undefined,
+        undefined,
+        { lthr: LTHR }
+      )
+
+      expect(intervals.length).toBeGreaterThan(1)
+      // Friel LTHR bands at LTHR 160: Z1 <= 130, Z4 150-158.
+      const workIntervals = intervals.filter((interval) => interval.type === 'WORK')
+      expect(workIntervals.length).toBeGreaterThan(0)
+      workIntervals.forEach((interval) => {
+        expect(interval.intensity_zone).toBe(4)
+      })
+      intervals
+        .filter((interval) => interval.type !== 'WORK')
+        .forEach((interval) => {
+          expect(interval.intensity_zone).toBe(1)
+        })
+    })
+
+    it('falls back to the max-HR zone model when only max HR is known', () => {
+      // Max-HR bands at 190: Z2 115-133, Z4 153-171.
+      const intervals = detectIntervals(
+        time,
+        heartrate,
+        'heartrate',
+        resolveHrWorkThreshold({ maxHr: 190 }),
+        undefined,
+        undefined,
+        undefined,
+        { maxHr: 190 }
+      )
+
+      const workIntervals = intervals.filter((interval) => interval.type === 'WORK')
+      expect(workIntervals.length).toBeGreaterThan(0)
+      workIntervals.forEach((interval) => {
+        expect(interval.intensity_zone).toBe(4)
+      })
+    })
+
+    it('leaves the zone undefined when the profile carries neither LTHR nor max HR', () => {
+      const intervals = detectIntervals(time, heartrate, 'heartrate', threshold)
+
+      expect(intervals.length).toBeGreaterThan(1)
+      intervals.forEach((interval) => {
+        expect(interval.intensity_zone).toBeUndefined()
+      })
+
+      // ...and passing empty refs must not guess off the work bar either.
+      const withEmptyRefs = detectIntervals(
+        time,
+        heartrate,
+        'heartrate',
+        threshold,
+        undefined,
+        undefined,
+        undefined,
+        { lthr: null, maxHr: null }
+      )
+      withEmptyRefs.forEach((interval) => {
+        expect(interval.intensity_zone).toBeUndefined()
+      })
+    })
+  })
+
   it('classifies a long steady power session with no candidates as STEADY', () => {
     const watts = Array.from({ length: 2400 }, (_, index) => 130 + (index % 5))
     const time = watts.map((_, index) => index)
@@ -168,6 +258,51 @@ describe('detectIntervals', () => {
 
     expect(intervals).toHaveLength(1)
     expect(intervals[0]?.type).toBe('STEADY')
+  })
+
+  // CW-400: plan-guided labelling paired planned WORK steps with detected WORK
+  // intervals only, so a STEADY session (which has no WORK interval at all) came
+  // back unlabelled even with a planned workout linked to it.
+  it('labels a STEADY session against its planned step', () => {
+    const watts = Array.from({ length: 2400 }, (_, index) => 130 + (index % 5))
+    const time = watts.map((_, index) => index)
+    const plannedSteps = [{ type: 'STEADY', name: 'Endurance ride', durationSeconds: 2400 }]
+
+    const intervals = detectIntervals(time, watts, 'power', 250, plannedSteps)
+
+    expect(intervals).toHaveLength(1)
+    expect(intervals[0]?.type).toBe('STEADY')
+    expect(intervals[0]?.label).toBe('Endurance ride')
+    expect(intervals[0]?.match_score).toBeGreaterThan(0.99)
+  })
+
+  it('still pairs planned WORK steps with detected WORK intervals only', () => {
+    const block = (value: number, seconds: number) => Array.from({ length: seconds }, () => value)
+    const watts = [
+      ...block(120, 600), // warmup
+      ...block(260, 300), // work 1
+      ...block(120, 300), // recovery 1
+      ...block(260, 300), // work 2
+      ...block(110, 300) // cooldown
+    ]
+    const time = watts.map((_, index) => index)
+    // A single planned step keeps plan-guided detection out of it (it needs two
+    // or more), so the tail matching block runs on a session that does have WORK
+    // intervals - the case the STEADY fallback must not disturb.
+    const plannedSteps = [{ type: 'WORK', durationSeconds: 300, name: 'Rep 1' }]
+
+    const intervals = detectIntervals(time, watts, 'power', 250, plannedSteps)
+    const workIntervals = intervals.filter((interval) => interval.type === 'WORK')
+
+    expect(workIntervals).toHaveLength(2)
+    expect(workIntervals[0]?.label).toBe('Rep 1')
+    expect(workIntervals[1]?.label).toBeUndefined()
+    // The label must not leak onto the warmup/recovery/cooldown blocks.
+    intervals
+      .filter((interval) => interval.type !== 'WORK')
+      .forEach((interval) => {
+        expect(interval.label).toBeUndefined()
+      })
   })
 })
 
