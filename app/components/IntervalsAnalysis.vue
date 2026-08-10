@@ -424,10 +424,9 @@
             xMin: indexForTime(interval.start_time),
             xMax: indexForTime(interval.end_time),
             backgroundColor: shading,
-            // `ensureChartJsAnnotationDefaults` replaces the plugin's own defaults, which
-            // drops its default `drawTime`. Without this every annotation resolves to no
-            // draw phase and silently never paints - the state the WORK boxes shipped in.
-            drawTime: 'afterDatasetsDraw',
+            // No `drawTime` here on purpose: `ensureChartJsAnnotationDefaults` now merges
+            // into the plugin's defaults instead of replacing them, so the plugin's own
+            // `afterDatasetsDraw` default applies (CW-422). One source of truth.
             borderWidth: 0
           }
         }
