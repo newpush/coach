@@ -1458,6 +1458,8 @@ describe('planned-to-actual alignment (CW-386)', () => {
       durationSeconds: number
       classification: 'work' | 'recovery'
       avgCadence: number | null
+      startIndex: number | null
+      endIndex: number | null
     }> = {}
   ) => ({
     type: 'WORK',
@@ -1471,6 +1473,10 @@ describe('planned-to-actual alignment (CW-386)', () => {
     confidence: null,
     ambiguityNote: null,
     classification: 'work' as const,
+    // Sample bounds are optional on ActualInterval (CW-393); these fixtures
+    // exercise the alignment, which does not read them.
+    startIndex: null,
+    endIndex: null,
     ...overrides
   })
 
@@ -1719,5 +1725,317 @@ describe('planned-to-actual alignment (CW-386)', () => {
     expect(facts.adherence.workIntervalHitRate).toBe(50)
     expect(facts.adherence.targetOvershootPct).toBe(12)
     expect(facts.adherence.recoveryHitRate).toBeCloseTo(66.7, 1)
+  })
+})
+
+/* -------------------------------------------------------------------------- */
+/* Rep-scoped durability and stability signals (CW-393)                        */
+/* -------------------------------------------------------------------------- */
+
+describe('rep-scoped durability and stability signals', () => {
+  const THRESHOLD_FIXTURE_FTP = 280
+
+  /**
+   * The shape of production workout `81597338-b680-459a-a97e-d7caf1ede3da`:
+   * warmup, 3 x 4min at threshold (271 / 274 / 276 W — a CoV of 0.75%, i.e.
+   * excellent), recovery jogs between them, a long endurance-buffer block that
+   * the provider also labels WORK, and a cooldown.
+   *
+   * Measured session-wide, every durability signal on this session lies:
+   *   - execution stability: whole-stream CoV 29.2% -> clamped to 0.0/100
+   *   - repeatability: the 223 W buffer averaged in with the reps -> 33.0/100
+   *   - cadence drift: warmup window vs cooldown window -> "cadence fell 6.8%"
+   *   - late-session fade: withheld entirely by the cooldown suppression
+   */
+  const THRESHOLD_BLOCKS = [
+    { seconds: 600, watts: 150, cadence: 85, intensity: 0.54 },
+    { seconds: 240, watts: 271, cadence: 92, intensity: 0.97 },
+    { seconds: 240, watts: 140, cadence: 80, intensity: 0.5 },
+    { seconds: 240, watts: 274, cadence: 92, intensity: 0.98 },
+    { seconds: 240, watts: 140, cadence: 80, intensity: 0.5 },
+    { seconds: 240, watts: 276, cadence: 92, intensity: 0.99 },
+    { seconds: 240, watts: 140, cadence: 80, intensity: 0.5 },
+    { seconds: 900, watts: 223, cadence: 88, intensity: 0.8 },
+    { seconds: 300, watts: 120, cadence: 70, intensity: 0.43 }
+  ]
+
+  function buildThresholdWorkout() {
+    const time: number[] = []
+    const watts: number[] = []
+    const cadence: number[] = []
+    const heartrate: number[] = []
+    // Every lap is labelled WORK, the way Intervals.icu labels them;
+    // `resolveProviderIntervalTypes` demotes the warmup, jogs and cooldown but
+    // leaves the endurance-buffer block as work — which is the bug's premise.
+    const laps: any[] = []
+    let cursor = 0
+    for (const block of THRESHOLD_BLOCKS) {
+      const start = cursor
+      for (let index = 0; index < block.seconds; index++) {
+        time.push(cursor)
+        // Small deterministic jitter so a per-rep CoV is not trivially zero.
+        watts.push(block.watts + ((index % 5) - 2))
+        cadence.push(block.cadence)
+        heartrate.push(110 + Math.round(block.watts / 6))
+        cursor++
+      }
+      laps.push({
+        type: 'WORK',
+        start_index: start,
+        end_index: cursor - 1,
+        moving_time: block.seconds,
+        average_watts: block.watts,
+        average_cadence: block.cadence,
+        average_heartrate: 110 + Math.round(block.watts / 6),
+        intensity: block.intensity
+      })
+    }
+
+    return makeWorkout({
+      title: '4x4 Threshold',
+      type: 'Ride',
+      durationSec: time.length,
+      averageWatts: 193,
+      averageHr: 145,
+      intensity: 0.85,
+      variabilityIndex: 1.14,
+      rawJson: { icu_intervals: laps },
+      streams: { time, watts, cadence, heartrate }
+    })
+  }
+
+  const thresholdPlan = {
+    durationSec: 3240,
+    structuredWorkout: {
+      steps: [
+        { type: 'Warmup', durationSeconds: 600, power: { value: 54, units: '%' } },
+        { type: 'Interval', durationSeconds: 240, power: { value: 97, units: '%' } },
+        { type: 'Rest', durationSeconds: 240, power: { value: 50, units: '%' } },
+        { type: 'Interval', durationSeconds: 240, power: { value: 98, units: '%' } },
+        { type: 'Rest', durationSeconds: 240, power: { value: 50, units: '%' } },
+        { type: 'Interval', durationSeconds: 240, power: { value: 99, units: '%' } },
+        { type: 'Rest', durationSeconds: 240, power: { value: 50, units: '%' } },
+        // The endurance buffer: prescribed, work-classified, and NOT a threshold rep.
+        { type: 'Interval', durationSeconds: 900, power: { value: 80, units: '%' } },
+        { type: 'Cooldown', durationSeconds: 300, power: { value: 43, units: '%' } }
+      ]
+    }
+  }
+
+  it('scores repeatability on the threshold reps alone, not against the endurance buffer', () => {
+    const facts = buildWorkoutAnalysisFactsV2({
+      workout: buildThresholdWorkout(),
+      plannedWorkout: thresholdPlan,
+      sportSettings: { ftp: THRESHOLD_FIXTURE_FTP }
+    })
+
+    expect(facts.guardrails.archetype.sessionSteadiness).toBe('intervalled')
+    // Session-wide (pre-CW-393) this was 33.0: the 223 W buffer was averaged in
+    // with reps of 271/274/276 W. Rep-scoped it is the reps' own CoV of 0.75%.
+    expect(facts.performanceSignals.durability.repeatabilityScore).toBe(94)
+    expect(facts.performanceSignals.applicability.repeatability).toEqual({
+      applicable: true,
+      reason: null
+    })
+  })
+
+  it('reports execution stability from within the reps instead of across the whole session', () => {
+    const facts = buildWorkoutAnalysisFactsV2({
+      workout: buildThresholdWorkout(),
+      plannedWorkout: thresholdPlan,
+      sportSettings: { ftp: THRESHOLD_FIXTURE_FTP }
+    })
+
+    // Whole-stream CoV on this fixture is 29.2%, which scores -74.9 and clamps
+    // to 0.0 — "very unstable execution" for a session ridden perfectly.
+    expect(facts.performanceSignals.durability.executionStabilityScore).not.toBeNull()
+    expect(facts.performanceSignals.durability.executionStabilityScore!).toBeGreaterThan(70)
+    expect(facts.performanceSignals.applicability.executionStability.applicable).toBe(true)
+  })
+
+  it('does not manufacture a cadence-drift claim out of the cooldown', () => {
+    const facts = buildWorkoutAnalysisFactsV2({
+      workout: buildThresholdWorkout(),
+      plannedWorkout: thresholdPlan,
+      sportSettings: { ftp: THRESHOLD_FIXTURE_FTP }
+    })
+
+    // The reps were all ridden at 92 rpm. The first-20% / last-20% window read
+    // the 85 rpm warmup against the 70 rpm cooldown and reported a 6.8% decay.
+    expect(facts.performanceSignals.sportSpecific.cadenceDriftPct).toBeCloseTo(0, 5)
+  })
+
+  it('reads late-session fade as first rep versus last rep for an interval session', () => {
+    const facts = buildWorkoutAnalysisFactsV2({
+      workout: buildThresholdWorkout(),
+      plannedWorkout: thresholdPlan,
+      sportSettings: { ftp: THRESHOLD_FIXTURE_FTP }
+    })
+
+    // Session-wide this was withheld entirely (the plan ends in a cooldown, so
+    // `hasTerminalRecoveryPhase` suppressed it). Rep-scoped it is answerable and
+    // negative: the athlete finished the set STRONGER than they started it.
+    expect(facts.performanceSignals.durability.lateSessionFadePct).toBe(-1.8)
+    expect(facts.performanceSignals.durability.firstVsLastIntervalDeltaPct).toBe(-1.8)
+    expect(facts.performanceSignals.applicability.lateSessionFade.applicable).toBe(true)
+    // ...and the cooldown caution is no longer emitted, because nothing reads
+    // the cooldown any more.
+    expect(facts.guardrails.suppressions).not.toContain(
+      'Late-session fade should not be penalized because the workout ends with a planned recovery/cooldown phase.'
+    )
+  })
+
+  it('groups reps by duration and effort similarity when no plan is linked', () => {
+    const facts = buildWorkoutAnalysisFactsV2({
+      workout: buildThresholdWorkout(),
+      sportSettings: { ftp: THRESHOLD_FIXTURE_FTP }
+    })
+
+    // Same answer without a plan: the 15-minute buffer is not a 4-minute rep.
+    expect(facts.performanceSignals.durability.repeatabilityScore).toBe(94)
+    expect(facts.performanceSignals.applicability.repeatability.applicable).toBe(true)
+  })
+
+  it('withholds rep-scoped signals with a reason when no comparable rep set exists', () => {
+    // Three work efforts that are not repetitions of anything: a 1-minute
+    // sprint, a 5-minute tempo block and a 15-minute endurance block. The
+    // session is intervalled, so a session-wide CoV would be presented as
+    // "execution stability" — the exact substitution CW-393 forbids.
+    const facts = buildWorkoutAnalysisFactsV2({
+      workout: makeWorkout({
+        title: 'Unstructured Mixed Ride',
+        type: 'Ride',
+        durationSec: 3600,
+        averageWatts: 200,
+        variabilityIndex: 1.16,
+        rawJson: {
+          icu_intervals: [
+            {
+              type: 'WORK',
+              moving_time: 60,
+              average_watts: 350,
+              average_cadence: 95,
+              intensity: 1.25,
+              start_index: 0,
+              end_index: 59
+            },
+            {
+              type: 'REST',
+              moving_time: 300,
+              average_watts: 120,
+              average_cadence: 78,
+              intensity: 0.43,
+              start_index: 60,
+              end_index: 359
+            },
+            {
+              type: 'WORK',
+              moving_time: 300,
+              average_watts: 260,
+              average_cadence: 90,
+              intensity: 0.93,
+              start_index: 360,
+              end_index: 659
+            },
+            {
+              type: 'REST',
+              moving_time: 300,
+              average_watts: 120,
+              average_cadence: 78,
+              intensity: 0.43,
+              start_index: 660,
+              end_index: 959
+            },
+            {
+              type: 'WORK',
+              moving_time: 900,
+              average_watts: 205,
+              average_cadence: 86,
+              intensity: 0.73,
+              start_index: 960,
+              end_index: 1859
+            },
+            {
+              type: 'WORK',
+              moving_time: 300,
+              average_watts: 110,
+              average_cadence: 70,
+              intensity: 0.4,
+              start_index: 1860,
+              end_index: 2159
+            }
+          ]
+        },
+        streams: {
+          time: Array.from({ length: 2160 }, (_, index) => index),
+          watts: Array.from({ length: 2160 }, (_, index) =>
+            index < 60
+              ? 350
+              : index < 360
+                ? 120
+                : index < 660
+                  ? 260
+                  : index < 960
+                    ? 120
+                    : index < 1860
+                      ? 205
+                      : 110
+          ),
+          cadence: Array.from({ length: 2160 }, (_, index) => (index < 60 ? 95 : 86))
+        }
+      }),
+      sportSettings: { ftp: 280 }
+    })
+
+    expect(facts.guardrails.archetype.sessionSteadiness).toBe('intervalled')
+    for (const signal of ['executionStability', 'repeatability', 'cadenceDrift'] as const) {
+      expect(facts.performanceSignals.applicability[signal].applicable).toBe(false)
+      expect(facts.performanceSignals.applicability[signal].reason).toContain(
+        'comparable work reps'
+      )
+    }
+    expect(facts.performanceSignals.durability.executionStabilityScore).toBeNull()
+    expect(facts.performanceSignals.durability.repeatabilityScore).toBeNull()
+    expect(facts.performanceSignals.sportSpecific.cadenceDriftPct).toBeNull()
+  })
+
+  it('leaves a steady endurance ride on its session-wide values and applicability', () => {
+    const facts = buildWorkoutAnalysisFactsV2({
+      workout: makeWorkout({
+        title: 'Steady Endurance Ride',
+        durationSec: 3600,
+        averageWatts: 205,
+        averageHr: 141,
+        intensity: 0.76,
+        variabilityIndex: 1.03,
+        streams: {
+          time: Array.from({ length: 720 }, (_, index) => index * 5),
+          watts: Array.from({ length: 720 }, (_, index) => 205 + ((index % 7) - 3)),
+          heartrate: Array.from({ length: 720 }, (_, index) => (index < 120 ? 138 : 142)),
+          cadence: Array.from({ length: 720 }, (_, index) => 88 + ((index % 5) - 2))
+        }
+      })
+    })
+
+    // Not intervalled -> no rep scoping -> exactly today's numbers.
+    expect(facts.guardrails.archetype.sessionSteadiness).toBe('steady')
+    expect(facts.performanceSignals.durability.executionStabilityScore).toBe(94.2)
+    expect(facts.performanceSignals.applicability.executionStability).toEqual({
+      applicable: true,
+      reason: null
+    })
+    expect(facts.performanceSignals.durability.lateSessionFadePct).toBeCloseTo(0, 5)
+    expect(facts.performanceSignals.applicability.lateSessionFade).toEqual({
+      applicable: true,
+      reason: null
+    })
+    expect(facts.performanceSignals.sportSpecific.cadenceDriftPct).toBeCloseTo(0, 5)
+    expect(facts.performanceSignals.applicability.cadenceDrift).toEqual({
+      applicable: true,
+      reason: null
+    })
+    // A steady ride has no repeated efforts, so repeatability stays withheld.
+    expect(facts.performanceSignals.durability.repeatabilityScore).toBeNull()
+    expect(facts.performanceSignals.applicability.repeatability.applicable).toBe(false)
   })
 })

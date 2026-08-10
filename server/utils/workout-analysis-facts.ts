@@ -1215,6 +1215,18 @@ type ActualInterval = {
   confidence: number | null
   ambiguityNote: string | null
   classification: 'work' | 'recovery'
+  /**
+   * Where this segment sits in the sample streams, inclusive on both ends.
+   *
+   * Both provider laps (`icu_intervals[].start_index`) and engine-detected
+   * intervals (`interval-detection.ts`) carry these; they are `null` for any
+   * source that does not, and every consumer must treat them as optional.
+   * Without them a signal cannot be measured *inside* a rep — which is exactly
+   * why rep-scoped execution stability reports itself as not applicable rather
+   * than falling back to a session-wide number (CW-393).
+   */
+  startIndex: number | null
+  endIndex: number | null
 }
 
 type AnalysisRefs = {
@@ -1513,6 +1525,13 @@ function toIntervalIntensityFactor(value: unknown): number | null {
   return numeric > 5 ? numeric / 100 : numeric
 }
 
+/** A stream offset, or `null` when the source carries no usable one. */
+function toSampleIndex(value: unknown): number | null {
+  const numeric = Number(value)
+  if (!Number.isFinite(numeric) || numeric < 0) return null
+  return Math.floor(numeric)
+}
+
 function mapIntervalsToActual(intervals: any[]): ActualInterval[] {
   return intervals
     .map((interval) => {
@@ -1560,7 +1579,9 @@ function mapIntervalsToActual(intervals: any[]): ActualInterval[] {
           : null,
         ambiguityNote:
           typeof interval?.ambiguity_note === 'string' ? String(interval.ambiguity_note) : null,
-        classification
+        classification,
+        startIndex: toSampleIndex(interval?.start_index),
+        endIndex: toSampleIndex(interval?.end_index)
       }
     })
     .filter((interval) => interval.durationSeconds > 0)
@@ -1773,6 +1794,9 @@ function buildDetectedIntervals(
     avg_power?: number
     avg_heartrate?: number
     avg_pace?: number
+    // Carried through so rep-scoped signals can look inside a rep (CW-393).
+    start_index?: number
+    end_index?: number
   }> = []
 
   if (
@@ -2673,25 +2697,416 @@ function deriveMotionPattern(workout: any): MotionPattern {
   }
 }
 
+/* -------------------------------------------------------------------------- */
+/* Rep-scoped signal scope (CW-393)                                            */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Durability and stability signals answer "how consistent was the effort?".
+ * For a steady ride the session IS the effort, so a session-wide statistic
+ * answers the question. For an interval session it does not: a coefficient of
+ * variation measured across warmup + reps + recovery jogs describes the SHAPE
+ * of the session, not the athlete's execution, and a perfectly ridden 4x4min
+ * therefore scored near zero on "execution stability" and ~20/100 on
+ * "repeatability" once an endurance-buffer block was averaged in with the
+ * threshold reps.
+ *
+ * `deriveDecouplingV2` and the `paceDriftApplicable` gate already refuse to
+ * answer when the session shape makes the number meaningless. The helpers below
+ * extend the same discipline to the remaining signals: for intervalled and
+ * stochastic sessions they are measured over the comparable work reps, and when
+ * no comparable rep set can be formed the signal is withheld WITH A REASON
+ * rather than quietly falling back to the session-wide figure.
+ */
+
+/**
+ * How similar two efforts' durations must be before they count as repetitions
+ * of the same thing. 0.75 keeps a 4:00 rep together with a 3:05 one (cutting a
+ * rep short is still doing that rep) while separating 4-minute threshold reps
+ * from a long endurance-buffer block.
+ */
+const COMPARABLE_REP_DURATION_RATIO = 0.75
+
+/**
+ * How far two PLANNED targets may sit apart and still describe the same
+ * prescription. Tight, because this compares what was ASKED for rather than
+ * what was done: 0.95 IF and 1.05 IF are different steps.
+ */
+const COMPARABLE_PLANNED_TARGET_TOLERANCE = 0.1
+
+/**
+ * How far two EXECUTED efforts may sit apart and still be grouped as the same
+ * rep type when there is no plan to group by.
+ *
+ * Deliberately loose. Grouping executed reps by how alike they are is circular,
+ * and too tight a bar would split a genuine fade into two internally
+ * "consistent" groups and then report the larger one — the mirror image of the
+ * lie this ticket fixes. 0.25 is wide enough that any realistic fade stays
+ * inside one group and is scored honestly, and narrow enough to separate a
+ * Z2 buffer block from threshold reps.
+ */
+const COMPARABLE_ACTUAL_EFFORT_TOLERANCE = 0.25
+
+/** Fewest comparable reps a rep-scoped repeatability number may be built from. */
+const MIN_COMPARABLE_REPS = 3
+
+function durationSimilarity(a: number, b: number): number {
+  const longest = Math.max(a, b)
+  return longest > 0 ? Math.min(a, b) / longest : 0
+}
+
+function relativeDelta(a: number, b: number): number {
+  const largest = Math.max(Math.abs(a), Math.abs(b))
+  return largest > 0 ? Math.abs(a - b) / largest : 0
+}
+
+function positiveOrNull(value: number | null | undefined): number | null {
+  return value !== null && value !== undefined && Number.isFinite(value) && value > 0 ? value : null
+}
+
+/** Coefficient of variation as a percentage; `null` when it is undefined. */
+function coefficientOfVariationPct(values: number[]): number | null {
+  if (values.length < 2) return null
+  const mean = values.reduce((sum, value) => sum + value, 0) / values.length
+  if (!(mean > 0)) return null
+  const variance = values.reduce((sum, value) => sum + Math.pow(value - mean, 2), 0) / values.length
+  return (Math.sqrt(variance) / mean) * 100
+}
+
+type RepEffortSource = 'speed' | 'power' | 'intensity'
+
+/**
+ * One effort number per rep, all drawn from the SAME channel.
+ *
+ * Mixing channels here would be a units bug rather than a rounding one — raw
+ * watts sitting next to an intensity factor — so a channel is only used when
+ * every rep in the set carries it.
+ */
+function resolveRepEfforts(
+  reps: ActualInterval[],
+  family: ReturnType<typeof getWorkoutFamily>
+): { values: number[]; source: RepEffortSource } | null {
+  if (reps.length === 0) return null
+  const channels: Array<{ source: RepEffortSource; read: (rep: ActualInterval) => number | null }> =
+    family === 'run'
+      ? [
+          { source: 'speed', read: (rep) => positiveOrNull(rep.avgSpeed) },
+          { source: 'power', read: (rep) => positiveOrNull(rep.avgPower) },
+          { source: 'intensity', read: (rep) => positiveOrNull(rep.intensity) }
+        ]
+      : [
+          { source: 'power', read: (rep) => positiveOrNull(rep.avgPower) },
+          { source: 'intensity', read: (rep) => positiveOrNull(rep.intensity) },
+          { source: 'speed', read: (rep) => positiveOrNull(rep.avgSpeed) }
+        ]
+
+  for (const channel of channels) {
+    const values = reps.map(channel.read)
+    if (values.every((value): value is number => value !== null)) {
+      return { values, source: channel.source }
+    }
+  }
+  return null
+}
+
+/**
+ * Greedy order-preserving clustering.
+ *
+ * A candidate joins a cluster only when it is comparable to EVERY member, not
+ * merely to a representative: transitive drift is precisely how a 4-minute rep
+ * ends up in the same group as a 20-minute block.
+ */
+function clusterComparable<T>(items: T[], comparable: (a: T, b: T) => boolean): T[][] {
+  const clusters: T[][] = []
+  for (const item of items) {
+    const target = clusters.find((cluster) => cluster.every((member) => comparable(member, item)))
+    if (target) target.push(item)
+    else clusters.push([item])
+  }
+  return clusters
+}
+
+/** Do two planned work steps prescribe the same effort? */
+function plannedPrescriptionMatches(
+  a: FlattenedPlannedStep,
+  b: FlattenedPlannedStep,
+  refs: AnalysisRefs
+): boolean {
+  if (a.metric !== b.metric) return false
+  if (durationSimilarity(a.durationSeconds, b.durationSeconds) < COMPARABLE_REP_DURATION_RATIO) {
+    return false
+  }
+  const targetA = a.intensityFactor ?? resolveComparableTargetValue(a, refs)
+  const targetB = b.intensityFactor ?? resolveComparableTargetValue(b, refs)
+  // With no resolvable target on either side, duration is all the evidence
+  // there is; with one resolvable and one not, they are not comparable.
+  if (targetA === null || targetB === null) return targetA === targetB
+  return relativeDelta(targetA, targetB) <= COMPARABLE_PLANNED_TARGET_TOLERANCE
+}
+
+/** Do two executed segments look like repetitions of the same effort? */
+function executedRepsAreComparable(
+  a: ActualInterval,
+  b: ActualInterval,
+  family: ReturnType<typeof getWorkoutFamily>
+): boolean {
+  if (durationSimilarity(a.durationSeconds, b.durationSeconds) < COMPARABLE_REP_DURATION_RATIO) {
+    return false
+  }
+  const efforts = resolveRepEfforts([a, b], family)
+  if (!efforts) return true
+  return relativeDelta(efforts.values[0]!, efforts.values[1]!) <= COMPARABLE_ACTUAL_EFFORT_TOLERANCE
+}
+
+function meanRepEffort(
+  reps: ActualInterval[],
+  family: ReturnType<typeof getWorkoutFamily>
+): number {
+  const efforts = resolveRepEfforts(reps, family)
+  return efforts ? (computeAverage(efforts.values) ?? 0) : 0
+}
+
+/**
+ * The set of comparable work reps the rep-scoped signals are measured over.
+ *
+ * `active` is the session-shape gate; `reps` is empty with a `reason` whenever
+ * the session is rep-scoped but no usable rep set exists. Callers must never
+ * substitute a session-wide number when `active` is true and `reps` is empty —
+ * presenting the session-wide figure as applicable is the bug being fixed.
+ */
+type RepScope = {
+  active: boolean
+  reps: ActualInterval[]
+  basis: 'planned_step' | 'duration_intensity' | null
+  reason: string | null
+  /**
+   * Planned work steps the alignment found no segment for at all. These are
+   * genuine misses (execution evidence, CW-385/CW-386) rather than segments
+   * that merely lack a measurement, so they are reported in the withholding
+   * reason instead of being silently dropped. Whether a missed rep is a problem
+   * is adherence's question (`workIntervalHitRate`), not repeatability's.
+   */
+  missedPlannedReps: number
+  /** The unfiltered actual intervals, so callers need not extract them twice. */
+  allActualIntervals: ActualInterval[]
+}
+
+function resolveRepScope(params: {
+  workout: any
+  plannedWorkout?: any
+  family: ReturnType<typeof getWorkoutFamily>
+  refs: AnalysisRefs
+  archetype: WorkoutAnalysisFactsV2['guardrails']['archetype']
+}): RepScope {
+  const { workout, plannedWorkout, family, refs, archetype } = params
+  const allActualIntervals = extractActualIntervals(workout, plannedWorkout, refs)
+  // The same shapes `deriveDecouplingV2` refuses to interpret session-wide.
+  const active = ['intervalled', 'stochastic'].includes(archetype.sessionSteadiness)
+
+  if (!active) {
+    return {
+      active: false,
+      reps: [],
+      basis: null,
+      reason: null,
+      missedPlannedReps: 0,
+      allActualIntervals
+    }
+  }
+
+  const plannedSteps = flattenPlannedSteps(
+    getStructuredSteps(
+      plannedWorkout?.structuredWorkout || workout?.plannedWorkout?.structuredWorkout
+    ),
+    refs
+  )
+  // CW-386's alignment, not a re-pairing by index: `pairs` already knows which
+  // segment each planned step was executed as, and `actualSegments` is already
+  // free of lap-button stubs.
+  const alignment = alignPlannedToActualIntervals(plannedSteps, allActualIntervals)
+  const workPairs = alignment.pairs.filter((pair) => pair.planned.classification === 'work')
+  const missedPlannedReps = workPairs.filter((pair) => pair.actual === null).length
+
+  // Preferred basis: reps that were prescribed as the same thing. This is what
+  // keeps an endurance-buffer block out of a threshold rep's company, and it
+  // groups on the PRESCRIPTION rather than on the execution, so the athlete's
+  // actual variation stays fully visible inside the group.
+  if (workPairs.length >= MIN_COMPARABLE_REPS) {
+    const dominant = clusterComparable(workPairs, (a, b) =>
+      plannedPrescriptionMatches(a.planned, b.planned, refs)
+    )
+      .map((cluster) => ({
+        reps: cluster
+          .map((pair) => pair.actual)
+          .filter((actual): actual is ActualInterval => actual !== null),
+        intensity: Math.max(...cluster.map((pair) => pair.planned.intensityFactor ?? 0))
+      }))
+      .sort((a, b) => b.reps.length - a.reps.length || b.intensity - a.intensity)[0]
+
+    if (dominant && dominant.reps.length >= MIN_COMPARABLE_REPS) {
+      return {
+        active,
+        reps: dominant.reps,
+        basis: 'planned_step',
+        reason: null,
+        missedPlannedReps,
+        allActualIntervals
+      }
+    }
+  }
+
+  // No plan (or a plan that yielded too few aligned reps): group the executed
+  // work segments by duration and effort similarity instead.
+  const workSegments = alignment.actualSegments.filter(
+    (interval) => interval.classification === 'work'
+  )
+  if (workSegments.length >= MIN_COMPARABLE_REPS) {
+    const dominant = clusterComparable(workSegments, (a, b) =>
+      executedRepsAreComparable(a, b, family)
+    ).sort((a, b) => b.length - a.length || meanRepEffort(b, family) - meanRepEffort(a, family))[0]
+
+    if (dominant && dominant.length >= MIN_COMPARABLE_REPS) {
+      return {
+        active,
+        reps: dominant,
+        basis: 'duration_intensity',
+        reason: null,
+        missedPlannedReps,
+        allActualIntervals
+      }
+    }
+  }
+
+  const missNote =
+    missedPlannedReps > 0
+      ? ` (${missedPlannedReps} planned work rep${missedPlannedReps === 1 ? ' was' : 's were'} not executed at all)`
+      : ''
+  const reason =
+    workSegments.length < MIN_COMPARABLE_REPS
+      ? `This session is ${archetype.sessionSteadiness}, so the signal is measured across its work reps, and only ${workSegments.length} executed work rep${workSegments.length === 1 ? '' : 's'} could be identified${missNote}.`
+      : `This session is ${archetype.sessionSteadiness}, so the signal is measured across comparable work reps, and no group of at least ${MIN_COMPARABLE_REPS} comparable reps could be formed${missNote} — a session-wide figure here would compare unlike efforts.`
+
+  return {
+    active,
+    reps: [],
+    basis: null,
+    reason,
+    missedPlannedReps,
+    allActualIntervals
+  }
+}
+
+/**
+ * Mean per-rep coefficient of variation, measured INSIDE each rep.
+ *
+ * Delegates to `calculateStabilityMetrics`, which already implements per-interval
+ * CoV via its `intervals` argument — the whole-session call sites pass `[]` and
+ * read `overallCoV`, which is what makes the session-wide number meaningless
+ * for an interval session.
+ */
+function repScopedStabilityCoV(reps: ActualInterval[], stream: number[]): number | null {
+  if (stream.length === 0) return null
+  const bounded = reps
+    .filter(
+      (rep) =>
+        rep.startIndex !== null &&
+        rep.endIndex !== null &&
+        rep.startIndex < stream.length &&
+        rep.endIndex > rep.startIndex
+    )
+    .map((rep) => ({
+      type: 'WORK',
+      start_index: rep.startIndex!,
+      end_index: Math.min(rep.endIndex!, stream.length - 1)
+    }))
+  if (bounded.length === 0) return null
+
+  const stability = calculateStabilityMetrics(stream, bounded)
+  if (!stability || stability.intervalStability.length === 0) return null
+  return computeAverage(stability.intervalStability.map((entry) => entry.cov))
+}
+
+/**
+ * First rep versus last rep, as a percentage of the first.
+ *
+ * Extracted verbatim from `deriveDurabilitySignals` so the rep-scoped and the
+ * legacy call sites cannot drift apart. The delta is a ratio, so the units only
+ * need to agree between the two ends: an intensity factor scaled to a
+ * percent-of-threshold stands in when watts are missing.
+ */
+function firstVsLastRepDeltaPct(
+  reps: ActualInterval[],
+  family: ReturnType<typeof getWorkoutFamily>
+): number | null {
+  if (reps.length < 2) return null
+  const first = reps[0]!
+  const last = reps[reps.length - 1]!
+  const metricOf = (interval: ActualInterval) =>
+    family === 'run'
+      ? (interval.avgSpeed ?? null)
+      : (interval.avgPower ?? (interval.intensity !== null ? interval.intensity * 100 : null))
+  const firstMetric = metricOf(first)
+  const lastMetric = metricOf(last)
+  if (firstMetric && lastMetric && firstMetric > 0) {
+    return round(((firstMetric - lastMetric) / firstMetric) * 100, 1)
+  }
+  return null
+}
+
+/** Whether a signal answers the question this session poses, and why not. */
+type SignalGate = { applicable: boolean; reason: string | null }
+
+const OPEN_GATE: SignalGate = { applicable: true, reason: null }
+
+type DurabilityGates = {
+  lateSessionFade: SignalGate
+  executionStability: SignalGate
+  repeatability: SignalGate
+}
+
 function deriveDurabilitySignals(params: {
   workout: any
   family: ReturnType<typeof getWorkoutFamily>
   plannedWorkout?: any
   refs: AnalysisRefs
-}): WorkoutAnalysisFactsV2['performanceSignals']['durability'] {
-  const { workout, family, plannedWorkout, refs } = params
+  repScope: RepScope
+}): {
+  durability: WorkoutAnalysisFactsV2['performanceSignals']['durability']
+  gates: DurabilityGates
+} {
+  const { workout, family, plannedWorkout, refs, repScope } = params
   const time = asNumberArray(workout?.streams?.time)
   const power = asNumberArray(workout?.streams?.watts)
   const hr = asNumberArray(workout?.streams?.heartrate)
   const speed = asNumberArray(workout?.streams?.velocity)
   const cadence = asNumberArray(workout?.streams?.cadence)
-  const actualIntervals = extractActualIntervals(workout, plannedWorkout, refs).filter(
+  const actualIntervals = repScope.allActualIntervals.filter(
     (interval) => interval.classification === 'work'
   )
   const suppressLateFade = hasTerminalRecoveryPhase(workout, plannedWorkout, refs)
+  const gates: DurabilityGates = {
+    lateSessionFade: OPEN_GATE,
+    executionStability: OPEN_GATE,
+    repeatability: OPEN_GATE
+  }
 
   let lateSessionFadePct: number | null = null
-  if (!suppressLateFade && family === 'ride' && power.length >= 120) {
+  if (repScope.active) {
+    // A cooldown is not evidence of fatigue and the first 20% of an interval
+    // session is warmup, so the only honest "did the athlete fade?" question is
+    // first rep versus last rep. `hasTerminalRecoveryPhase` is deliberately not
+    // consulted here: rep-scoped fade never reads the cooldown in the first
+    // place, so there is nothing to suppress.
+    lateSessionFadePct = firstVsLastRepDeltaPct(repScope.reps, family)
+    if (lateSessionFadePct === null) {
+      gates.lateSessionFade = {
+        applicable: false,
+        reason:
+          repScope.reason ??
+          'Late-session fade is measured first rep versus last rep for this session shape, and the reps carry no comparable measurement.'
+      }
+    }
+  } else if (!suppressLateFade && family === 'ride' && power.length >= 120) {
     const chunk = Math.max(1, Math.floor(power.length * 0.2))
     const first = computeAverage(power.slice(0, chunk).filter((value) => value > 0))
     const last = computeAverage(power.slice(-chunk).filter((value) => value > 0))
@@ -2710,25 +3125,13 @@ function deriveDurabilitySignals(params: {
     lateSessionFadePct = round(fatigue?.decay, 1)
   }
 
-  let firstVsLastIntervalDeltaPct: number | null = null
-  if (actualIntervals.length >= 2) {
-    const first = actualIntervals[0]!
-    const last = actualIntervals[actualIntervals.length - 1]!
-    // The delta below is a ratio, so the units only need to agree between the
-    // two ends: an intensity factor scaled to a percent-of-threshold stands in
-    // when watts are missing.
-    const firstMetric =
-      family === 'run'
-        ? (first.avgSpeed ?? null)
-        : (first.avgPower ?? (first.intensity !== null ? first.intensity * 100 : null))
-    const lastMetric =
-      family === 'run'
-        ? (last.avgSpeed ?? null)
-        : (last.avgPower ?? (last.intensity !== null ? last.intensity * 100 : null))
-    if (firstMetric && lastMetric && firstMetric > 0) {
-      firstVsLastIntervalDeltaPct = round(((firstMetric - lastMetric) / firstMetric) * 100, 1)
-    }
-  }
+  // Scoped to the comparable reps when there is a rep set, so first-vs-last is
+  // a threshold rep against a threshold rep rather than against whatever block
+  // happened to be classified as work last.
+  const firstVsLastIntervalDeltaPct =
+    repScope.reps.length >= 2
+      ? firstVsLastRepDeltaPct(repScope.reps, family)
+      : firstVsLastRepDeltaPct(actualIntervals, family)
 
   const avgRecoveryDrop = Array.isArray(workout?.recoveryTrend)
     ? computeAverage(
@@ -2740,8 +3143,32 @@ function deriveDurabilitySignals(params: {
   const recoveryTrendScore =
     avgRecoveryDrop !== null ? round(clamp((avgRecoveryDrop / 35) * 100, 0, 100), 1) : null
 
+  // The pacing signal execution stability is measured on: watts for a ride,
+  // speed for a run. Anything else has no primary pacing stream here.
+  const stabilityStream = family === 'ride' ? power : family === 'run' ? speed : []
+  const stabilityWeight = family === 'run' ? 8 : 6
+
   let executionStabilityScore: number | null = null
-  if (family === 'ride' && power.length >= 120) {
+  if (repScope.active) {
+    // Mean CoV WITHIN each rep. The session-wide CoV below measures the
+    // difference between warmup, reps and recovery jogs, which for an interval
+    // session is the prescribed shape of the workout rather than a flaw in how
+    // it was ridden.
+    const repCoV =
+      stabilityStream.length >= 120 ? repScopedStabilityCoV(repScope.reps, stabilityStream) : null
+    if (repCoV !== null) {
+      executionStabilityScore = round(clamp(100 - repCoV * stabilityWeight, 0, 100), 1)
+    } else {
+      gates.executionStability = {
+        applicable: false,
+        reason:
+          stabilityStream.length < 120
+            ? 'Execution stability is unavailable because the primary pacing signal is missing or too sparse.'
+            : (repScope.reason ??
+              'Execution stability is measured within each work rep for this session shape, and the rep boundaries could not be located in the sample stream.')
+      }
+    }
+  } else if (family === 'ride' && power.length >= 120) {
     const stability = calculateStabilityMetrics(power, [])
     executionStabilityScore =
       stability !== null ? round(clamp(100 - stability.overallCoV * 6, 0, 100), 1) : null
@@ -2752,26 +3179,42 @@ function deriveDurabilitySignals(params: {
   }
 
   let repeatabilityScore: number | null = null
-  if (actualIntervals.length >= 3) {
+  if (repScope.active) {
+    // Comparable reps only. Lumping an endurance-buffer block in with threshold
+    // reps is what turned three reps at 271/274/276 W - a CoV of 0.75%, which is
+    // excellent - into a ~20/100 "inconsistent" verdict.
+    const efforts =
+      repScope.reps.length >= MIN_COMPARABLE_REPS ? resolveRepEfforts(repScope.reps, family) : null
+    const cov = efforts ? coefficientOfVariationPct(efforts.values) : null
+    if (cov !== null) {
+      repeatabilityScore = round(clamp(100 - cov * 8, 0, 100), 1)
+    } else {
+      gates.repeatability = {
+        applicable: false,
+        reason:
+          repScope.reason ??
+          `Repeatability needs at least ${MIN_COMPARABLE_REPS} comparable work reps carrying the same measurement, and this session does not provide them.`
+      }
+    }
+  } else if (actualIntervals.length >= 3) {
     const intervalMetrics = actualIntervals
       .map((interval) => (family === 'run' ? interval.avgSpeed : interval.avgPower))
       .filter((value): value is number => value !== null && Number.isFinite(value) && value > 0)
     if (intervalMetrics.length >= 3) {
-      const mean = intervalMetrics.reduce((sum, value) => sum + value, 0) / intervalMetrics.length
-      const variance =
-        intervalMetrics.reduce((sum, value) => sum + Math.pow(value - mean, 2), 0) /
-        intervalMetrics.length
-      const cov = mean > 0 ? (Math.sqrt(variance) / mean) * 100 : null
+      const cov = coefficientOfVariationPct(intervalMetrics)
       if (cov !== null) repeatabilityScore = round(clamp(100 - cov * 8, 0, 100), 1)
     }
   }
 
   return {
-    lateSessionFadePct,
-    firstVsLastIntervalDeltaPct,
-    recoveryTrendScore,
-    executionStabilityScore,
-    repeatabilityScore
+    durability: {
+      lateSessionFadePct,
+      firstVsLastIntervalDeltaPct,
+      recoveryTrendScore,
+      executionStabilityScore,
+      repeatabilityScore
+    },
+    gates
   }
 }
 
@@ -2780,21 +3223,47 @@ function deriveSportSpecificSignals(params: {
   family: ReturnType<typeof getWorkoutFamily>
   archetype: WorkoutAnalysisFactsV2['guardrails']['archetype']
   motionPattern: MotionPattern
-}): WorkoutAnalysisFactsV2['performanceSignals']['sportSpecific'] {
-  const { workout, family, archetype, motionPattern } = params
+  repScope: RepScope
+}): {
+  sportSpecific: WorkoutAnalysisFactsV2['performanceSignals']['sportSpecific']
+  gates: { cadenceDrift: SignalGate }
+} {
+  const { workout, family, archetype, motionPattern, repScope } = params
   const cadence = asNumberArray(workout?.streams?.cadence)
   const speed = asNumberArray(workout?.streams?.velocity)
   let cadenceDriftPct: number | null = null
   let cadenceStabilityScore: number | null = null
   let pacingDriftPct: number | null = null
+  let cadenceDriftGate: SignalGate = OPEN_GATE
   let torqueProfile: WorkoutAnalysisFactsV2['performanceSignals']['sportSpecific']['torqueProfile'] =
     'unknown'
 
-  if (cadence.length >= 120) {
+  if (repScope.active) {
+    // First rep versus last rep. The 20%-window form reads the warmup spin-up
+    // against the cooldown and reports the difference as fatigue-driven decay.
+    const repCadences = repScope.reps.map((rep) => positiveOrNull(rep.avgCadence))
+    const first = repCadences[0] ?? null
+    const last = repCadences[repCadences.length - 1] ?? null
+    if (repCadences.length >= 2 && first !== null && last !== null) {
+      cadenceDriftPct = round(((first - last) / first) * 100, 1)
+    } else {
+      cadenceDriftGate = {
+        applicable: false,
+        reason:
+          repScope.reason ??
+          'Cadence drift is measured first rep versus last rep for this session shape, and the reps carry no cadence.'
+      }
+    }
+  } else if (cadence.length >= 120) {
     const chunk = Math.max(1, Math.floor(cadence.length * 0.2))
     const first = computeAverage(cadence.slice(0, chunk).filter((value) => value > 0))
     const last = computeAverage(cadence.slice(-chunk).filter((value) => value > 0))
     if (first && last && first > 0) cadenceDriftPct = round(((first - last) / first) * 100, 1)
+  }
+
+  // Session-wide cadence stability is untouched by CW-393: it has no
+  // applicability gate and is out of that ticket's scope.
+  if (cadence.length >= 120) {
     const stability = calculateStabilityMetrics(cadence, [])
     if (stability) cadenceStabilityScore = round(clamp(100 - stability.overallCoV * 5, 0, 100), 1)
   }
@@ -2825,10 +3294,13 @@ function deriveSportSpecificSignals(params: {
   }
 
   return {
-    cadenceDriftPct,
-    cadenceStabilityScore,
-    torqueProfile,
-    pacingDriftPct
+    sportSpecific: {
+      cadenceDriftPct,
+      cadenceStabilityScore,
+      torqueProfile,
+      pacingDriftPct
+    },
+    gates: { cadenceDrift: cadenceDriftGate }
   }
 }
 
@@ -2839,52 +3311,58 @@ function deriveSignalApplicability(params: {
   motionPattern: MotionPattern
   durability: WorkoutAnalysisFactsV2['performanceSignals']['durability']
   sportSpecific: WorkoutAnalysisFactsV2['performanceSignals']['sportSpecific']
+  gates: DurabilityGates & { cadenceDrift: SignalGate }
 }): WorkoutAnalysisFactsV2['performanceSignals']['applicability'] {
-  const { workout, family, archetype, motionPattern, durability, sportSpecific } = params
+  const { workout, family, archetype, motionPattern, durability, sportSpecific, gates } = params
   const durationSec = Number(workout?.durationSec || 0)
   const hasReliableSteadyState =
     durationSec >= 1800 &&
     !motionPattern.stopGoLikely &&
     !['intervalled', 'stochastic'].includes(archetype.sessionSteadiness)
 
+  /**
+   * Applicability is `gate && value`, never `value` alone (CW-393).
+   *
+   * A number existing says nothing about whether it answers the question this
+   * session poses. The gate carries that judgement, and its reason - the one
+   * that names the actual session shape - wins over the generic fallback.
+   */
+  const resolve = (
+    gate: SignalGate,
+    value: number | null,
+    fallbackReason: string
+  ): SignalApplicability =>
+    gate.applicable && value !== null
+      ? { applicable: true, reason: null }
+      : { applicable: false, reason: gate.reason ?? fallbackReason }
+
   return {
-    lateSessionFade:
-      durability.lateSessionFadePct !== null
-        ? { applicable: true, reason: null }
-        : {
-            applicable: false,
-            reason: hasReliableSteadyState
-              ? 'Late-session fade could not be estimated from the available signals.'
-              : 'Late-session fade is not meaningful for stochastic, intervalled, or cooldown-biased sessions.'
-          },
-    executionStability:
-      durability.executionStabilityScore !== null
-        ? { applicable: true, reason: null }
-        : {
-            applicable: false,
-            reason:
-              family === 'ride' || family === 'run'
-                ? 'Execution stability is unavailable because the primary pacing signal is missing or too sparse.'
-                : 'Execution stability is not a primary signal for this modality.'
-          },
-    repeatability:
-      durability.repeatabilityScore !== null
-        ? { applicable: true, reason: null }
-        : {
-            applicable: false,
-            reason:
-              archetype.sessionSteadiness === 'intervalled'
-                ? 'Repeatability needs enough comparable work intervals and those were not available.'
-                : 'Repeatability is only meaningful when the session contains comparable repeated efforts.'
-          },
-    cadenceDrift:
-      sportSpecific.cadenceDriftPct !== null
-        ? { applicable: true, reason: null }
-        : {
-            applicable: false,
-            reason:
-              'Cadence drift is unavailable because cadence telemetry is missing or too sparse.'
-          },
+    lateSessionFade: resolve(
+      gates.lateSessionFade,
+      durability.lateSessionFadePct,
+      hasReliableSteadyState
+        ? 'Late-session fade could not be estimated from the available signals.'
+        : 'Late-session fade is not meaningful for stochastic, intervalled, or cooldown-biased sessions.'
+    ),
+    executionStability: resolve(
+      gates.executionStability,
+      durability.executionStabilityScore,
+      family === 'ride' || family === 'run'
+        ? 'Execution stability is unavailable because the primary pacing signal is missing or too sparse.'
+        : 'Execution stability is not a primary signal for this modality.'
+    ),
+    repeatability: resolve(
+      gates.repeatability,
+      durability.repeatabilityScore,
+      archetype.sessionSteadiness === 'intervalled'
+        ? 'Repeatability needs enough comparable work intervals and those were not available.'
+        : 'Repeatability is only meaningful when the session contains comparable repeated efforts.'
+    ),
+    cadenceDrift: resolve(
+      gates.cadenceDrift,
+      sportSpecific.cadenceDriftPct,
+      'Cadence drift is unavailable because cadence telemetry is missing or too sparse.'
+    ),
     pacingDrift:
       sportSpecific.pacingDriftPct !== null
         ? { applicable: true, reason: null }
@@ -3602,23 +4080,47 @@ export function buildWorkoutAnalysisFactsV2({
     refs,
     metricOrder: parseLegacyLoadPreference(sportSettings?.loadPreference)
   })
+  // One comparable-rep resolution, shared by every rep-scoped signal, so the
+  // durability and sport-specific blocks cannot disagree about which segments
+  // count as this session's reps (CW-393).
+  const repScope = resolveRepScope({ workout, plannedWorkout, family, refs, archetype })
+  if (repScope.active && repScope.reason) {
+    suppressedMetrics.push(repScope.reason)
+  }
+
   const plannedRecoveryTail = hasTerminalRecoveryPhase(workout, plannedWorkout, refs)
 
-  if (plannedRecoveryTail) {
+  // Only relevant while fade is read off the tail of the session. A rep-scoped
+  // fade compares rep to rep and never looks at the cooldown, so repeating this
+  // caution there would contradict a number that is now trustworthy (CW-393).
+  if (plannedRecoveryTail && !repScope.active) {
     suppressedMetrics.push(
       'Late-session fade should not be penalized because the workout ends with a planned recovery/cooldown phase.'
     )
   }
 
-  const durability = deriveDurabilitySignals({ workout, family, plannedWorkout, refs })
-  const sportSpecific = deriveSportSpecificSignals({ workout, family, archetype, motionPattern })
+  const { durability, gates: durabilityGates } = deriveDurabilitySignals({
+    workout,
+    family,
+    plannedWorkout,
+    refs,
+    repScope
+  })
+  const { sportSpecific, gates: sportSpecificGates } = deriveSportSpecificSignals({
+    workout,
+    family,
+    archetype,
+    motionPattern,
+    repScope
+  })
   const applicability = deriveSignalApplicability({
     workout,
     family,
     archetype,
     motionPattern,
     durability,
-    sportSpecific
+    sportSpecific,
+    gates: { ...durabilityGates, ...sportSpecificGates }
   })
   const currentPowerZoneTimes =
     computeZoneTimesFromSamples(workout?.streams?.watts, refs.powerZones) ??
