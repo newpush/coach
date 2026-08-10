@@ -7,6 +7,7 @@ import { logger } from '@trigger.dev/sdk/v3'
 import { workoutStreamRepository } from '../repositories/workoutStreamRepository'
 import { formatPromptPace } from '../ai-prompt-format'
 import { calculateHrZones, calculatePaceZones, calculatePowerZones } from '../zones'
+import { getHrStats, getPlausibleHrPeak } from '../workout-analysis-facts'
 
 /**
  * Threshold pace is taken directly off the best sustained 40 minute effort (no
@@ -324,29 +325,82 @@ export const thresholdDetectionService = {
       Array.isArray(workout.streams.time)
     ) {
       // MAX HR DETECTION
+      //
+      // The third instance of the never-fires-for-a-first-time-athlete guard
+      // (CW-446), and deliberately *not* fixed the way LTHR and FTP were. Those
+      // two infer a threshold from a 20 minute peak, so a first nomination needs
+      // corroborating effort or the coefficient mints a threshold off an easy
+      // segment. A session max HR infers nothing: it is an observed maximum, and
+      // asking an athlete to have worked hard before their highest recorded beat
+      // counts would reject the very sessions — a race, a hill sprint — where it
+      // is real. So the first nomination is simply allowed.
+      //
+      // What it is not allowed to do is nominate an artifact. An improvement is
+      // sanity-checked by the value it has to beat; a first nomination has
+      // nothing, so one 240 bpm sample of strap static would become the
+      // athlete's max HR and skew every HR zone derived from it, including
+      // interval detection's work bar (CW-383). CW-395 already knows what
+      // impossible heart rate looks like, at two levels, and both are used:
+      // `getHrStats` decides whether the workout's telemetry is trustworthy at
+      // all, and `getPlausibleHrPeak` picks the highest sample that survives the
+      // same band and rate-of-change rules. No second plausibility check is
+      // written here.
       const workoutMaxHr = workout.maxHr || Math.max(...(workout.streams.heartrate as number[]))
-      if (currentMaxHr && workoutMaxHr > currentMaxHr) {
-        results.maxHr = { old: currentMaxHr, new: workoutMaxHr, detected: true }
+      let nominatedMaxHr: number | null = null
+
+      if (hasPreviousValue(currentMaxHr)) {
+        // Improvement path, untouched: beating a stored max HR is its own
+        // evidence, and the value only ever ratchets upward.
+        if (workoutMaxHr > currentMaxHr) nominatedMaxHr = workoutMaxHr
+      } else {
+        const hrStats = getHrStats(workout)
+        // Note this reads the stream rather than `workout.maxHr`: the
+        // device-reported maximum is itself an unvetted raw maximum, which is
+        // precisely the number a first detection must not take on trust.
+        const plausiblePeak =
+          hrStats.usable && !hrStats.artifactFlag ? getPlausibleHrPeak(workout) : null
+
+        if (plausiblePeak) {
+          nominatedMaxHr = plausiblePeak
+        } else {
+          logger.log('First max HR nomination rejected: heart rate telemetry not trustworthy', {
+            workoutId: workout.id,
+            hrUsable: hrStats.usable,
+            hrArtifactFlag: hrStats.artifactFlag,
+            implausibleRatio: hrStats.implausibleRatio,
+            jumpRatio: hrStats.jumpRatio,
+            rawWorkoutMaxHr: workoutMaxHr
+          })
+        }
+      }
+
+      if (nominatedMaxHr) {
+        results.maxHr = { old: currentMaxHr || 0, new: nominatedMaxHr, detected: true }
         if (!dryRun && !noNotify) {
           await this.createThresholdRecommendation(
             workout.userId,
             workout.id,
             'MAX_HR',
-            currentMaxHr,
-            workoutMaxHr,
-            workoutMaxHr,
+            currentMaxHr || 0,
+            nominatedMaxHr,
+            nominatedMaxHr,
             sportName,
             workout.date,
             prisma,
             noNotify
           )
+          const workoutLabel = workout.title || workout.type || 'workout'
           await createUserNotification(workout.userId, {
             title: sportName
               ? `New Max Heart Rate Detected (${sportName})`
               : 'New Max Heart Rate Detected',
-            message: sportName
-              ? `We detected a new peak heart rate of ${workoutMaxHr} bpm for your ${sportName} profile during "${workout.title || workout.type || 'workout'}".`
-              : `We detected a new peak heart rate of ${workoutMaxHr} bpm during "${workout.title || workout.type || 'workout'}".`,
+            message: hasPreviousValue(currentMaxHr)
+              ? sportName
+                ? `We detected a new peak heart rate of ${nominatedMaxHr} bpm for your ${sportName} profile during "${workoutLabel}".`
+                : `We detected a new peak heart rate of ${nominatedMaxHr} bpm during "${workoutLabel}".`
+              : sportName
+                ? `We detected your ${sportName} profile max heart rate: ${nominatedMaxHr} bpm, based on "${workoutLabel}".`
+                : `We detected your max heart rate: ${nominatedMaxHr} bpm, based on "${workoutLabel}".`,
             icon: 'i-heroicons-heart',
             link: `/activities/${workout.id}`
           })

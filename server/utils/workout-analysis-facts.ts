@@ -445,7 +445,21 @@ const HR_CORRUPTION_FLAG_RATIO = 0.02
 /** At 5% the artifacts are systemic, not isolated, and derived HR facts stop being safe. */
 const HR_CORRUPTION_UNUSABLE_RATIO = 0.05
 
-function getHrStats(workout: any) {
+/**
+ * A live reading inside CW-395's plausible band. Dropouts (zero / non-finite)
+ * and out-of-band artifacts are neither: they are counted by their own ratios in
+ * `getHrStats`, so nothing here judges them twice.
+ */
+function isPlausibleHrSample(value: number | undefined): value is number {
+  return (
+    typeof value === 'number' &&
+    Number.isFinite(value) &&
+    value >= HR_MIN_PLAUSIBLE_BPM &&
+    value <= HR_MAX_PLAUSIBLE_BPM
+  )
+}
+
+export function getHrStats(workout: any) {
   const hrStream = asNumberArray(workout?.streams?.heartrate)
   if (hrStream.length === 0) {
     return {
@@ -484,11 +498,7 @@ function getHrStats(workout: any) {
   // counting them here too would charge one defect to two ratios and push streams past
   // the degrade threshold on the strength of a single artifact. The two checks therefore
   // stay orthogonal: this one catches impossible movement between believable values.
-  const isLivePlausible = (value: number | undefined): value is number =>
-    typeof value === 'number' &&
-    Number.isFinite(value) &&
-    value >= HR_MIN_PLAUSIBLE_BPM &&
-    value <= HR_MAX_PLAUSIBLE_BPM
+  const isLivePlausible = isPlausibleHrSample
   const timeStream = asNumberArray(workout?.streams?.time)
   const hasAlignedTime = timeStream.length === hrStream.length
   let jumpCount = 0
@@ -527,6 +537,77 @@ function getHrStats(workout: any) {
     artifactFlag,
     usable
   }
+}
+
+/**
+ * The highest heart-rate sample in `workout` that CW-395's plausibility rules
+ * accept, or `null` when the stream carries none.
+ *
+ * `getHrStats` asks "is this stream trustworthy as a whole", and answers in
+ * ratios. That is the wrong question for a peak, which is decided by a single
+ * sample: one 240 bpm artifact in an hour of clean telemetry moves no ratio past
+ * its threshold, so the stream stays `usable` while its raw `Math.max` is strap
+ * static. The two are companions on the same two rules and the same constants —
+ * no second plausibility standard is introduced here:
+ *
+ * 1. The sample sits inside the plausible band (`HR_MIN/MAX_PLAUSIBLE_BPM`).
+ * 2. It is not an isolated spike. A sample the stream both jumps *to* and jumps
+ *    away *from* faster than `HR_MAX_DELTA_BPM_PER_SEC` is electrical noise, not
+ *    a heart rate. Both sides are required on purpose: the start of a hard
+ *    interval arrives just as abruptly, but it is then *held*, so it departs
+ *    within the rate limit and is kept. A sample that arrives implausibly at the
+ *    very end of the stream has nothing to corroborate it and is dropped.
+ *
+ * Dropouts are skipped rather than compared against — a zero is a missing
+ * sample, not a heart rate — and deltas are measured against real elapsed time
+ * rather than sample index, both matching `getHrStats`.
+ *
+ * Read this for a value that will be shown to, or acted on by, an athlete (the
+ * first max-HR nomination in `thresholdDetectionService`, CW-446). It is not a
+ * substitute for `getHrStats`: a stream flagged unusable there should not be
+ * nominating anything, whatever its cleanest sample says.
+ */
+export function getPlausibleHrPeak(workout: any): number | null {
+  const hrStream = asNumberArray(workout?.streams?.heartrate)
+  if (hrStream.length === 0) return null
+
+  const timeStream = asNumberArray(workout?.streams?.time)
+  const hasAlignedTime = timeStream.length === hrStream.length
+
+  const live: { value: number; timeSec: number }[] = []
+  for (let index = 0; index < hrStream.length; index += 1) {
+    const value = hrStream[index]
+    if (!isPlausibleHrSample(value)) continue
+    const stamp = hasAlignedTime ? timeStream[index] : undefined
+    live.push({
+      value,
+      timeSec: typeof stamp === 'number' && Number.isFinite(stamp) ? stamp : index
+    })
+  }
+  if (live.length === 0) return null
+
+  const exceedsRate = (
+    from: { value: number; timeSec: number },
+    to: { value: number; timeSec: number }
+  ) => {
+    const rawDelta = to.timeSec - from.timeSec
+    const seconds = Number.isFinite(rawDelta) && rawDelta > 0 ? rawDelta : 1
+    return Math.abs(to.value - from.value) / seconds > HR_MAX_DELTA_BPM_PER_SEC
+  }
+
+  let peak: number | null = null
+  for (let index = 0; index < live.length; index += 1) {
+    const sample = live[index]!
+    const previous = live[index - 1]
+    const next = live[index + 1]
+    // The first live sample is the baseline: it has not jumped from anything.
+    const arrivedImplausibly = previous ? exceedsRate(previous, sample) : false
+    const departedImplausibly = next ? exceedsRate(sample, next) : true
+    if (arrivedImplausibly && departedImplausibly) continue
+    if (peak === null || sample.value > peak) peak = sample.value
+  }
+
+  return peak
 }
 
 function getAnalysisMode(params: {
