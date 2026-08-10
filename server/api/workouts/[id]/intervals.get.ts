@@ -5,15 +5,13 @@ import { attachStreamToWorkout } from '../../../utils/repositories/workoutStream
 import { sportSettingsRepository } from '../../../utils/repositories/sportSettingsRepository'
 import { calculateRollingNormalizedPower } from '../../../utils/power-metrics'
 import {
-  detectIntervals,
   findPeakEfforts,
   calculateHeartRateRecovery,
   calculateAerobicDecoupling,
   calculateCoastingStats,
   detectSurgesAndFades,
   calculateRecoveryRateTrend,
-  resolveProviderIntervalTypes,
-  resolveHrWorkThreshold
+  resolveProviderIntervalTypes
 } from '../../../utils/interval-detection'
 import {
   calculateWPrimeBalance,
@@ -22,7 +20,10 @@ import {
   calculateFatigueSensitivity,
   calculateStabilityMetrics
 } from '../../../utils/performance-metrics'
-import { getActualIntervalsSourceForAnalysis } from '../../../utils/workout-analysis-facts'
+import {
+  buildDetectedIntervalCandidate,
+  getActualIntervalsSourceForAnalysis
+} from '../../../utils/workout-analysis-facts'
 
 defineRouteMeta({
   openAPI: {
@@ -251,57 +252,33 @@ export default defineEventHandler(async (event) => {
 
   const syncedIntervals = mapSyncedIntervals(icuIntervalsRaw)
 
+  // Audit-only since CW-434: the detection run gets its planned steps from the shared
+  // builder (which flattens them through `toDetectionPlannedSteps`), so this raw list is
+  // used purely to report whether a plan was available to arbitrate against.
   const plannedSteps = (workout.plannedWorkout?.structuredWorkout as any)?.steps || []
 
   // B. Intervals from our engine
-  let detectedEngineIntervals: any[] = []
-  let autoDetectionMetric = ''
-
-  if (hasWatts) {
-    autoDetectionMetric = 'power'
-    const smoothedPowerStream = calculateRollingNormalizedPower(wattsStream!)
-    detectedEngineIntervals = detectIntervals(
-      time,
-      wattsStream!,
-      'power',
-      calculationFtp,
-      plannedSteps,
-      smoothedPowerStream,
-      cadenceStream || undefined
-    )
-  } else if (
-    velocityStream &&
-    velocityStream.length > 0 &&
-    (workout.type === 'Run' || workout.type === 'Swim')
-  ) {
-    autoDetectionMetric = 'pace'
-    detectedEngineIntervals = detectIntervals(
-      time,
-      velocityStream!,
-      'pace',
-      calculationThresholdPace,
-      plannedSteps,
-      undefined,
-      cadenceStream || undefined
-    )
-  } else if (hasHr) {
-    autoDetectionMetric = 'heartrate'
-    const threshold = resolveHrWorkThreshold({
-      ...hrRefs,
-      sessionMaxHr: workout.maxHr
-    })
-    detectedEngineIntervals = detectIntervals(
-      time,
-      hrStream!,
-      'heartrate',
-      threshold,
-      plannedSteps,
-      undefined,
-      cadenceStream || undefined,
-      // Zone reference, kept separate from the work bar above (CW-400).
-      hrRefs
-    )
-  }
+  //
+  // Built by the shared builder in the facts layer, NOT rebuilt here (CW-434). This
+  // endpoint used to have its own copy of the metric-priority rule, and it disagreed
+  // with the facts layer's on three points — watts before pace regardless of sport, a
+  // raw `type === 'Run' || 'Swim'` string match instead of `getWorkoutFamily`, and no
+  // `stream.length === time.length` check. The arbitration below is computed in the
+  // facts layer, so it scored ITS candidate while the chart rendered this one: for a
+  // power-metered run the verdict described a pace-detected segmentation the athlete
+  // never saw. One builder, one candidate, one verdict.
+  //
+  // `buildDetectedIntervalCandidate` returns engine-shaped `Interval`s, so the
+  // `start_index`/`end_index` that enrichment and charting need are already here and
+  // nothing is converted between shapes.
+  const detectionCandidate = buildDetectedIntervalCandidate(
+    workout,
+    workout.plannedWorkout,
+    analysisRefs
+  )
+  const detectedEngineIntervals: any[] = detectionCandidate.intervals
+  // The metric the shared builder actually segmented on, not a guess re-derived here.
+  const autoDetectionMetric = detectionCandidate.metric ?? ''
 
   // C. Selection Logic
   //
