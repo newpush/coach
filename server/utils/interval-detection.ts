@@ -904,26 +904,47 @@ export function timeWeightedMean(
   return totalSeconds > 0 ? weightedSum / totalSeconds : null
 }
 
+/** One duration bucket `findPeakEfforts` searches for. */
+export interface PeakDuration {
+  sec: number
+  label: string
+}
+
 /**
- * Find peak efforts for standard durations (1min, 5min, 20min, etc.)
+ * The standard duration buckets every peak consumer shares.
+ *
+ * This list is load-bearing well beyond the peaks themselves: `pbDetectionService`
+ * mints a `POWER_<LABEL>` personal-best type from every entry, and both intervals
+ * endpoints return the buckets verbatim as rows in the UI peaks table. Adding a
+ * bucket here therefore invents a new PB type and a new UI row for every athlete.
+ * A caller that needs an off-list duration for its own maths should pass it via
+ * `findPeakEfforts`' `durations` argument instead of extending this list.
+ */
+export const DEFAULT_PEAK_DURATIONS: readonly PeakDuration[] = [
+  { sec: 5, label: '5s' },
+  { sec: 30, label: '30s' },
+  { sec: 60, label: '1m' },
+  { sec: 300, label: '5m' },
+  { sec: 600, label: '10m' },
+  { sec: 1200, label: '20m' },
+  { sec: 3600, label: '60m' }
+]
+
+/**
+ * Find peak efforts for standard durations (1min, 5min, 20min, etc.).
+ *
+ * `durations` defaults to {@link DEFAULT_PEAK_DURATIONS}. Pass an explicit list
+ * only when the caller consumes the result itself — anything handed to the PB
+ * detector or to the intervals endpoints must keep the default buckets.
  */
 export function findPeakEfforts(
   times: number[],
   values: number[],
-  metric: 'power' | 'heartrate' | 'pace'
+  metric: 'power' | 'heartrate' | 'pace',
+  durations: readonly PeakDuration[] = DEFAULT_PEAK_DURATIONS
 ): PeakEffort[] {
   if (!values || values.length === 0) return []
   if (!times || times.length < 2) return []
-
-  const durations = [
-    { sec: 5, label: '5s' },
-    { sec: 30, label: '30s' },
-    { sec: 60, label: '1m' },
-    { sec: 300, label: '5m' },
-    { sec: 600, label: '10m' },
-    { sec: 1200, label: '20m' },
-    { sec: 3600, label: '60m' }
-  ]
 
   const peaks: PeakEffort[] = []
 
