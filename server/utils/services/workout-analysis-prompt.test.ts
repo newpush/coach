@@ -1,9 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import {
+  ANALYSIS_SCORE_MAX,
+  ANALYSIS_SCORE_MIN,
+  ANALYSIS_SECTION_STATUSES,
+  analysisSchema,
   buildAnalysisFactsPromptBlock,
   buildAnalysisGuardrailInstructions,
   buildWorkoutAnalysisData,
   buildWorkoutAnalysisPrompt,
+  clampAnalysisScore,
   getAnalysisSectionsGuidance,
   getWorkoutTypeGuidance,
   normalizeRunningCadence
@@ -432,5 +437,135 @@ describe('shared-module wiring', () => {
     expect(serviceSource).toContain("} from './workout-analysis-prompt'")
     expect(serviceSource).not.toContain('function buildWorkoutAnalysisPrompt')
     expect(serviceSource).not.toContain('function buildWorkoutAnalysisData')
+  })
+})
+
+/**
+ * CW-403 regression coverage.
+ *
+ * The response schema used to exist twice -- once in `trigger/analyze-workout.ts`
+ * (1-10 scores, `excellent/good/moderate/needs_improvement/poor`) and once in
+ * `server/utils/services/workoutAnalysisService.ts` (0-100 scores,
+ * `excellent/good/fair/needs_attention/info`). Gemini enforces whichever schema it is
+ * handed, so the service path -- the one that actually runs in production -- forced the
+ * model off the vocabulary the prompt asks for, and every UI status->colour mapper fell
+ * through to `neutral`: problem sections rendered grey instead of red.
+ *
+ * These tests read the vocabulary and the score scale back out of the *prompt string*
+ * and compare them to the schema, so the two cannot drift apart again silently.
+ */
+describe('analysisSchema matches the prompt it is handed with', () => {
+  const sectionStatusEnum = (analysisSchema.properties.sections as any).items.properties.status.enum
+  const scoreProps = (analysisSchema.properties.scores as any).properties
+  const scoreKeys = ['overall', 'technical', 'effort', 'pacing', 'execution'] as const
+
+  /** Every distinct "Assign status: a/b/c" vocabulary the prompt instructs, across sports. */
+  function statusVocabulariesInstructedByPrompt(): string[][] {
+    const guidance = [
+      getAnalysisSectionsGuidance('Strength', false, true),
+      getAnalysisSectionsGuidance('Run', true, false),
+      getAnalysisSectionsGuidance('Ride', true, false)
+    ].join('\n')
+
+    const matches = [...guidance.matchAll(/Assign status: ([a-z_/]+)/g)]
+    expect(matches.length).toBeGreaterThan(0)
+    return matches.map((m) => m[1]!.split('/'))
+  }
+
+  it('instructs exactly one status vocabulary across every sport variant', () => {
+    const vocabularies = statusVocabulariesInstructedByPrompt()
+    for (const vocabulary of vocabularies) {
+      expect(vocabulary).toEqual(vocabularies[0])
+    }
+  })
+
+  it('declares the section status enum the prompt asks for, and nothing else', () => {
+    const [instructed] = statusVocabulariesInstructedByPrompt()
+
+    expect(sectionStatusEnum).toEqual(instructed)
+    expect(sectionStatusEnum).toEqual([...ANALYSIS_SECTION_STATUSES])
+    // The retired vocabulary must never come back: the UI mappers do not understand it.
+    expect(sectionStatusEnum).not.toContain('fair')
+    expect(sectionStatusEnum).not.toContain('needs_attention')
+    expect(sectionStatusEnum).not.toContain('info')
+  })
+
+  it('declares 1-10 score bounds, matching the scale the prompt states', () => {
+    const prompt = buildWorkoutAnalysisPrompt(
+      buildWorkoutAnalysisData(RIDE_WORKOUT),
+      'Europe/Budapest',
+      'Supportive',
+      undefined,
+      USER_PROFILE
+    )
+    expect(prompt).toContain('**Performance Scores** (1-10 scale for tracking progress over time)')
+
+    expect(ANALYSIS_SCORE_MIN).toBe(1)
+    expect(ANALYSIS_SCORE_MAX).toBe(10)
+    for (const key of scoreKeys) {
+      expect(scoreProps[key].minimum).toBe(1)
+      expect(scoreProps[key].maximum).toBe(10)
+      expect(scoreProps[key].description).toContain('(1-10)')
+    }
+  })
+
+  it('is the exact same object on both analysis entry points', () => {
+    expect(analyzeWorkoutTrigger.analysisSchema).toBe(analysisSchema)
+  })
+
+  it('is not redefined by either entry point', async () => {
+    const fs = await import('node:fs')
+    const serviceSource = fs.readFileSync(
+      new URL('./workoutAnalysisService.ts', import.meta.url),
+      'utf-8'
+    )
+    const triggerSource = fs.readFileSync(
+      new URL('../../../trigger/analyze-workout.ts', import.meta.url),
+      'utf-8'
+    )
+
+    expect(serviceSource).not.toContain('const analysisSchema')
+    expect(triggerSource).not.toContain('const analysisSchema')
+    expect(serviceSource).not.toContain('interface StructuredAnalysis')
+    expect(triggerSource).not.toContain('interface StructuredAnalysis')
+    // The service must import, never re-export: server/utils is Nitro auto-imported and
+    // re-exporting produces "Duplicated imports" warnings (CW-392 NOTE, CW-404).
+    expect(serviceSource).not.toMatch(/^export \{/m)
+  })
+})
+
+describe('clampAnalysisScore', () => {
+  it('is the single implementation both entry points call', async () => {
+    expect(analyzeWorkoutTrigger.clampAnalysisScore).toBe(clampAnalysisScore)
+
+    const fs = await import('node:fs')
+    const serviceSource = fs.readFileSync(
+      new URL('./workoutAnalysisService.ts', import.meta.url),
+      'utf-8'
+    )
+    const triggerSource = fs.readFileSync(
+      new URL('../../../trigger/analyze-workout.ts', import.meta.url),
+      'utf-8'
+    )
+    expect(serviceSource).not.toContain('const clampScore')
+    expect(triggerSource).not.toContain('const clampScore')
+  })
+
+  it('keeps 1-10 scores on the stored scale', () => {
+    expect(clampAnalysisScore(1)).toBe(1)
+    expect(clampAnalysisScore(7.4)).toBe(7)
+    expect(clampAnalysisScore(10)).toBe(10)
+  })
+
+  it('folds a stray 0-100 score back onto the stored 1-10 scale', () => {
+    // Safety net for responses produced while one entry point still declared 0-100.
+    expect(clampAnalysisScore(88)).toBe(9)
+    expect(clampAnalysisScore(100)).toBe(10)
+  })
+
+  it('returns null for non-numeric input', () => {
+    expect(clampAnalysisScore(null)).toBeNull()
+    expect(clampAnalysisScore(undefined)).toBeNull()
+    expect(clampAnalysisScore(Number.NaN)).toBeNull()
   })
 })

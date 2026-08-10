@@ -55,6 +55,289 @@ export interface WorkoutAnalysisPromptRecentContext {
 }
 
 /**
+ * The section-status vocabulary the prompt instructs the model to emit -- see the
+ * repeated "Assign status: excellent/good/moderate/needs_improvement/poor" lines in
+ * {@link getAnalysisSectionsGuidance}.
+ *
+ * This is also the vocabulary every UI status->colour mapper understands
+ * (`app/pages/workouts/[id]/index.vue`, `app/components/ScoreDetailModal.vue`,
+ * `app/pages/report/[id].vue`, `app/pages/share/workouts/[token].vue`). Until CW-403
+ * the Redis-worker service handed Gemini a *different* enum
+ * (`fair`/`needs_attention`/`info`), which those mappers fall through to `neutral`,
+ * so problem sections rendered grey instead of red. Keep this list, the schema enum
+ * below, and the prompt text in lockstep; `workout-analysis-prompt.test.ts` fails if
+ * they drift.
+ */
+export const ANALYSIS_SECTION_STATUSES = [
+  'excellent',
+  'good',
+  'moderate',
+  'needs_improvement',
+  'poor'
+] as const
+
+export type AnalysisSectionStatus = (typeof ANALYSIS_SECTION_STATUSES)[number]
+
+/**
+ * Inclusive bounds of the performance-score scale. The prompt asks for
+ * "**Performance Scores** (1-10 scale for tracking progress over time)" and the DB
+ * columns (`overallScore`, `technicalScore`, ...) already hold 1-10 values, so this
+ * is the scale the schema must declare too. Do not change without a data migration.
+ */
+export const ANALYSIS_SCORE_MIN = 1
+export const ANALYSIS_SCORE_MAX = 10
+
+/**
+ * Shape of the structured analysis Gemini returns for {@link analysisSchema}.
+ *
+ * `status` is typed as a plain `string` on purpose: analyses stored before CW-403 can
+ * contain the retired `fair`/`needs_attention`/`info` values, and the renderers must
+ * keep accepting them.
+ */
+export interface StructuredAnalysis {
+  type: string
+  title: string
+  date?: string
+  executive_summary: string
+  sections?: Array<{
+    title: string
+    status: string
+    status_label?: string
+    analysis_points: string[]
+  }>
+  recommendations?: Array<{
+    title: string
+    description: string
+    priority?: string
+  }>
+  strengths?: string[]
+  weaknesses?: string[]
+  scores?: {
+    overall: number
+    overall_explanation: string
+    technical: number
+    technical_explanation: string
+    effort: number
+    effort_explanation: string
+    pacing: number
+    pacing_explanation: string
+    execution: number
+    execution_explanation: string
+  }
+  metrics_summary?: {
+    avg_power?: number
+    ftp?: number
+    intensity?: number
+    duration_minutes?: number
+    tss?: number
+  }
+}
+
+/**
+ * The single response schema handed to `generateStructuredAnalysis` by BOTH workout
+ * analysis entry points -- the Redis-worker service
+ * (`server/utils/services/workoutAnalysisService.ts`, the one that runs in production)
+ * and the Trigger.dev task (`trigger/analyze-workout.ts`).
+ *
+ * It lives next to the prompt that describes it so the two cannot drift (CW-403).
+ * Gemini enforces the schema, so anything declared here overrides what the prompt
+ * text asks for.
+ */
+export const analysisSchema = {
+  type: 'object',
+  properties: {
+    type: {
+      type: 'string',
+      description: 'Type of analysis: workout, weekly_report, planning, etc.',
+      enum: ['workout', 'weekly_report', 'planning', 'comparison']
+    },
+    title: {
+      type: 'string',
+      description: 'Title of the analysis'
+    },
+    date: {
+      type: 'string',
+      description: 'Date or date range of the analysis'
+    },
+    executive_summary: {
+      type: 'string',
+      description: '2-3 sentence high-level summary of key findings'
+    },
+    sections: {
+      type: 'array',
+      description: 'Analysis sections with status and points',
+      items: {
+        type: 'object',
+        properties: {
+          title: {
+            type: 'string',
+            description: 'Section title (e.g., Pacing Strategy, Power Application)'
+          },
+          status: {
+            type: 'string',
+            description: 'Overall assessment',
+            enum: [...ANALYSIS_SECTION_STATUSES]
+          },
+          status_label: {
+            type: 'string',
+            description: 'Display label for status'
+          },
+          analysis_points: {
+            type: 'array',
+            description: 'Detailed analysis points for this section',
+            items: {
+              type: 'string'
+            }
+          }
+        },
+        required: ['title', 'status', 'analysis_points']
+      }
+    },
+    recommendations: {
+      type: 'array',
+      description: 'Actionable recommendations',
+      items: {
+        type: 'object',
+        properties: {
+          title: {
+            type: 'string',
+            description: 'Recommendation title'
+          },
+          description: {
+            type: 'string',
+            description: 'Detailed recommendation'
+          },
+          priority: {
+            type: 'string',
+            description: 'Priority level',
+            enum: ['high', 'medium', 'low']
+          }
+        },
+        required: ['title', 'description']
+      }
+    },
+    strengths: {
+      type: 'array',
+      description: 'Key strengths identified',
+      items: {
+        type: 'string'
+      }
+    },
+    weaknesses: {
+      type: 'array',
+      description: 'Areas needing improvement',
+      items: {
+        type: 'string'
+      }
+    },
+    scores: {
+      type: 'object',
+      description:
+        'Performance scores on 1-10 scale for tracking over time, with detailed explanations',
+      properties: {
+        overall: {
+          type: 'number',
+          description: 'Overall workout quality (1-10)',
+          minimum: ANALYSIS_SCORE_MIN,
+          maximum: ANALYSIS_SCORE_MAX
+        },
+        overall_explanation: {
+          type: 'string',
+          description:
+            'Detailed explanation of overall quality: key factors contributing to score, what went well, what could improve, and 2-3 specific actionable improvements'
+        },
+        technical: {
+          type: 'number',
+          description: 'Technical execution score - form, technique, efficiency (1-10)',
+          minimum: ANALYSIS_SCORE_MIN,
+          maximum: ANALYSIS_SCORE_MAX
+        },
+        technical_explanation: {
+          type: 'string',
+          description:
+            'Technical analysis: power application smoothness, cadence consistency, form observations, and specific technique improvements needed'
+        },
+        effort: {
+          type: 'number',
+          description: 'Effort appropriateness relative to plan and goals (1-10)',
+          minimum: ANALYSIS_SCORE_MIN,
+          maximum: ANALYSIS_SCORE_MAX
+        },
+        effort_explanation: {
+          type: 'string',
+          description:
+            'Effort management analysis: whether intensity matched goals, HR/power relationship, and recommendations for effort control'
+        },
+        pacing: {
+          type: 'number',
+          description: 'Pacing strategy and execution quality (1-10)',
+          minimum: ANALYSIS_SCORE_MIN,
+          maximum: ANALYSIS_SCORE_MAX
+        },
+        pacing_explanation: {
+          type: 'string',
+          description:
+            'Pacing strategy analysis: consistency throughout workout, whether pacing was appropriate, and specific pacing improvements'
+        },
+        execution: {
+          type: 'number',
+          description: 'How well the workout plan was executed (1-10)',
+          minimum: ANALYSIS_SCORE_MIN,
+          maximum: ANALYSIS_SCORE_MAX
+        },
+        execution_explanation: {
+          type: 'string',
+          description:
+            'Execution quality analysis: adherence to workout structure, target achievement, and recommendations for better execution'
+        }
+      },
+      required: [
+        'overall',
+        'overall_explanation',
+        'technical',
+        'technical_explanation',
+        'effort',
+        'effort_explanation',
+        'pacing',
+        'pacing_explanation',
+        'execution',
+        'execution_explanation'
+      ]
+    },
+    metrics_summary: {
+      type: 'object',
+      description: 'Key metrics at a glance',
+      properties: {
+        avg_power: { type: 'number' },
+        ftp: { type: 'number' },
+        intensity: { type: 'number' },
+        duration_minutes: { type: 'number' },
+        tss: { type: 'number' }
+      }
+    }
+  },
+  required: ['type', 'title', 'executive_summary', 'sections', 'scores']
+}
+
+/**
+ * Normalise a model-supplied performance score to the 1-10 integer scale the
+ * `*Score` workout columns hold.
+ *
+ * The `> 10` branch is a safety net for historic responses produced while one entry
+ * point still declared a 0-100 schema; it is kept so a stray 0-100 score is folded
+ * back onto the stored scale instead of being clamped flat to 10.
+ *
+ * Named `clampAnalysisScore` rather than `clampScore` because everything under
+ * `server/utils` is Nitro auto-imported and `clampScore` is already used as a local
+ * (0-100) helper elsewhere in the server tree.
+ */
+export function clampAnalysisScore(val?: number | null): number | null {
+  if (typeof val !== 'number' || Number.isNaN(val)) return null
+  const num = val > ANALYSIS_SCORE_MAX ? val / 10 : val
+  return Math.min(ANALYSIS_SCORE_MAX, Math.max(ANALYSIS_SCORE_MIN, Math.round(num)))
+}
+
+/**
  * Running exports sometimes report "per-foot" cadence (< 120). Convert those into
  * total steps per minute so the model never reads a 85 spm run as a form problem.
  *
