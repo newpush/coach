@@ -3,8 +3,10 @@ import { calculateRollingNormalizedPower } from './power-metrics'
 import { toIntensityFactorFromTarget } from './structured-workout-persistence'
 import {
   detectIntervals,
+  normalizePlannedStepType,
   resolveHrWorkThreshold,
   resolveProviderIntervalTypes,
+  PLANNED_WORK_INTENSITY_FACTOR,
   type Interval
 } from './interval-detection'
 import { parseLegacyLoadPreference, type MetricTarget } from './workout-target-policy'
@@ -1540,6 +1542,11 @@ function flattenPlannedSteps(
       else if (metric === 'rpe' && typeof step.rpe === 'number')
         intensityFactor = clamp(step.rpe / 10, 0.3, 1.5)
 
+      // Same rule as the shared `normalizePlannedStepType` (which was lifted
+      // from here): a recovery label only sticks when the step's own numeric
+      // target does not contradict it. Kept inline because this path needs the
+      // work/recovery split rather than the four detection types, but the
+      // threshold is the shared constant so the two cannot drift apart.
       const hasRecoveryLabel = recoveryTokens.some(
         (token) => normalizedType.includes(token) || stepName.includes(token)
       )
@@ -1547,7 +1554,9 @@ function flattenPlannedSteps(
       const isRecovery =
         isWarmOrCool ||
         (hasRecoveryLabel &&
-          (intensityFactor === null || !Number.isFinite(intensityFactor) || intensityFactor < 0.8))
+          (intensityFactor === null ||
+            !Number.isFinite(intensityFactor) ||
+            intensityFactor < PLANNED_WORK_INTENSITY_FACTOR))
 
       flattened.push({
         type: stepType,
@@ -1696,17 +1705,6 @@ function mapIntervalsToActual(intervals: any[]): ActualInterval[] {
     .filter((interval) => interval.durationSeconds > 0)
 }
 
-function normalizePlannedStepType(
-  type: unknown
-): 'WORK' | 'RECOVERY' | 'WARMUP' | 'COOLDOWN' | undefined {
-  const normalized = String(type || '').toLowerCase()
-  if (!normalized) return undefined
-  if (normalized.includes('warm')) return 'WARMUP'
-  if (normalized.includes('cool')) return 'COOLDOWN'
-  if (normalized.includes('rest') || normalized.includes('recover')) return 'RECOVERY'
-  return 'WORK'
-}
-
 /**
  * Flatten a structured workout into the shape `detectIntervals` consumes.
  *
@@ -1719,6 +1717,13 @@ function normalizePlannedStepType(
  * wrong session shape (CW-402). Callers without references may still pass a
  * zeroed refs object: the promotion then simply cannot fire, which is the
  * pre-fix behaviour.
+ *
+ * This is also the ONLY place in the detection pipeline that classifies a step:
+ * it is the last layer that can resolve an intensity factor, so it runs the
+ * shared `normalizePlannedStepType` with the name AND that intensity factor and
+ * emits a resolved type. `flattenPlannedStepsForDetection` downstream then
+ * takes that type as the answer instead of re-deriving it from the free-text
+ * name, which is what used to undo the promotion (CW-414).
  */
 function toDetectionPlannedSteps(
   steps: any[],
@@ -1766,14 +1771,17 @@ function toDetectionPlannedSteps(
               : metric === 'rpe' && typeof step.rpe === 'number'
                 ? clamp(step.rpe / 10, 0.3, 1.5)
                 : null
-      const normalizedType = normalizePlannedStepType(step.type)
-      const type =
-        normalizedType === 'RECOVERY' &&
-        intensity !== null &&
-        Number.isFinite(intensity) &&
-        intensity >= 0.8
-          ? 'WORK'
-          : normalizedType
+      // One call, one rule: the recovery label (from the type or the name) is
+      // honoured unless this step's own numeric target says otherwise. The
+      // RECOVERY -> WORK promotion of CW-402 is the intensity veto inside
+      // `normalizePlannedStepType`; the name demotion the adherence path has
+      // always applied now happens here too, gated by the same intensity, so
+      // both sides of the analysis classify a step identically (CW-414).
+      const type = normalizePlannedStepType({
+        type: step.type,
+        name: step.name,
+        intensityFactor: intensity
+      })
 
       planned.push({
         name: step.name,
