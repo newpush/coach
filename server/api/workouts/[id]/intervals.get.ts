@@ -11,8 +11,10 @@ import {
   calculateCoastingStats,
   detectSurgesAndFades,
   calculateRecoveryRateTrend,
-  resolveProviderIntervalTypes
+  resolveProviderIntervalTypes,
+  resolveHrWorkThreshold
 } from '../../../utils/interval-detection'
+import { sportSettingsRepository } from '../../../utils/repositories/sportSettingsRepository'
 import {
   calculateWPrimeBalance,
   calculateEfficiencyFactorDecay,
@@ -96,6 +98,7 @@ export default defineEventHandler(async (event) => {
       id: true,
       ftp: true,
       maxHr: true,
+      lthr: true,
       email: true
     }
   })
@@ -246,8 +249,19 @@ export default defineEventHandler(async (event) => {
     )
   } else if (hasHr) {
     autoDetectionMetric = 'heartrate'
-    const maxHr = workout.maxHr || user.maxHr
-    const threshold = maxHr ? maxHr * 0.7 : undefined
+    // Source the reference from the athlete's PROFILE. Using this workout's own
+    // max HR would make the bar self-referential and drift session to session,
+    // so it is only reached as an explicit last resort inside
+    // `resolveHrWorkThreshold` when the profile carries neither LTHR nor max HR.
+    const sportSettings = await sportSettingsRepository.getForActivityType(
+      user.id,
+      String(workout.type || '')
+    )
+    const threshold = resolveHrWorkThreshold({
+      lthr: sportSettings?.lthr ?? user.lthr,
+      maxHr: sportSettings?.maxHr ?? user.maxHr,
+      sessionMaxHr: workout.maxHr
+    })
     detectedEngineIntervals = detectIntervals(
       time,
       hrStream!,

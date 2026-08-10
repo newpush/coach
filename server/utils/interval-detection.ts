@@ -152,14 +152,70 @@ export function resolveProviderIntervalTypes(intervals: ProviderIntervalSummary[
 }
 
 /**
+ * Fraction of max HR that marks the bottom of "work" for interval detection.
+ * ~70% of max HR is the upper Z2 / lower Z3 border — an easy jog sits below it,
+ * a tempo or threshold effort clearly above it.
+ */
+export const HR_WORK_BAR_FRACTION_OF_MAX_HR = 0.7
+
+/**
+ * Fraction of LTHR that marks the same bar. LTHR sits at roughly 85% of max HR,
+ * so 0.82 * LTHR lands on the same bpm as 0.7 * maxHR for a typical athlete.
+ */
+export const HR_WORK_BAR_FRACTION_OF_LTHR = 0.82
+
+/**
+ * Resolve the FINAL heart-rate work bar (in bpm) to hand to `detectIntervals`.
+ *
+ * `detectIntervals` deliberately applies no further multiplier to an HR
+ * threshold (see the contract note on that function), so this is the one place
+ * the physiological scaling happens. Callers should source `lthr`/`maxHr` from
+ * the athlete's PROFILE (sportSettings, falling back to the user record).
+ *
+ * `sessionMaxHr` is an explicit last-resort fallback only: it is the max HR of
+ * the single workout being analysed, so a threshold derived from it is
+ * self-referential and drifts workout to workout. Pass it so a profile-less
+ * athlete still gets some segmentation, never as the preferred input.
+ */
+export function resolveHrWorkThreshold(refs: {
+  lthr?: number | null
+  maxHr?: number | null
+  sessionMaxHr?: number | null
+}): number | undefined {
+  const lthr = Number(refs.lthr || 0)
+  if (lthr > 0) return lthr * HR_WORK_BAR_FRACTION_OF_LTHR
+
+  const maxHr = Number(refs.maxHr || 0)
+  if (maxHr > 0) return maxHr * HR_WORK_BAR_FRACTION_OF_MAX_HR
+
+  const sessionMaxHr = Number(refs.sessionMaxHr || 0)
+  if (sessionMaxHr > 0) return sessionMaxHr * HR_WORK_BAR_FRACTION_OF_MAX_HR
+
+  return undefined
+}
+
+/**
  * Detect intervals in a workout based on power or heart rate data
  * Uses a moving average and threshold-based approach
+ *
+ * THRESHOLD CONTRACT (do not add a second discount on top of a scaled value):
+ * - `power`:     `threshold` is the athlete's FTP. The work bar is derived here
+ *                as 70% of FTP (the Z2/Z3 border).
+ * - `pace`:      `threshold` is a reference velocity (usually omitted, in which
+ *                case the stream's own median is used). The work bar is derived
+ *                here as 65% of it.
+ * - `heartrate`: `threshold` is ALREADY THE FINAL WORK BAR in bpm — build it
+ *                with `resolveHrWorkThreshold()` from profile LTHR/max HR. No
+ *                multiplier is applied here. Callers used to pass `maxHr * 0.7`
+ *                into a function that multiplied by 0.65 again, putting the work
+ *                bar at ~46% of max HR: every sample read as work and the merge
+ *                pass welded whole sessions into one interval (CW-383).
  */
 export function detectIntervals(
   times: number[],
   values: number[],
   metricType: 'power' | 'heartrate' | 'pace',
-  threshold?: number, // FTP or Threshold Pace/HR
+  threshold?: number, // FTP, reference pace, or the final HR work bar in bpm
   plannedSteps?: PlannedStep[],
   smoothedValues?: number[],
   cadenceValues?: number[]
@@ -189,9 +245,19 @@ export function detectIntervals(
   // If no manual threshold provided, estimate baseline
   const baseline = threshold || calculateBaseline(smoothed)
 
-  // For power, work is typically > 70% FTP (Zone 2/3 border)
-  // For HR, work is > 65% Max (approx Z2)
-  const workThreshold = metricType === 'power' ? baseline * 0.7 : baseline * 0.65
+  // Per the threshold contract above:
+  // - power: work is > 70% FTP (Zone 2/3 border)
+  // - heartrate: the caller already handed us the final work bar in bpm
+  //   (`resolveHrWorkThreshold`), so it is used verbatim. With no threshold at
+  //   all the fallback baseline is the stream's own median HR, which is a
+  //   sensible "above your typical effort = work" bar on its own.
+  // - pace: work is > 65% of the reference velocity
+  const workThreshold =
+    metricType === 'power'
+      ? baseline * 0.7
+      : metricType === 'heartrate'
+        ? baseline
+        : baseline * 0.65
 
   let intervals: Interval[] = []
   let inInterval = false
@@ -284,13 +350,17 @@ export function detectIntervals(
   if (merged.length === 0 && times.length > 0) {
     const totalDuration = (times[times.length - 1] || 0) - (times[0] || 0)
     const avgValue = values.reduce((a, b) => a + (b || 0), 0) / values.length
+    // `baseline` is FTP for power and the work bar itself for HR/pace.
     const isSteady =
       totalDuration > 900 && // 15 mins
       (metricType === 'power' ? avgValue >= baseline * 0.4 : avgValue >= baseline * 0.5)
 
     if (isSteady) {
+      // STEADY, not WORK: a continuous ride/run is one steady block, not a rep.
+      // Downstream consumers that count reps filter on `type === 'WORK'`, and
+      // labelling this WORK made every endurance session look like a 1x session.
       intervals = [
-        createIntervalObj(times, values, 0, times.length - 1, 'WORK', threshold, metricType)
+        createIntervalObj(times, values, 0, times.length - 1, 'STEADY', threshold, metricType)
       ]
     }
   } else {
