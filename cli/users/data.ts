@@ -9,8 +9,11 @@ import path from 'path'
 import zlib from 'zlib'
 import { UserUniverseCollector } from '../../server/utils/data-management/collector'
 import { UserUniverseImporter } from '../../server/utils/data-management/importer'
+import transferCommand from './data-transfer'
 
 const dataCommand = new Command('data').description('Export and import user data universes')
+
+dataCommand.addCommand(transferCommand)
 
 async function getPrisma(isProd: boolean) {
   const connectionString = isProd ? process.env.DATABASE_URL_PROD : process.env.DATABASE_URL
