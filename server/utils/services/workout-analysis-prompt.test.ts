@@ -40,7 +40,8 @@ const RIDE_WORKOUT = {
   maxHr: 176,
   averageCadence: 88,
   maxCadence: 121,
-  averageSpeed: 32,
+  // m/s, as every sync writer stores it (48000 m / 5400 s = 8.889 m/s).
+  averageSpeed: 8.9,
   tss: 96,
   trainingLoad: 101,
   intensity: 0.9,
@@ -125,7 +126,7 @@ describe('buildWorkoutAnalysisData', () => {
     expect(data.avg_power).toBe(231)
     expect(data.normalized_power).toBe(248)
     expect(data.avg_cadence).toBe(88)
-    expect(data.avg_speed_ms).toBeCloseTo(8.889, 2)
+    expect(data.avg_speed_ms).toBe(8.9)
     // Provider lap labels are re-derived rather than trusted (CW-376).
     expect(data.intervals).toHaveLength(2)
     expect(data.intervals[0].type).toBe('WORK')
@@ -142,6 +143,19 @@ describe('buildWorkoutAnalysisData', () => {
 
     expect(data.avg_cadence).toBe(174)
     expect(data.max_cadence).toBe(190)
+  })
+
+  it('passes the stored m/s average speed through untouched (CW-382)', () => {
+    // Every sync writer persists `averageSpeed` in m/s. The payload used to divide it by
+    // 3.6 as if it were km/h, so a 3.0 m/s run (5:33/km) reached the model as 0.83 m/s.
+    const data = buildWorkoutAnalysisData({
+      type: 'Run',
+      durationSec: 3333,
+      distanceMeters: 10000,
+      averageSpeed: 3.0
+    })
+
+    expect(data.avg_speed_ms).toBe(3.0)
   })
 })
 
@@ -246,6 +260,34 @@ describe('buildWorkoutAnalysisPrompt', () => {
     )
 
     expect(prompt).toMatchSnapshot()
+  })
+
+  it('reports an average speed that agrees with the derived average pace (CW-382)', () => {
+    // The two lines in the "Pace & Speed" block are derived independently: the pace from
+    // distance_m / duration_s, the speed from the stored `averageSpeed` column. They only
+    // agree once the bogus /3.6 conversion is gone.
+    const prompt = buildWorkoutAnalysisPrompt(
+      buildWorkoutAnalysisData({
+        id: 'workout-fixture-run',
+        date: new Date('2026-03-16T06:00:00Z'),
+        title: 'Steady 10k',
+        type: 'Run',
+        durationSec: 3333,
+        distanceMeters: 10000,
+        averageSpeed: 3.0,
+        averageHr: 152,
+        maxHr: 171
+      }),
+      'Europe/Budapest',
+      'Supportive',
+      { loadPreference: 'PACE' },
+      USER_PROFILE
+    )
+
+    expect(prompt).toContain('## Pace & Speed (Primary Metric)')
+    // 10000 m / 3333 s = 3.0 m/s = 333 s/km = 5:33/km.
+    expect(prompt).toContain('- Average Pace: 5:33/km')
+    expect(prompt).toContain('- Average Speed: 3.00 m/s')
   })
 
   it('respects the athlete distanceUnits preference for strength set distances', () => {
