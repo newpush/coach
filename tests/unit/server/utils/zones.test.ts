@@ -7,6 +7,7 @@ import {
   identifyZone,
   type Zone
 } from '../../../../server/utils/zones'
+import { resolveZonesForMigration } from '../../../../cli/db/migrate-zones'
 
 /** Bands that contain `value` by their own [min, max] definition. */
 function containingBands(value: number, zones: Zone[]): Zone[] {
@@ -298,6 +299,74 @@ describe('Zone Utils', () => {
   describe('formatZoneRange', () => {
     it('formats watts correctly', () => {
       expect(formatZoneRange({ name: 'Z1', min: 100, max: 200 }, 'W')).toBe('100-200W')
+    })
+  })
+
+  /**
+   * CW-431: `cli/db/migrate-zones.ts` used to carry its own copy of the zone
+   * maths, with different HR band names and three different percentages. It now
+   * imports the canonical helpers; these tests fail the moment anyone
+   * reintroduces a second implementation.
+   */
+  describe('migration tool parity (CW-431)', () => {
+    it('derives byte-identical zone definitions to server/utils/zones for any references', () => {
+      for (const ftp of [null, 150, 200, 233, 250, 317, 400]) {
+        for (const lthr of [null, 140, 150, 160, 170, 185]) {
+          for (const maxHr of [null, 175, 190, 195, 200, 220]) {
+            const label = `ftp ${ftp} / lthr ${lthr} / maxHr ${maxHr}`
+            const resolved = resolveZonesForMigration({ ftp, lthr, maxHr })
+
+            expect(resolved.powerZones, `${label}: power`).toEqual(
+              ftp ? calculatePowerZones(ftp) : []
+            )
+            expect(resolved.hrZones, `${label}: hr`).toEqual(
+              lthr || maxHr ? calculateHrZones(lthr, maxHr) : []
+            )
+          }
+        }
+      }
+    })
+
+    it('emits the canonical Friel band names, not the pre-CW-431 Z5/Z6/Z7 ones', () => {
+      const { hrZones } = resolveZonesForMigration({ lthr: 160, maxHr: 195 })
+      expect(hrZones.map((zone) => zone.name)).toEqual([
+        'Z1 Recovery',
+        'Z2 Aerobic',
+        'Z3 Tempo',
+        'Z4 SubThreshold',
+        'Z5a SuperThreshold',
+        'Z5b Aerobic Capacity',
+        'Z5c Anaerobic'
+      ])
+    })
+
+    it('uses the five-band max-HR model when LTHR is absent instead of estimating one', () => {
+      // The old copy derived `lthr = round(maxHr * 0.85)` and always emitted
+      // seven Friel bands, so a max-HR-only athlete saw a different model from
+      // the one the app computes for them.
+      const { hrZones } = resolveZonesForMigration({ lthr: null, maxHr: 195 })
+      expect(hrZones).toEqual(calculateHrZones(null, 195))
+      expect(hrZones).toHaveLength(5)
+    })
+
+    it('carries existing zones over untouched rather than recomputing them', () => {
+      const custom: Zone[] = [{ name: 'My Zone', min: 0, max: 999 }]
+      const resolved = resolveZonesForMigration({ ftp: 250, lthr: 160, maxHr: 195 }, custom, custom)
+
+      expect(resolved.hrZones).toBe(custom)
+      expect(resolved.powerZones).toBe(custom)
+      expect(resolved.computedHrZones).toBe(false)
+      expect(resolved.computedPowerZones).toBe(false)
+    })
+
+    it('reports nothing to store when the athlete has no references at all', () => {
+      const resolved = resolveZonesForMigration({ ftp: null, lthr: null, maxHr: null })
+      expect(resolved).toEqual({
+        hrZones: [],
+        powerZones: [],
+        computedHrZones: false,
+        computedPowerZones: false
+      })
     })
   })
 
