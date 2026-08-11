@@ -140,6 +140,57 @@ export async function claimPendingWebhookLogs(
 }
 
 /**
+ * Number of consecutive claim-query failures before the poller escalates.
+ *
+ * The poller runs every 5s, so this is ~15s of a fully halted webhook pipeline
+ * before we alert — long enough to ride out a single connection blip, short
+ * enough that a genuinely broken claim query is not silent.
+ */
+export const WEBHOOK_CLAIM_ESCALATION_THRESHOLD = 3
+
+/**
+ * Tracks consecutive failures of the webhook *claim* query specifically.
+ *
+ * A claim that fails permanently (a malformed statement, a dropped column, a
+ * bind parameter Postgres will not accept) halts all webhook processing while
+ * producing nothing louder than a `console.error` every 5 seconds — the poller's
+ * only escalation path is `isRedisConnectionError`, which such a failure is not.
+ * This distinguishes "transient blip" from "the claim query itself is broken"
+ * and escalates once per failure streak.
+ */
+export function createWebhookClaimFailureTracker(options: {
+  threshold?: number
+  onEscalate: (error: unknown, consecutiveFailures: number) => void
+}) {
+  const threshold = options.threshold ?? WEBHOOK_CLAIM_ESCALATION_THRESHOLD
+  let consecutiveFailures = 0
+  let escalated = false
+
+  return {
+    /** A successful claim ends the streak and re-arms escalation. */
+    recordSuccess(): void {
+      consecutiveFailures = 0
+      escalated = false
+    },
+    /** Returns the current streak length. Escalates once when it crosses the threshold. */
+    recordFailure(error: unknown): number {
+      consecutiveFailures++
+      if (consecutiveFailures >= threshold && !escalated) {
+        escalated = true
+        options.onEscalate(error, consecutiveFailures)
+      }
+      return consecutiveFailures
+    },
+    get consecutiveFailures(): number {
+      return consecutiveFailures
+    },
+    get hasEscalated(): boolean {
+      return escalated
+    }
+  }
+}
+
+/**
  * Hand a claimed webhook log back to the poller when the BullMQ enqueue failed,
  * so the webhook is retried instead of being stranded in QUEUED with no job.
  * Guarded on `status = 'QUEUED'` so it can never resurrect a row that another
@@ -911,24 +962,62 @@ export const startCommand = new Command('start')
     })
 
     // --- Webhook Log Poller ---
-    // This loop checks for PENDING webhooks in SQL and moves them to BullMQ
-    const pollWebhooks = async () => {
-      try {
-        // Claim the batch atomically: the rows come back already flipped to
-        // QUEUED, so a second worker polling concurrently cannot pick them up.
-        const claimedLogs = await claimPendingWebhookLogs(prisma, WEBHOOK_POLL_BATCH_SIZE)
-
-        if (claimedLogs.length > 0) {
-          if (verboseWorkerLogs) {
-            console.log(
-              chalk.gray(`[Poller] Claimed ${claimedLogs.length} pending webhooks in SQL`)
-            )
-          }
-
-          await drainClaimedWebhookLogs(prisma, webhookQueue, claimedLogs)
+    // This loop checks for PENDING webhooks in SQL and moves them to BullMQ.
+    //
+    // A claim query that is broken rather than merely unlucky halts every
+    // webhook in the system. Escalate it loudly instead of letting it scroll
+    // past as a console.error once every 5 seconds.
+    const claimFailures = createWebhookClaimFailureTracker({
+      onEscalate: (error, consecutiveFailures) => {
+        const detail = formatErrorMessage(error)
+        console.error(
+          chalk.red.bold(
+            `[Poller] WEBHOOK INGESTION HALTED — the claim query has failed ${consecutiveFailures} consecutive times. ` +
+              `No webhook has been queued since the streak began. This is not a transient error; ` +
+              `the claim statement itself is likely broken. Last error: ${detail}`
+          )
+        )
+        if (process.env.SENTRY_DSN) {
+          Sentry.captureException(error, {
+            level: 'fatal',
+            tags: { worker: 'webhookPoller', failure: 'claim-query' },
+            extra: { consecutiveFailures, batchSize: WEBHOOK_POLL_BATCH_SIZE }
+          })
         }
+      }
+    })
+
+    const pollWebhooks = async () => {
+      // Claim the batch atomically: the rows come back already flipped to
+      // QUEUED, so a second worker polling concurrently cannot pick them up.
+      let claimedLogs: ClaimedWebhookLog[]
+      try {
+        claimedLogs = await claimPendingWebhookLogs(prisma, WEBHOOK_POLL_BATCH_SIZE)
+        claimFailures.recordSuccess()
       } catch (err) {
-        console.error(chalk.red('[Poller] Error polling webhooks:'), err)
+        const streak = claimFailures.recordFailure(err)
+        console.error(
+          chalk.red(`[Poller] Claim query failed (consecutive failures: ${streak}):`),
+          err
+        )
+        if (isRedisConnectionError(err)) {
+          requestRestart('sql-to-queue poller lost redis connectivity', err)
+        }
+        return
+      }
+
+      if (claimedLogs.length === 0) return
+
+      if (verboseWorkerLogs) {
+        console.log(chalk.gray(`[Poller] Claimed ${claimedLogs.length} pending webhooks in SQL`))
+      }
+
+      try {
+        await drainClaimedWebhookLogs(prisma, webhookQueue, claimedLogs)
+      } catch (err) {
+        // Drain failures are already self-healing: drainClaimedWebhookLogs hands
+        // every un-enqueued row back to PENDING before rethrowing.
+        console.error(chalk.red('[Poller] Error draining claimed webhooks:'), err)
         if (isRedisConnectionError(err)) {
           requestRestart('sql-to-queue poller lost redis connectivity', err)
         }
