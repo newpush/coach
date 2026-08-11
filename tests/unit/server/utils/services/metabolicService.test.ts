@@ -1,5 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { metabolicService } from '../../../../../server/utils/services/metabolicService'
+import {
+  MAX_WAVE_RANGE_SPAN_DAYS,
+  metabolicService,
+  waveRangeSpanDays
+} from '../../../../../server/utils/services/metabolicService'
 import { prisma } from '../../../../../server/utils/db'
 import { nutritionRepository } from '../../../../../server/utils/repositories/nutritionRepository'
 import { workoutRepository } from '../../../../../server/utils/repositories/workoutRepository'
@@ -778,6 +782,66 @@ describe('metabolicService smoke coverage', () => {
       // Today is not past, so getDailyTimeline still merges in planned-but-uncompleted workouts -
       // only the finalized-past-day behavior changed.
       expect(plannedWorkoutRepository.list).toHaveBeenCalled()
+    })
+  })
+})
+
+// CW-73: getWaveRange is the single computation path for every wave caller and costs ~97 timeline
+// points plus per-day work for each day of the span, so it carries its own bounds rather than
+// trusting callers to have validated. These assert the guard fires before any DB work happens.
+describe('getWaveRange defensive range bounds (CW-73)', () => {
+  const userId = 'user-123'
+
+  beforeEach(() => {
+    // An earlier suite in this file spies on getWaveRange without restoring it, and clearAllMocks
+    // only resets calls - restore so these exercise the real implementation's guards.
+    vi.restoreAllMocks()
+    vi.clearAllMocks()
+  })
+
+  it('computes an inclusive day span', () => {
+    expect(
+      waveRangeSpanDays(new Date('2026-02-13T00:00:00Z'), new Date('2026-02-13T00:00:00Z'))
+    ).toBe(1)
+    expect(
+      waveRangeSpanDays(new Date('2026-02-13T00:00:00Z'), new Date('2026-02-14T00:00:00Z'))
+    ).toBe(2)
+  })
+
+  it('rejects a span wider than the hard limit before touching the database', async () => {
+    const start = new Date('2026-01-01T00:00:00Z')
+    const end = new Date(start.getTime() + (MAX_WAVE_RANGE_SPAN_DAYS + 1) * 24 * 60 * 60 * 1000)
+
+    await expect(metabolicService.getWaveRange(userId, start, end)).rejects.toMatchObject({
+      statusCode: 400
+    })
+    expect(prisma.user.findUnique).not.toHaveBeenCalled()
+  })
+
+  it('rejects an end date before the start date', async () => {
+    await expect(
+      metabolicService.getWaveRange(
+        userId,
+        new Date('2026-02-13T00:00:00Z'),
+        new Date('2026-02-11T00:00:00Z')
+      )
+    ).rejects.toMatchObject({ statusCode: 400 })
+    expect(prisma.user.findUnique).not.toHaveBeenCalled()
+  })
+
+  it('rejects invalid dates', async () => {
+    await expect(
+      metabolicService.getWaveRange(userId, new Date('nonsense'), new Date('2026-02-13T00:00:00Z'))
+    ).rejects.toMatchObject({ statusCode: 400 })
+    expect(prisma.user.findUnique).not.toHaveBeenCalled()
+  })
+
+  it('rejects a non-finite daysAhead in generateExtendedWave instead of building an Invalid Date', async () => {
+    await expect(metabolicService.generateExtendedWave(userId, Number.NaN)).rejects.toMatchObject({
+      statusCode: 400
+    })
+    await expect(metabolicService.generateExtendedWave(userId, -1)).rejects.toMatchObject({
+      statusCode: 400
     })
   })
 })
