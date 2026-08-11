@@ -178,6 +178,12 @@ fi
 # main checkout's '$DB_MAIN' database is never created, migrated or dropped.
 ensure_db_container
 
+# db_exists interpolates its argument into a datname='...' comparison, so assert
+# before the first use — worktree-warm.sh already does this, and the guard is
+# free. Only reachable via a hostile CW_DB_TEMPLATE, but the inconsistency would
+# invite the next reader to assume coverage that was not there.
+assert_safe_db "$DB_TEMPLATE"
+
 TEMPLATE_USABLE=0
 if db_exists "$DB_TEMPLATE"; then
   if check_db_migrations "$WT" "$DB_TEMPLATE"; then
@@ -238,8 +244,14 @@ if [[ "$MIGRATE" -eq 1 ]]; then
   # (server/plugins/auth-bypass.ts) needs AUTH_BYPASS_USER to exist as a row.
   if [[ "$FRESH_DB" -eq 1 && "$INSTALL" -eq 1 && -f "$WT/scripts/seed-dev-user.ts" ]]; then
     info "seeding the dev bypass user (scripts/seed-dev-user.ts)"
-    (cd "$WT" && pnpm exec tsx scripts/seed-dev-user.ts >/dev/null) \
-      || warn "seeding the dev user failed — log-in via the auth bypass will 401 until you run: cd $WT && pnpm exec tsx scripts/seed-dev-user.ts"
+    # Pin DATABASE_URL exactly as migrate_deploy does. seed-dev-user.ts does
+    # `import 'dotenv/config'`, and dotenv does NOT override an already-set
+    # variable — so an inherited DATABASE_URL (exported in the caller's shell,
+    # a direnv .envrc, a shell profile) would send this upsert to that database
+    # instead of the per-ticket one. This is the only write path that could
+    # otherwise escape the worktree's own database.
+    (cd "$WT" && DATABASE_URL="$(database_url "$DB")" pnpm exec tsx scripts/seed-dev-user.ts >/dev/null) \
+      || warn "seeding the dev user failed — log-in via the auth bypass will 401 until you run: cd $WT && DATABASE_URL=\"\$(bin/worktree-common.sh database_url $DB)\" pnpm exec tsx scripts/seed-dev-user.ts"
   fi
 else
   warn "skipping migrations (--no-migrate) — $DB may not match prisma/migrations/"

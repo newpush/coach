@@ -87,7 +87,11 @@ migrate_deploy "$WARM_DIR" "$DB_TEMPLATE" \
 
 if [[ -f "$WARM_DIR/scripts/seed-dev-user.ts" ]]; then
   info "seeding the dev bypass user into $DB_TEMPLATE"
-  (cd "$WARM_DIR" && pnpm exec tsx scripts/seed-dev-user.ts >/dev/null) \
+  # Pin DATABASE_URL as migrate_deploy does — see the same note in
+  # worktree-up.sh. Unpinned, an inherited DATABASE_URL would seed *that*
+  # database and leave the template without a dev user, silently, so every
+  # worktree cloned from it would 401 on the auth bypass.
+  (cd "$WARM_DIR" && DATABASE_URL="$(database_url "$DB_TEMPLATE")" pnpm exec tsx scripts/seed-dev-user.ts >/dev/null) \
     || warn "seeding failed — ticket databases cloned from this template will have no dev user"
 fi
 

@@ -46,7 +46,10 @@ if [[ -d "$WT" ]]; then
     fi
     # HEAD only — '--branches' would scan every branch in the shared repo and
     # refuse because some *other* worktree has unpushed commits.
-    unpushed="$(git -C "$WT" log --oneline HEAD --not --remotes 2>/dev/null | head -5)"
+    # `-n 5` rather than `| head -5`: under `set -o pipefail`, head closing the
+    # pipe on the 6th commit gives git SIGPIPE (141), which `set -e` turns into
+    # a silent exit — with no message, in exactly the case this guard exists for.
+    unpushed="$(git -C "$WT" log --oneline -n 5 HEAD --not --remotes 2>/dev/null || true)"
     if [[ -n "$unpushed" ]]; then
       printf '%s\n' "$unpushed" >&2
       die "$TICKET has commits not on any remote — push them (git -C $WT push), or re-run with --force"
@@ -74,8 +77,28 @@ if docker ps --format '{{.Names}}' 2>/dev/null | grep -qx "$DB_CONTAINER" && db_
   drop_db "$DB"
 fi
 
+# Redis indices are `n % 15 + 1`, so with more than 15 live worktrees the
+# buckets collide by pigeonhole — CW-363, CW-378, CW-348 and CW-393 all map to
+# index 4. FLUSHDB is not scoped to a ticket, so flushing on teardown would
+# destroy a *sibling* worktree's BullMQ queues, sessions and image cache while
+# that agent is mid-run, silently. Only flush when no other live worktree
+# shares this index; stale keys are harmless and nothing in worktree-up.sh
+# depends on a clean one.
 if docker ps --format '{{.Names}}' 2>/dev/null | grep -qx "$REDIS_CONTAINER"; then
-  if docker exec -i "$REDIS_CONTAINER" redis-cli -a dragonfly --no-auth-warning -n "$REDIS_DB" FLUSHDB >/dev/null 2>&1; then
+  sharers=()
+  for sibling in "$WT_ROOT"/*; do
+    [[ -d "$sibling" ]] || continue
+    sibling_ticket="$(basename "$sibling")"
+    [[ "$sibling_ticket" == "$TICKET" ]] && continue
+    ticket_number "$sibling_ticket" >/dev/null 2>&1 || continue
+    if [[ "$(ticket_redis_db "$sibling_ticket")" == "$REDIS_DB" ]]; then
+      sharers+=("$sibling_ticket")
+    fi
+  done
+
+  if [[ ${#sharers[@]} -gt 0 ]]; then
+    info "leaving Redis database $REDIS_DB alone — also used by: ${sharers[*]}"
+  elif docker exec -i "$REDIS_CONTAINER" redis-cli -a dragonfly --no-auth-warning -n "$REDIS_DB" FLUSHDB >/dev/null 2>&1; then
     info "flushed Redis database $REDIS_DB (index 0 — the main checkout's — is never touched)"
   else
     warn "could not flush Redis database $REDIS_DB in $REDIS_CONTAINER — flush it by hand if stale jobs matter"

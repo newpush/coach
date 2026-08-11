@@ -60,6 +60,7 @@ Rules:
 - **Tear down with `bin/worktree-down.sh <TICKET>`** after the PR merges: it drops the database and removes the worktree, and refuses if there are uncommitted changes or unpushed commits (`--force` overrides, `--delete-branch` also deletes the branch).
 - If `worktree-up.sh` reports a divergent database (history rows not in `prisma/migrations/`), do not patch it by hand — recreate it with the commands the error prints.
 - Two tickets whose numbers differ by exactly 200 share a port; run those sequentially.
+- **Realtime and chat pub/sub is shared across every worktree and the main checkout.** The per-ticket Redis index isolates keys, but Redis pub/sub ignores the selected index and `realtime-bus.ts` / `chat-realtime-bus.ts` publish to a fixed channel. The subscriber deliberately accepts events from other instances and dispatches by `userId` — and every template-cloned database carries the _same_ seeded dev-user UUID, so the id matches and the event is delivered. When verifying anything realtime or chat-related, run only one dev server at a time, or you will see another agent's events in your own browser.
 - These scripts are for the local macOS environment (Docker + `watts-postgres`). On the Cursor Cloud VM there are no worktrees — work in the checkout you are given (see below).
 
 ## Commands
