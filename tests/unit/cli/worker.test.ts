@@ -3,9 +3,11 @@ import type { Prisma } from '@prisma/client'
 import {
   buildWebhookJob,
   claimPendingWebhookLogs,
+  createWebhookClaimFailureTracker,
   drainClaimedWebhookLogs,
   registerScheduledTasks,
   releaseClaimedWebhookLog,
+  WEBHOOK_CLAIM_ESCALATION_THRESHOLD,
   WEBHOOK_POLL_BATCH_SIZE,
   type ClaimedWebhookLog
 } from '../../../cli/worker/start'
@@ -188,6 +190,28 @@ describe('Webhook poller atomic claim', () => {
     expect(queries[0]!.values).toEqual([WEBHOOK_POLL_BATCH_SIZE])
   })
 
+  // CW-502: the batch size reaches Postgres as `LIMIT $1`. Postgres rejects a
+  // non-integer there, and a rejected claim halts webhook ingestion entirely.
+  // Verified against real Postgres (Prisma 7.8.0 / @prisma/adapter-pg 7.8.0):
+  // the driver wire-encodes a JS integer as pg `integer`, so the query is fine.
+  // This guards the remaining way to break it — feeding LIMIT a non-integer.
+  it('binds LIMIT as an integer, never a float or string', async () => {
+    for (const limit of [WEBHOOK_POLL_BATCH_SIZE, 1, 2, 250]) {
+      const { client, queries } = makeClient([])
+      await claimPendingWebhookLogs(client, limit)
+
+      const bound = queries[0]!.values[0]
+      expect(typeof bound).toBe('number')
+      expect(Number.isInteger(bound)).toBe(true)
+      expect(bound as number).toBeGreaterThan(0)
+    }
+  })
+
+  it('declares a batch size that is itself a positive integer', () => {
+    expect(Number.isInteger(WEBHOOK_POLL_BATCH_SIZE)).toBe(true)
+    expect(WEBHOOK_POLL_BATCH_SIZE).toBeGreaterThan(0)
+  })
+
   it('returns an empty batch when nothing is pending', async () => {
     const { client } = makeClient([])
     await expect(claimPendingWebhookLogs(client, 10)).resolves.toEqual([])
@@ -273,6 +297,73 @@ describe('Webhook poller atomic claim', () => {
         logId: 'log-3'
       }
     })
+  })
+})
+
+describe('Webhook claim failure escalation', () => {
+  // CW-502: a permanently broken claim query halts every webhook while the
+  // poller's only escalation path (isRedisConnectionError) stays silent about
+  // it. A failure streak must become loud instead of looping on console.error.
+  it('does not escalate a transient failure that recovers', () => {
+    const onEscalate = vi.fn()
+    const tracker = createWebhookClaimFailureTracker({ onEscalate })
+
+    tracker.recordFailure(new Error('blip'))
+    tracker.recordSuccess()
+    tracker.recordFailure(new Error('blip'))
+    tracker.recordSuccess()
+
+    expect(onEscalate).not.toHaveBeenCalled()
+    expect(tracker.consecutiveFailures).toBe(0)
+    expect(tracker.hasEscalated).toBe(false)
+  })
+
+  it('escalates once the failure streak reaches the threshold', () => {
+    const onEscalate = vi.fn()
+    const tracker = createWebhookClaimFailureTracker({ onEscalate })
+    const err = new Error('could not determine data type of parameter $1')
+
+    for (let i = 1; i < WEBHOOK_CLAIM_ESCALATION_THRESHOLD; i++) {
+      expect(tracker.recordFailure(err)).toBe(i)
+      expect(onEscalate).not.toHaveBeenCalled()
+    }
+
+    expect(tracker.recordFailure(err)).toBe(WEBHOOK_CLAIM_ESCALATION_THRESHOLD)
+    expect(onEscalate).toHaveBeenCalledTimes(1)
+    expect(onEscalate).toHaveBeenCalledWith(err, WEBHOOK_CLAIM_ESCALATION_THRESHOLD)
+    expect(tracker.hasEscalated).toBe(true)
+  })
+
+  it('escalates only once per streak, so a permanent failure does not spam', () => {
+    const onEscalate = vi.fn()
+    const tracker = createWebhookClaimFailureTracker({ onEscalate, threshold: 2 })
+
+    // Simulate the 5s poll loop failing for a long time.
+    for (let i = 0; i < 100; i++) tracker.recordFailure(new Error('broken'))
+
+    expect(onEscalate).toHaveBeenCalledTimes(1)
+    expect(tracker.consecutiveFailures).toBe(100)
+  })
+
+  it('re-arms after a recovery so a second outage escalates again', () => {
+    const onEscalate = vi.fn()
+    const tracker = createWebhookClaimFailureTracker({ onEscalate, threshold: 2 })
+
+    tracker.recordFailure(new Error('a'))
+    tracker.recordFailure(new Error('a'))
+    expect(onEscalate).toHaveBeenCalledTimes(1)
+
+    tracker.recordSuccess()
+    expect(tracker.hasEscalated).toBe(false)
+
+    tracker.recordFailure(new Error('b'))
+    tracker.recordFailure(new Error('b'))
+    expect(onEscalate).toHaveBeenCalledTimes(2)
+  })
+
+  it('uses a threshold that keeps the halt window short', () => {
+    expect(WEBHOOK_CLAIM_ESCALATION_THRESHOLD).toBeGreaterThan(1)
+    expect(WEBHOOK_CLAIM_ESCALATION_THRESHOLD).toBeLessThanOrEqual(5)
   })
 })
 
