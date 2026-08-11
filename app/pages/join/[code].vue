@@ -1,5 +1,8 @@
 <script setup lang="ts">
+  import { useTranslate } from '@tolgee/vue'
   import CoachJoinPage from '~/components/public/CoachJoinPage.vue'
+
+  const { t } = useTranslate('coaching')
 
   const route = useRoute()
   const router = useRouter()
@@ -28,7 +31,8 @@
     try {
       invite.value = await $fetch<any, string & {}>(`/api/join/${code.value}`)
     } catch (err: any) {
-      error.value = err.data?.message || 'Invalid or expired invitation code.'
+      error.value =
+        err.data?.message || t.value('join_error_default', 'Invalid or expired invitation code.')
     } finally {
       loading.value = false
     }
@@ -49,10 +53,10 @@
       toast.add({
         title:
           response.type === 'TEAM'
-            ? 'Successfully joined the team!'
+            ? t.value('join_toast_team', 'Successfully joined the team!')
             : response.type === 'COACHING'
-              ? 'Athlete connected!'
-              : 'Successfully connected with coach!',
+              ? t.value('join_toast_coaching', 'Athlete connected!')
+              : t.value('join_toast_coach', 'Successfully connected with coach!'),
         color: 'success'
       })
 
@@ -65,7 +69,9 @@
       }
     } catch (err: any) {
       toast.add({
-        title: 'Failed to join: ' + (err.data?.message || 'Unknown error'),
+        title: t.value('join_toast_failed', 'Failed to join: {message}', {
+          message: err.data?.message || t.value('join_toast_unknown_error', 'Unknown error')
+        }),
         color: 'error'
       })
     } finally {
@@ -115,7 +121,9 @@
           name="i-heroicons-arrow-path"
           class="w-12 h-12 text-primary-500 animate-spin mx-auto"
         />
-        <p class="text-neutral-500 font-medium">Checking invitation...</p>
+        <p class="text-neutral-500 font-medium">
+          {{ t('join_checking', 'Checking invitation...') }}
+        </p>
       </div>
 
       <div v-else-if="error" class="p-8 text-center space-y-6">
@@ -124,7 +132,7 @@
         </div>
         <div class="space-y-2">
           <h1 class="text-2xl font-black text-gray-900 dark:text-white uppercase">
-            Invite Not Found
+            {{ t('join_not_found_title', 'Invite Not Found') }}
           </h1>
           <p class="text-neutral-500">{{ error }}</p>
         </div>
@@ -132,7 +140,7 @@
           to="/dashboard"
           color="neutral"
           variant="ghost"
-          label="Back to Dashboard"
+          :label="t('join_back_to_dashboard', 'Back to Dashboard')"
           block
           size="lg"
         />
@@ -143,10 +151,14 @@
         <div class="bg-primary-600 p-8 text-center text-white space-y-2 relative overflow-hidden">
           <div class="relative z-10">
             <p class="text-[10px] font-black uppercase tracking-[0.2em] opacity-80">
-              You've been invited
+              {{ t('join_eyebrow', "You've been invited") }}
             </p>
             <h1 class="text-3xl font-black uppercase tracking-tight leading-none">
-              {{ invite.type === 'TEAM' ? 'Join Team' : 'Connect with Coach' }}
+              {{
+                invite.type === 'TEAM'
+                  ? t('join_title_team', 'Join Team')
+                  : t('join_title_coach', 'Connect with Coach')
+              }}
             </h1>
           </div>
           <!-- Decorative Background -->
@@ -184,11 +196,15 @@
                 v-if="invite.type === 'ATHLETE_INVITE' && invite.email"
                 class="text-xs text-neutral-500 max-w-xs"
               >
-                This invitation is reserved for {{ invite.email }}.
+                {{
+                  t('join_reserved_for', 'This invitation is reserved for {email}.', {
+                    email: invite.email
+                  })
+                }}
               </p>
               <div v-if="invite.type === 'TEAM'" class="mt-4 flex flex-wrap justify-center gap-2">
                 <UBadge color="neutral" variant="subtle" size="xs" class="font-bold uppercase">
-                  Role: {{ invite.role }}
+                  {{ t('join_role', 'Role: {role}', { role: invite.role }) }}
                 </UBadge>
                 <UBadge
                   v-if="invite.groupName"
@@ -197,7 +213,7 @@
                   size="xs"
                   class="font-bold uppercase"
                 >
-                  Group: {{ invite.groupName }}
+                  {{ t('join_group', 'Group: {group}', { group: invite.groupName }) }}
                 </UBadge>
               </div>
             </div>
@@ -217,17 +233,19 @@
                 }
               "
             >
-              {{ session ? 'Accept Invitation' : 'Login to Join' }}
+              {{
+                session ? t('join_accept', 'Accept Invitation') : t('join_login', 'Login to Join')
+              }}
             </UButton>
             <p v-if="!session" class="text-[10px] text-center text-neutral-400 uppercase font-bold">
-              You must have a Coach Watts account to join
+              {{ t('join_account_required', 'You must have a Coach Watts account to join') }}
             </p>
             <UButton
               v-if="session"
               to="/dashboard"
               color="neutral"
               variant="ghost"
-              label="Not now"
+              :label="t('join_not_now', 'Not now')"
               block
             />
           </div>
