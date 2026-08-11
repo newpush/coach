@@ -1646,6 +1646,132 @@ describe('planned-to-actual alignment (CW-386)', () => {
     expect(facts.adherence.executionClassification).toBe('as_prescribed')
   })
 
+  describe('cadence hit-rate denominator (CW-419)', () => {
+    // A four-step cadence-targeted plan: two reps at 95 rpm with 85 rpm
+    // recoveries. Every variation below only changes what the executed laps
+    // recorded, so the denominator behaviour is the only moving part.
+    const cadencePlan = {
+      durationSec: 1200,
+      structuredWorkout: {
+        steps: [
+          {
+            type: 'Interval',
+            durationSeconds: 300,
+            power: { value: 100, units: '%' },
+            cadence: 95
+          },
+          { type: 'Rest', durationSeconds: 300, power: { value: 50, units: '%' }, cadence: 85 },
+          {
+            type: 'Interval',
+            durationSeconds: 300,
+            power: { value: 100, units: '%' },
+            cadence: 95
+          },
+          { type: 'Rest', durationSeconds: 300, power: { value: 50, units: '%' }, cadence: 85 }
+        ]
+      }
+    }
+
+    const factsFor = (icuIntervals: Record<string, unknown>[]) =>
+      buildWorkoutAnalysisFactsV2({
+        workout: makeWorkout({
+          title: 'Cadence Denominator Session',
+          type: 'Ride',
+          durationSec: 1200,
+          rawJson: { icu_intervals: icuIntervals }
+        }),
+        sportSettings: { ftp: 250 },
+        plannedWorkout: cadencePlan
+      })
+
+    it('excludes aligned steps whose segment carries no cadence measurement', () => {
+      // Every planned step is paired, the reps were executed on target power,
+      // but the head unit had no cadence sensor. Before CW-419 this reported
+      // `cadenceHitRate: 0` with `cadenceAssessable: true` — an explicit
+      // "assessable" hard zero the AI could only read as total non-compliance.
+      const facts = factsFor([
+        { type: 'WORK', moving_time: 300, average_watts: 250, intensity: 100 },
+        { type: 'REST', moving_time: 300, average_watts: 125, intensity: 50 },
+        { type: 'WORK', moving_time: 300, average_watts: 250, intensity: 100 },
+        { type: 'REST', moving_time: 300, average_watts: 125, intensity: 50 }
+      ])
+
+      expect(facts.adherence.cadenceHitRate).toBeNull()
+      expect(facts.adherence.cadenceAssessable).toBe(false)
+    })
+
+    it('treats a zero cadence average as unmeasured rather than a miss', () => {
+      const facts = factsFor([
+        { type: 'WORK', moving_time: 300, average_watts: 250, average_cadence: 0, intensity: 100 },
+        { type: 'REST', moving_time: 300, average_watts: 125, average_cadence: 0, intensity: 50 },
+        { type: 'WORK', moving_time: 300, average_watts: 250, average_cadence: 0, intensity: 100 },
+        { type: 'REST', moving_time: 300, average_watts: 125, average_cadence: 0, intensity: 50 }
+      ])
+
+      expect(facts.adherence.cadenceHitRate).toBeNull()
+      expect(facts.adherence.cadenceAssessable).toBe(false)
+    })
+
+    it('still counts a planned cadence step with no aligned segment as a miss', () => {
+      // Only the first rep and its recovery were executed. The two unpaired
+      // planned steps are execution evidence, not missing measurement, so they
+      // stay in the denominator (CW-386).
+      const facts = factsFor([
+        { type: 'WORK', moving_time: 300, average_watts: 250, average_cadence: 95, intensity: 100 },
+        { type: 'REST', moving_time: 300, average_watts: 125, average_cadence: 85, intensity: 50 }
+      ])
+
+      expect(facts.adherence.cadenceAssessable).toBe(true)
+      expect(facts.adherence.cadenceHitRate).toBe(50)
+    })
+
+    it('reports a real miss rate when cadence was recorded and missed', () => {
+      const facts = factsFor([
+        { type: 'WORK', moving_time: 300, average_watts: 250, average_cadence: 70, intensity: 100 },
+        { type: 'REST', moving_time: 300, average_watts: 125, average_cadence: 70, intensity: 50 },
+        { type: 'WORK', moving_time: 300, average_watts: 250, average_cadence: 70, intensity: 100 },
+        { type: 'REST', moving_time: 300, average_watts: 125, average_cadence: 70, intensity: 50 }
+      ])
+
+      expect(facts.adherence.cadenceAssessable).toBe(true)
+      expect(facts.adherence.cadenceHitRate).toBe(0)
+    })
+
+    it('scores only the measured steps when cadence coverage is partial', () => {
+      // Rep 1 recorded cadence and hit it; rep 2's lap has no cadence at all.
+      // Denominator drops to the two measured steps rather than diluting the
+      // athlete's real compliance with unmeasurable ones.
+      const facts = factsFor([
+        { type: 'WORK', moving_time: 300, average_watts: 250, average_cadence: 95, intensity: 100 },
+        { type: 'REST', moving_time: 300, average_watts: 125, average_cadence: 85, intensity: 50 },
+        { type: 'WORK', moving_time: 300, average_watts: 250, intensity: 100 },
+        { type: 'REST', moving_time: 300, average_watts: 125, intensity: 50 }
+      ])
+
+      expect(facts.adherence.cadenceAssessable).toBe(true)
+      expect(facts.adherence.cadenceHitRate).toBe(100)
+    })
+
+    it('always surfaces the cadence assessability flag to the prompt', () => {
+      // The narrative must be able to say "cadence was not assessable"; gating
+      // the flag on its own truth value hid exactly the case that matters.
+      const facts = factsFor([
+        { type: 'WORK', moving_time: 300, average_watts: 250, intensity: 100 },
+        { type: 'REST', moving_time: 300, average_watts: 125, intensity: 50 },
+        { type: 'WORK', moving_time: 300, average_watts: 250, intensity: 100 },
+        { type: 'REST', moving_time: 300, average_watts: 125, intensity: 50 }
+      ])
+
+      expect(facts.adherence.cadenceAssessable).toBe(false)
+      expect(
+        facts.confidence.debugMeta.promptDecisions['adherence.cadenceAssessable']!.include
+      ).toBe(true)
+      expect(facts.confidence.debugMeta.promptDecisions['adherence.cadenceHitRate']!.include).toBe(
+        false
+      )
+    })
+  })
+
   it('does not let a mid-session stub lap consume a planned rep', () => {
     const facts = buildWorkoutAnalysisFactsV2({
       workout: makeWorkout({

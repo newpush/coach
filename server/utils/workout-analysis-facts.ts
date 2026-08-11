@@ -3903,6 +3903,24 @@ function deriveAdherence(params: {
   ) => actual !== null && planned.metric === 'rpe' && !result.comparable
 
   /**
+   * The same rule for cadence targets (CW-419). A cadence-prescribed step can
+   * only be scored when its aligned segment actually carries a cadence
+   * measurement: riding a cadence-targeted plan on a bike with no cadence
+   * sensor says nothing about whether the athlete respected the prescription.
+   * Those steps leave the denominator instead of scoring as misses, so a
+   * session with no cadence stream reports `cadenceHitRate: null` /
+   * `cadenceAssessable: false` rather than a hard zero the AI would read as
+   * total non-compliance.
+   *
+   * `actual !== null` is load-bearing: a planned step the alignment could not
+   * pair at all is execution evidence (see the note below) and keeps counting
+   * as a miss, exactly as CW-386 established.
+   */
+  const isUnmeasurableCadenceStep = (actual: ActualInterval | null) =>
+    actual !== null &&
+    (actual.avgCadence === null || !Number.isFinite(actual.avgCadence) || actual.avgCadence <= 0)
+
+  /**
    * A planned step the alignment could not pair at all is a different case from
    * CW-385's unmeasurable RPE step, and is treated differently on purpose.
    *
@@ -3920,10 +3938,12 @@ function deriveAdherence(params: {
   let workHits = 0
   let recoveryHits = 0
   let cadenceHits = 0
-  // Denominators start at every planned step and shrink only when an RPE step
-  // turns out to be unmeasurable (see `isUnmeasurableRpeStep`).
+  // Denominators start at every planned step and shrink only when the step
+  // turns out to be unmeasurable (see `isUnmeasurableRpeStep` /
+  // `isUnmeasurableCadenceStep`).
   let scorableWorkSteps = plannedWork.length
   let scorableRecoverySteps = plannedRecovery.length
+  let scorableCadenceSteps = cadencePlanned.length
   const overshoots: number[] = []
   const undershoots: number[] = []
 
@@ -3955,9 +3975,16 @@ function deriveAdherence(params: {
   // athlete's warmup lap (CW-386).
   for (const { planned, actual } of alignment.pairs) {
     if (planned.cadence === null) continue
-    if (!actual || actual.avgCadence === null || actual.avgCadence <= 0) continue
+    if (isUnmeasurableCadenceStep(actual)) {
+      scorableCadenceSteps--
+      continue
+    }
+    const measuredCadence = actual?.avgCadence ?? null
+    // No aligned segment at all: the work was not executed, so this stays in
+    // the denominator as a miss (CW-386).
+    if (measuredCadence === null) continue
     const tolerance = planned.ramp ? 8 : 5
-    if (Math.abs(actual.avgCadence - planned.cadence) <= tolerance) cadenceHits++
+    if (Math.abs(measuredCadence - planned.cadence) <= tolerance) cadenceHits++
   }
 
   const workIntervalHitRate =
@@ -3965,7 +3992,7 @@ function deriveAdherence(params: {
   const recoveryHitRate =
     scorableRecoverySteps > 0 ? round((recoveryHits / scorableRecoverySteps) * 100, 1) : null
   const cadenceHitRate =
-    cadencePlanned.length > 0 ? round((cadenceHits / cadencePlanned.length) * 100, 1) : null
+    scorableCadenceSteps > 0 ? round((cadenceHits / scorableCadenceSteps) * 100, 1) : null
   const structureMatched =
     plannedWork.length > 0 &&
     actualWork.length > 0 &&
@@ -3996,7 +4023,9 @@ function deriveAdherence(params: {
     workIntervalHitRate,
     recoveryHitRate,
     cadenceHitRate,
-    cadenceAssessable: cadencePlanned.length > 0,
+    // Assessable means cadence was prescribed AND at least one prescribed step
+    // could actually be measured — not merely that cadence was planned (CW-419).
+    cadenceAssessable: scorableCadenceSteps > 0,
     targetOvershootPct,
     targetUndershootPct,
     structureMatched,
@@ -4134,8 +4163,12 @@ function buildPromptDecisionsV2(facts: WorkoutAnalysisFactsV2): Record<string, P
   )
   set(
     'adherence.cadenceAssessable',
-    facts.adherence.cadenceAssessable,
-    'The model should know whether cadence prescriptions were present and assessable.'
+    true,
+    // Always surfaced, including when false: a cadence-targeted plan ridden
+    // without a cadence sensor now yields `cadenceHitRate: null`, and the
+    // narrative must be able to say "cadence was not assessable" instead of
+    // silently dropping cadence or implying zero compliance (CW-419).
+    'The model must know whether cadence prescriptions could be assessed at all; false means cadence was not prescribed or not measured, never that the athlete ignored it.'
   )
   set(
     'adherence.targetOvershootPct',
