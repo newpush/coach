@@ -645,6 +645,80 @@ function getAnalysisMode(params: {
   return 'mixed'
 }
 
+/**
+ * Written out rather than inferred: an inferred object literal widens the string-literal
+ * unions to `string`, which would erase `AnalysisMode` and the workout family at the
+ * destructuring sites in both builders.
+ */
+type SharedAnalysisSignals = {
+  family: ReturnType<typeof getWorkoutFamily>
+  durationMinutes: number
+  rpe: number | null
+  hrStats: ReturnType<typeof getHrStats>
+  powerSourceType: PowerSourceType
+  powerAbsoluteUsable: boolean
+  powerRelativeUsable: boolean
+  hasPace: boolean
+  analysisMode: AnalysisMode
+}
+
+/**
+ * The derivations both facts builders need, computed once (CW-438).
+ *
+ * `buildWorkoutAnalysisFacts` (V1) and `buildWorkoutAnalysisFactsV2` used to derive HR
+ * usability, power provenance and the analysis mode independently, from expressions that
+ * happened to be identical. Nothing enforced that: the two builders could silently
+ * disagree about whether HR was usable or whether power was measured, and no test would
+ * fail. CW-394, CW-395 and CW-437 each had to land their fix in both copies and were only
+ * correct because the implementer noticed the duplication. Deriving these here makes
+ * agreement structural rather than a convention someone has to remember — and the
+ * `V1/V2 shared derivation agreement (CW-438)` suite fails if either builder drifts back
+ * to computing one of these itself.
+ *
+ * Only what both builders consume belongs here — anything a single builder needs
+ * (V1's `impactProfile`/`sessionRpeLoad`, V2's `refs`) stays in that builder.
+ */
+function deriveSharedAnalysisSignals(workout: any): SharedAnalysisSignals {
+  const family = getWorkoutFamily(workout?.type)
+  const durationMinutes = Math.round((workout?.durationSec || 0) / 60)
+  const rpe =
+    workout?.rpe ??
+    (workout?.sessionRpe && durationMinutes > 0
+      ? Math.round(workout.sessionRpe / durationMinutes)
+      : null) ??
+    null
+  const hrStats = getHrStats(workout)
+  const powerSourceType = inferPowerSourceType(workout, family)
+  const powerAbsoluteUsable = powerSourceType === 'measured'
+  const powerRelativeUsable =
+    powerSourceType !== 'unknown' ||
+    Boolean(workout?.averageWatts) ||
+    Boolean(workout?.normalizedPower) ||
+    asNumberArray(workout?.streams?.watts).length > 0 ||
+    asNumberArray(workout?.streams?.powerZoneTimes).some((value) => value > 0)
+  const hasPace =
+    Boolean(workout?.averageSpeed) || asNumberArray(workout?.streams?.velocity).length > 0
+  const analysisMode = getAnalysisMode({
+    family,
+    powerSourceType,
+    hrUsable: hrStats.usable,
+    hasPace,
+    hasRpe: Boolean(rpe)
+  })
+
+  return {
+    family,
+    durationMinutes,
+    rpe,
+    hrStats,
+    powerSourceType,
+    powerAbsoluteUsable,
+    powerRelativeUsable,
+    hasPace,
+    analysisMode
+  }
+}
+
 function deriveSubjectiveObjectiveGap(
   sessionRpeLoad: number | null,
   objectiveLoad: number | null
@@ -1004,15 +1078,17 @@ export function buildWorkoutAnalysisFacts({
   if (userProfile) computedFrom.push('userProfile')
   else unavailableInputs.push('userProfile')
 
-  const family = getWorkoutFamily(workout?.type)
+  const {
+    family,
+    durationMinutes,
+    rpe,
+    hrStats,
+    powerSourceType,
+    powerAbsoluteUsable,
+    powerRelativeUsable,
+    analysisMode
+  } = deriveSharedAnalysisSignals(workout)
   const impactProfile = inferImpactProfile(family)
-  const durationMinutes = Math.round((workout?.durationSec || 0) / 60)
-  const rpe =
-    workout?.rpe ??
-    (workout?.sessionRpe && durationMinutes > 0
-      ? Math.round(workout.sessionRpe / durationMinutes)
-      : null) ??
-    null
   const sessionRpeLoad = workout?.sessionRpe ?? (rpe ? rpe * durationMinutes : null)
   const objectiveLoad =
     workout?.trainingLoad ?? workout?.tss ?? (workout?.kilojoules ? workout.kilojoules / 4 : null)
@@ -1023,36 +1099,18 @@ export function buildWorkoutAnalysisFacts({
     objectiveLoad
   })
 
-  const hrStats = getHrStats(workout)
   if (!hrStats.usable) {
     disabledInterpretations.push(
       'Heart-rate-derived analysis disabled because HR telemetry is missing or artifact-prone.'
     )
   }
 
-  const powerSourceType = inferPowerSourceType(workout, family)
-  const powerAbsoluteUsable = powerSourceType === 'measured'
-  const powerRelativeUsable =
-    powerSourceType !== 'unknown' ||
-    Boolean(workout?.averageWatts) ||
-    Boolean(workout?.normalizedPower) ||
-    asNumberArray(workout?.streams?.watts).length > 0 ||
-    asNumberArray(workout?.streams?.powerZoneTimes).some((value) => value > 0)
   if (!powerAbsoluteUsable && powerRelativeUsable) {
     disabledInterpretations.push(
       'Absolute power benchmarking disabled because available power is estimated or uncertain.'
     )
   }
 
-  const hasPace =
-    Boolean(workout?.averageSpeed) || asNumberArray(workout?.streams?.velocity).length > 0
-  const analysisMode = getAnalysisMode({
-    family,
-    powerSourceType,
-    hrUsable: hrStats.usable,
-    hasPace,
-    hasRpe: Boolean(rpe)
-  })
   const motionPattern = deriveMotionPattern(workout)
 
   const warmupExcludedMinutes = clamp(Number(sportSettings?.warmupTime || 10), 10, 15)
@@ -4438,32 +4496,15 @@ export function buildWorkoutAnalysisFactsV2({
   if (userProfile) computedFrom.push('userProfile')
   else unavailableInputs.push('userProfile')
 
-  const family = getWorkoutFamily(workout?.type)
-  const durationMinutes = Math.round((workout?.durationSec || 0) / 60)
-  const rpe =
-    workout?.rpe ??
-    (workout?.sessionRpe && durationMinutes > 0
-      ? Math.round(workout.sessionRpe / durationMinutes)
-      : null) ??
-    null
-  const hrStats = getHrStats(workout)
-  const powerSourceType = inferPowerSourceType(workout, family)
-  const powerAbsoluteUsable = powerSourceType === 'measured'
-  const powerRelativeUsable =
-    powerSourceType !== 'unknown' ||
-    Boolean(workout?.averageWatts) ||
-    Boolean(workout?.normalizedPower) ||
-    asNumberArray(workout?.streams?.watts).length > 0 ||
-    asNumberArray(workout?.streams?.powerZoneTimes).some((value) => value > 0)
-  const hasPace =
-    Boolean(workout?.averageSpeed) || asNumberArray(workout?.streams?.velocity).length > 0
-  const analysisMode = getAnalysisMode({
+  const {
     family,
+    hrStats,
     powerSourceType,
-    hrUsable: hrStats.usable,
+    powerAbsoluteUsable,
+    powerRelativeUsable,
     hasPace,
-    hasRpe: Boolean(rpe)
-  })
+    analysisMode
+  } = deriveSharedAnalysisSignals(workout)
   // Reference values come from the athlete's sport settings (profile-level), not from the
   // session row. They are resolved before archetype/interval work so every downstream
   // consumer — including interval detection and raw-vs-detected arbitration — sees the
