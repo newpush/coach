@@ -46,30 +46,36 @@ export default defineEventHandler(async (event) => {
   const providedSecret = (headers['x-webhook-secret'] as string) || (query.secret as string)
   const secretMatched = app.webhookSecret && providedSecret === app.webhookSecret
 
-  // 3. Log the request - set status to PENDING for the worker poller to pick up
-  const log = await logWebhookRequest({
+  // 3. Log the request - set status to PENDING for the worker poller to pick up.
+  //
+  // Both worker-facing fields MUST be written in this single `create`. The
+  // poller (`claimPendingWebhookLogs` in cli/worker/start.ts) atomically flips
+  // PENDING -> QUEUED, and `buildWebhookJob` derives the job's `appName` from
+  // `eventType` and `secretMatched` from `error`. A row created with placeholder
+  // values and corrected by a follow-up `update` can be claimed in between, and
+  // because the claim is atomic the wrong values are permanent - nothing
+  // re-reads the row afterwards. See CW-503.
+  //
+  // NOTE: `error` doubles as the secret-verification result here rather than
+  // carrying an actual error. That overloading is pre-existing and intentional
+  // for now (the worker reads `log.error === 'SECRET_MATCHED'`); giving the
+  // WebhookLog schema a dedicated column is tracked in CW-564.
+  const secretStatus = secretMatched
+    ? 'SECRET_MATCHED'
+    : providedSecret
+      ? 'SECRET_MISMATCH'
+      : 'NO_SECRET_PROVIDED'
+
+  await logWebhookRequest({
     provider: `oauth-generic`,
-    eventType: 'RAW_PUSH',
+    // Metadata for the generic worker - must be final at creation time.
+    eventType: `oauth:${app.name}`,
     payload: body,
     headers,
     query,
-    status: 'PENDING'
+    status: 'PENDING',
+    error: secretStatus
   })
-
-  if (log) {
-    await prisma.webhookLog.update({
-      where: { id: log.id },
-      data: {
-        error: secretMatched
-          ? 'SECRET_MATCHED'
-          : providedSecret
-            ? 'SECRET_MISMATCH'
-            : 'NO_SECRET_PROVIDED',
-        // Also store metadata for generic worker
-        eventType: `oauth:${app.name}`
-      }
-    })
-  }
 
   // Always return 200 OK as per requirement to be developer-friendly
   return {
