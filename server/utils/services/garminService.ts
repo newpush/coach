@@ -321,6 +321,28 @@ export function extractGarminBodyBatteryScore(record: Record<string, unknown> | 
   return readinessFallback !== null ? clampPercentage(readinessFallback) : null
 }
 
+/**
+ * Outcome of a `startBackfill` run (CW-95).
+ * - `no-integration`: the user has no Garmin integration, nothing was requested.
+ * - `failed`: every backfill request failed.
+ * - `partial`: at least one type succeeded and at least one failed.
+ * - `success`: every type was accepted by Garmin.
+ */
+export type GarminBackfillStatus = 'success' | 'partial' | 'failed' | 'no-integration'
+
+export interface GarminBackfillTypeFailure {
+  type: GarminBackfillType
+  error: string
+}
+
+export interface GarminBackfillResult {
+  status: GarminBackfillStatus
+  /** Types Garmin accepted a backfill request for (409 "already requested" counts as accepted). */
+  requested: GarminBackfillType[]
+  /** Types whose backfill request failed, with the error message per type. */
+  failed: GarminBackfillTypeFailure[]
+}
+
 export const GarminService = {
   /**
    * Process a single webhook payload (Push API).
@@ -511,14 +533,23 @@ export const GarminService = {
   },
 
   /**
-   * Start historical backfill for a user
+   * Start historical backfill for a user.
+   *
+   * Returns a machine-readable summary instead of throwing (CW-95): the caller decides
+   * what an incomplete backfill means. `runIngestGarmin`'s InvalidPullTokenException
+   * fallback below treats any outcome as best-effort, while the `garmin-backfill`
+   * Trigger task fails the run on `no-integration` / `failed` so an incomplete backfill
+   * can no longer be reported to the platform as a success.
    */
-  async startBackfill(userId: string) {
+  async startBackfill(userId: string): Promise<GarminBackfillResult> {
     const integration = await prisma.integration.findUnique({
       where: { userId_provider: { userId, provider: 'garmin' } }
     })
 
-    if (!integration) return
+    if (!integration) {
+      console.error(`[GarminService] Backfill skipped: no Garmin integration for user ${userId}`)
+      return { status: 'no-integration', requested: [], failed: [] }
+    }
 
     const now = Math.floor(Date.now() / 1000) - 60
     const thirtyDaysAgo = now - 30 * 24 * 60 * 60
@@ -534,14 +565,24 @@ export const GarminService = {
       'userMetrics'
     ]
 
+    const requested: GarminBackfillType[] = []
+    const failed: GarminBackfillTypeFailure[] = []
+
     for (const type of types) {
       try {
         await requestGarminBackfill(integration, type, thirtyDaysAgo, now)
+        requested.push(type)
         console.log(`[GarminService] Backfill requested for ${type}`)
       } catch (error) {
+        failed.push({ type, error: error instanceof Error ? error.message : String(error) })
         console.error(`[GarminService] Backfill failed for ${type}:`, error)
       }
     }
+
+    const status: GarminBackfillStatus =
+      failed.length === 0 ? 'success' : requested.length === 0 ? 'failed' : 'partial'
+
+    return { status, requested, failed }
   },
 
   /**
