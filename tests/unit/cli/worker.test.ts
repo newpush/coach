@@ -3,6 +3,7 @@ import type { Prisma } from '@prisma/client'
 import {
   buildWebhookJob,
   claimPendingWebhookLogs,
+  drainClaimedWebhookLogs,
   registerScheduledTasks,
   releaseClaimedWebhookLog,
   WEBHOOK_POLL_BATCH_SIZE,
@@ -272,5 +273,84 @@ describe('Webhook poller atomic claim', () => {
         logId: 'log-3'
       }
     })
+  })
+})
+
+describe('Webhook poller batch drain', () => {
+  function makeLogs(n: number): ClaimedWebhookLog[] {
+    return Array.from({ length: n }, (_, i) => ({
+      id: `log-${i}`,
+      provider: 'strava',
+      eventType: 'activity',
+      payload: { i },
+      headers: null,
+      query: null,
+      error: null
+    }))
+  }
+
+  function makeReleaseClient() {
+    const released: string[] = []
+    return {
+      released,
+      client: {
+        $queryRaw: vi.fn(async () => []),
+        $executeRaw: vi.fn(async (query: Prisma.Sql) => {
+          released.push(query.values[0] as string)
+          return 1
+        })
+      }
+    }
+  }
+
+  it('enqueues every claimed log when the queue is healthy', async () => {
+    const { client, released } = makeReleaseClient()
+    const queue = { add: vi.fn(async () => ({}) as never) }
+
+    await drainClaimedWebhookLogs(client, queue, makeLogs(3))
+
+    expect(queue.add).toHaveBeenCalledTimes(3)
+    expect(released).toEqual([])
+  })
+
+  it('releases the failing row AND the whole unenqueued remainder', async () => {
+    // Regression: the batch is already flipped to QUEUED by the claim, and we
+    // abandon the loop on error. Releasing only the row that threw stranded
+    // every later row in QUEUED with no job and no reaper to recover it.
+    const { client, released } = makeReleaseClient()
+    const queue = {
+      add: vi.fn(async () => {
+        if (queue.add.mock.calls.length === 3) throw new Error('redis down')
+        return {} as never
+      })
+    }
+
+    await expect(drainClaimedWebhookLogs(client, queue, makeLogs(6))).rejects.toThrow('redis down')
+
+    // log-0..log-1 enqueued; log-2 threw; log-2..log-5 all handed back.
+    expect(released).toEqual(['log-2', 'log-3', 'log-4', 'log-5'])
+  })
+
+  it('still releases the remainder when an individual release throws', async () => {
+    const released: string[] = []
+    const client = {
+      $queryRaw: vi.fn(async () => []),
+      $executeRaw: vi.fn(async (query: Prisma.Sql) => {
+        const id = query.values[0] as string
+        if (id === 'log-1') throw new Error('db blip')
+        released.push(id)
+        return 1
+      })
+    }
+    const queue = {
+      add: vi.fn(async () => {
+        throw new Error('redis down')
+      })
+    }
+
+    await expect(drainClaimedWebhookLogs(client, queue, makeLogs(3))).rejects.toThrow('redis down')
+
+    // log-1's release failed but must not abort the rest of the drain.
+    expect(released).toEqual(['log-0', 'log-2'])
   })
 })

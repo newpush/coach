@@ -1,4 +1,4 @@
-import type { Job } from 'bullmq'
+import type { Job, Queue } from 'bullmq'
 import { Worker } from 'bullmq'
 import IORedis from 'ioredis'
 import chalk from 'chalk'
@@ -196,6 +196,44 @@ export function buildWebhookJob(log: ClaimedWebhookLog): {
   }
 
   return { queueJobName, jobData }
+}
+
+/**
+ * Enqueue an already-claimed batch of webhook logs.
+ *
+ * The claim flips the whole batch to QUEUED up front, so this function owns the
+ * invariant that every row it was handed either ends up with a job or goes back
+ * to PENDING. If an enqueue throws we abandon the batch (the caller treats it as
+ * a poll-level failure and may restart the worker), which means every row we
+ * have not enqueued yet must be released first — nothing re-picks a QUEUED row,
+ * since the claim query selects only PENDING and there is no reaper for stale
+ * QUEUED rows.
+ */
+export async function drainClaimedWebhookLogs(
+  client: WebhookClaimClient,
+  queue: Pick<Queue, 'add'>,
+  claimedLogs: ClaimedWebhookLog[]
+): Promise<void> {
+  for (let i = 0; i < claimedLogs.length; i++) {
+    const log = claimedLogs[i]!
+    const { queueJobName, jobData } = buildWebhookJob(log)
+
+    try {
+      await queue.add(queueJobName, jobData)
+    } catch (addErr) {
+      for (const stranded of claimedLogs.slice(i)) {
+        try {
+          await releaseClaimedWebhookLog(client, stranded.id)
+        } catch (releaseErr) {
+          console.error(
+            chalk.red(`[Poller] Failed to release webhook log ${stranded.id} back to PENDING:`),
+            releaseErr
+          )
+        }
+      }
+      throw addErr
+    }
+  }
 }
 
 export const startCommand = new Command('start')
@@ -869,25 +907,7 @@ export const startCommand = new Command('start')
             )
           }
 
-          for (const log of claimedLogs) {
-            const { queueJobName, jobData } = buildWebhookJob(log)
-
-            try {
-              await webhookQueue.add(queueJobName, jobData)
-            } catch (addErr) {
-              // The claim already marked the row QUEUED; hand it back so the
-              // webhook is retried on a later poll instead of being stranded.
-              try {
-                await releaseClaimedWebhookLog(prisma, log.id)
-              } catch (releaseErr) {
-                console.error(
-                  chalk.red(`[Poller] Failed to release webhook log ${log.id} back to PENDING:`),
-                  releaseErr
-                )
-              }
-              throw addErr
-            }
-          }
+          await drainClaimedWebhookLogs(prisma, webhookQueue, claimedLogs)
         }
       } catch (err) {
         console.error(chalk.red('[Poller] Error polling webhooks:'), err)
