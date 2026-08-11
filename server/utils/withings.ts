@@ -141,6 +141,17 @@ export const WITHINGS_RATE_LIMIT_BASE_BACKOFF_MS = 10 * 60 * 1000
 export const WITHINGS_RATE_LIMIT_MAX_BACKOFF_MS = 60 * 60 * 1000
 
 /**
+ * Floor for a provider-supplied Retry-After.
+ *
+ * The deferral budget is a *count*, so it only bounds patience if each step is large. An
+ * unfloored provider interval would defeat it: a `Retry-After: 3` would fire all five
+ * deferrals ~3s apart and give up permanently inside ~15 seconds — strictly worse than the
+ * three plain retries this replaced. Withings sends no such header today; this exists for
+ * the day it starts.
+ */
+export const WITHINGS_RATE_LIMIT_MIN_PROVIDER_BACKOFF_MS = 30 * 1000
+
+/**
  * How many times a single ingest may defer itself before it stops re-enqueueing.
  *
  * With the escalation below that is roughly 10m + 20m + 40m + 60m + 60m ~= 3h6 of patience.
@@ -292,14 +303,22 @@ export function resolveWithingsDeferralDelayMs(
 ): number {
   const base =
     providerRetryAfterMs != null && providerRetryAfterMs > 0
-      ? Math.min(providerRetryAfterMs, WITHINGS_RATE_LIMIT_MAX_BACKOFF_MS)
+      ? Math.min(
+          Math.max(providerRetryAfterMs, WITHINGS_RATE_LIMIT_MIN_PROVIDER_BACKOFF_MS),
+          WITHINGS_RATE_LIMIT_MAX_BACKOFF_MS
+        )
       : Math.min(
           WITHINGS_RATE_LIMIT_BASE_BACKOFF_MS *
             2 ** Math.min(Math.max(0, Math.floor(deferralCount)), 10),
           WITHINGS_RATE_LIMIT_MAX_BACKOFF_MS
         )
 
-  return clampBackoffMs(base * (1 + 0.2 * random()))
+  // Cap the base, THEN jitter — never re-clamp. `base` is already at the ceiling from
+  // deferral 3 onwards, so clamping the jittered value would round it straight back down
+  // to exactly MAX and hand every deferred ingest the same wake-up instant — the precise
+  // thundering herd the jitter exists to prevent, in the sustained-outage case where it
+  // matters most.
+  return Math.round(base * (1 + 0.2 * random()))
 }
 
 export interface WithingsDeferralContext {

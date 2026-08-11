@@ -12,6 +12,7 @@ import {
   WITHINGS_MAX_RATE_LIMIT_DEFERRALS,
   WITHINGS_RATE_LIMIT_BASE_BACKOFF_MS,
   WITHINGS_RATE_LIMIT_MAX_BACKOFF_MS,
+  WITHINGS_RATE_LIMIT_MIN_PROVIDER_BACKOFF_MS,
   WithingsRateLimitError
 } from '../../../../server/utils/withings'
 import {
@@ -241,6 +242,30 @@ describe('resolveWithingsDeferralDelayMs', () => {
     expect(resolveWithingsDeferralDelayMs(0, null, noJitter)).toBeGreaterThanOrEqual(
       WITHINGS_RATE_LIMIT_BASE_BACKOFF_MS
     )
+  })
+
+  it('still jitters once the escalation has reached the ceiling', () => {
+    // Regression: clamping the *jittered* value rounded deferrals 3-5 back to exactly MAX,
+    // so every ingest deferred during a sustained outage woke at the same instant — the
+    // thundering herd the jitter exists to prevent, in the case that matters most.
+    for (const deferral of [3, 4, 5]) {
+      expect(resolveWithingsDeferralDelayMs(deferral, null, () => 1)).toBeGreaterThan(
+        WITHINGS_RATE_LIMIT_MAX_BACKOFF_MS
+      )
+      expect(resolveWithingsDeferralDelayMs(deferral, null, noJitter)).toBe(
+        WITHINGS_RATE_LIMIT_MAX_BACKOFF_MS
+      )
+    }
+  })
+
+  it('floors a small provider Retry-After so it cannot burn the deferral budget in seconds', () => {
+    // An unfloored `Retry-After: 3` would fire all five deferrals ~3s apart and give up
+    // permanently inside ~15s — strictly worse than the three plain retries this replaced.
+    expect(resolveWithingsDeferralDelayMs(0, 3_000, noJitter)).toBe(
+      WITHINGS_RATE_LIMIT_MIN_PROVIDER_BACKOFF_MS
+    )
+    // A provider interval above the floor is still honoured verbatim.
+    expect(resolveWithingsDeferralDelayMs(0, 5 * 60 * 1000, noJitter)).toBe(5 * 60 * 1000)
   })
 })
 
