@@ -619,7 +619,26 @@ function getAnalysisMode(params: {
 }) {
   if (params.family === 'run' && params.hasPace) return 'pace'
   if (params.powerSourceType === 'measured') return params.hrUsable ? 'mixed' : 'power'
-  if (params.powerSourceType === 'estimated') return params.hasPace ? 'pace' : 'mixed'
+  if (params.powerSourceType === 'estimated') {
+    /**
+     * Rides never lead on speed (CW-437).
+     *
+     * This branch predates CW-394, when `'estimated'` meant runs and ski — modalities
+     * where pace really is the primary effort metric. CW-394 made
+     * `inferPowerSourceType` classify a Strava ride whose `device_watts` is explicitly
+     * `false` as estimated, which routed real outdoor rides here for the first time.
+     *
+     * Cycling speed is a far weaker proxy for effort than running pace: wind, gradient
+     * and drafting move it independently of the work done, so the same 200 W produces
+     * wildly different speeds into a headwind and down a descent. Leading the analysis
+     * with speed would build pacing narratives on the wrong signal, so an
+     * estimated-power ride resolves to `'mixed'` — which already means "no single
+     * metric leads", the honest description of that session. Run and ski behaviour is
+     * deliberately untouched (runs are caught by the `family === 'run'` rule above).
+     */
+    if (params.family === 'ride') return 'mixed'
+    return params.hasPace ? 'pace' : 'mixed'
+  }
   if (params.hrUsable) return 'mixed'
   if (params.hasRpe) return 'rpe'
   return 'mixed'

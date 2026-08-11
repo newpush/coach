@@ -2441,6 +2441,105 @@ describe('Strava estimated ride power provenance (CW-394)', () => {
   })
 })
 
+describe('analysis mode for estimated-power rides (CW-437)', () => {
+  // CW-394 started routing power-meter-less Strava rides through the 'estimated' branch of
+  // getAnalysisMode, which used to mean run/ski and therefore led on pace. Cycling speed is
+  // confounded by wind, gradient and drafting far more than running pace is, so an
+  // estimated-power ride must resolve to 'mixed' — no single metric leads. Every case here
+  // drops averageHr so hrUsable is false: that isolates the estimated branch from the
+  // `if (hrUsable) return 'mixed'` fallback further down, and makes 'mixed' load-bearing.
+  function modes(workout: Record<string, unknown>) {
+    return {
+      v1: buildWorkoutAnalysisFacts({ workout }).telemetry.analysisMode,
+      v2: buildWorkoutAnalysisFactsV2({ workout }).guardrails.analysisMode
+    }
+  }
+
+  function outdoorRide(overrides: Record<string, unknown> = {}) {
+    return makeWorkout({
+      type: 'Ride',
+      title: 'Outdoor Ride',
+      durationSec: 3600,
+      averageWatts: 198,
+      normalizedPower: 214,
+      averageHr: null,
+      averageSpeed: 8.1,
+      ...overrides
+    })
+  }
+
+  it('routes an estimated-power ride with a speed signal to mixed rather than pace', () => {
+    const workout = outdoorRide({ rawJson: { device_watts: false } })
+    const facts = buildWorkoutAnalysisFactsV2({ workout })
+
+    expect(facts.guardrails.telemetry.powerSourceType).toBe('estimated')
+    expect(facts.guardrails.telemetry.paceUsable).toBe(true)
+    expect(modes(workout)).toEqual({ v1: 'mixed', v2: 'mixed' })
+  })
+
+  it('routes an estimated-power ride carrying a velocity stream to mixed as well', () => {
+    const workout = outdoorRide({
+      averageSpeed: null,
+      rawJson: { device_watts: false },
+      streams: { velocity: [7.8, 8.2, 8.6, 9.1, 8.4, 7.9] }
+    })
+    const facts = buildWorkoutAnalysisFactsV2({ workout })
+
+    expect(facts.guardrails.telemetry.powerSourceType).toBe('estimated')
+    expect(facts.guardrails.telemetry.paceUsable).toBe(true)
+    expect(modes(workout)).toEqual({ v1: 'mixed', v2: 'mixed' })
+  })
+
+  it('leaves measured-power rides on their existing modes', () => {
+    const withoutHr = outdoorRide({ rawJson: { device_watts: true } })
+    const withHr = outdoorRide({ averageHr: 145, rawJson: { device_watts: true } })
+
+    expect(
+      buildWorkoutAnalysisFactsV2({ workout: withoutHr }).guardrails.telemetry.powerSourceType
+    ).toBe('measured')
+    expect(modes(withoutHr)).toEqual({ v1: 'power', v2: 'power' })
+    expect(modes(withHr)).toEqual({ v1: 'mixed', v2: 'mixed' })
+  })
+
+  it('leaves a run with pace on pace mode', () => {
+    const workout = makeWorkout({
+      type: 'Run',
+      durationSec: 3600,
+      averageWatts: 290,
+      averageHr: null,
+      averageSpeed: 3.3
+    })
+
+    expect(buildWorkoutAnalysisFactsV2({ workout }).guardrails.telemetry.powerSourceType).toBe(
+      'estimated'
+    )
+    expect(modes(workout)).toEqual({ v1: 'pace', v2: 'pace' })
+  })
+
+  it('leaves estimated-power ski sessions on pace mode', () => {
+    const withPace = makeWorkout({
+      type: 'NordicSki',
+      durationSec: 3600,
+      averageWatts: 180,
+      averageHr: null,
+      averageSpeed: 4.2
+    })
+    const withoutPace = makeWorkout({
+      type: 'NordicSki',
+      durationSec: 3600,
+      averageWatts: 180,
+      averageHr: null,
+      averageSpeed: null
+    })
+
+    expect(
+      buildWorkoutAnalysisFactsV2({ workout: withPace }).guardrails.telemetry.powerSourceType
+    ).toBe('estimated')
+    expect(modes(withPace)).toEqual({ v1: 'pace', v2: 'pace' })
+    expect(modes(withoutPace)).toEqual({ v1: 'mixed', v2: 'mixed' })
+  })
+})
+
 describe('heart-rate physiological plausibility (CW-395)', () => {
   // A clean stream reading `usable: true` is the primary acceptance criterion here:
   // falsely suppressing HR removes decoupling, zone times, EF and durability from the
