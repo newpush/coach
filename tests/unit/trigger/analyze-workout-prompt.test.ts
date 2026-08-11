@@ -135,7 +135,6 @@ describe('buildWorkoutAnalysisPrompt', () => {
       },
       null,
       undefined,
-      undefined,
       analysisFactsV2
     )
 

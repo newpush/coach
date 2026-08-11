@@ -66,13 +66,25 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, message: 'No suggested modifications found' })
   }
 
+  // Older recommendations may have a target snapshot but no persisted relation.
+  // Recover only the exact, owned target recorded at generation time; the normal
+  // guardrail validation below still rejects a changed, completed, or ambiguous workout.
+  const targetWorkout =
+    recommendation.plannedWorkout ||
+    (targetSnapshot?.id
+      ? await prisma.plannedWorkout.findFirst({
+          where: { id: targetSnapshot.id, userId },
+          include: { completedWorkouts: true }
+        })
+      : null)
+
   // Prepare the new description (completely replacing the old one)
   const newDescription = `${modifications.description || ''}${modifications.zone_adjustments ? `\n\nZone Adjustments: ${modifications.zone_adjustments}` : ''}`
   const type =
     modifications.new_type === 'Gym' ? 'WeightTraining' : modifications.new_type || 'Ride'
   const title =
     modifications.new_title?.trim() ||
-    (type === 'Rest' ? 'Rest Day' : recommendation.plannedWorkout?.title || 'Updated Workout')
+    (type === 'Rest' ? 'Rest Day' : targetWorkout?.title || 'Updated Workout')
   const durationSec =
     modifications.new_duration_min !== undefined && modifications.new_duration_min !== null
       ? Math.round(modifications.new_duration_min * 60)
@@ -93,7 +105,7 @@ export default defineEventHandler(async (event) => {
   if (!canCreateWorkoutFromUntargetedRecommendation) {
     const validation = validateRecommendationAcceptanceTarget({
       recommendationDate: recommendation.date,
-      currentWorkout: recommendation.plannedWorkout,
+      currentWorkout: targetWorkout,
       targetSnapshot,
       activeWorkoutCountForDate
     })
@@ -106,7 +118,7 @@ export default defineEventHandler(async (event) => {
     }
   }
 
-  let targetPlannedWorkoutId = recommendation.plannedWorkoutId
+  let targetPlannedWorkoutId = targetWorkout?.id || recommendation.plannedWorkoutId
   const nextSyncStatus = (syncStatus: string | null | undefined) =>
     syncStatus === 'LOCAL_ONLY' ? 'LOCAL_ONLY' : 'PENDING'
 
@@ -122,7 +134,7 @@ export default defineEventHandler(async (event) => {
         tss: modifications.new_tss,
         description: newDescription,
         modifiedLocally: true,
-        syncStatus: nextSyncStatus(recommendation.plannedWorkout?.syncStatus),
+        syncStatus: nextSyncStatus(targetWorkout?.syncStatus),
         syncError: null
       }
     })

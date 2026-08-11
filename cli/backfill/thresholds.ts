@@ -87,6 +87,9 @@ backfillThresholdsCommand
                 lthr: true,
                 ftp: true,
                 maxHr: true,
+                // Needed for the first max-HR nomination's near-maximal floor
+                // (CW-446); without it the backfill can never nominate one.
+                dob: true,
                 distanceUnits: true
               }
             }

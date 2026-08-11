@@ -264,4 +264,87 @@ describe('workoutStreamRepository', () => {
       expect(streams.get('workout-legacy')).toBeTruthy()
     })
   })
+
+  describe('findWattsByWorkoutIds', () => {
+    beforeEach(() => {
+      workoutStreamV2.findMany.mockResolvedValue([])
+      vi.mocked(prisma.workoutStream.findMany).mockResolvedValue([] as any)
+    })
+
+    it('returns an empty map without querying when given no IDs', async () => {
+      const watts = await workoutStreamRepository.findWattsByWorkoutIds([])
+
+      expect(watts.size).toBe(0)
+      expect(workoutStreamV2.findMany).not.toHaveBeenCalled()
+      expect(prisma.workoutStream.findMany).not.toHaveBeenCalled()
+    })
+
+    it('reads watts from WorkoutStreamV2 and selects only the watts column', async () => {
+      workoutStreamV2.findMany.mockResolvedValue([
+        { workoutId: 'workout-1', watts: [100, 110, 120] }
+      ])
+
+      const watts = await workoutStreamRepository.findWattsByWorkoutIds(['workout-1'])
+
+      expect(workoutStreamV2.findMany).toHaveBeenCalledWith({
+        where: { workoutId: { in: ['workout-1'] } },
+        select: { workoutId: true, watts: true }
+      })
+      expect(watts.get('workout-1')).toEqual([100, 110, 120])
+      // V2 covered every ID, so the legacy table is never touched.
+      expect(prisma.workoutStream.findMany).not.toHaveBeenCalled()
+    })
+
+    it('falls back to the legacy V1 table for workouts with no usable V2 watts', async () => {
+      workoutStreamV2.findMany.mockResolvedValue([
+        { workoutId: 'workout-v2', watts: [200] },
+        // Present in V2 but with no power series -- must still fall back.
+        { workoutId: 'workout-empty-v2', watts: [] }
+      ])
+      vi.mocked(prisma.workoutStream.findMany).mockResolvedValue([
+        { workoutId: 'workout-empty-v2', watts: [150] },
+        { workoutId: 'workout-v1-only', watts: [175] }
+      ] as any)
+
+      const watts = await workoutStreamRepository.findWattsByWorkoutIds([
+        'workout-v2',
+        'workout-empty-v2',
+        'workout-v1-only'
+      ])
+
+      expect(prisma.workoutStream.findMany).toHaveBeenCalledWith({
+        where: { workoutId: { in: ['workout-empty-v2', 'workout-v1-only'] } },
+        select: { workoutId: true, watts: true }
+      })
+      expect(watts.get('workout-v2')).toEqual([200])
+      expect(watts.get('workout-empty-v2')).toEqual([150])
+      expect(watts.get('workout-v1-only')).toEqual([175])
+    })
+
+    it('omits workouts that have no power data in either table', async () => {
+      workoutStreamV2.findMany.mockResolvedValue([{ workoutId: 'workout-hr-only', watts: [] }])
+      vi.mocked(prisma.workoutStream.findMany).mockResolvedValue([
+        { workoutId: 'workout-hr-only', watts: null }
+      ] as any)
+
+      const watts = await workoutStreamRepository.findWattsByWorkoutIds([
+        'workout-hr-only',
+        'workout-no-streams'
+      ])
+
+      expect(watts.size).toBe(0)
+    })
+
+    it('splits a large IN(...) clause into chunks of at most 200 IDs', async () => {
+      const workoutIds = Array.from({ length: 450 }, (_, i) => `workout-${i}`)
+
+      await workoutStreamRepository.findWattsByWorkoutIds(workoutIds)
+
+      expect(workoutStreamV2.findMany).toHaveBeenCalledTimes(3)
+      const callSizes = workoutStreamV2.findMany.mock.calls.map(
+        (call: any[]) => call[0].where.workoutId.in.length
+      )
+      expect(callSizes).toEqual([200, 200, 50])
+    })
+  })
 })

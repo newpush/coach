@@ -1,6 +1,5 @@
-<!-- TRIGGER.DEV SKILLS START -->
+# CLAUDE.md
 
-## Trigger.dev agent skills
+Claude, please refer to **[AGENTS.md](./AGENTS.md)** and **[docs/04-guides/issue-management.md](./docs/04-guides/issue-management.md)** for the primary repository context, architecture, commands, operational rules, and Linear issue management standards.
 
-This project has Trigger.dev agent skills installed in `.claude/skills/`. Before writing or changing Trigger.dev code (background tasks, scheduled tasks, realtime, or chat.agent AI agents), load the most relevant skill: `trigger-authoring-chat-agent`.
-<!-- TRIGGER.DEV SKILLS END -->
+This file (CLAUDE.md) is an entry point to ensure you find the centralized instructions.

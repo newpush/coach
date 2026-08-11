@@ -9,7 +9,8 @@ const mocks = vi.hoisted(() => ({
   messageUpdate: vi.fn(),
   eventCreate: vi.fn(),
   usageUpdateMany: vi.fn(),
-  transaction: vi.fn()
+  transaction: vi.fn(),
+  captureMessage: vi.fn()
 }))
 
 vi.mock('../../../../../server/utils/db', () => ({
@@ -21,6 +22,10 @@ vi.mock('../../../../../server/utils/db', () => ({
     },
     $transaction: mocks.transaction
   }
+}))
+
+vi.mock('@sentry/nuxt', () => ({
+  captureMessage: mocks.captureMessage
 }))
 
 const now = new Date('2026-07-12T12:00:00.000Z')
@@ -148,6 +153,52 @@ describe('chat turn restart recovery', () => {
         })
       })
     )
+  })
+
+  it('reports requeue and interruption telemetry to Sentry/console (CW-295)', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+    mocks.findMany.mockResolvedValue([buildTurn()])
+    await chatTurnService.recoverStaleTurns(now)
+
+    expect(warnSpy).toHaveBeenCalledWith(
+      '[ChatTurn] Turn requeued after heartbeat timeout.',
+      expect.objectContaining({ turnId: 'turn-1', recoveryReason: 'heartbeat_timeout' })
+    )
+    expect(mocks.captureMessage).not.toHaveBeenCalled()
+
+    vi.clearAllMocks()
+    mocks.transaction.mockImplementation(async (callback) =>
+      callback({
+        chatTurn: { updateMany: mocks.updateMany },
+        chatMessage: { update: mocks.messageUpdate },
+        chatTurnEvent: { create: mocks.eventCreate },
+        llmUsage: { updateMany: mocks.usageUpdateMany }
+      })
+    )
+    mocks.updateMany.mockResolvedValue({ count: 1 })
+    mocks.messageUpdate.mockResolvedValue({})
+    mocks.eventCreate.mockResolvedValue({})
+    mocks.usageUpdateMany.mockResolvedValue({ count: 1 })
+    mocks.findMany.mockResolvedValue([buildTurn(2)])
+
+    await chatTurnService.recoverStaleTurns(now)
+
+    expect(errorSpy).toHaveBeenCalledWith(
+      '[ChatTurn] Turn interrupted after recovery attempts exhausted.',
+      expect.objectContaining({ turnId: 'turn-1', recoveryReason: 'heartbeat_timeout' })
+    )
+    expect(mocks.captureMessage).toHaveBeenCalledWith(
+      'ChatTurn heartbeat-timeout recovery exhausted',
+      expect.objectContaining({
+        level: 'warning',
+        tags: { turnId: 'turn-1', recoveryReason: 'heartbeat_timeout' }
+      })
+    )
+
+    errorSpy.mockRestore()
+    warnSpy.mockRestore()
   })
 
   it('does not recover a turn whose heartbeat was concurrently refreshed', async () => {

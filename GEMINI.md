@@ -1,34 +1,35 @@
-## Coach Watts Hot Context
+# GEMINI.md
 
-This file tracks ongoing project state, active blockers, and recent architectural changes that haven't yet been formalized in `RULES.md` or `docs/`.
+Gemini, please refer to **[AGENTS.md](./AGENTS.md)** and **[docs/04-guides/issue-management.md](./docs/04-guides/issue-management.md)** for the primary repository context, architecture, commands, operational rules, and Linear issue management standards.
 
-### Active Status & Known Issues
+This file (GEMINI.md) is an entry point to ensure you find the centralized instructions.
+
+## Hot context (product notes)
+
+Ongoing project state that has not yet been fully folded into `AGENTS.md` or `docs/`:
 
 - **Typechecks**: `pnpm typecheck` is the canonical fresh check; use `pnpm typecheck:fast`, `:app`, `:server`, or `:watch` for shorter feedback loops. See `docs/04-guides/typechecking.md`.
 - **Pricing Transition**: Transitioning from 'Free for Early Adopters' to tiered structure: Free ($0), Supporter ($8.99/mo), and Pro ($14.99/mo). See `docs/06-plans/pricing-and-entitlements.md`.
+- **Wellness Tracking**: Weight and Blood Pressure via Intervals.icu.
+- **Oura Integration**: SpO2, Stress, VO2 Max, and Weight. Raw biometrics (HRV/RHR) are extracted to avoid score conflicts.
+- **Location Tracking**: `cw:cli users location` tools manage user countries based on last login IP.
+- **Chat Stability**: AI SDK v5 UIMessage schema. See `docs/04-guides/chat-development.md`.
+- **LLM Response Mocking**: Flat JSON fixtures in `tests/fixtures/llm-mocks/` when `MOCK_LLM_RESPONSES=true`. Update/create `tests/fixtures/llm-mocks/${operation}.json` when AI schemas or operations change. See `docs/04-guides/e2e-testing.md`.
+- **Git & PR Workflow**: PRs target `develop` (`gh pr create --base develop`). Merge: ticket branches → `develop` → `master`. No direct pushes to `master` or `develop`.
 
-### Recent Integrations & Changes
+### Feature pointers
 
-- **Wellness Tracking**: Added Weight and Blood Pressure tracking via Intervals.icu.
-- **Oura Integration**: Expanded to include SpO2, Stress, VO2 Max, and Weight. Raw biometrics (HRV/RHR) are strictly extracted to avoid score conflicts.
-- **Location Tracking**: Added `cw:cli users location` tools to manage user countries based on last login IP.
-- **Chat Stability**: fully stabilized using AI SDK v5 UIMessage schema. See `docs/04-guides/chat-development.md`.
-- **LLM Response Mocking**: Flat JSON fixtures in `tests/fixtures/llm-mocks/` are loaded when `MOCK_LLM_RESPONSES=true` is set. Whenever you modify AI schemas or add operations, update/create the corresponding `tests/fixtures/llm-mocks/${operation}.json` file. See `docs/04-guides/e2e-testing.md`.
-- **Git & PR Workflow**: Pull Requests must target the `develop` branch by default. Merge flow: feature/bugfix branches -> `develop` -> `master`. Direct pushes to `master` or `develop` are strictly prohibited.
+- **CLI Reference**: `docs/04-guides/cli-reference.md` — maintain whenever the CLI changes.
+- **Nutrition Logic**: `docs/02-features/nutrition/fueling-logic.md`
+- **System Messages**: `docs/02-features/system-messages.md`
+- **Email System**: `docs/02-features/email-communication.md`
+- **Chat Development**: `docs/04-guides/chat-development.md`
+- **Timezone Handling**: `docs/04-guides/timezone-handling.md`
+- **E2E Testing**: `docs/04-guides/e2e-testing.md` — targeted specs during development; full suite (`pnpm test:e2e`) when work is complete.
 
-### Feature Pointers
-
-- **CLI Reference**: See `docs/04-guides/cli-reference.md`. **IMPORTANT**: Maintain this document whenever the CLI is updated or new issues/commands are found.
-- **Nutrition Logic**: See `docs/02-features/nutrition/fueling-logic.md`.
-- **System Messages**: See `docs/02-features/system-messages.md`.
-- **Email System**: See `docs/02-features/email-communication.md`.
-- **Chat Development**: See `docs/04-guides/chat-development.md`.
-- **Timezone Handling**: See `docs/04-guides/timezone-handling.md`.
-- **E2E Testing**: See `docs/04-guides/e2e-testing.md`. Run targeted spec files during development (`pnpm exec playwright test <spec>`) and full suite (`pnpm test:e2e`) only when work is complete.
-
-### Critical Prisma Workflow (DO NOT IGNORE)
+### Critical Prisma workflow
 
 - **NEVER use `prisma db push`**. It breaks migration history and causes schema drift.
 - **NEVER use `prisma migrate reset`** on the local database unless explicitly told by the user. It destroys data.
-- **Mandatory Migrations**: Whenever you modify `prisma/schema.prisma`, you MUST immediately create a migration file using `npx prisma migrate dev --name <descriptive_name>`. Do not commit schema changes without the corresponding `prisma/migrations` folder update.
-- **Handling Schema Drift**: If `migrate dev` prompts to reset the database due to drift (e.g. "We need to reset the public schema"), **CANCEL IT**. You must resolve the drift manually by generating the SQL, creating a migration folder, and using `npx prisma migrate resolve --applied <name>` followed by `npx prisma migrate deploy`.
+- **Mandatory Migrations**: After changing `prisma/schema.prisma`, create a migration with `npx prisma migrate dev --name <descriptive_name>`. Do not commit schema changes without the matching `prisma/migrations` update.
+- **Handling Schema Drift**: If `migrate dev` prompts to reset due to drift, **CANCEL IT**. Resolve manually (generate SQL, create migration folder, `npx prisma migrate resolve --applied <name>`, then `npx prisma migrate deploy`).

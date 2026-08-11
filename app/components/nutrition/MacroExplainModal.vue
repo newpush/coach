@@ -1,7 +1,10 @@
 <template>
   <UModal
     v-model:open="isOpen"
-    :ui="{ content: 'sm:max-w-md' }"
+    :ui="{
+      content: 'sm:max-w-md z-[9999]',
+      overlay: 'z-[9998]'
+    }"
     title="Macro Analysis"
     description="Explanation of macronutrients and their role in your metabolic strategy."
   >

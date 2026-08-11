@@ -333,6 +333,64 @@ export const workoutStreamRepository = {
     return result
   },
 
+  /**
+   * Watts-only bulk read for aggregate power analytics.
+   *
+   * findManyByWorkoutIds() always fetches the REQUIRED_V2_SELECT baseline so
+   * hasUsableStreamData() can decide V2-vs-V1, which means ~6 parallel series
+   * per workout. Curve endpoints scan up to two years of workouts at once and
+   * only ever look at `watts`, so the baseline is the dominant cost there.
+   * This reads a single column and decides the V1 fallback from the presence
+   * of a non-empty watts series, which is the only signal that matters here.
+   *
+   * Workouts with no power data are simply absent from the returned map.
+   */
+  async findWattsByWorkoutIds(workoutIds: string[]): Promise<Map<string, number[]>> {
+    const result = new Map<string, number[]>()
+    if (workoutIds.length === 0) return result
+
+    const chunks = chunkArray(workoutIds, WORKOUT_ID_CHUNK_SIZE)
+
+    const v2Chunks = await Promise.all(
+      chunks.map((chunk) =>
+        (prisma as any).workoutStreamV2
+          .findMany({
+            where: { workoutId: { in: chunk } },
+            select: { workoutId: true, watts: true }
+          })
+          .catch(() => [])
+      )
+    )
+
+    for (const record of v2Chunks.flat() as Array<{ workoutId: string; watts: unknown }>) {
+      if (Array.isArray(record.watts) && record.watts.length > 0) {
+        result.set(record.workoutId, record.watts as number[])
+      }
+    }
+
+    const missingIds = workoutIds.filter((id) => !result.has(id))
+    if (missingIds.length === 0) return result
+
+    const v1Chunks = await Promise.all(
+      chunkArray(missingIds, WORKOUT_ID_CHUNK_SIZE).map((chunk) =>
+        prisma.workoutStream
+          .findMany({
+            where: { workoutId: { in: chunk } },
+            select: { workoutId: true, watts: true }
+          })
+          .catch(() => [])
+      )
+    )
+
+    for (const record of v1Chunks.flat() as Array<{ workoutId: string; watts: unknown }>) {
+      if (Array.isArray(record.watts) && record.watts.length > 0) {
+        result.set(record.workoutId, record.watts as number[])
+      }
+    }
+
+    return result
+  },
+
   async updateMetadata(
     workoutId: string,
     data: { hrZoneTimes?: unknown; powerZoneTimes?: unknown }

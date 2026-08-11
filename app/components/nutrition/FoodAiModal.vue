@@ -2,6 +2,10 @@
   <UModal
     v-model:open="isOpen"
     title="AI Nutrition Logger"
+    :ui="{
+      content: 'z-[9999]',
+      overlay: 'z-[9998]'
+    }"
     description="Describe what you ate in natural language."
   >
     <template #header>

@@ -1,4 +1,5 @@
 import type { Prisma } from '@prisma/client'
+import * as Sentry from '@sentry/nuxt'
 import { prisma } from '../db'
 import { expandStoredChatMessages, truncateMessages } from '../chat/history'
 import { shouldExcludeAssistantMessageFromHistory } from '../chat/message-state'
@@ -602,7 +603,7 @@ class ChatTurnService {
     ]
     const cutoff = new Date(now.getTime() - CHAT_TURN_HEARTBEAT_TIMEOUT_MS)
 
-    return await prisma.$transaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx) => {
       const claimed = await tx.chatTurn.updateMany({
         where: {
           id: turn.id,
@@ -757,6 +758,41 @@ class ChatTurnService {
           ? ('completed' as const)
           : ('interrupted' as const)
     })
+
+    // Recovery telemetry previously only landed in ChatTurnEvent rows (DB-only, no
+    // alerting/searchability). Surface it to Sentry/console so a recurrence is
+    // diagnosable without depending on docker log retention (see CW-295).
+    if (result === 'requeued' || result === 'interrupted') {
+      const elapsedMs =
+        turn.startedAt instanceof Date
+          ? now.getTime() - turn.startedAt.getTime()
+          : now.getTime() - turn.createdAt.getTime()
+      const logPayload = {
+        turnId: turn.id,
+        roomId: turn.roomId,
+        userId: turn.userId,
+        recoveryReason: reason,
+        recoveryAttempts,
+        recoveryClaimant,
+        previousRunId: turn.runId,
+        deploymentId: getDeploymentIdentity(),
+        elapsedMs,
+        hasUncertainMutation
+      }
+
+      if (result === 'interrupted') {
+        console.error('[ChatTurn] Turn interrupted after recovery attempts exhausted.', logPayload)
+        Sentry.captureMessage('ChatTurn heartbeat-timeout recovery exhausted', {
+          level: 'warning',
+          tags: { turnId: turn.id, recoveryReason: reason },
+          extra: logPayload
+        })
+      } else {
+        console.warn('[ChatTurn] Turn requeued after heartbeat timeout.', logPayload)
+      }
+    }
+
+    return result
   }
 
   async recoverStaleTurns(now = new Date(), recoveryClaimant = 'unknown') {

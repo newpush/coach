@@ -1,3 +1,31 @@
+import { resolveSplitPacingVerdictApplicability } from './services/workout-analysis-prompt'
+import type { WorkoutAnalysisFactsV2 } from './workout-analysis-facts'
+
+/**
+ * Plain-language stand-in shown to the athlete when the split-strategy verdict
+ * does not apply to this session shape (CW-436). The machine-readable reason from
+ * the shared gate travels alongside it as `verdictWithheldReason`.
+ */
+export const SPLIT_STRATEGY_NOT_GRADED_DESCRIPTION =
+  'Splits are cut at fixed distances, not at your efforts, so a first-half vs second-half comparison would not describe how you paced this session.'
+
+export interface PacingStrategyAnalysis {
+  strategy: string
+  description: string
+  /**
+   * Evenness grade (0-100). Withheld together with the rest of the verdict when
+   * the session shape makes distance-split halves incomparable.
+   */
+  evenness?: number
+  firstHalfPace?: number
+  secondHalfPace?: number
+  paceDifference?: number
+  /** False when the split-strategy verdict is withheld for this session shape. */
+  verdictApplicable: boolean
+  /** Why the verdict was withheld, or null when it applies. */
+  verdictWithheldReason: string | null
+}
+
 /**
  * Calculate lap splits from time and distance streams
  * @param timeData - Array of elapsed time in seconds
@@ -175,16 +203,45 @@ export function formatPace(paceMinPerKm: number | null): string {
 }
 
 /**
- * Detect if pacing was even or if there was positive/negative split
- * @param lapSplits - Array of lap split objects
+ * Detect if pacing was even or if there was positive/negative split.
+ *
+ * These are automatic per-distance splits, not laps and not the workout's work
+ * intervals. For an intervalled or stochastic session they cut across warmup,
+ * work reps, recoveries and cooldown, so their halves are not comparable and the
+ * strategy verdict is withheld (CW-436). The gate is the same one CW-389 applied
+ * to the AI prompt -- `resolveSplitPacingVerdictApplicability` -- so the pacing
+ * card and the AI analysis agree about whether pacing was gradeable.
+ *
+ * The per-split rows and the raw dispersion measurement are unaffected; only the
+ * grading is withheld.
+ *
+ * @param lapSplits - Array of distance-split objects
+ * @param analysisFacts - v2 analysis facts; when omitted the verdict applies, which
+ *   keeps ingestion-time callers (which have no facts) on today's behaviour
  * @returns Analysis of pacing strategy
  */
-export function analyzePacingStrategy(lapSplits: any[]) {
+export function analyzePacingStrategy(
+  lapSplits: any[],
+  analysisFacts?: WorkoutAnalysisFactsV2
+): PacingStrategyAnalysis {
+  const splitVerdict = resolveSplitPacingVerdictApplicability(analysisFacts)
+
   if (lapSplits.length < 2) {
     return {
       strategy: 'insufficient_data',
       description: 'Not enough laps to analyze pacing strategy',
-      evenness: 0
+      evenness: 0,
+      verdictApplicable: splitVerdict.applicable,
+      verdictWithheldReason: splitVerdict.reason
+    }
+  }
+
+  if (!splitVerdict.applicable) {
+    return {
+      strategy: 'not_graded',
+      description: SPLIT_STRATEGY_NOT_GRADED_DESCRIPTION,
+      verdictApplicable: false,
+      verdictWithheldReason: splitVerdict.reason
     }
   }
 
@@ -233,7 +290,9 @@ export function analyzePacingStrategy(lapSplits: any[]) {
     evenness: Math.round(evennessScore),
     firstHalfPace: Math.round(firstHalfAvgPace),
     secondHalfPace: Math.round(secondHalfAvgPace),
-    paceDifference: Math.round(paceDifference)
+    paceDifference: Math.round(paceDifference),
+    verdictApplicable: true,
+    verdictWithheldReason: null
   }
 }
 

@@ -2,6 +2,10 @@
   <UModal
     v-model:open="isOpen"
     :title="isEditing ? 'Edit Food Entry' : 'Add Food Entry'"
+    :ui="{
+      content: 'z-[9999]',
+      overlay: 'z-[9998]'
+    }"
     description="Correct or update nutritional information for this item."
   >
     <template #header>

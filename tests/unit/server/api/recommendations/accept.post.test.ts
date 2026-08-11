@@ -29,6 +29,7 @@ vi.mock('../../../../../server/utils/db', () => ({
     },
     plannedWorkout: {
       count: vi.fn(),
+      findFirst: vi.fn(),
       create: vi.fn(),
       update: vi.fn(),
       findUnique: vi.fn()
@@ -140,6 +141,69 @@ describe('POST /api/recommendations/[id]/accept', () => {
     expect(result).toEqual({
       success: true,
       message: 'Workout updated successfully'
+    })
+  })
+
+  it('recovers the saved target for legacy recommendations missing the workout relation', async () => {
+    const handler = await getHandler()
+
+    vi.mocked(prisma.activityRecommendation.findUnique).mockResolvedValue({
+      id: 'rec-legacy',
+      userId: 'user-1',
+      date: new Date('2026-03-12T00:00:00Z'),
+      userAccepted: false,
+      plannedWorkoutId: null,
+      analysisJson: {
+        guardrails: {
+          targetPlannedWorkout: { id: 'planned-1', updatedAt: '2026-03-12T06:00:00.000Z' }
+        },
+        suggested_modifications: {
+          description: 'Take the rest of the day off.',
+          new_type: 'Rest',
+          new_duration_min: 0,
+          new_tss: 0
+        }
+      },
+      plannedWorkout: null
+    } as any)
+    vi.mocked(prisma.plannedWorkout.findFirst).mockResolvedValue({
+      id: 'planned-1',
+      title: 'Long Endurance Ride',
+      completed: false,
+      completionStatus: 'PENDING',
+      completedWorkouts: [],
+      updatedAt: new Date('2026-03-12T06:00:00.000Z'),
+      syncStatus: 'LOCAL_ONLY'
+    } as any)
+    vi.mocked(prisma.plannedWorkout.update).mockResolvedValue({
+      id: 'planned-1',
+      type: 'Rest',
+      syncStatus: 'LOCAL_ONLY',
+      externalId: 'ai_gen_user-1_2026-03-12_1',
+      date: new Date('2026-03-12T00:00:00Z'),
+      title: 'Rest Day',
+      description: 'Take the rest of the day off.',
+      durationSec: 0,
+      tss: 0,
+      managedBy: 'COACH_WATTS'
+    } as any)
+
+    await expect(handler({ context: { params: { id: 'rec-legacy' } } } as any)).resolves.toEqual({
+      success: true,
+      message: 'Workout updated successfully'
+    })
+
+    expect(prisma.plannedWorkout.findFirst).toHaveBeenCalledWith({
+      where: { id: 'planned-1', userId: 'user-1' },
+      include: { completedWorkouts: true }
+    })
+    expect(prisma.plannedWorkout.update).toHaveBeenCalledWith({
+      where: { id: 'planned-1' },
+      data: expect.objectContaining({ type: 'Rest' })
+    })
+    expect(prisma.activityRecommendation.update).toHaveBeenCalledWith({
+      where: { id: 'rec-legacy' },
+      data: { userAccepted: true, plannedWorkoutId: 'planned-1' }
     })
   })
 

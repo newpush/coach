@@ -24,10 +24,11 @@ Task state lives in Linear, never in git-tracked markdown. Files under `docs/iss
 3. **Only touch the ticket's `Owned Paths`.** If the work requires files outside that set, stop and move the ticket to `Blocked`.
 4. **Never mark a ticket `Done` without clean verification output.** Run the ticket's Verification Command and post the output as a comment.
 5. **Blocked is a state, not a vibe.** Missing credentials, ambiguity, or an external dependency → move to `Blocked` and say what you need. Never leave a stalled ticket sitting in `In Progress`.
+6. **File follow-ups in Linear.** Bugs, risks, missing requirements, tech debt, or out-of-scope todos discovered while working → create a `CW` issue in `Triage` (see issue-management §8). Do not expand the current ticket's scope to absorb them.
 
 ## Execution loop
 
-**Plan → Act → Verify → Push & Open PR → Log & Transition.** Confirm file locations and restate the approach on the ticket; implement inside the worktree; run the verification command; push branch (`git push origin <branch>`) and open Pull Request (`gh pr create --target develop --body "Fixes CW-XYZ"`); post results, PR link, and diff summary to Linear.
+**Plan → Act → Verify → Push & Open PR → Log & Transition.** Confirm file locations and restate the approach on the ticket; implement inside the worktree; run the verification command; push branch (`git push origin <branch>`) and open Pull Request (`gh pr create --base develop --body "Fixes CW-XYZ"`); post results, PR link, and diff summary to Linear.
 
 ## Commands
 
@@ -41,10 +42,6 @@ npx prisma migrate dev
 ```
 
 See [`docs/04-guides/`](docs/04-guides/) for typechecking, e2e testing, chat development, localization, and analytics guides.
-
-## Trigger.dev
-
-This project has Trigger.dev agent skills in `.claude/skills/`. Before writing or changing Trigger.dev code (background tasks, scheduled tasks, realtime, or `chat.agent` AI agents), load the relevant skill: `trigger-authoring-chat-agent`.
 
 ## Scope
 

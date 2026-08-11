@@ -68,6 +68,8 @@ Manage user accounts, statistics, and quotas.
 - `location`: Manage user countries based on last login IP.
 - `quota`: View or manage user AI/API usage quotas.
 - `reset-quota`: Reset usage quotas for specific users.
+- `data export|api-pull|import`: Export a user universe to a file and import it as a new user.
+- `data transfer`: Selectively copy a user's data from one instance's database onto an existing user in another (prod → testing). See [Data Management](./data-management.md#developer-workflow-prod-to-testing-transfer).
 
 #### 2b. Subscriptions (`subscriptions`)
 

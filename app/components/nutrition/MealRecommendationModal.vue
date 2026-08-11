@@ -2,7 +2,10 @@
   <UModal
     v-model:open="isOpen"
     title="Meal Recommendations"
-    :ui="{ content: 'sm:max-w-2xl' }"
+    :ui="{
+      content: 'sm:max-w-2xl z-[9999]',
+      overlay: 'z-[9998]'
+    }"
     description="Nutritional recommendations based on your planned activity and metabolic state."
   >
     <template #header>

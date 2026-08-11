@@ -358,7 +358,10 @@
 
   <UModal
     v-model:open="showCarbExplainModal"
-    :ui="{ content: 'sm:max-w-md' }"
+    :ui="{
+      content: 'sm:max-w-md z-[9999]',
+      overlay: 'z-[9998]'
+    }"
     title="Carbohydrate Target Details"
     description="Explanation of your carbohydrate targets and current compliance status for this fueling window."
   >

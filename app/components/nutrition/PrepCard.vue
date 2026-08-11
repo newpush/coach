@@ -188,7 +188,10 @@
 
   <UModal
     v-model:open="showFuelStateModal"
-    :ui="{ content: 'sm:max-w-lg' }"
+    :ui="{
+      content: 'sm:max-w-lg z-[9999]',
+      overlay: 'z-[9998]'
+    }"
     title="Fuel State Breakdown"
     description="Technical details on how your fueling state was calculated based on workout intensity and triggers."
   >

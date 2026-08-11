@@ -525,38 +525,52 @@
     userNotes: ''
   })
 
-  watch(
-    () => props.item,
-    (item) => {
-      if (item?.kind === 'journey_event') {
-        journeyForm.category = (item.category || 'FATIGUE') as JourneyEventCategory
-        journeyForm.eventType = (String(item.metadata?.eventType || 'SYMPTOM') ||
-          'SYMPTOM') as JourneyEventType
-        journeyForm.severity = item.severity || 5
-        journeyForm.timestamp = toLocalDateTimeValue(item.startAt)
-        journeyForm.description = item.description || ''
-        selectedTimePreset.value = 'custom'
-      } else if (item?.kind === 'daily_checkin') {
-        checkinForm.questions = (item.rawAnswerSummary || []).map((question) => ({
-          ...question,
-          answer: question.answer || undefined
-        }))
-        checkinForm.userNotes = item.userNotes || ''
-      }
-    },
-    { immediate: true }
-  )
+  function toLocalDateTimeValue(value?: string | Date | null): string {
+    if (!value) {
+      const now = new Date()
+      const local = new Date(now.getTime() - now.getTimezoneOffset() * 60000)
+      return local.toISOString().slice(0, 16)
+    }
+    const date = typeof value === 'string' ? new Date(value) : value
+    if (isNaN(date.getTime())) {
+      const now = new Date()
+      const local = new Date(now.getTime() - now.getTimezoneOffset() * 60000)
+      return local.toISOString().slice(0, 16)
+    }
+    const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000)
+    return local.toISOString().slice(0, 16)
+  }
+
+  function initForm() {
+    if (createMode.value) {
+      journeyForm.category = 'FATIGUE'
+      journeyForm.eventType = 'SYMPTOM'
+      journeyForm.severity = 6
+      journeyForm.timestamp = toLocalDateTimeValue(props.createDate || new Date())
+      journeyForm.description = ''
+      selectedTimePreset.value = props.createDate ? 'custom' : 'now'
+    } else if (props.item?.kind === 'journey_event') {
+      journeyForm.category = (props.item.category || 'FATIGUE') as JourneyEventCategory
+      journeyForm.eventType = (String(props.item.metadata?.eventType || 'SYMPTOM') ||
+        'SYMPTOM') as JourneyEventType
+      journeyForm.severity = props.item.severity || 5
+      journeyForm.timestamp = toLocalDateTimeValue(props.item.startAt)
+      journeyForm.description = props.item.description || ''
+      selectedTimePreset.value = 'custom'
+    } else if (props.item?.kind === 'daily_checkin') {
+      checkinForm.questions = (props.item.rawAnswerSummary || []).map((question) => ({
+        ...question,
+        answer: question.answer || undefined
+      }))
+      checkinForm.userNotes = props.item.userNotes || ''
+    }
+  }
 
   watch(
-    () => props.createDate,
-    (createDate) => {
-      if (createMode.value) {
-        journeyForm.category = 'FATIGUE'
-        journeyForm.eventType = 'SYMPTOM'
-        journeyForm.severity = 6
-        journeyForm.timestamp = toLocalDateTimeValue(createDate || new Date().toISOString())
-        journeyForm.description = ''
-        selectedTimePreset.value = createDate ? 'custom' : 'now'
+    () => [props.open, props.item, props.createDate],
+    ([open]) => {
+      if (open) {
+        initForm()
       }
     },
     { immediate: true }
@@ -575,10 +589,6 @@
     if (journeyForm.eventType === 'WELLNESS_CHECK') return 'Logged as wellness check'
     return 'Logged as symptom'
   })
-
-  function toLocalDateTimeValue(value: string) {
-    return new Date(value).toISOString().slice(0, 16)
-  }
 
   function setLocalDateTime(baseDate: Date, hour: number, minute: number) {
     const date = new Date(baseDate)
@@ -623,13 +633,25 @@
       nextDate = setLocalDateTime(yesterday, 9, 0)
     }
 
-    journeyForm.timestamp = toLocalDateTimeValue(nextDate.toISOString())
+    journeyForm.timestamp = toLocalDateTimeValue(nextDate)
   }
 
   async function handleSave() {
     saving.value = true
 
     try {
+      if (createMode.value || isJourneyEvent.value) {
+        if (!journeyForm.timestamp || isNaN(new Date(journeyForm.timestamp).getTime())) {
+          toast.add({
+            title: 'Invalid time value',
+            description: 'Please select a valid date and time for the recovery event.',
+            color: 'error'
+          })
+          saving.value = false
+          return
+        }
+      }
+
       if (createMode.value) {
         await $fetch<any, string & {}>('/api/recovery-context/journey', {
           method: 'POST',

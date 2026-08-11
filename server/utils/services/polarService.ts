@@ -27,6 +27,11 @@ export const polarService = {
     // Ensure valid token
     const validIntegration = await ensureValidToken(integration)
 
+    await prisma.integration.update({
+      where: { id: integration.id },
+      data: { syncStatus: 'SYNCING' }
+    })
+
     const results = {
       exercises: 0,
       sleeps: 0,
@@ -60,13 +65,13 @@ export const polarService = {
           errorMessage: null
         }
       })
-    } catch (error: any) {
+    } catch (error) {
       console.error('Polar sync error:', error)
       await prisma.integration.update({
         where: { id: integration.id },
         data: {
           syncStatus: 'FAILED',
-          errorMessage: error.message
+          errorMessage: error instanceof Error ? error.message : 'Unknown error'
         }
       })
       throw error

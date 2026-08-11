@@ -1,7 +1,13 @@
 import { defineEventHandler, createError, getRouterParam } from 'h3'
 import { prisma } from '../../../../utils/db'
 import { workoutStreamRepository } from '../../../../utils/repositories/workoutStreamRepository'
+import { sportSettingsRepository } from '../../../../utils/repositories/sportSettingsRepository'
 import { formatPromptPace } from '../../../../utils/ai-prompt-format'
+import { analyzePacingStrategy } from '../../../../utils/pacing'
+import {
+  buildWorkoutAnalysisFactsV2,
+  type WorkoutAnalysisFactsV2
+} from '../../../../utils/workout-analysis-facts'
 
 defineRouteMeta({
   openAPI: {
@@ -68,15 +74,24 @@ export default defineEventHandler(async (event) => {
     })
   }
 
-  // Get workout with streams by ID
+  // Get workout with streams by ID.
+  //
+  // `plannedWorkout` and the owner profile fields are DETECTION INPUTS ONLY: they feed the
+  // v2 analysis facts builder below and are never returned. The response body is built from
+  // the stream record (or, in the fallback, from hand-picked split fields), so nothing on
+  // `workout` -- including `user` and `userId` -- reaches the shared payload (CW-418/CW-441).
   const workout = await (prisma as any).workout.findUnique({
     where: {
       id: shareToken.resourceId
     },
     include: {
+      plannedWorkout: true,
       user: {
         select: {
-          distanceUnits: true
+          distanceUnits: true,
+          weight: true,
+          weightUnits: true,
+          language: true
         }
       }
     }
@@ -91,8 +106,57 @@ export default defineEventHandler(async (event) => {
 
   const workoutStream = await workoutStreamRepository.findByWorkoutId(workout.id)
 
+  // CW-441: the shared view must agree with the owner's pacing card (CW-436) and with the AI
+  // analysis (CW-389) about whether this session's pacing was gradeable at all. The persisted
+  // `pacingStrategy` was computed at ingestion with no facts available, so it carries an
+  // ungraded verdict; the verdict is therefore recomputed here, on the same shared gate.
+  //
+  // This endpoint is authenticated by share token and has no session user, so the sport
+  // settings the builder needs are resolved from the workout OWNER via `workout.userId` --
+  // never from whoever is viewing the link (the CW-418 precedent in the sibling
+  // intervals.get.ts). Those settings stay server-side; see the note on the query above.
+  //
+  // Built lazily and memoised, mirroring the owner endpoint: the builder runs its own
+  // interval detection over the full streams, so a request with no splits to grade must not
+  // pay for it, and it runs at most once per request. A failure here must never take the
+  // pacing card down -- returning undefined leaves the verdict applicable, i.e. the
+  // pre-CW-441 behaviour.
+  let analysisFactsV2Resolved = false
+  let analysisFactsV2: WorkoutAnalysisFactsV2 | undefined
+  const resolveAnalysisFactsV2 = async (): Promise<WorkoutAnalysisFactsV2 | undefined> => {
+    if (analysisFactsV2Resolved) return analysisFactsV2
+    analysisFactsV2Resolved = true
+    try {
+      const ownerId = workout.userId || workout.user?.id
+      analysisFactsV2 = buildWorkoutAnalysisFactsV2({
+        workout: { ...workout, streams: workoutStream } as any,
+        sportSettings: ownerId
+          ? await sportSettingsRepository.getForActivityType(ownerId, workout.type || '')
+          : null,
+        plannedWorkout: workout.plannedWorkout,
+        userProfile: workout.user || undefined
+      })
+    } catch (factsError) {
+      console.error('[API] share streams.get: failed to build analysis facts v2:', factsError)
+    }
+    return analysisFactsV2
+  }
+
   if (workoutStream) {
-    // Return actual time-series stream data
+    // Return actual time-series stream data, with the split-strategy verdict re-graded on the
+    // shared gate. Only `pacingStrategy` is replaced: the split rows and the raw dispersion
+    // measurement (`lapSplits`, `paceVariability`, `avgPacePerKm`) are untouched, because it
+    // is the grading that is withheld, not the data.
+    if (workoutStream.lapSplits && Array.isArray(workoutStream.lapSplits)) {
+      return {
+        ...workoutStream,
+        pacingStrategy: analyzePacingStrategy(
+          workoutStream.lapSplits,
+          await resolveAnalysisFactsV2()
+        ) as any
+      }
+    }
+
     return workoutStream
   }
 
@@ -142,31 +206,11 @@ export default defineEventHandler(async (event) => {
             )
           : 0
 
-      // Calculate first/second half for pacing strategy
-      const halfwayIndex = Math.floor(lapSplits.length / 2)
-      const firstHalf = lapSplits.slice(0, halfwayIndex)
-      const secondHalf = lapSplits.slice(halfwayIndex)
-
-      const firstHalfPace =
-        firstHalf.reduce((sum: number, s: any) => sum + s.paceSeconds, 0) / firstHalf.length
-      const secondHalfPace =
-        secondHalf.reduce((sum: number, s: any) => sum + s.paceSeconds, 0) / secondHalf.length
-      const paceDifference = secondHalfPace - firstHalfPace
-
-      let strategy = 'even'
-      let description = 'Consistent pacing throughout'
-      if (paceDifference > 10) {
-        strategy = 'positive_split'
-        description = 'Slowed down in second half'
-      } else if (paceDifference < -10) {
-        strategy = 'negative_split'
-        description = 'Sped up in second half'
-      }
-
-      const evenness = Math.max(
-        0,
-        Math.min(100, 100 - (Math.abs(paceDifference) / avgPaceSecondsValue) * 100)
-      )
+      // Use the shared utility, exactly as the owner's endpoint does for this same fallback.
+      // It applies `resolveSplitPacingVerdictApplicability` internally, so the owner view and
+      // the shared view reach the same verdict decision for the same workout instead of
+      // drifting apart through a second, hand-rolled copy of the thresholds (CW-441).
+      const pacingStrategy = analyzePacingStrategy(lapSplits, await resolveAnalysisFactsV2())
 
       return {
         workoutId: workout.id,
@@ -174,14 +218,7 @@ export default defineEventHandler(async (event) => {
         lapSplits,
         avgPacePerKm: avgPaceMinPerKm,
         paceVariability: paceVariability,
-        pacingStrategy: {
-          strategy,
-          description,
-          firstHalfPace: firstHalfPace,
-          secondHalfPace: secondHalfPace,
-          paceDifference: paceDifference,
-          evenness: Math.round(evenness)
-        },
+        pacingStrategy,
         createdAt: new Date(),
         updatedAt: new Date()
       }

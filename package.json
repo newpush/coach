@@ -1,6 +1,6 @@
 {
   "dependencies": {
-    "@ai-sdk/google": "^4.0.10",
+    "@ai-sdk/google": "^4.0.29",
     "@ai-sdk/vue": "^4.0.18",
     "@auth/core": "^0.34.3",
     "@google-cloud/storage": "^7.18.0",
