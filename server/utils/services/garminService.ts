@@ -35,6 +35,10 @@ import { normalizeReadinessScore, normalizeStressScoreForStorage } from '../well
 import { parseCalendarDate } from '../date'
 import crypto from 'crypto'
 
+// `processWebhookEvent` only ever runs inside the BullMQ webhook worker, so it
+// shares the worker's verbosity knob rather than introducing a second one.
+const verboseWorkerLogs = process.env.CW_VERBOSE_WORKER_LOGS === '1'
+
 function normalizeDeviceName(name: unknown): string | null {
   if (typeof name !== 'string') return null
   const trimmed = name.trim()
@@ -442,7 +446,16 @@ export const GarminService = {
 
     const integration = integrations[0]
     if (!integration) {
-      console.warn('[GarminService] No integration found for externalUserId', { externalUserId })
+      // Routine: the athlete deleted their account or unlinked Garmin and Garmin is
+      // still delivering events. Not a failure — keep it out of the default log stream.
+      if (verboseWorkerLogs) {
+        console.debug(
+          '[GarminService] Skipping orphaned event, no integration for externalUserId',
+          {
+            externalUserId
+          }
+        )
+      }
       return
     }
 

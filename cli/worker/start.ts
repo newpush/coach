@@ -435,6 +435,7 @@ export const startCommand = new Command('start')
             )?.id
 
           let queuedCount = 0
+          let orphanedCount = 0
           try {
             for (const intervalEvent of events) {
               const { athlete_id, type: eventType } = intervalEvent
@@ -448,9 +449,17 @@ export const startCommand = new Command('start')
               })
 
               if (!integration) {
-                console.warn(
-                  `[BulkJob ${job.id}] No integration found for athlete_id: ${athlete_id}`
-                )
+                // Routine: the athlete deleted their account or unlinked Intervals.icu
+                // and the provider is still sending events. Not a failure — keep it out
+                // of the default log stream; the count is persisted on the parent log.
+                orphanedCount++
+                if (verboseWorkerLogs) {
+                  console.debug(
+                    chalk.gray(
+                      `[BulkJob ${job.id}] Skipping orphaned event, no integration for athlete_id: ${athlete_id}`
+                    )
+                  )
+                }
                 continue
               }
 
@@ -476,7 +485,9 @@ export const startCommand = new Command('start')
               await updateWebhookStatus(
                 parentLogId,
                 queuedCount > 0 ? 'PROCESSED' : 'IGNORED',
-                `Dispatched ${queuedCount} child events`
+                orphanedCount > 0
+                  ? `Dispatched ${queuedCount} child events (${orphanedCount} orphaned, no integration)`
+                  : `Dispatched ${queuedCount} child events`
               )
             }
             return { queuedCount }
@@ -768,7 +779,14 @@ export const startCommand = new Command('start')
           }
 
           if (!userId) {
-            console.warn(`[StravaJob ${job.id}] No user found for strava payload`)
+            // Routine: Strava keeps delivering events for athletes who deleted their
+            // account or revoked the connection. Not a failure — the IGNORED webhook
+            // log below is the durable record, so keep it out of the default stream.
+            if (verboseWorkerLogs) {
+              console.debug(
+                chalk.gray(`[StravaJob ${job.id}] Skipping orphaned event, no user for payload`)
+              )
+            }
             if (logId) await updateWebhookStatus(logId, 'IGNORED', 'User not found')
             return { handled: false, message: 'User not found' }
           }
