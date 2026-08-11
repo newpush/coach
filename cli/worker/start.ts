@@ -12,6 +12,7 @@ import { OuraService } from '../../server/utils/services/ouraService'
 import { processStravaWebhookEvent } from '../../server/utils/services/stravaService'
 import { ResendService } from '../../server/utils/services/resendService'
 import { logWebhookRequest, updateWebhookStatus } from '../../server/utils/webhook-logger'
+import { Prisma } from '@prisma/client'
 import { prisma } from '../../server/utils/db'
 import { webhookQueue, pingQueue, streamsQueue, mainTaskQueue } from '../../server/utils/queue'
 import { executeRegisteredTask, getRegisteredTaskIds } from '../../server/utils/task-registry'
@@ -91,6 +92,110 @@ export async function registerScheduledTasks(
     )
   )
   return scheduledTasks.length
+}
+
+export const WEBHOOK_POLL_BATCH_SIZE = 50
+
+export type ClaimedWebhookLog = {
+  id: string
+  provider: string
+  eventType: string | null
+  payload: unknown
+  headers: unknown
+  query: unknown
+  error: string | null
+}
+
+type WebhookClaimClient = {
+  $queryRaw<T = unknown>(query: Prisma.Sql): Promise<T>
+  $executeRaw(query: Prisma.Sql): Promise<number>
+}
+
+/**
+ * Atomically claim a batch of PENDING webhook logs.
+ *
+ * Selection and the transition to QUEUED happen in a single statement, so two
+ * worker instances polling at the same time can never claim the same row:
+ * `FOR UPDATE SKIP LOCKED` makes the loser of the race skip the locked rows
+ * instead of waiting for them and re-reading a stale `PENDING` status.
+ */
+export async function claimPendingWebhookLogs(
+  client: WebhookClaimClient,
+  limit: number = WEBHOOK_POLL_BATCH_SIZE
+): Promise<ClaimedWebhookLog[]> {
+  const rows = await client.$queryRaw<ClaimedWebhookLog[]>(Prisma.sql`
+    UPDATE "WebhookLog"
+    SET "status" = 'QUEUED'
+    WHERE "id" IN (
+      SELECT "id"
+      FROM "WebhookLog"
+      WHERE "status" = 'PENDING'
+      ORDER BY "createdAt" ASC
+      LIMIT ${limit}
+      FOR UPDATE SKIP LOCKED
+    )
+    RETURNING "id", "provider", "eventType", "payload", "headers", "query", "error"
+  `)
+  return rows ?? []
+}
+
+/**
+ * Hand a claimed webhook log back to the poller when the BullMQ enqueue failed,
+ * so the webhook is retried instead of being stranded in QUEUED with no job.
+ * Guarded on `status = 'QUEUED'` so it can never resurrect a row that another
+ * code path has already moved to a terminal status.
+ */
+export async function releaseClaimedWebhookLog(
+  client: WebhookClaimClient,
+  id: string
+): Promise<void> {
+  await client.$executeRaw(Prisma.sql`
+    UPDATE "WebhookLog"
+    SET "status" = 'PENDING'
+    WHERE "id" = ${id} AND "status" = 'QUEUED'
+  `)
+}
+
+/**
+ * Map a claimed webhook log onto the BullMQ job name + payload the webhook
+ * worker expects.
+ */
+export function buildWebhookJob(log: ClaimedWebhookLog): {
+  queueJobName: string
+  jobData: Record<string, unknown>
+} {
+  let queueJobName = `${log.provider}-webhook`
+  let provider = log.provider
+  let jobData: Record<string, unknown> = {
+    provider,
+    type: log.eventType,
+    payload: log.payload,
+    headers: log.headers,
+    query: log.query,
+    logId: log.id,
+    // Oauth specific fields if any were stored in error or similar
+    appName: log.eventType?.startsWith('oauth:') ? log.eventType.split(':')[1] : 'unknown',
+    secretMatched: log.error === 'SECRET_MATCHED'
+  }
+
+  if (provider === 'intervals-bulk' || provider === 'intervals') {
+    queueJobName = 'intervals-webhook-bulk'
+    provider = 'intervals-bulk' // Force bulk handler for both
+    jobData.provider = provider
+  } else if (provider === 'oauth-generic') {
+    queueJobName = 'oauth-webhook'
+  } else if (provider === 'resend') {
+    const payload = (log.payload || {}) as Record<string, any>
+    jobData = {
+      provider: 'resend',
+      type: payload.type || log.eventType,
+      data: payload.data,
+      createdAt: payload.created_at,
+      logId: log.id
+    }
+  }
+
+  return { queueJobName, jobData }
 }
 
 export const startCommand = new Command('start')
@@ -753,57 +858,35 @@ export const startCommand = new Command('start')
     // This loop checks for PENDING webhooks in SQL and moves them to BullMQ
     const pollWebhooks = async () => {
       try {
-        const pendingLogs = await prisma.webhookLog.findMany({
-          where: { status: 'PENDING' },
-          orderBy: { createdAt: 'asc' },
-          take: 50
-        })
+        // Claim the batch atomically: the rows come back already flipped to
+        // QUEUED, so a second worker polling concurrently cannot pick them up.
+        const claimedLogs = await claimPendingWebhookLogs(prisma, WEBHOOK_POLL_BATCH_SIZE)
 
-        if (pendingLogs.length > 0) {
+        if (claimedLogs.length > 0) {
           if (verboseWorkerLogs) {
-            console.log(chalk.gray(`[Poller] Found ${pendingLogs.length} pending webhooks in SQL`))
+            console.log(
+              chalk.gray(`[Poller] Claimed ${claimedLogs.length} pending webhooks in SQL`)
+            )
           }
 
-          for (const log of pendingLogs) {
-            let queueJobName = `${log.provider}-webhook`
-            let provider = log.provider
-            let jobData: Record<string, unknown> = {
-              provider,
-              type: log.eventType,
-              payload: log.payload,
-              headers: log.headers,
-              query: log.query,
-              logId: log.id,
-              // Oauth specific fields if any were stored in error or similar
-              appName: log.eventType?.startsWith('oauth:')
-                ? log.eventType.split(':')[1]
-                : 'unknown',
-              secretMatched: log.error === 'SECRET_MATCHED'
-            }
+          for (const log of claimedLogs) {
+            const { queueJobName, jobData } = buildWebhookJob(log)
 
-            if (provider === 'intervals-bulk' || provider === 'intervals') {
-              queueJobName = 'intervals-webhook-bulk'
-              provider = 'intervals-bulk' // Force bulk handler for both
-              jobData.provider = provider
-            } else if (provider === 'oauth-generic') {
-              queueJobName = 'oauth-webhook'
-            } else if (provider === 'resend') {
-              const payload = (log.payload || {}) as Record<string, any>
-              jobData = {
-                provider: 'resend',
-                type: payload.type || log.eventType,
-                data: payload.data,
-                createdAt: payload.created_at,
-                logId: log.id
+            try {
+              await webhookQueue.add(queueJobName, jobData)
+            } catch (addErr) {
+              // The claim already marked the row QUEUED; hand it back so the
+              // webhook is retried on a later poll instead of being stranded.
+              try {
+                await releaseClaimedWebhookLog(prisma, log.id)
+              } catch (releaseErr) {
+                console.error(
+                  chalk.red(`[Poller] Failed to release webhook log ${log.id} back to PENDING:`),
+                  releaseErr
+                )
               }
+              throw addErr
             }
-
-            await webhookQueue.add(queueJobName, jobData)
-
-            await prisma.webhookLog.update({
-              where: { id: log.id },
-              data: { status: 'QUEUED' }
-            })
           }
         }
       } catch (err) {
