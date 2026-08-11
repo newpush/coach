@@ -54,6 +54,38 @@
           @refresh="fetchGroups"
         />
 
+        <div v-if="requestsError" class="px-4 sm:px-0">
+          <UAlert
+            color="error"
+            variant="soft"
+            icon="i-heroicons-exclamation-triangle"
+            :title="tr('athletes_requests_error_title', 'Could not load coaching requests')"
+            :description="
+              tr(
+                'athletes_requests_error_desc',
+                'We could not reach the server, so pending requests from your start page are not shown. This is a loading error — you may still have requests waiting.'
+              )
+            "
+          >
+            <template #actions>
+              <UButton
+                color="error"
+                variant="outline"
+                size="xs"
+                icon="i-heroicons-arrow-path"
+                class="font-bold"
+                :loading="retryingRequests"
+                :label="tr('athletes_requests_error_retry', 'Retry')"
+                @click="
+                  () => {
+                    void retryPendingRequests()
+                  }
+                "
+              />
+            </template>
+          </UAlert>
+        </div>
+
         <UCard v-if="pendingRequests.length > 0" :ui="{ ...mobileListCardUi, body: 'p-4 sm:p-6' }">
           <div class="flex items-center justify-between gap-4 mb-4">
             <div>
@@ -320,6 +352,38 @@
             </div>
           </div>
         </UCard>
+
+        <div v-if="invitesError" class="px-4 sm:px-0">
+          <UAlert
+            color="error"
+            variant="soft"
+            icon="i-heroicons-exclamation-triangle"
+            :title="tr('athletes_invites_error_title', 'Could not load pending invitations')"
+            :description="
+              tr(
+                'athletes_invites_error_desc',
+                'We could not reach the server, so your pending invites and share links are not shown. This is a loading error — any existing invites are still active.'
+              )
+            "
+          >
+            <template #actions>
+              <UButton
+                color="error"
+                variant="outline"
+                size="xs"
+                icon="i-heroicons-arrow-path"
+                class="font-bold"
+                :loading="retryingInvites"
+                :label="tr('athletes_invites_error_retry', 'Retry')"
+                @click="
+                  () => {
+                    void retryPendingInvites()
+                  }
+                "
+              />
+            </template>
+          </UAlert>
+        </div>
 
         <UCard v-if="pendingInvites.length > 0" :ui="{ ...mobileListCardUi, body: 'p-4 sm:p-6' }">
           <div class="flex items-center justify-between gap-4 mb-4">
@@ -602,6 +666,10 @@
   const inviteEmail = ref('')
   const pendingInvites = ref<any[]>([])
   const pendingRequests = ref<any[]>([])
+  const invitesError = ref(false)
+  const requestsError = ref(false)
+  const retryingInvites = ref(false)
+  const retryingRequests = ref(false)
   const revokingInviteId = ref<string | null>(null)
   const reviewingRequestId = ref<string | null>(null)
   const reviewingAction = ref<'approve' | 'decline' | null>(null)
@@ -638,21 +706,80 @@
     return athletes.value.filter((rel) => memberIds.includes(rel.athlete.id))
   })
 
+  // Loads pending invites on its own so a transient failure does not take the whole page
+  // down — but it never masquerades as an empty list: `invitesError` drives an explicit
+  // error state with a retry, while a successful empty response clears it.
+  async function loadPendingInvites() {
+    try {
+      const data = await $fetch<any, string & {}>('/api/coaching/athletes/invites')
+      pendingInvites.value = (data as any[]) || []
+      invitesError.value = false
+      return true
+    } catch (e) {
+      console.error(e)
+      pendingInvites.value = []
+      invitesError.value = true
+      return false
+    }
+  }
+
+  async function loadPendingRequests() {
+    try {
+      const data = await $fetch<any, string & {}>('/api/coaching/athletes/requests')
+      pendingRequests.value = (data as any[]) || []
+      requestsError.value = false
+      return true
+    } catch (e) {
+      console.error(e)
+      pendingRequests.value = []
+      requestsError.value = true
+      return false
+    }
+  }
+
+  async function retryPendingInvites() {
+    retryingInvites.value = true
+    try {
+      const ok = await loadPendingInvites()
+      if (!ok) {
+        toast.add({
+          title: tr('athletes_invites_error_toast', 'Still unable to load pending invitations'),
+          color: 'error'
+        })
+      }
+    } finally {
+      retryingInvites.value = false
+    }
+  }
+
+  async function retryPendingRequests() {
+    retryingRequests.value = true
+    try {
+      const ok = await loadPendingRequests()
+      if (!ok) {
+        toast.add({
+          title: tr('athletes_requests_error_toast', 'Still unable to load coaching requests'),
+          color: 'error'
+        })
+      }
+    } finally {
+      retryingRequests.value = false
+    }
+  }
+
   async function fetchData() {
     loading.value = true
     try {
-      const [athletesData, groupsData, teamsData, invitesData, requestsData] = await Promise.all([
+      const [athletesData, groupsData, teamsData] = await Promise.all([
         $fetch<any, string & {}>('/api/coaching/athletes'),
         $fetch<any, string & {}>('/api/coaching/groups'),
         $fetch<any, string & {}>('/api/coaching/teams'),
-        $fetch<any, string & {}>('/api/coaching/athletes/invites').catch(() => []),
-        $fetch<any, string & {}>('/api/coaching/athletes/requests').catch(() => [])
+        loadPendingInvites(),
+        loadPendingRequests()
       ])
       athletes.value = athletesData as any[]
       groups.value = groupsData as any[]
       teams.value = teamsData as any[]
-      pendingInvites.value = invitesData as any[]
-      pendingRequests.value = requestsData as any[]
     } catch (e) {
       console.error(e)
       toast.add({ title: 'Failed to load coaching data', color: 'error' })
