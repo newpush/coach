@@ -69,13 +69,30 @@ The export/import pair above always creates a **new** user from a file. To load 
 
 ### 1. Prerequisites
 
-- Network access to both databases.
+- Network access to both databases — see [Reaching the testing database](#reaching-the-testing-database) below, which is not as simple as it sounds.
 - `DATABASE_URL_PROD` and `DATABASE_URL_TESTING` in `.env` (either option also accepts a literal `postgresql://…` URL).
 - The target user must already exist on the target instance. Sign in there once, then look up the id:
 
 ```bash
 pnpm cw:cli users search you@example.com
 ```
+
+#### Reaching the testing database
+
+The testing instance's database runs inside the deployment's private container network and **publishes no host port**, so its connection string cannot be used from a workstation as-is. Reaching it needs a forward from your machine to that network — typically a short-lived proxy container on the deployment host plus an SSH local forward.
+
+`DATABASE_URL_TESTING` should therefore point at the **local end** of that forward, not at the internal hostname:
+
+```bash
+DATABASE_URL_TESTING="postgresql://<user>:<password>@127.0.0.1:15432/<database>"
+```
+
+The forward has to be up before the command runs; without it you get a connection refused on `127.0.0.1:15432`.
+
+> [!NOTE]
+> The host-specific recipe — stack and container names, host address, and the exact proxy/tunnel commands — lives in the private infrastructure runbook (`hdkiller/docs/applications/coach-watts.md`, "Testing instance database access"), not in this repository. Credentials come from the deployed stack; they are not stored in the repo or in `.env.example`.
+
+Tear the forward down when you are done, and keep the credentials out of anything tracked by git — `.env` is git-ignored, command lines and shell history are not, which is why `--to` also accepts an env var name rather than a literal URL.
 
 ### 2. See what would move
 
