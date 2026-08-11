@@ -2683,6 +2683,141 @@ describe('analysis mode for estimated-power rides (CW-437)', () => {
   })
 })
 
+describe('V1/V2 shared derivation agreement (CW-438)', () => {
+  // HR usability, power provenance and the analysis mode are derived once, in
+  // `deriveSharedAnalysisSignals`, and consumed by both builders. Before CW-438 each builder
+  // re-implemented them from expressions that merely happened to match, so the two could
+  // silently disagree — a workout could be `hrUsable` in V1 and not in V2 — and no test
+  // would fail. CW-394, CW-395 and CW-437 each had to land their fix twice for that reason.
+  //
+  // This block is the guarantee, not the extraction: if either builder ever starts deriving
+  // one of these itself and the copies drift, one of the cases below breaks. The cases are
+  // chosen to hit every branch of `inferPowerSourceType` and `getAnalysisMode` — measured,
+  // estimated and unknown power; usable, artifact-ruined and absent HR; pace present and
+  // absent; and the RPE-only fallback.
+  function sharedSignals(workout: Record<string, unknown>) {
+    const v1 = buildWorkoutAnalysisFacts({ workout })
+    const v2 = buildWorkoutAnalysisFactsV2({ workout })
+
+    return {
+      v1: {
+        analysisMode: v1.telemetry.analysisMode,
+        hrUsable: v1.telemetry.hrUsable,
+        hrZeroRatio: v1.telemetry.hrZeroRatio,
+        hrMissingRatio: v1.telemetry.hrMissingRatio,
+        powerSourceType: v1.telemetry.powerSourceType,
+        powerAbsoluteUsable: v1.telemetry.powerAbsoluteUsable,
+        powerRelativeUsable: v1.telemetry.powerRelativeUsable
+      },
+      v2: {
+        analysisMode: v2.guardrails.analysisMode,
+        hrUsable: v2.guardrails.telemetry.hrUsable,
+        hrZeroRatio: v2.guardrails.telemetry.hrZeroRatio,
+        hrMissingRatio: v2.guardrails.telemetry.hrMissingRatio,
+        powerSourceType: v2.guardrails.telemetry.powerSourceType,
+        powerAbsoluteUsable: v2.guardrails.telemetry.powerAbsoluteUsable,
+        powerRelativeUsable: v2.guardrails.telemetry.powerRelativeUsable
+      }
+    }
+  }
+
+  const cases: Array<[string, Record<string, unknown>]> = [
+    ['a measured-power indoor ride with usable HR', makeWorkout({ trainer: true })],
+    [
+      'a measured-power outdoor ride flagged by Strava device_watts',
+      makeWorkout({ averageSpeed: 8.1, rawJson: { device_watts: true } })
+    ],
+    [
+      'an estimated-power outdoor ride (device_watts false)',
+      makeWorkout({ averageSpeed: 8.1, averageHr: null, rawJson: { device_watts: false } })
+    ],
+    [
+      'a run with pace and estimated running power',
+      makeWorkout({ type: 'Run', averageSpeed: 3.3, averageWatts: 290 })
+    ],
+    [
+      'an estimated-power ski session without a pace signal',
+      makeWorkout({ type: 'NordicSki', averageWatts: 180, averageHr: null, averageSpeed: null })
+    ],
+    [
+      'a zero-heavy heart-rate stream that ruins HR usability',
+      makeWorkout({
+        streams: {
+          heartrate: [0, 0, 0, 120, 122, 0, 0, 0],
+          watts: [100, 120, 140, 160, 170, 150, 130, 110]
+        }
+      })
+    ],
+    [
+      'power present only as a watts stream',
+      makeWorkout({ averageWatts: null, streams: { watts: [180, 195, 210, 205, 190] } })
+    ],
+    [
+      'power present only as power-zone times',
+      makeWorkout({ averageWatts: null, streams: { powerZoneTimes: [0, 600, 1200, 300, 0] } })
+    ],
+    [
+      'a strength session with no power, no pace and no HR but an RPE',
+      makeWorkout({
+        type: 'WeightTraining',
+        averageWatts: null,
+        averageHr: null,
+        trainingLoad: null,
+        tss: null,
+        rpe: 7
+      })
+    ],
+    [
+      'a bare session with no telemetry at all',
+      makeWorkout({ averageWatts: null, averageHr: null, trainingLoad: null, tss: null })
+    ],
+    [
+      // The only shape where powerRelativeUsable's extra clauses are load-bearing:
+      // an unknown-provenance family (neither ride, run nor ski) that still has power.
+      // Everywhere else powerRelativeUsable happens to equal powerSourceType !== 'unknown',
+      // so without this case a builder could re-inline that simpler expression and the
+      // whole agreement block would still pass.
+      'a strength session carrying power, where provenance stays unknown',
+      makeWorkout({
+        type: 'WeightTraining',
+        averageWatts: 150,
+        averageHr: 130,
+        averageSpeed: null
+      })
+    ]
+  ]
+
+  it.each(cases)('derives identical shared signals for %s', (_label, workout) => {
+    const { v1, v2 } = sharedSignals(workout)
+
+    expect(v2).toEqual(v1)
+  })
+
+  it('keeps the shared signals meaningful rather than trivially equal everywhere', () => {
+    const observed = cases.map(([, workout]) => sharedSignals(workout).v1)
+
+    // Guards the block above against decaying into a tautology: if every case collapsed to
+    // the same telemetry, agreement would prove nothing about the branches it claims to
+    // cover. All three power provenances and more than one analysis mode must be present.
+    expect(new Set(observed.map((signals) => signals.powerSourceType))).toEqual(
+      new Set(['measured', 'estimated', 'unknown'])
+    )
+    expect(new Set(observed.map((signals) => signals.analysisMode)).size).toBeGreaterThan(1)
+    expect(new Set(observed.map((signals) => signals.hrUsable))).toEqual(new Set([true, false]))
+
+    // powerRelativeUsable is the one derivation whose extra clauses (averageWatts /
+    // normalizedPower / watts stream / zone times) are invisible unless provenance is
+    // unknown while power is present. Assert the corpus actually reaches that branch,
+    // otherwise `powerRelativeUsable = powerSourceType !== 'unknown'` would be an
+    // undetectable re-inlining.
+    expect(
+      observed.some(
+        (signals) => signals.powerSourceType === 'unknown' && signals.powerRelativeUsable === true
+      )
+    ).toBe(true)
+  })
+})
+
 describe('heart-rate physiological plausibility (CW-395)', () => {
   // A clean stream reading `usable: true` is the primary acceptance criterion here:
   // falsely suppressing HR removes decoupling, zone times, EF and durability from the
