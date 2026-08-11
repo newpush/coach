@@ -707,6 +707,21 @@ export async function deRegisterGarminUser(integration: Integration) {
 }
 
 /**
+ * Narrow a permissions array to the strings we understand.
+ *
+ * Throws if the array had entries but none of them were strings: that is a payload shape we do
+ * not recognize, and returning the empty result would be indistinguishable from a genuine
+ * "user granted nothing" — which prunes every user permission for every user.
+ */
+function filterGarminPermissionStrings(values: unknown[]): string[] {
+  const strings = values.filter((value): value is string => typeof value === 'string')
+  if (values.length > 0 && strings.length === 0) {
+    throw new Error('Garmin permissions API returned an unrecognized payload')
+  }
+  return strings
+}
+
+/**
  * Fetch current user permissions granted to this app.
  *
  * Resolves only for a successful, well-formed response — an empty array then genuinely means
@@ -727,13 +742,17 @@ export async function fetchGarminUserPermissions(integration: Integration): Prom
 
     if (response.ok) {
       const data = await response.json().catch(() => undefined)
+      // A 200 we cannot parse is not evidence that every permission was
+      // revoked. That includes an array we *can* iterate but whose entries are
+      // not strings (e.g. a future `[{ permission: 'HEALTH_EXPORT' }]` shape):
+      // filtering it to strings would yield [], which reconcileGarminScopes
+      // would faithfully apply as a full revoke for every user.
       if (Array.isArray(data)) {
-        return data.filter((x) => typeof x === 'string')
+        return filterGarminPermissionStrings(data)
       }
       if (Array.isArray(data?.permissions)) {
-        return data.permissions.filter((x: unknown) => typeof x === 'string')
+        return filterGarminPermissionStrings(data.permissions)
       }
-      // A 200 we cannot parse is not evidence that every permission was revoked.
       throw new Error('Garmin permissions API returned an unrecognized payload')
     }
 
