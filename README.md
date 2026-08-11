@@ -1,5 +1,7 @@
 # Coach Watts
 
+[![MCP Toplist](https://mcptoplist.com/badge/com.coachwatts%2Fcoach-watts.svg)](https://mcptoplist.com/server/com.coachwatts%2Fcoach-watts)
+
 <div align="center">
   <p align="center">
     <strong>Your Open Source AI-Powered Endurance Coach</strong>
