@@ -2770,6 +2770,20 @@ describe('V1/V2 shared derivation agreement (CW-438)', () => {
     [
       'a bare session with no telemetry at all',
       makeWorkout({ averageWatts: null, averageHr: null, trainingLoad: null, tss: null })
+    ],
+    [
+      // The only shape where powerRelativeUsable's extra clauses are load-bearing:
+      // an unknown-provenance family (neither ride, run nor ski) that still has power.
+      // Everywhere else powerRelativeUsable happens to equal powerSourceType !== 'unknown',
+      // so without this case a builder could re-inline that simpler expression and the
+      // whole agreement block would still pass.
+      'a strength session carrying power, where provenance stays unknown',
+      makeWorkout({
+        type: 'WeightTraining',
+        averageWatts: 150,
+        averageHr: 130,
+        averageSpeed: null
+      })
     ]
   ]
 
@@ -2790,6 +2804,17 @@ describe('V1/V2 shared derivation agreement (CW-438)', () => {
     )
     expect(new Set(observed.map((signals) => signals.analysisMode)).size).toBeGreaterThan(1)
     expect(new Set(observed.map((signals) => signals.hrUsable))).toEqual(new Set([true, false]))
+
+    // powerRelativeUsable is the one derivation whose extra clauses (averageWatts /
+    // normalizedPower / watts stream / zone times) are invisible unless provenance is
+    // unknown while power is present. Assert the corpus actually reaches that branch,
+    // otherwise `powerRelativeUsable = powerSourceType !== 'unknown'` would be an
+    // undetectable re-inlining.
+    expect(
+      observed.some(
+        (signals) => signals.powerSourceType === 'unknown' && signals.powerRelativeUsable === true
+      )
+    ).toBe(true)
   })
 })
 
