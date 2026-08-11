@@ -9,6 +9,15 @@
   const toast = useToast()
   const { data: session } = useAuth()
 
+  // Public invite landing page: reachable signed-out *and* signed-in, so it must
+  // not pick up the `guest` middleware (which bounces authenticated visitors to
+  // /dashboard). `layout: false` matches the sibling branded join page at
+  // `coach/[slug]/join.vue`, which renders the same CoachJoinPage full-bleed.
+  definePageMeta({
+    layout: false,
+    auth: false
+  })
+
   const code = computed(() => (route.params.code as string)?.toUpperCase())
   const invite = ref<any>(null)
   const loading = ref(true)
