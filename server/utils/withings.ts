@@ -2,6 +2,7 @@ import type { Integration } from '@prisma/client'
 import { prisma } from './db'
 import { formatUserDate } from './date'
 import { IntegrationAuthError, IntegrationProviderError } from './integration-errors'
+import type { IngestionCounts, IngestionResult } from '../../trigger/types'
 
 interface WithingsTokenResponse {
   access_token: string
@@ -105,25 +106,301 @@ export const WITHINGS_MEASURE_TYPES = {
 /**
  * Withings-documented status code for "Too Many Requests" (application temporarily
  * rate-limited). https://developer.withings.com/api-reference/#section/Response-status
+ *
+ * 601 is a *deterministic* answer, not a transient fault: Withings is telling us the
+ * application-wide quota is spent. The task-level retry policy in trigger.config.ts
+ * (3 attempts, 1s -> 10s backoff) walks straight back into the same wall on a timescale
+ * far shorter than the quota window, so the run burns its retries and then fails —
+ * producing a Sentry event nobody can act on (CW-334: 780 of them in one week, which
+ * also drowns out genuine Withings errors).
+ *
+ * The correct response is to defer the whole run: see WithingsRateLimitError and
+ * buildWithingsRateLimitDeferral below, and their consumer in trigger/ingest-withings.ts.
  */
 const WITHINGS_RATE_LIMIT_STATUS = 601
 
 /**
- * Throws a retryable IntegrationProviderError when the Withings body-level status
- * indicates the app has been rate-limited. Trigger.dev's task-level retry config
- * (see trigger.config.ts) will back off and retry automatically, and the global
- * onFailure hook (trigger/init.ts) suppresses Sentry reporting until the final
- * attempt via shouldReportIntegrationErrorToSentry.
+ * Backoff used when Withings does not tell us when to come back.
+ *
+ * Withings does not document a `Retry-After` on 601, and in practice does not send one;
+ * parseWithingsRetryAfterMs still honours it (and `X-RateLimit-Reset`) if it ever appears,
+ * which is the "respect any interval the provider communicates" half of the contract.
+ *
+ * Absent that, 10 minutes is a deliberate choice, not a guess. The documented Withings
+ * application quota is a per-minute window, so 10 minutes is an order of magnitude past
+ * the reset — we are not racing it and not re-probing a wall we know is still up — while
+ * remaining far shorter than the daily ingest cadence, so a deferred run lands well before
+ * the next scheduled one and no measures are skipped.
  */
-function throwIfWithingsRateLimited(status: number, integrationId: string): void {
-  if (status === WITHINGS_RATE_LIMIT_STATUS) {
-    throw new IntegrationProviderError({
-      provider: 'withings',
-      integrationId,
-      statusCode: status,
-      message: `Withings API rate limit exceeded (Status ${status})`
-    })
+export const WITHINGS_RATE_LIMIT_BASE_BACKOFF_MS = 10 * 60 * 1000
+
+/**
+ * Ceiling for the exponential escalation below. Also caps a provider-supplied Retry-After,
+ * so a malformed or absurd header cannot park an ingest for a day.
+ */
+export const WITHINGS_RATE_LIMIT_MAX_BACKOFF_MS = 60 * 60 * 1000
+
+/**
+ * How many times a single ingest may defer itself before it stops re-enqueueing.
+ *
+ * With the escalation below that is roughly 10m + 20m + 40m + 60m + 60m ~= 3h6 of patience.
+ * If the quota still has not cleared after that, something is wrong at a level a longer
+ * sleep will not fix; the run gives up and the next webhook / scheduled sync picks the
+ * window back up (ingestion is idempotent upserts over a date range, so nothing is lost).
+ */
+export const WITHINGS_MAX_RATE_LIMIT_DEFERRALS = 5
+
+/**
+ * Minimum gap between two Withings HTTP calls issued by this process.
+ *
+ * Withings' quota is per *application*, not per user, so every concurrent ingest run
+ * competes for the same budget. The worst offender is a single run: fetchWithingsIntraday
+ * is called once per workout in a loop, so one ingest can fire dozens of requests back to
+ * back. Pacing them in-process removes that burst. Set WITHINGS_MIN_REQUEST_INTERVAL_MS=0
+ * to disable (tests do this).
+ *
+ * Note this is a per-process pacer — it cannot cap concurrency *across* runs. See the
+ * CW-334 PR for the follow-up on a Withings-specific queue.
+ */
+const DEFAULT_WITHINGS_MIN_REQUEST_INTERVAL_MS = 250
+
+function getWithingsMinRequestIntervalMs(): number {
+  const raw = process.env.WITHINGS_MIN_REQUEST_INTERVAL_MS
+  if (raw === undefined || raw === '') return DEFAULT_WITHINGS_MIN_REQUEST_INTERVAL_MS
+  const parsed = Number(raw)
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : DEFAULT_WITHINGS_MIN_REQUEST_INTERVAL_MS
+}
+
+let withingsRequestGate: Promise<unknown> = Promise.resolve()
+let lastWithingsRequestAt = 0
+
+/**
+ * fetch() for the Withings API, serialised behind the pacer above so callers queue up
+ * instead of all firing at once.
+ */
+async function withingsFetch(url: string, init?: RequestInit): Promise<Response> {
+  const intervalMs = getWithingsMinRequestIntervalMs()
+  if (intervalMs <= 0) {
+    return await fetch(url, init)
   }
+
+  const send = withingsRequestGate.then(async () => {
+    const waitMs = lastWithingsRequestAt + intervalMs - Date.now()
+    if (waitMs > 0) {
+      await new Promise((resolve) => setTimeout(resolve, waitMs))
+    }
+    lastWithingsRequestAt = Date.now()
+    return await fetch(url, init)
+  })
+
+  // Keep the chain alive even if this request rejects, otherwise one failure would
+  // permanently poison the gate for every later caller in the process.
+  withingsRequestGate = send.catch(() => undefined)
+  return await send
+}
+
+/**
+ * A Withings 601. Deliberately a subclass of IntegrationProviderError so every existing
+ * `isIntegrationProviderError` check keeps working, while callers that know how to defer
+ * can single it out with isWithingsRateLimitError.
+ */
+export class WithingsRateLimitError extends IntegrationProviderError {
+  readonly rateLimited = true
+  /** How long Withings wants us gone, or the documented default if it did not say. */
+  readonly retryAfterMs: number
+  readonly retryAfterSource: 'provider' | 'default'
+
+  constructor(params: {
+    integrationId: string
+    statusCode: number
+    retryAfterMs: number
+    retryAfterSource: 'provider' | 'default'
+  }) {
+    super({
+      provider: 'withings',
+      integrationId: params.integrationId,
+      statusCode: params.statusCode,
+      message: `Withings API rate limit exceeded (Status ${params.statusCode})`
+    })
+    this.name = 'WithingsRateLimitError'
+    this.retryAfterMs = params.retryAfterMs
+    this.retryAfterSource = params.retryAfterSource
+  }
+}
+
+export function isWithingsRateLimitError(error: unknown): error is WithingsRateLimitError {
+  return error instanceof WithingsRateLimitError
+}
+
+type HeaderLike = { get(name: string): string | null } | null | undefined
+
+function clampBackoffMs(ms: number): number {
+  return Math.min(Math.round(ms), WITHINGS_RATE_LIMIT_MAX_BACKOFF_MS)
+}
+
+/**
+ * Extracts a retry interval from the response headers, if the provider communicated one.
+ * Returns null when it did not, which is the normal case for Withings today.
+ */
+export function parseWithingsRetryAfterMs(
+  headers?: HeaderLike,
+  now: number = Date.now()
+): number | null {
+  if (!headers || typeof headers.get !== 'function') return null
+
+  const retryAfter = headers.get('retry-after')
+  if (retryAfter) {
+    const seconds = Number(retryAfter)
+    if (Number.isFinite(seconds) && seconds > 0) {
+      return clampBackoffMs(seconds * 1000)
+    }
+    // RFC 7231 also allows an HTTP-date.
+    const asDate = Date.parse(retryAfter)
+    if (!Number.isNaN(asDate) && asDate - now > 0) {
+      return clampBackoffMs(asDate - now)
+    }
+  }
+
+  const reset = headers.get('x-ratelimit-reset') ?? headers.get('x-rate-limit-reset')
+  if (reset) {
+    const value = Number(reset)
+    if (Number.isFinite(value) && value > 0) {
+      // Reset headers are ambiguous in the wild: a small number means "seconds from now",
+      // a large one is an absolute epoch-seconds timestamp.
+      const ms = value > 1_000_000_000 ? value * 1000 - now : value * 1000
+      if (ms > 0) return clampBackoffMs(ms)
+    }
+  }
+
+  return null
+}
+
+/**
+ * How long a deferred run should sleep before trying again.
+ *
+ * A provider-supplied interval always wins. Otherwise the documented base backoff doubles
+ * with each successive deferral, capped at WITHINGS_RATE_LIMIT_MAX_BACKOFF_MS.
+ *
+ * Jitter is upward-only (+0-20%): every ingest that hit the same application-wide wall
+ * would otherwise come back at the same instant and re-trip it, and skewing downward could
+ * return before the provider said we may.
+ */
+export function resolveWithingsDeferralDelayMs(
+  deferralCount: number,
+  providerRetryAfterMs?: number | null,
+  random: () => number = Math.random
+): number {
+  const base =
+    providerRetryAfterMs != null && providerRetryAfterMs > 0
+      ? Math.min(providerRetryAfterMs, WITHINGS_RATE_LIMIT_MAX_BACKOFF_MS)
+      : Math.min(
+          WITHINGS_RATE_LIMIT_BASE_BACKOFF_MS *
+            2 ** Math.min(Math.max(0, Math.floor(deferralCount)), 10),
+          WITHINGS_RATE_LIMIT_MAX_BACKOFF_MS
+        )
+
+  return clampBackoffMs(base * (1 + 0.2 * random()))
+}
+
+export interface WithingsDeferralContext {
+  userId: string
+  startDate: string
+  endDate: string
+  /** How many times this particular ingest window has already been deferred. */
+  deferralCount?: number
+}
+
+export interface WithingsRateLimitDeferral {
+  /** Safe to persist on Integration.errorMessage and show to the user. */
+  message: string
+  delayMs: number
+  /** False once WITHINGS_MAX_RATE_LIMIT_DEFERRALS has been reached. */
+  shouldReenqueue: boolean
+  nextDeferralCount: number
+  syncStatus: 'RATE_LIMITED'
+  result: IngestionResult
+}
+
+/**
+ * Turns a Withings 601 into a *deferral* instead of a failure — the counterpart to
+ * buildAuthFailureResult in ./ingestion-failure.
+ *
+ * Returns null for anything that is not a rate limit, so a genuine error keeps falling
+ * through to the caller's normal failure path (status FAILED, thrown, reported to Sentry).
+ *
+ * The shape here is provider-agnostic on purpose: CW-512 is the same class of problem in
+ * Garmin, and this should lift into a shared helper when the second caller exists.
+ */
+export function buildWithingsRateLimitDeferral(
+  error: unknown,
+  context: WithingsDeferralContext,
+  options: { counts?: IngestionCounts; skipped?: number; random?: () => number } = {}
+): WithingsRateLimitDeferral | null {
+  if (!isWithingsRateLimitError(error)) return null
+
+  const deferralCount = Math.max(0, Math.floor(context.deferralCount ?? 0))
+  const shouldReenqueue = deferralCount < WITHINGS_MAX_RATE_LIMIT_DEFERRALS
+  const delayMs = resolveWithingsDeferralDelayMs(
+    deferralCount,
+    error.retryAfterSource === 'provider' ? error.retryAfterMs : null,
+    options.random
+  )
+
+  const minutes = Math.max(1, Math.round(delayMs / 60_000))
+  const message = shouldReenqueue
+    ? `Rate limited by Withings. Sync is deferred and will resume automatically in ~${minutes} minute${
+        minutes === 1 ? '' : 's'
+      }.`
+    : `Rate limited by Withings. Sync was deferred ${WITHINGS_MAX_RATE_LIMIT_DEFERRALS} times without the quota clearing; it will resume on the next sync.`
+
+  return {
+    message,
+    delayMs,
+    shouldReenqueue,
+    nextDeferralCount: deferralCount + 1,
+    syncStatus: 'RATE_LIMITED',
+    result: {
+      success: false,
+      counts: options.counts ?? {},
+      skipped: options.skipped ?? 0,
+      message,
+      error: {
+        code: 'RATE_LIMITED',
+        provider: 'withings',
+        integrationId: error.integrationId,
+        statusCode: error.statusCode,
+        retryAfterMs: delayMs,
+        retryAfterSource: error.retryAfterSource,
+        deferred: shouldReenqueue,
+        deferralCount: deferralCount + 1
+      },
+      userId: context.userId,
+      startDate: context.startDate,
+      endDate: context.endDate
+    }
+  }
+}
+
+/**
+ * Throws a WithingsRateLimitError when the Withings body-level status says the application
+ * has been rate-limited. Callers must let it propagate to the task boundary, which defers
+ * the run (see buildWithingsRateLimitDeferral) rather than retrying into the same wall.
+ */
+export function throwIfWithingsRateLimited(
+  status: number,
+  integrationId: string,
+  headers?: HeaderLike
+): void {
+  if (status !== WITHINGS_RATE_LIMIT_STATUS) return
+
+  const providerRetryAfterMs = parseWithingsRetryAfterMs(headers)
+
+  throw new WithingsRateLimitError({
+    integrationId,
+    statusCode: status,
+    retryAfterMs: providerRetryAfterMs ?? WITHINGS_RATE_LIMIT_BASE_BACKOFF_MS,
+    retryAfterSource: providerRetryAfterMs != null ? 'provider' : 'default'
+  })
 }
 
 /**
@@ -148,7 +425,7 @@ export async function refreshWithingsToken(integration: Integration): Promise<In
 
   console.log('Refreshing Withings token for integration:', integration.id)
 
-  const response = await fetch('https://wbsapi.withings.net/v2/oauth2', {
+  const response = await withingsFetch('https://wbsapi.withings.net/v2/oauth2', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/x-www-form-urlencoded'
@@ -167,7 +444,12 @@ export async function refreshWithingsToken(integration: Integration): Promise<In
   if (data.status !== 0) {
     console.error('Withings token refresh failed:', data)
 
-    if (data.status === 601 || data.status === 401) {
+    // CW-334: 601 used to be bundled in with 401 below, which marked a perfectly healthy
+    // integration FAILED and told the user to reconnect Withings — for a rate limit. It is
+    // backpressure, not a revoked grant; defer like every other 601.
+    throwIfWithingsRateLimited(data.status, integration.id, response.headers)
+
+    if (data.status === 401) {
       await prisma.integration.update({
         where: { id: integration.id },
         data: {
@@ -264,11 +546,11 @@ export async function fetchWithingsMeasures(
     endDate: endDate.toISOString()
   })
 
-  const response = await fetch(url.toString())
+  const response = await withingsFetch(url.toString())
   const data: WithingsMeasureResponse = await response.json()
 
   if (data.status !== 0) {
-    throwIfWithingsRateLimited(data.status, validIntegration.id)
+    throwIfWithingsRateLimited(data.status, validIntegration.id, response.headers)
 
     // 401: Invalid access token
     if (data.status === 401) {
@@ -276,11 +558,11 @@ export async function fetchWithingsMeasures(
       const refreshedIntegration = await refreshWithingsToken(validIntegration)
       // Retry with new token
       url.searchParams.set('access_token', refreshedIntegration.accessToken)
-      const retryResponse = await fetch(url.toString())
+      const retryResponse = await withingsFetch(url.toString())
       const retryData: WithingsMeasureResponse = await retryResponse.json()
 
       if (retryData.status !== 0) {
-        throwIfWithingsRateLimited(retryData.status, refreshedIntegration.id)
+        throwIfWithingsRateLimited(retryData.status, refreshedIntegration.id, retryResponse.headers)
         throw new Error(`Withings API error after refresh: Status ${retryData.status}`)
       }
 
@@ -323,11 +605,11 @@ export async function fetchWithingsActivities(
     endDate: endDate.toISOString()
   })
 
-  const response = await fetch(url.toString())
+  const response = await withingsFetch(url.toString())
   const data: WithingsActivityResponse = await response.json()
 
   if (data.status !== 0) {
-    throwIfWithingsRateLimited(data.status, validIntegration.id)
+    throwIfWithingsRateLimited(data.status, validIntegration.id, response.headers)
 
     // 401: Invalid access token
     if (data.status === 401) {
@@ -335,11 +617,11 @@ export async function fetchWithingsActivities(
       const refreshedIntegration = await refreshWithingsToken(validIntegration)
       // Retry with new token
       url.searchParams.set('access_token', refreshedIntegration.accessToken)
-      const retryResponse = await fetch(url.toString())
+      const retryResponse = await withingsFetch(url.toString())
       const retryData: WithingsActivityResponse = await retryResponse.json()
 
       if (retryData.status !== 0) {
-        throwIfWithingsRateLimited(retryData.status, refreshedIntegration.id)
+        throwIfWithingsRateLimited(retryData.status, refreshedIntegration.id, retryResponse.headers)
         throw new Error(`Withings API error after refresh: Status ${retryData.status}`)
       }
 
@@ -528,19 +810,19 @@ export async function fetchWithingsWorkouts(
     endDate: endDate.toISOString().split('T')[0]
   })
 
-  const response = await fetch(url.toString())
+  const response = await withingsFetch(url.toString())
   const data: WithingsWorkoutResponse = await response.json()
 
   if (data.status !== 0) {
-    throwIfWithingsRateLimited(data.status, validIntegration.id)
+    throwIfWithingsRateLimited(data.status, validIntegration.id, response.headers)
 
     if (data.status === 401) {
       const refreshedIntegration = await refreshWithingsToken(validIntegration)
       url.searchParams.set('access_token', refreshedIntegration.accessToken)
-      const retryResponse = await fetch(url.toString())
+      const retryResponse = await withingsFetch(url.toString())
       const retryData: WithingsWorkoutResponse = await retryResponse.json()
       if (retryData.status !== 0) {
-        throwIfWithingsRateLimited(retryData.status, refreshedIntegration.id)
+        throwIfWithingsRateLimited(retryData.status, refreshedIntegration.id, retryResponse.headers)
         throw new Error(`Withings API error after refresh: Status ${retryData.status}`)
       }
       return retryData.body.series || []
@@ -575,19 +857,19 @@ export async function fetchWithingsIntraday(
     'heart_rate,steps,elevation,calories,distance,duration,spo2_auto,rmssd,sdnn1,hrv_quality'
   )
 
-  const response = await fetch(url.toString())
+  const response = await withingsFetch(url.toString())
   const data: any = await response.json()
 
   if (data.status !== 0) {
-    throwIfWithingsRateLimited(data.status, validIntegration.id)
+    throwIfWithingsRateLimited(data.status, validIntegration.id, response.headers)
 
     if (data.status === 401) {
       const refreshedIntegration = await refreshWithingsToken(validIntegration)
       url.searchParams.set('access_token', refreshedIntegration.accessToken)
-      const retryResponse = await fetch(url.toString())
+      const retryResponse = await withingsFetch(url.toString())
       const retryData: any = await retryResponse.json()
       if (retryData.status !== 0) {
-        throwIfWithingsRateLimited(retryData.status, refreshedIntegration.id)
+        throwIfWithingsRateLimited(retryData.status, refreshedIntegration.id, retryResponse.headers)
         throw new Error(`Withings API error after refresh: Status ${retryData.status}`)
       }
       // Return raw series object (keys are timestamps)
@@ -746,19 +1028,19 @@ export async function fetchWithingsSleep(
     endDate: endDate.toISOString().split('T')[0]
   })
 
-  const response = await fetch(url.toString())
+  const response = await withingsFetch(url.toString())
   const data: WithingsSleepResponse = await response.json()
 
   if (data.status !== 0) {
-    throwIfWithingsRateLimited(data.status, validIntegration.id)
+    throwIfWithingsRateLimited(data.status, validIntegration.id, response.headers)
 
     if (data.status === 401) {
       const refreshedIntegration = await refreshWithingsToken(validIntegration)
       url.searchParams.set('access_token', refreshedIntegration.accessToken)
-      const retryResponse = await fetch(url.toString())
+      const retryResponse = await withingsFetch(url.toString())
       const retryData: WithingsSleepResponse = await retryResponse.json()
       if (retryData.status !== 0) {
-        throwIfWithingsRateLimited(retryData.status, refreshedIntegration.id)
+        throwIfWithingsRateLimited(retryData.status, refreshedIntegration.id, retryResponse.headers)
         throw new Error(`Withings API error after refresh: Status ${retryData.status}`)
       }
       return retryData.body.series || []
