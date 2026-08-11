@@ -45,17 +45,12 @@
           </p>
         </div>
 
-        <CoachingGroupManager
-          v-if="athletes.length > 0 || groups.length > 0"
-          v-model:active-group-id="activeGroupId"
-          :groups="groups"
-          :athletes="athletes"
-          :teams="teams"
-          @refresh="fetchGroups"
-        />
-
-        <div v-if="requestsError" class="px-4 sm:px-0">
+        <!-- Load failures for the requests/invites sub-requests, grouped at the top of the page so
+             a coach scanning for "anything wrong" cannot scroll past one. A failure must never be
+             rendered as an empty list — missing a real connection request costs a client. -->
+        <div v-if="requestsError || invitesError" class="px-4 sm:px-0 space-y-3">
           <UAlert
+            v-if="requestsError"
             color="error"
             variant="soft"
             icon="i-heroicons-exclamation-triangle"
@@ -84,7 +79,47 @@
               />
             </template>
           </UAlert>
+
+          <UAlert
+            v-if="invitesError"
+            color="error"
+            variant="soft"
+            icon="i-heroicons-exclamation-triangle"
+            :title="tr('athletes_invites_error_title', 'Could not load pending invitations')"
+            :description="
+              tr(
+                'athletes_invites_error_desc',
+                'We could not reach the server, so your pending invites and share links are not shown. This is a loading error — any existing invites are still active.'
+              )
+            "
+          >
+            <template #actions>
+              <UButton
+                color="error"
+                variant="outline"
+                size="xs"
+                icon="i-heroicons-arrow-path"
+                class="font-bold"
+                :loading="retryingInvites"
+                :label="tr('athletes_invites_error_retry', 'Retry')"
+                @click="
+                  () => {
+                    void retryPendingInvites()
+                  }
+                "
+              />
+            </template>
+          </UAlert>
         </div>
+
+        <CoachingGroupManager
+          v-if="athletes.length > 0 || groups.length > 0"
+          v-model:active-group-id="activeGroupId"
+          :groups="groups"
+          :athletes="athletes"
+          :teams="teams"
+          @refresh="fetchGroups"
+        />
 
         <UCard v-if="pendingRequests.length > 0" :ui="{ ...mobileListCardUi, body: 'p-4 sm:p-6' }">
           <div class="flex items-center justify-between gap-4 mb-4">
@@ -352,38 +387,6 @@
             </div>
           </div>
         </UCard>
-
-        <div v-if="invitesError" class="px-4 sm:px-0">
-          <UAlert
-            color="error"
-            variant="soft"
-            icon="i-heroicons-exclamation-triangle"
-            :title="tr('athletes_invites_error_title', 'Could not load pending invitations')"
-            :description="
-              tr(
-                'athletes_invites_error_desc',
-                'We could not reach the server, so your pending invites and share links are not shown. This is a loading error — any existing invites are still active.'
-              )
-            "
-          >
-            <template #actions>
-              <UButton
-                color="error"
-                variant="outline"
-                size="xs"
-                icon="i-heroicons-arrow-path"
-                class="font-bold"
-                :loading="retryingInvites"
-                :label="tr('athletes_invites_error_retry', 'Retry')"
-                @click="
-                  () => {
-                    void retryPendingInvites()
-                  }
-                "
-              />
-            </template>
-          </UAlert>
-        </div>
 
         <UCard v-if="pendingInvites.length > 0" :ui="{ ...mobileListCardUi, body: 'p-4 sm:p-6' }">
           <div class="flex items-center justify-between gap-4 mb-4">

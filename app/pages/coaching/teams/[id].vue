@@ -132,29 +132,15 @@
                 />
               </div>
 
+              <!-- On a roster load failure the alert above the tabs owns the message and the
+                   retry; this empty state must stay hidden so it cannot be read as "no athletes". -->
               <div
                 v-if="rosterError"
                 class="text-center py-12 bg-neutral-50 dark:bg-neutral-800/20 rounded-xl border-2 border-dashed border-gray-200 dark:border-gray-800"
               >
-                <UIcon
-                  name="i-heroicons-exclamation-triangle"
-                  class="w-12 h-12 text-error-400 mb-2"
-                />
-                <p class="text-neutral-500">The roster could not be loaded.</p>
-                <UButton
-                  color="error"
-                  variant="outline"
-                  size="xs"
-                  icon="i-heroicons-arrow-path"
-                  class="font-bold mt-4"
-                  label="Retry"
-                  :loading="retryingRoster"
-                  @click="
-                    () => {
-                      void retryRoster()
-                    }
-                  "
-                />
+                <p class="text-sm text-neutral-500 italic font-medium">
+                  Roster unavailable — see the error above.
+                </p>
               </div>
               <div
                 v-else-if="roster.length === 0"
@@ -419,25 +405,15 @@
                   />
                 </div>
 
+                <!-- Same rule as the roster: the alert above the tabs owns the message and the
+                     retry, so "No active invites." can never stand in for a failed load. -->
                 <div
                   v-if="invitesError"
                   class="text-center py-8 border-2 border-dashed border-gray-200 dark:border-gray-800 rounded-lg"
                 >
-                  <p class="text-sm text-neutral-500">Pending invitations could not be loaded.</p>
-                  <UButton
-                    color="error"
-                    variant="outline"
-                    size="xs"
-                    icon="i-heroicons-arrow-path"
-                    class="font-bold mt-3"
-                    label="Retry"
-                    :loading="retryingInvites"
-                    @click="
-                      () => {
-                        void retryInvites()
-                      }
-                    "
-                  />
+                  <p class="text-sm text-neutral-500 italic font-medium">
+                    Invitations unavailable — see the error above.
+                  </p>
                 </div>
                 <div
                   v-else-if="invites.length === 0"
