@@ -52,6 +52,63 @@
           </p>
         </div>
 
+        <!-- Load failures for the roster/invites sub-requests. These must never be rendered as
+             an empty roster or an empty invite list — a coach has to be able to tell "nothing
+             pending" apart from "we could not load it". -->
+        <div v-if="rosterError || invitesError" class="px-4 sm:px-0 space-y-3">
+          <UAlert
+            v-if="rosterError"
+            color="error"
+            variant="soft"
+            icon="i-heroicons-exclamation-triangle"
+            title="Could not load the team roster"
+            description="We could not reach the server, so this team's athletes are not shown. This is a loading error — the roster itself is unchanged."
+          >
+            <template #actions>
+              <UButton
+                color="error"
+                variant="outline"
+                size="xs"
+                icon="i-heroicons-arrow-path"
+                class="font-bold"
+                label="Retry"
+                :loading="retryingRoster"
+                @click="
+                  () => {
+                    void retryRoster()
+                  }
+                "
+              />
+            </template>
+          </UAlert>
+
+          <UAlert
+            v-if="invitesError"
+            color="error"
+            variant="soft"
+            icon="i-heroicons-exclamation-triangle"
+            title="Could not load pending invitations"
+            description="We could not reach the server, so this team's invite codes and share links are not shown. This is a loading error — any existing invites are still active."
+          >
+            <template #actions>
+              <UButton
+                color="error"
+                variant="outline"
+                size="xs"
+                icon="i-heroicons-arrow-path"
+                class="font-bold"
+                label="Retry"
+                :loading="retryingInvites"
+                @click="
+                  () => {
+                    void retryInvites()
+                  }
+                "
+              />
+            </template>
+          </UAlert>
+        </div>
+
         <!-- Dashboard Content -->
         <UTabs :items="tabs" class="w-full">
           <!-- Roster Tab -->
@@ -75,8 +132,18 @@
                 />
               </div>
 
+              <!-- On a roster load failure the alert above the tabs owns the message and the
+                   retry; this empty state must stay hidden so it cannot be read as "no athletes". -->
               <div
-                v-if="roster.length === 0"
+                v-if="rosterError"
+                class="text-center py-12 bg-neutral-50 dark:bg-neutral-800/20 rounded-xl border-2 border-dashed border-gray-200 dark:border-gray-800"
+              >
+                <p class="text-sm text-neutral-500 italic font-medium">
+                  Roster unavailable — see the error above.
+                </p>
+              </div>
+              <div
+                v-else-if="roster.length === 0"
                 class="text-center py-12 bg-neutral-50 dark:bg-neutral-800/20 rounded-xl border-2 border-dashed border-gray-200 dark:border-gray-800"
               >
                 <UIcon name="i-heroicons-users" class="w-12 h-12 text-neutral-300 mb-2" />
@@ -338,8 +405,18 @@
                   />
                 </div>
 
+                <!-- Same rule as the roster: the alert above the tabs owns the message and the
+                     retry, so "No active invites." can never stand in for a failed load. -->
                 <div
-                  v-if="invites.length === 0"
+                  v-if="invitesError"
+                  class="text-center py-8 border-2 border-dashed border-gray-200 dark:border-gray-800 rounded-lg"
+                >
+                  <p class="text-sm text-neutral-500 italic font-medium">
+                    Invitations unavailable — see the error above.
+                  </p>
+                </div>
+                <div
+                  v-else-if="invites.length === 0"
                   class="text-center py-8 border-2 border-dashed border-gray-200 dark:border-gray-800 rounded-lg"
                 >
                   <p class="text-sm text-neutral-500">No active invites.</p>
@@ -679,6 +756,10 @@
   const team = ref<any>(null)
   const roster = ref<any[]>([])
   const invites = ref<any[]>([])
+  const rosterError = ref(false)
+  const invitesError = ref(false)
+  const retryingRoster = ref(false)
+  const retryingInvites = ref(false)
   const myCoachedAthletes = ref<any[]>([])
   const loading = ref(true)
   const creatingInvite = ref(false)
@@ -844,18 +925,69 @@
     }
   }
 
+  // Roster and invites load independently so one transient failure does not blank the whole
+  // page — but a failure is never rendered as "nothing here": the *Error flags drive an
+  // explicit error state with a retry, and a successful empty response clears them.
+  async function loadRoster() {
+    const teamId = route.params.id as string
+    try {
+      const data = await $fetch<any, string & {}>(`/api/coaching/teams/${teamId}/roster`)
+      roster.value = (data as any[]) || []
+      rosterError.value = false
+      return true
+    } catch (e) {
+      console.error(e)
+      roster.value = []
+      rosterError.value = true
+      return false
+    }
+  }
+
+  async function loadInvites() {
+    const teamId = route.params.id as string
+    try {
+      const data = await $fetch<any, string & {}>(`/api/coaching/teams/${teamId}/invites`)
+      invites.value = (data as any[]) || []
+      invitesError.value = false
+      return true
+    } catch (e) {
+      console.error(e)
+      invites.value = []
+      invitesError.value = true
+      return false
+    }
+  }
+
+  async function retryRoster() {
+    retryingRoster.value = true
+    try {
+      const ok = await loadRoster()
+      if (!ok) {
+        toast.add({ title: 'Still unable to load the team roster', color: 'error' })
+      }
+    } finally {
+      retryingRoster.value = false
+    }
+  }
+
+  async function retryInvites() {
+    retryingInvites.value = true
+    try {
+      const ok = await loadInvites()
+      if (!ok) {
+        toast.add({ title: 'Still unable to load pending invitations', color: 'error' })
+      }
+    } finally {
+      retryingInvites.value = false
+    }
+  }
+
   async function refreshTeam() {
     const teamId = route.params.id as string
     try {
       team.value = await $fetch<any, string & {}>(`/api/coaching/teams/${teamId}`)
 
-      const [rosterData, invitesData] = await Promise.all([
-        $fetch<any, string & {}>(`/api/coaching/teams/${teamId}/roster`).catch(() => []),
-        $fetch<any, string & {}>(`/api/coaching/teams/${teamId}/invites`).catch(() => [])
-      ])
-
-      roster.value = rosterData as any[]
-      invites.value = invitesData as any[]
+      await Promise.all([loadRoster(), loadInvites()])
     } catch (e) {
       console.error(e)
       toast.add({ title: 'Failed to load team data', color: 'error' })
