@@ -180,6 +180,7 @@ export interface WorkoutAnalysisFactsV2 {
       executionStability: SignalApplicability
       repeatability: SignalApplicability
       cadenceDrift: SignalApplicability
+      cadenceStability: SignalApplicability
       pacingDrift: SignalApplicability
     }
     decoupling: {
@@ -3441,6 +3442,11 @@ type DurabilityGates = {
   repeatability: SignalGate
 }
 
+type SportSpecificGates = {
+  cadenceDrift: SignalGate
+  cadenceStability: SignalGate
+}
+
 function deriveDurabilitySignals(params: {
   workout: any
   family: ReturnType<typeof getWorkoutFamily>
@@ -3603,7 +3609,7 @@ function deriveSportSpecificSignals(params: {
   repScope: RepScope
 }): {
   sportSpecific: WorkoutAnalysisFactsV2['performanceSignals']['sportSpecific']
-  gates: { cadenceDrift: SignalGate }
+  gates: SportSpecificGates
 } {
   const { workout, family, archetype, motionPattern, repScope } = params
   const cadence = asNumberArray(workout?.streams?.cadence)
@@ -3612,6 +3618,7 @@ function deriveSportSpecificSignals(params: {
   let cadenceStabilityScore: number | null = null
   let pacingDriftPct: number | null = null
   let cadenceDriftGate: SignalGate = OPEN_GATE
+  let cadenceStabilityGate: SignalGate = OPEN_GATE
   let torqueProfile: WorkoutAnalysisFactsV2['performanceSignals']['sportSpecific']['torqueProfile'] =
     'unknown'
 
@@ -3638,9 +3645,27 @@ function deriveSportSpecificSignals(params: {
     if (first && last && first > 0) cadenceDriftPct = round(((first - last) / first) * 100, 1)
   }
 
-  // Session-wide cadence stability is untouched by CW-393: it has no
-  // applicability gate and is out of that ticket's scope.
-  if (cadence.length >= 120) {
+  // Cadence stability follows the same rule as every other structure-scoped
+  // signal (CW-427): when the session has a comparable rep set, the CoV is
+  // measured WITHIN each work rep. Session-wide, the number is dominated by the
+  // gap between rep cadence and recovery-jog cadence — which is the prescribed
+  // shape of the session, not a flaw in how it was ridden. A steady session has
+  // no rep structure to scope to, so it keeps the session-wide CoV.
+  if (repScope.active) {
+    const repCoV = cadence.length >= 120 ? repScopedStabilityCoV(repScope.reps, cadence) : null
+    if (repCoV !== null) {
+      cadenceStabilityScore = round(clamp(100 - repCoV * 5, 0, 100), 1)
+    } else {
+      cadenceStabilityGate = {
+        applicable: false,
+        reason:
+          cadence.length < 120
+            ? 'Cadence stability is unavailable because cadence telemetry is missing or too sparse.'
+            : (repScope.reason ??
+              'Cadence stability is measured within each work rep for this session shape, and the rep boundaries could not be located in the cadence stream.')
+      }
+    }
+  } else if (cadence.length >= 120) {
     const stability = calculateStabilityMetrics(cadence, [])
     if (stability) cadenceStabilityScore = round(clamp(100 - stability.overallCoV * 5, 0, 100), 1)
   }
@@ -3677,7 +3702,7 @@ function deriveSportSpecificSignals(params: {
       torqueProfile,
       pacingDriftPct
     },
-    gates: { cadenceDrift: cadenceDriftGate }
+    gates: { cadenceDrift: cadenceDriftGate, cadenceStability: cadenceStabilityGate }
   }
 }
 
@@ -3688,7 +3713,7 @@ function deriveSignalApplicability(params: {
   motionPattern: MotionPattern
   durability: WorkoutAnalysisFactsV2['performanceSignals']['durability']
   sportSpecific: WorkoutAnalysisFactsV2['performanceSignals']['sportSpecific']
-  gates: DurabilityGates & { cadenceDrift: SignalGate }
+  gates: DurabilityGates & SportSpecificGates
 }): WorkoutAnalysisFactsV2['performanceSignals']['applicability'] {
   const { workout, family, archetype, motionPattern, durability, sportSpecific, gates } = params
   const durationSec = Number(workout?.durationSec || 0)
@@ -3739,6 +3764,11 @@ function deriveSignalApplicability(params: {
       gates.cadenceDrift,
       sportSpecific.cadenceDriftPct,
       'Cadence drift is unavailable because cadence telemetry is missing or too sparse.'
+    ),
+    cadenceStability: resolve(
+      gates.cadenceStability,
+      sportSpecific.cadenceStabilityScore,
+      'Cadence stability is unavailable because cadence telemetry is missing or too sparse.'
     ),
     pacingDrift:
       sportSpecific.pacingDriftPct !== null
@@ -4258,6 +4288,17 @@ function buildPromptDecisionsV2(facts: WorkoutAnalysisFactsV2): Record<string, P
     !facts.performanceSignals.applicability.cadenceDrift.applicable &&
       Boolean(facts.performanceSignals.applicability.cadenceDrift.reason),
     'A reason is useful when cadence drift is unavailable or inapplicable.'
+  )
+  set(
+    'performanceSignals.applicability.cadenceStability.applicable',
+    !facts.performanceSignals.applicability.cadenceStability.applicable,
+    'Show non-applicability when cadence stability cannot be trusted.'
+  )
+  set(
+    'performanceSignals.applicability.cadenceStability.reason',
+    !facts.performanceSignals.applicability.cadenceStability.applicable &&
+      Boolean(facts.performanceSignals.applicability.cadenceStability.reason),
+    'A reason is useful when cadence stability is unavailable or inapplicable.'
   )
   set(
     'performanceSignals.applicability.pacingDrift.applicable',

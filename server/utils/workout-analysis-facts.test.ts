@@ -1993,6 +1993,142 @@ describe('rep-scoped durability and stability signals', () => {
     expect(facts.performanceSignals.sportSpecific.cadenceDriftPct).toBeCloseTo(0, 5)
   })
 
+  it('scores cadence stability within the reps rather than across the whole session (CW-427)', () => {
+    const facts = buildWorkoutAnalysisFactsV2({
+      workout: buildThresholdWorkout(),
+      plannedWorkout: thresholdPlan,
+      sportSettings: { ftp: THRESHOLD_FIXTURE_FTP }
+    })
+
+    // Session-wide, this fixture's cadence CoV is 7.43% — the 85 rpm warmup,
+    // the 80 rpm jogs, the 88 rpm buffer and the 70 rpm cooldown all averaged
+    // together — and scored 62.9/100 as if the athlete's cadence had wandered.
+    // The reps themselves were all ridden at a flat 92 rpm.
+    expect(facts.performanceSignals.sportSpecific.cadenceStabilityScore).toBe(100)
+    expect(facts.performanceSignals.applicability.cadenceStability).toEqual({
+      applicable: true,
+      reason: null
+    })
+  })
+
+  it('withholds cadence stability with a reason when the reps cannot be scoped (CW-427)', () => {
+    // Same premise as the mixed-ride case below: an intervalled session whose
+    // work efforts are not repetitions of one another. A session-wide cadence
+    // CoV here would be presented as execution quality, which is the
+    // substitution CW-393 forbade and CW-427 extends to this signal.
+    const facts = buildWorkoutAnalysisFactsV2({
+      workout: makeWorkout({
+        title: 'Unstructured Mixed Ride',
+        type: 'Ride',
+        durationSec: 2160,
+        averageWatts: 200,
+        variabilityIndex: 1.16,
+        rawJson: {
+          icu_intervals: [
+            {
+              type: 'WORK',
+              moving_time: 60,
+              average_watts: 350,
+              average_cadence: 95,
+              intensity: 1.25,
+              start_index: 0,
+              end_index: 59
+            },
+            {
+              type: 'REST',
+              moving_time: 300,
+              average_watts: 120,
+              average_cadence: 78,
+              intensity: 0.43,
+              start_index: 60,
+              end_index: 359
+            },
+            {
+              type: 'WORK',
+              moving_time: 300,
+              average_watts: 260,
+              average_cadence: 90,
+              intensity: 0.93,
+              start_index: 360,
+              end_index: 659
+            },
+            {
+              type: 'REST',
+              moving_time: 300,
+              average_watts: 120,
+              average_cadence: 78,
+              intensity: 0.43,
+              start_index: 660,
+              end_index: 959
+            },
+            {
+              type: 'WORK',
+              moving_time: 900,
+              average_watts: 205,
+              average_cadence: 86,
+              intensity: 0.73,
+              start_index: 960,
+              end_index: 1859
+            },
+            {
+              type: 'WORK',
+              moving_time: 300,
+              average_watts: 110,
+              average_cadence: 70,
+              intensity: 0.4,
+              start_index: 1860,
+              end_index: 2159
+            }
+          ]
+        },
+        streams: {
+          time: Array.from({ length: 2160 }, (_, index) => index),
+          watts: Array.from({ length: 2160 }, (_, index) =>
+            index < 60
+              ? 350
+              : index < 360
+                ? 120
+                : index < 660
+                  ? 260
+                  : index < 960
+                    ? 120
+                    : index < 1860
+                      ? 205
+                      : 110
+          ),
+          cadence: Array.from({ length: 2160 }, (_, index) => (index < 60 ? 95 : 86))
+        }
+      }),
+      sportSettings: { ftp: 280 }
+    })
+
+    expect(facts.guardrails.archetype.sessionSteadiness).toBe('intervalled')
+    // Withheld, not quietly replaced by the session-wide figure.
+    expect(facts.performanceSignals.sportSpecific.cadenceStabilityScore).toBeNull()
+    expect(facts.performanceSignals.applicability.cadenceStability.applicable).toBe(false)
+    expect(facts.performanceSignals.applicability.cadenceStability.reason).toContain(
+      'comparable work reps'
+    )
+  })
+
+  it('withholds cadence stability when an interval session carries no cadence (CW-427)', () => {
+    const workout = buildThresholdWorkout()
+    delete (workout as any).streams.cadence
+
+    const facts = buildWorkoutAnalysisFactsV2({
+      workout,
+      plannedWorkout: thresholdPlan,
+      sportSettings: { ftp: THRESHOLD_FIXTURE_FTP }
+    })
+
+    expect(facts.guardrails.archetype.sessionSteadiness).toBe('intervalled')
+    expect(facts.performanceSignals.sportSpecific.cadenceStabilityScore).toBeNull()
+    expect(facts.performanceSignals.applicability.cadenceStability).toEqual({
+      applicable: false,
+      reason: 'Cadence stability is unavailable because cadence telemetry is missing or too sparse.'
+    })
+  })
+
   it('reads late-session fade as first rep versus last rep for an interval session', () => {
     const facts = buildWorkoutAnalysisFactsV2({
       workout: buildThresholdWorkout(),
@@ -2165,6 +2301,13 @@ describe('rep-scoped durability and stability signals', () => {
     // A steady ride has no repeated efforts, so repeatability stays withheld.
     expect(facts.performanceSignals.durability.repeatabilityScore).toBeNull()
     expect(facts.performanceSignals.applicability.repeatability.applicable).toBe(false)
+    // CW-427: no rep structure to scope to, so cadence stability keeps the
+    // session-wide CoV (1.61%) and the value it produced before the change.
+    expect(facts.performanceSignals.sportSpecific.cadenceStabilityScore).toBe(92)
+    expect(facts.performanceSignals.applicability.cadenceStability).toEqual({
+      applicable: true,
+      reason: null
+    })
   })
 })
 
