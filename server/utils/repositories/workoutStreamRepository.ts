@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client'
 import { prisma } from '../db'
 import { toPrismaInputJsonValue } from '../prisma-json'
 
@@ -168,10 +169,18 @@ export interface FindManyByWorkoutIdsOptions {
    * behavior and should be kept for callers that need full-fidelity stream
    * data (e.g. the GDPR/migration data export in data-management/collector.ts).
    *
-   * When provided (including an empty array), only the mandatory baseline
-   * fields plus whatever is listed here are fetched, which is dramatically
-   * cheaper for hot paths that read a handful of scalar fields (or none) off
-   * potentially hundreds of workouts' streams at once.
+   * When provided with at least one field, the mandatory baseline
+   * (REQUIRED_V2_SELECT/REQUIRED_V1_SELECT) plus whatever is listed here is
+   * fetched, which is dramatically cheaper for hot paths that read a handful
+   * of scalar fields off potentially hundreds of workouts' streams at once.
+   *
+   * An **empty array** means "presence only": the caller never reads a stream
+   * field and only tests whether a workout has usable stream data at all. That
+   * takes a separate, much cheaper code path -- see
+   * findStreamPresenceByWorkoutIds() -- which transfers no series data
+   * whatsoever. Streams returned that way have every series/metadata field set
+   * to null; only id/workoutId/createdAt/updatedAt are populated. Do not pass
+   * `fields: []` if you intend to read anything off the returned stream.
    */
   fields?: readonly WorkoutStreamOptionalField[]
 }
@@ -251,6 +260,161 @@ function chunkArray<T>(items: readonly T[], size: number): T[][] {
   return chunks
 }
 
+/** Row returned by the presence probe: identity columns plus the usability flag. */
+type StreamPresenceRow = {
+  id: string
+  workoutId: string
+  createdAt: Date
+  updatedAt: Date
+  hasData: boolean | null
+}
+
+/**
+ * SQL equivalent of hasUsableStreamData() for WorkoutStreamV2, evaluated in
+ * Postgres so the series themselves never cross the wire. `lat` stands in for
+ * `latlng` (normalizeV2 derives latlng from lat/lng). Each disjunct is written
+ * so it can only be TRUE/FALSE per column -- the outer COALESCE then turns the
+ * all-NULL case (row exists, every probed column NULL) into FALSE.
+ */
+const V2_HAS_DATA_SQL = Prisma.sql`COALESCE(
+  COALESCE(array_length("time", 1), 0) > 0
+  OR COALESCE(array_length("heartrate", 1), 0) > 0
+  OR COALESCE(array_length("watts", 1), 0) > 0
+  OR COALESCE(array_length("velocity", 1), 0) > 0
+  OR COALESCE(array_length("lat", 1), 0) > 0
+  OR ("hrZoneTimes" IS NOT NULL AND jsonb_typeof("hrZoneTimes") <> 'null')
+  OR ("powerZoneTimes" IS NOT NULL AND jsonb_typeof("powerZoneTimes") <> 'null'),
+  false
+)`
+
+/**
+ * Same probe for the legacy V1 table, whose series are JSONB arrays rather
+ * than Postgres arrays. `jsonb_typeof(col) = 'array'` mirrors the
+ * Array.isArray() guard in hasUsableStreamData(), and comparing against
+ * '[]'::jsonb mirrors its `.length > 0` check without calling
+ * jsonb_array_length() on a value that might not be an array.
+ */
+const V1_HAS_DATA_SQL = Prisma.sql`COALESCE(
+  (jsonb_typeof("time") = 'array' AND "time" <> '[]'::jsonb)
+  OR (jsonb_typeof("heartrate") = 'array' AND "heartrate" <> '[]'::jsonb)
+  OR (jsonb_typeof("watts") = 'array' AND "watts" <> '[]'::jsonb)
+  OR (jsonb_typeof("velocity") = 'array' AND "velocity" <> '[]'::jsonb)
+  OR (jsonb_typeof("latlng") = 'array' AND "latlng" <> '[]'::jsonb)
+  OR ("hrZoneTimes" IS NOT NULL AND jsonb_typeof("hrZoneTimes") <> 'null')
+  OR ("powerZoneTimes" IS NOT NULL AND jsonb_typeof("powerZoneTimes") <> 'null'),
+  false
+)`
+
+/**
+ * A NormalizedStream carrying no payload -- every series, JSON blob and scalar
+ * is null. Returned by the presence-only path so `streams` stays a truthy
+ * object for consumers that merely test existence, without fetching megabytes
+ * of per-second arrays to produce a boolean.
+ */
+function toPresenceStream(row: StreamPresenceRow): NormalizedStream {
+  return {
+    id: row.id,
+    workoutId: row.workoutId,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+    time: null,
+    distance: null,
+    velocity: null,
+    heartrate: null,
+    cadence: null,
+    watts: null,
+    altitude: null,
+    latlng: null,
+    grade: null,
+    moving: null,
+    temp: null,
+    torque: null,
+    leftRightBalance: null,
+    hrv: null,
+    respiration: null,
+    targetPower: null,
+    avgPacePerKm: null,
+    paceVariability: null,
+    lapSplits: null,
+    paceZones: null,
+    pacingStrategy: null,
+    surges: null,
+    hrZoneTimes: null,
+    powerZoneTimes: null,
+    extrasMeta: null
+  }
+}
+
+/**
+ * Presence-only bulk read (`findManyByWorkoutIds(ids, { fields: [] })`).
+ *
+ * The mandatory baseline exists solely so hasUsableStreamData() can decide
+ * V2-vs-V1 in JS, which means six large array columns per workout even for
+ * callers that never look at a series. The deduplication paths ask this
+ * question for a user's entire workout history at once, which is the
+ * CW-296 slow query (`IN ($1..$71)` over time/heartrate/watts/velocity/
+ * lat/lng). Evaluating the same predicate in Postgres reduces each row to a
+ * few dozen bytes while keeping the V2 -> V1 fallback semantics identical.
+ *
+ * It also sidesteps CW-453: no numeric array is decoded, so rows with NULL
+ * elements can't fail Prisma's decoder and blank out a whole batch.
+ */
+async function findStreamPresenceByWorkoutIds(
+  workoutIds: string[]
+): Promise<Map<string, NormalizedStream>> {
+  const result = new Map<string, NormalizedStream>()
+
+  const v2Chunks = await Promise.all(
+    chunkArray(workoutIds, WORKOUT_ID_CHUNK_SIZE).map((chunk) =>
+      prisma
+        .$queryRaw<StreamPresenceRow[]>(
+          Prisma.sql`
+            SELECT "id", "workoutId", "createdAt", "updatedAt", ${V2_HAS_DATA_SQL} AS "hasData"
+            FROM "WorkoutStreamV2"
+            WHERE "workoutId" IN (${Prisma.join(chunk)})
+          `
+        )
+        .catch(() => [] as StreamPresenceRow[])
+    )
+  )
+
+  const missingIds: string[] = []
+  const coveredIds = new Set<string>()
+  for (const row of v2Chunks.flat()) {
+    coveredIds.add(row.workoutId)
+    if (row.hasData) {
+      result.set(row.workoutId, toPresenceStream(row))
+    } else {
+      missingIds.push(row.workoutId)
+    }
+  }
+  for (const id of workoutIds) {
+    if (!coveredIds.has(id)) missingIds.push(id)
+  }
+
+  if (missingIds.length === 0) return result
+
+  const v1Chunks = await Promise.all(
+    chunkArray(missingIds, WORKOUT_ID_CHUNK_SIZE).map((chunk) =>
+      prisma
+        .$queryRaw<StreamPresenceRow[]>(
+          Prisma.sql`
+            SELECT "id", "workoutId", "createdAt", "updatedAt", ${V1_HAS_DATA_SQL} AS "hasData"
+            FROM "WorkoutStream"
+            WHERE "workoutId" IN (${Prisma.join(chunk)})
+          `
+        )
+        .catch(() => [] as StreamPresenceRow[])
+    )
+  )
+
+  for (const row of v1Chunks.flat()) {
+    if (row.hasData) result.set(row.workoutId, toPresenceStream(row))
+  }
+
+  return result
+}
+
 export const workoutStreamRepository = {
   async findByWorkoutId(workoutId: string): Promise<NormalizedStream | null> {
     const v2 = await (prisma as any).workoutStreamV2
@@ -280,6 +444,14 @@ export const workoutStreamRepository = {
     if (workoutIds.length === 0) return result
 
     const fields = options?.fields
+
+    // `fields: []` == "does this workout have usable streams at all?". Answer
+    // it in SQL instead of hauling six per-second arrays per workout across
+    // the wire (CW-296).
+    if (fields !== undefined && fields.length === 0) {
+      return findStreamPresenceByWorkoutIds(workoutIds)
+    }
+
     const v2Select = buildV2Select(fields)
 
     const v2Chunks = await Promise.all(
