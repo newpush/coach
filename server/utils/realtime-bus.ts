@@ -8,9 +8,51 @@ type RealtimeEnvelope = {
   data: any
 }
 
-const REALTIME_CHANNEL = 'app:realtime'
+const REALTIME_CHANNEL_BASE = 'app:realtime'
 const REDIS_URL = process.env.REDIS_URL
 const INSTANCE_ID = process.env.HOSTNAME || randomUUID()
+
+/**
+ * Pub/sub channel namespacing.
+ *
+ * Redis pub/sub ignores the selected database index, so the per-worktree Redis
+ * DB index does NOT isolate events: every dev server on this machine publishes
+ * to the same channel and (because template-cloned dev databases share the same
+ * seeded user id) delivers each other's events.
+ *
+ * Production must keep the historical, shared channel name: several app
+ * containers form one logical instance and legitimately need to broadcast to
+ * each other. So the namespace suffix is only applied for local dev servers
+ * (`NODE_ENV === 'development'`, which is what `nuxt dev` sets and what the
+ * production Dockerfile never sets — it pins `NODE_ENV=production`), or when
+ * `REALTIME_CHANNEL_NAMESPACE` is set explicitly.
+ *
+ * Dev suffix is derived from values `bin/worktree-up.sh` already writes per
+ * worktree (`REDIS_URL` database index + dev server port), so no change to the
+ * worktree scripts is required.
+ */
+function resolveChannelNamespace(): string {
+  const explicit = process.env.REALTIME_CHANNEL_NAMESPACE?.trim()
+  if (explicit) return explicit
+
+  if (process.env.NODE_ENV !== 'development') return ''
+
+  const parts: string[] = ['dev']
+
+  const redisPath = (process.env.REDIS_URL || '').split(/[?#]/)[0]
+  const redisDb = redisPath?.match(/\/(\d+)$/)?.[1]
+  if (redisDb) parts.push(`db${redisDb}`)
+
+  const port = (process.env.NITRO_PORT || process.env.NUXT_PORT || process.env.PORT || '').trim()
+  if (port) parts.push(`p${port}`)
+
+  return parts.join('-')
+}
+
+const CHANNEL_NAMESPACE = resolveChannelNamespace()
+const REALTIME_CHANNEL = CHANNEL_NAMESPACE
+  ? `${REALTIME_CHANNEL_BASE}:${CHANNEL_NAMESPACE}`
+  : REALTIME_CHANNEL_BASE
 
 let publisher: IORedis | null = null
 let subscriber: IORedis | null = null

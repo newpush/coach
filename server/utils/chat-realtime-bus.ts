@@ -7,9 +7,45 @@ type ChatRealtimeEnvelope = {
   data: any
 }
 
-const CHAT_REALTIME_CHANNEL = 'chat:realtime'
+const CHAT_REALTIME_CHANNEL_BASE = 'chat:realtime'
 const REDIS_URL = process.env.REDIS_URL
 const INSTANCE_ID = process.env.HOSTNAME || randomUUID()
+
+/**
+ * Pub/sub channel namespacing — see the matching comment in `realtime-bus.ts`.
+ *
+ * Redis pub/sub ignores the per-worktree Redis database index, so without a
+ * namespaced channel every dev server on this machine receives every other dev
+ * server's events (template-cloned dev databases share the same seeded user id,
+ * so the `userId` dispatch matches).
+ *
+ * Production keeps the historical shared channel name so multiple app
+ * containers still broadcast to each other: the suffix is only applied for
+ * local dev servers (`NODE_ENV === 'development'`) or when
+ * `REALTIME_CHANNEL_NAMESPACE` is set explicitly.
+ */
+function resolveChannelNamespace(): string {
+  const explicit = process.env.REALTIME_CHANNEL_NAMESPACE?.trim()
+  if (explicit) return explicit
+
+  if (process.env.NODE_ENV !== 'development') return ''
+
+  const parts: string[] = ['dev']
+
+  const redisPath = (process.env.REDIS_URL || '').split(/[?#]/)[0]
+  const redisDb = redisPath?.match(/\/(\d+)$/)?.[1]
+  if (redisDb) parts.push(`db${redisDb}`)
+
+  const port = (process.env.NITRO_PORT || process.env.NUXT_PORT || process.env.PORT || '').trim()
+  if (port) parts.push(`p${port}`)
+
+  return parts.join('-')
+}
+
+const CHANNEL_NAMESPACE = resolveChannelNamespace()
+const CHAT_REALTIME_CHANNEL = CHANNEL_NAMESPACE
+  ? `${CHAT_REALTIME_CHANNEL_BASE}:${CHANNEL_NAMESPACE}`
+  : CHAT_REALTIME_CHANNEL_BASE
 
 let publisher: IORedis | null = null
 let subscriber: IORedis | null = null
