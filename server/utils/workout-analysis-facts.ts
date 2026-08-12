@@ -2732,6 +2732,156 @@ export function formatActualIntervalsForPrompt(
     .join('\n      ')
 }
 
+/**
+ * A duration-weighted aggregate over ONE group of resolved intervals.
+ *
+ * Every average is weighted by each segment's duration, not by segment count:
+ * a mean-of-lap-means lets a 30-second stub count as much as a 4-minute rep,
+ * which is the same class of error as quoting the session mean for an interval
+ * metric. Cadence stays on whatever scale the caller's intervals carry (the
+ * facts module never re-scales running cadence; `buildWorkoutAnalysisData` is
+ * the single conversion point) — the weighting is linear, so normalising before
+ * or after aggregation gives the same number.
+ */
+export type IntervalGroupSummary = {
+  /** How many segments went into this aggregate. Never zero — the summary is `null` instead. */
+  repCount: number
+  totalDurationSeconds: number
+  /** Mean segment length, i.e. `totalDurationSeconds / repCount`. */
+  avgDurationSeconds: number
+  avgPower: number | null
+  avgHr: number | null
+  avgCadence: number | null
+  /** Duration-weighted mean speed in m/s, which is total distance over total time. */
+  avgSpeed: number | null
+  /** `1000 / avgSpeed`, i.e. seconds per kilometre; `null` when there is no usable speed. */
+  avgPaceSecondsPerKm: number | null
+}
+
+export type IntervalGroupSummaries = {
+  work: IntervalGroupSummary | null
+  recovery: IntervalGroupSummary | null
+}
+
+/**
+ * Warmup/cooldown markers, in the same languages `mapIntervalsToActual`
+ * recognises when it splits `classification` into work/recovery.
+ *
+ * These segments are classified `recovery`, but they are not the *recoveries*
+ * between reps: a warmup jog and a cooldown spin say nothing about how well the
+ * athlete recovered mid-session, and folding them in is precisely what drags a
+ * "recovery" figure toward the session mean. They are therefore excluded from
+ * the recovery aggregate and, being non-work, never reach the work aggregate.
+ */
+const WARMUP_COOLDOWN_TOKENS = ['warm', 'cool', 'calentamiento', 'enfriamiento']
+
+function isWarmupOrCooldownInterval(interval: ActualInterval): boolean {
+  const lower = String(interval.type || '').toLowerCase()
+  return WARMUP_COOLDOWN_TOKENS.some((token) => lower.includes(token))
+}
+
+/**
+ * Duration-weighted mean of one metric over `intervals`.
+ *
+ * Segments whose metric is absent are skipped entirely rather than counted as
+ * zero — a rep with no cadence sensor must not pull the cadence average down.
+ * When every contributing segment has a non-positive duration (fixtures, or a
+ * source that carries no timing at all) the weights are all zero, so the
+ * function falls back to the unweighted mean rather than dividing by zero and
+ * returning `NaN`.
+ */
+function durationWeightedMean(
+  intervals: ActualInterval[],
+  pick: (interval: ActualInterval) => number | null
+): number | null {
+  let weightedSum = 0
+  let weight = 0
+  let plainSum = 0
+  let count = 0
+
+  for (const interval of intervals) {
+    const value = pick(interval)
+    if (value === null || !Number.isFinite(value)) continue
+    const duration = Number(interval.durationSeconds)
+    plainSum += value
+    count += 1
+    if (Number.isFinite(duration) && duration > 0) {
+      weightedSum += value * duration
+      weight += duration
+    }
+  }
+
+  if (count === 0) return null
+  if (weight > 0) return weightedSum / weight
+  return plainSum / count
+}
+
+/**
+ * Aggregate one already-selected group of intervals.
+ *
+ * Returns `null` for an empty group rather than a zero-filled record: "there
+ * were no work intervals" and "the work intervals averaged nothing" are
+ * different statements, and only the first one is true of, say, a steady
+ * endurance ride. Every metric is independently `null` when no segment in the
+ * group carried it, so a run without a power meter reports no work power
+ * instead of `0W`.
+ */
+export function summarizeIntervalGroup(intervals: ActualInterval[]): IntervalGroupSummary | null {
+  if (!Array.isArray(intervals) || intervals.length === 0) return null
+
+  const totalDurationSeconds = intervals.reduce((sum, interval) => {
+    const duration = Number(interval.durationSeconds)
+    return sum + (Number.isFinite(duration) && duration > 0 ? duration : 0)
+  }, 0)
+
+  const avgSpeed = durationWeightedMean(intervals, (interval) =>
+    interval.avgSpeed !== null && Number(interval.avgSpeed) > 0 ? Number(interval.avgSpeed) : null
+  )
+
+  return {
+    repCount: intervals.length,
+    totalDurationSeconds,
+    avgDurationSeconds: totalDurationSeconds / intervals.length,
+    avgPower: durationWeightedMean(intervals, (interval) => interval.avgPower),
+    avgHr: durationWeightedMean(intervals, (interval) => interval.avgHr),
+    avgCadence: durationWeightedMean(intervals, (interval) => interval.avgCadence),
+    avgSpeed,
+    avgPaceSecondsPerKm: avgSpeed !== null && avgSpeed > 0 ? 1000 / avgSpeed : null
+  }
+}
+
+/**
+ * Split the arbitrated interval set into work-only and recovery-only aggregates
+ * (CW-381).
+ *
+ * The grouping reads the RESOLVED interval type — `classification`, which
+ * `mapIntervalsToActual` derives from the label `resolveProviderIntervalTypes`
+ * re-derived (CW-376) — and never `lap_splits`, which are the provider's
+ * automatic per-distance splits and straddle warmup, reps, recoveries and
+ * cooldown arbitrarily (CW-389).
+ *
+ * Why this exists: the payload gave the model per-lap rows plus session means
+ * and nothing in between, so interval-level claims were made from the session
+ * mean. A 4x4min threshold run was told its "average cadence of 162 spm is
+ * somewhat low for threshold work" — 162 spm being the whole-session mean,
+ * dragged down by warmup, recovery jogs and cooldown, while the four reps
+ * themselves averaged 177 spm. The advice was inverted, not merely imprecise.
+ */
+export function buildIntervalGroupSummaries(
+  intervals: ActualIntervalForAnalysis[]
+): IntervalGroupSummaries {
+  const all = Array.isArray(intervals) ? intervals : []
+  const work = all.filter((interval) => interval.classification === 'work')
+  const recovery = all.filter(
+    (interval) => interval.classification === 'recovery' && !isWarmupOrCooldownInterval(interval)
+  )
+
+  return {
+    work: summarizeIntervalGroup(work),
+    recovery: summarizeIntervalGroup(recovery)
+  }
+}
+
 function rateConfidence(score: number): FactConfidence {
   if (score >= 0.75) return 'high'
   if (score >= 0.4) return 'medium'

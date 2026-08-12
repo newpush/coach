@@ -24,11 +24,13 @@ import {
 } from '../../../trigger/utils/workout-metric-priority'
 import { formatStructuredPlanForPrompt } from '../../../trigger/utils/planned-workout-targets'
 import {
+  buildIntervalGroupSummaries,
   formatCadenceWithUnit,
   getActualIntervalsForAnalysis,
   getActualIntervalsSourceForAnalysis,
   isRunningCadenceFamily,
   toCanonicalCadence,
+  type IntervalGroupSummary,
   type WorkoutAnalysisFactsV2
 } from '../workout-analysis-facts'
 import { summarizePowerFromWatts } from '../power-metrics'
@@ -555,6 +557,40 @@ export function buildWorkoutAnalysisData(workout: any, options: WorkoutAnalysisD
       start_index: interval.startIndex,
       end_index: interval.endIndex
     }))
+
+    // Work-only and recovery-only aggregates over the SAME arbitrated set
+    // (CW-381).
+    //
+    // Without these the payload jumps straight from per-lap rows to session
+    // means, and the model reaches for the session mean when it wants an
+    // interval number: a 4x4min threshold run was told 162 spm was "somewhat
+    // low for threshold work" when 162 was the whole-session mean (warmup,
+    // recovery jogs and cooldown included) and the four reps themselves ran
+    // 177 spm.
+    //
+    // Grouped by the RESOLVED interval type, never by `lap_splits` -- those are
+    // automatic per-distance splits that cut across reps and recoveries
+    // (CW-389). Cadence is normalised here and only here, exactly like the
+    // session and per-interval values above.
+    const intervalGroups = buildIntervalGroupSummaries(actualIntervals)
+    const toSummaryPayload = (summary: IntervalGroupSummary | null) =>
+      summary
+        ? {
+            rep_count: summary.repCount,
+            total_duration_s: Math.round(summary.totalDurationSeconds),
+            avg_duration_s: Math.round(summary.avgDurationSeconds),
+            avg_power: summary.avgPower,
+            avg_hr: summary.avgHr,
+            avg_cadence: normalizeCadence(summary.avgCadence),
+            avg_speed_ms: summary.avgSpeed,
+            avg_pace_s_per_km: summary.avgPaceSecondsPerKm
+          }
+        : null
+
+    const workSummary = toSummaryPayload(intervalGroups.work)
+    const recoverySummary = toSummaryPayload(intervalGroups.recovery)
+    if (workSummary) data.work_interval_summary = workSummary
+    if (recoverySummary) data.recovery_interval_summary = recoverySummary
   }
 
   // Extract pacing splits from rawJson if available
@@ -1029,6 +1065,50 @@ export function formatIntervalDuration(durationSeconds: number): string {
  */
 export function formatIntervalIntensity(intensityFactor: number): string {
   return `${intensityFactor.toFixed(2)} IF (${Math.round(intensityFactor * 100)}% of threshold)`
+}
+
+/**
+ * Render one duration-weighted interval aggregate as prompt bullets (CW-381).
+ *
+ * Only metrics the group actually carried are printed: a missing value means
+ * "these segments had no such measurement", and printing a fabricated `0W`
+ * would hand the model a number to reason from. Values arrive already on the
+ * canonical scales `buildWorkoutAnalysisData` established (cadence normalised,
+ * speed in m/s, pace in seconds per kilometre); this renderer only labels them.
+ */
+export function formatIntervalGroupSummary(
+  summary: any,
+  options: {
+    workoutType: string
+    isCadenceRelevant: boolean
+    paceCapable: boolean
+    distanceUnits?: string | null
+  }
+): string {
+  if (!summary) return ''
+
+  let block = `- Segments: ${summary.rep_count}\n`
+  block += `- Total Time: ${formatIntervalDuration(summary.total_duration_s)}\n`
+  block += `- Average Segment Length: ${formatIntervalDuration(summary.avg_duration_s)}\n`
+  if (summary.avg_power != null) {
+    block += `- Average Power (duration-weighted): ${Math.round(summary.avg_power)}W\n`
+  }
+  if (summary.avg_hr != null) {
+    block += `- Average HR (duration-weighted): ${Math.round(summary.avg_hr)} bpm\n`
+  }
+  if (options.isCadenceRelevant && summary.avg_cadence != null) {
+    block += `- Average Cadence (duration-weighted): ${formatCadenceWithUnit(
+      Math.round(summary.avg_cadence),
+      options.workoutType
+    )}\n`
+  }
+  if (options.paceCapable && summary.avg_pace_s_per_km != null) {
+    block += `- Average Pace (duration-weighted): ${formatPromptPace(
+      summary.avg_pace_s_per_km,
+      options.distanceUnits
+    )}\n`
+  }
+  return block
 }
 
 /**
@@ -1588,6 +1668,47 @@ When analyzing "Execution" and "Effort", specifically reference how well the ath
     prompt += '\n'
   }
 
+  // Work-only and recovery-only aggregates (CW-381).
+  //
+  // Printed BEFORE the per-interval table and before the model is asked for
+  // anything, because these are the figures every interval-level claim has to
+  // be built from. The sections above this one are all session-wide -- a
+  // session mean over an intervalled workout is an average of warmup, reps,
+  // recoveries and cooldown, so quoting it as "your threshold cadence" or
+  // "your interval power" is not an approximation, it is a different number
+  // about a different thing (the 162-vs-177 spm inversion this ticket exists
+  // for).
+  const workIntervalSummary = workoutData.work_interval_summary
+  const recoveryIntervalSummary = workoutData.recovery_interval_summary
+  if (workIntervalSummary || recoveryIntervalSummary) {
+    const summaryOptions = {
+      workoutType,
+      isCadenceRelevant,
+      paceCapable: isRunningCadenceFamily(workoutType),
+      distanceUnits: userProfile?.distanceUnits
+    }
+
+    prompt += '\n## Work vs Recovery Aggregates\n'
+    prompt +=
+      'Duration-weighted averages over the resolved WORK and RECOVERY segments of the Interval Breakdown below (warmup and cooldown excluded). Any claim about interval, rep, or threshold execution MUST quote these figures, never the session averages above.\n'
+
+    if (workIntervalSummary) {
+      prompt += '\n### Work Intervals\n'
+      prompt += formatIntervalGroupSummary(workIntervalSummary, summaryOptions)
+    } else {
+      prompt +=
+        '\n### Work Intervals\n- None: this session has no segments resolved as work, so do not make rep-level or interval-level claims about it.\n'
+    }
+
+    if (recoveryIntervalSummary) {
+      prompt += '\n### Recovery Between Work\n'
+      prompt += formatIntervalGroupSummary(recoveryIntervalSummary, summaryOptions)
+    } else {
+      prompt +=
+        '\n### Recovery Between Work\n- None: no recovery segments between work, so do not characterise recovery quality.\n'
+    }
+  }
+
   // Add interval analysis if available.
   //
   // These rows ARE the arbitrated segmentation -- the same `ActualInterval[]`
@@ -1702,6 +1823,15 @@ ${buildAnalysisGuardrailInstructions(workoutType, analysisFactsV2)}
 ${buildAnalysisRequestMetricRules(metricPriorityContext)
   .map((rule) => `- ${rule}`)
   .join('\n')}`
+
+  // Restated at the point of use, next to the other hard rules: the section
+  // header alone lost to the session averages printed higher up, which is how
+  // a session mean ended up being quoted as an interval metric (CW-381).
+  if (workIntervalSummary || recoveryIntervalSummary) {
+    prompt += `
+- Every claim about interval, rep, or threshold execution must quote the figures from "## Work vs Recovery Aggregates" (or a specific row of "## Interval Breakdown"). The session averages under Power Metrics, Heart Rate & Cadence and Pace & Speed cover the whole file including warmup, recoveries and cooldown, so they must never be described as interval, rep or threshold values.
+- When a work-only figure and the session average disagree, that gap is the shape of the session, not an error to reconcile; judge the intervals on the work-only figure.`
+  }
 
   return prompt
 }
