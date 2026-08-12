@@ -4,10 +4,18 @@ import { PrismaClient, BugStatus } from '@prisma/client'
 import { PrismaPg } from '@prisma/adapter-pg'
 import pg from 'pg'
 import { sendToUser } from '../../server/utils/ws-state'
+import { stopRealtimeSubscription } from '../../server/utils/realtime-bus'
 
 export const ticketsCommand = new Command('tickets').description(
   'Manage support tickets (Bug Reports)'
 )
+
+/**
+ * Derived from the Prisma enum rather than hand-written, so the `--help` text
+ * cannot drift from what the command actually accepts. It previously advertised
+ * DUPLICATE and WONT_FIX, neither of which exists in `BugStatus`.
+ */
+export const VALID_STATUSES = Object.values(BugStatus)
 
 const getPrisma = (isProd: boolean) => {
   const connectionString = isProd ? process.env.DATABASE_URL_PROD : process.env.DATABASE_URL
@@ -18,6 +26,30 @@ const getPrisma = (isProd: boolean) => {
   const pool = new pg.Pool({ connectionString })
   const adapter = new PrismaPg(pool)
   return { prisma: new PrismaClient({ adapter }), pool }
+}
+
+/**
+ * Release every handle a command may have opened.
+ *
+ * `sendToUser` publishes through `realtime-bus`, which lazily opens an ioredis
+ * publisher and keeps it open. In the long-running server that is correct; in a
+ * one-shot CLI it keeps the event loop alive forever, so the command commits its
+ * write and then hangs until something kills it. Closing the bus here fixes that
+ * without a `process.exit()`, which would risk truncating the notification write.
+ */
+export const closeResources = async (prisma: PrismaClient, pool: pg.Pool) => {
+  await prisma.$disconnect()
+  await pool.end()
+  await stopRealtimeSubscription()
+}
+
+/**
+ * Report failure to scripted callers. Without this a command prints an error and
+ * still exits 0, so a batch script records success for work that never happened.
+ */
+const failed = (message: string, error?: unknown) => {
+  console.error(chalk.red(message), error ?? '')
+  process.exitCode = 1
 }
 
 async function createUserNotificationWithClient(
@@ -93,7 +125,7 @@ ticketsCommand
       })
 
       if (!ticket) {
-        console.log(chalk.red(`Ticket ${id} not found.`))
+        failed(`Ticket ${id} not found.`)
         return
       }
 
@@ -140,28 +172,23 @@ ticketsCommand
         )
       )
     } catch (error) {
-      console.error(chalk.red('Error:'), error)
+      failed('Error:', error)
     } finally {
-      await prisma.$disconnect()
-      await pool.end()
+      await closeResources(prisma, pool)
     }
   })
 
 ticketsCommand
   .command('update-status <id> <status>')
-  .description(
-    'Update the status of a ticket (OPEN, IN_PROGRESS, RESOLVED, CLOSED, DUPLICATE, WONT_FIX)'
-  )
+  .description(`Update the status of a ticket (${VALID_STATUSES.join(', ')})`)
   .option('--prod', 'Use production database')
   .action(async (id, status, options) => {
     const { prisma, pool } = getPrisma(options.prod)
     try {
       if (options.prod) console.log(chalk.yellow('⚠️  Using PRODUCTION database.'))
 
-      if (!Object.values(BugStatus).includes(status as BugStatus)) {
-        console.error(
-          chalk.red(`Invalid status. Must be one of: ${Object.values(BugStatus).join(', ')}`)
-        )
+      if (!VALID_STATUSES.includes(status as BugStatus)) {
+        failed(`Invalid status. Must be one of: ${VALID_STATUSES.join(', ')}`)
         return
       }
 
@@ -179,10 +206,9 @@ ticketsCommand
 
       console.log(chalk.green(`Successfully updated ticket ${id} to status ${status}`))
     } catch (error) {
-      console.error(chalk.red('Error updating ticket:'), error)
+      failed('Error updating ticket:', error)
     } finally {
-      await prisma.$disconnect()
-      await pool.end()
+      await closeResources(prisma, pool)
     }
   })
 
@@ -202,7 +228,7 @@ ticketsCommand
 
       const type = options.type.toUpperCase()
       if (type !== 'NOTE' && type !== 'MESSAGE') {
-        console.error(chalk.red('Invalid type. Must be NOTE or MESSAGE.'))
+        failed('Invalid type. Must be NOTE or MESSAGE.')
         return
       }
 
@@ -238,11 +264,7 @@ ticketsCommand
         }
 
         if (!userId) {
-          console.error(
-            chalk.red(
-              'No user-id provided, SUPPORT_AGENT_USER not found, and no ADMIN found in DB.'
-            )
-          )
+          failed('No user-id provided, SUPPORT_AGENT_USER not found, and no ADMIN found in DB.')
           return
         }
       }
@@ -275,10 +297,9 @@ ticketsCommand
 
       console.log(chalk.green(`Successfully added ${type} to ticket ${id}`))
     } catch (error) {
-      console.error(chalk.red('Error adding comment:'), error)
+      failed('Error adding comment:', error)
     } finally {
-      await prisma.$disconnect()
-      await pool.end()
+      await closeResources(prisma, pool)
     }
   })
 
@@ -328,9 +349,8 @@ ticketsCommand
         )
       }
     } catch (error) {
-      console.error(chalk.red('Error fetching tickets:'), error)
+      failed('Error fetching tickets:', error)
     } finally {
-      await prisma.$disconnect()
-      await pool.end()
+      await closeResources(prisma, pool)
     }
   })
