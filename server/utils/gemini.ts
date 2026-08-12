@@ -221,7 +221,7 @@ export interface GeminiErrorClassification {
   statusCode?: number
   /** In-process attempts the AI SDK made before giving up, when it reports them. */
   attempts?: number
-  /** Low-cardinality summary safe to put in a log prefix or a Sentry tag. */
+  /** Low-cardinality summary safe to put in a log prefix. */
   detail: string
 }
 
@@ -383,13 +383,22 @@ export function classifyGeminiError(error: unknown): GeminiErrorClassification {
 }
 
 /**
- * Emit a triage-shaped log line and tag the error for Sentry.
+ * Emit a triage-shaped log line and annotate the error with its classification.
  *
- * The `[Gemini][<type>]` prefix is stable and low-cardinality, so a connect timeout
- * and a schema failure land in different Sentry groups and are greppable apart in
- * Trigger.dev logs — which is the whole point of CW-328.
+ * The `[Gemini][<type>]` prefix is stable and low-cardinality, so a connect timeout and a
+ * schema failure are greppable apart in the Trigger.dev log viewer. Nitro-side callers
+ * additionally reach Sentry Logs (`sentry.server.config.ts` registers
+ * `consoleLoggingIntegration` with `enableLogs`); the Trigger worker does NOT, since
+ * `trigger/init.ts` initialises Sentry with `defaultIntegrations: false`.
  *
- * The original error is rethrown unchanged by callers: ~45 call sites already catch
+ * What this does NOT do (CW-328): it does not change Sentry *issue* grouping. The error is
+ * rethrown unchanged, so issues still group by call site, and grouping them apart would
+ * mean throwing distinct error types — a behavioural change across every call site.
+ * The queryable, works-everywhere signal is `LlmUsage.errorType`; the prefix is the human
+ * one. To get the classification into Sentry proper, tag it in the single
+ * `tasks.onFailure` hook in `trigger/init.ts` from the error properties set below.
+ *
+ * The original error is rethrown unchanged by callers: dozens of call sites already catch
  * these, so this deliberately does not wrap or re-type the error, only annotate it.
  */
 function reportGeminiFailure(params: {
@@ -417,9 +426,14 @@ function reportGeminiFailure(params: {
     params.error
   )
 
-  // Surface the classification as error properties so Sentry captures it as context
-  // without this module taking a dependency on a Sentry SDK (it runs in both the
-  // Nitro server and the Trigger.dev worker bundles).
+  // Carry the classification on the error so any local handler can branch on it without
+  // re-classifying, and without this module depending on a Sentry SDK (it is bundled into
+  // both the Nitro server and the Trigger.dev worker).
+  //
+  // NOTE: these properties are NOT captured by Sentry today — no `extraErrorDataIntegration`
+  // is registered, and Sentry does not serialise arbitrary own properties of an Error by
+  // default (the Trigger worker disables default integrations entirely). They exist so the
+  // `tasks.onFailure` hook in `trigger/init.ts` can promote them to Sentry tags in one line.
   try {
     Object.assign(params.error, {
       geminiErrorType: classification.type,
