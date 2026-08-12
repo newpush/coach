@@ -1573,7 +1573,8 @@ function inferHrArtifactSeverity(stats: ReturnType<typeof getHrStats>): HrArtifa
  * two sections agree by construction rather than by luck.
  */
 export function deriveMetricUsabilitySignals(
-  facts?: WorkoutAnalysisFactsV2 | null
+  facts?: WorkoutAnalysisFactsV2 | null,
+  workoutType?: string | null
 ): MetricUsabilitySignals | undefined {
   if (!facts?.guardrails) return undefined
   const { telemetry, archetype, analysisMode } = facts.guardrails
@@ -1583,34 +1584,35 @@ export function deriveMetricUsabilitySignals(
     // Relative usability is enough to lead an analysis: an estimated-power ride
     // can still be judged on its own power trace, just not benchmarked absolutely.
     powerUsable: telemetry.powerAbsoluteUsable || telemetry.powerRelativeUsable,
-    paceUsable: mayPaceLeadTheAnalysis(telemetry.paceUsable, analysisMode),
+    // Reported as the facts report it. Whether pace may *lead* is a separate
+    // question, answered below, so the prompt never claims a ride's perfectly
+    // good speed telemetry is unusable.
+    paceUsable: telemetry.paceUsable,
+    paceMayLead: mayPaceLeadTheAnalysis(analysisMode, getWorkoutFamily(workoutType)),
     factsPrimaryMetric: archetype?.primaryMetric ?? null
   }
 }
 
 /**
- * Whether pace is allowed to *lead* -- a stricter question than
- * `telemetry.paceUsable`, which only says the session has pace data at all.
+ * Whether pace is allowed to *lead* the analysis -- a question about the sport,
+ * not about the data.
  *
- * `getAnalysisMode` resolves to `'pace'` exactly when pace is the primary effort
- * metric for the modality: true for runs (and pace-carrying ski/row), and never
- * for a ride, because cycling speed moves with wind, gradient and drafting
- * independently of the work done. That reasoning is CW-437's, written out at
- * length in `getAnalysisMode`, and an estimated-power ride resolves to `'mixed'`
- * precisely so speed cannot lead it.
+ * CW-437's rule is specifically about cycling: speed moves with wind, gradient
+ * and drafting independently of the work done, so it is a poor effort proxy on a
+ * bike. It says nothing about swimming, rowing, skiing or walking, where pace is
+ * the effort metric and `PACE_*` is a first-class, user-selectable preference.
  *
- * Without this gate the CW-397 demotion path reintroduced the bug CW-437 removed:
- * an outdoor ride with no power meter and a dropout-riddled HR trace demoted HR
- * and promoted PACE, producing `**Hard Rule**: Base most conclusions on PACE
- * evidence` on a session whose facts decline to name any leading metric. When
- * nothing may lead, `**Fallback Rule**` is the honest output.
- *
- * Note the cost, which is deliberate: an athlete who set a `PACE_*` preference on
- * a ride now has pace demoted there too. That is the CW-437 position -- speed is
- * the wrong signal for a bike, whatever the preference says.
+ * So the gate is the ride family, with one widening: `analysisMode === 'pace'` is
+ * honoured wherever it appears. Note that `analysisMode` alone is far too narrow
+ * to use as the test -- `getAnalysisMode` only ever returns `'pace'` for runs and
+ * for power-carrying ski, so swim, row, walk and most ski sessions resolve to
+ * `'mixed'` and would have been silently demoted off pace onto HR.
  */
-function mayPaceLeadTheAnalysis(paceUsable: boolean, analysisMode: AnalysisMode): boolean {
-  return paceUsable && analysisMode === 'pace'
+function mayPaceLeadTheAnalysis(
+  analysisMode: AnalysisMode,
+  family: ReturnType<typeof getWorkoutFamily>
+): boolean {
+  return analysisMode === 'pace' || family !== 'ride'
 }
 
 const METRIC_KEY_TO_TARGET: Record<string, MetricTarget> = {
@@ -4852,9 +4854,9 @@ export function buildWorkoutAnalysisFactsV2({
   const metricUsability: MetricUsability = {
     hr: hrStats.usable && inferHrArtifactSeverity(hrStats) !== 'high',
     power: powerAbsoluteUsable || powerRelativeUsable,
-    // Same CW-437 gate the prompt side applies, so adherence and the prompt
-    // cannot disagree about whether pace may lead.
-    pace: mayPaceLeadTheAnalysis(hasPace, analysisMode)
+    // Same CW-437 gate the prompt side applies, through the same helper, so
+    // adherence and the prompt cannot disagree about whether pace may lead.
+    pace: hasPace && mayPaceLeadTheAnalysis(analysisMode, family)
   }
   const adherence = deriveAdherence({
     workout,

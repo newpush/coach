@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   buildAnalysisRequestMetricRules,
   buildMetricPriorityPromptBlock,
+  describeMetricStatus,
   parseLoadPreference,
   resolveMetricPriorityContext,
   shouldCondenseHeartRateSection
@@ -158,15 +159,64 @@ describe('metric priority demotion against the V2 facts (CW-397)', () => {
     const ctx = resolveMetricPriorityContext('HR_PACE_POWER', POWER_METER_RIDE, {
       hrUsable: false,
       powerUsable: true,
-      // A ride: `deriveMetricUsabilitySignals` reports pace as unable to lead,
-      // because `analysisMode` is not `'pace'` (CW-437).
-      paceUsable: false,
+      // A ride: the pace telemetry is fine, it simply may not lead (CW-437).
+      paceUsable: true,
+      paceMayLead: false,
       factsPrimaryMetric: 'mixed'
     })
 
     // `mixed` names no metric, so preference order decides among the usable ones.
     expect(ctx.primaryMetric).toBe('POWER')
     expect(ctx.resolvedPriority).toEqual(['POWER', 'HR', 'PACE'])
+  })
+
+  it("does not call a ride's good pace telemetry unusable", () => {
+    // The facts block in the same prompt says `Pace Usable: Yes`. Labelling the
+    // metric missing/unusable -- and citing those same facts as the evidence --
+    // is the contradiction CW-397 exists to remove, so the demotion reason has to
+    // name the real cause: the modality, not the data.
+    const ctx = resolveMetricPriorityContext(
+      'PACE_HR_POWER',
+      { avg_hr: 150, distance_m: 48000, duration_s: 5400, avg_speed_ms: 8.9 },
+      { hrUsable: true, powerUsable: false, paceUsable: true, paceMayLead: false }
+    )
+
+    expect(ctx.demotedFrom).toBe('PACE')
+    expect(ctx.demotionKind).toBe('not_valid_for_modality')
+    expect(ctx.primaryMetric).toBe('HR')
+    expect(describeMetricStatus(ctx, 'PACE')).toBe('present_but_not_leading')
+
+    const block = buildMetricPriorityPromptBlock(ctx)
+    expect(block).toContain(
+      '- **Secondary Metric for corroboration**: PACE (present_but_not_leading)'
+    )
+    expect(block).toContain('is measured reliably here')
+    expect(block).toContain('speed is not a valid proxy for cycling effort')
+    // The three claims that would contradict the facts block.
+    expect(block).not.toContain("this session's telemetry does not support it")
+    expect(block).not.toContain('missing_or_not_set')
+    expect(block).not.toContain('PACE (missing)')
+
+    const rules = buildAnalysisRequestMetricRules(ctx).join(' ')
+    expect(rules).toContain('measured reliably here but may not lead a ride')
+    expect(rules).toContain('PACE figures may still be reported')
+  })
+
+  it('still says "telemetry does not support it" when the data really is bad', () => {
+    // The other demotion kind must keep its original, accurate wording.
+    const ctx = resolveMetricPriorityContext('HR_PACE_POWER', POWER_METER_RIDE, {
+      hrUsable: false,
+      powerUsable: true,
+      paceUsable: true,
+      paceMayLead: false,
+      factsPrimaryMetric: 'power'
+    })
+
+    expect(ctx.demotedFrom).toBe('HR')
+    expect(ctx.demotionKind).toBe('data_unusable')
+    expect(buildMetricPriorityPromptBlock(ctx)).toContain(
+      "this session's telemetry does not support it"
+    )
   })
 
   it('never promotes pace on a ride, and says so honestly when nothing may lead', () => {
@@ -179,7 +229,13 @@ describe('metric priority demotion against the V2 facts (CW-397)', () => {
     const ctx = resolveMetricPriorityContext(
       'HR_PACE_POWER',
       { avg_hr: 150, distance_m: 48000, duration_s: 5400, avg_speed_ms: 8.9 },
-      { hrUsable: false, powerUsable: false, paceUsable: false, factsPrimaryMetric: 'mixed' }
+      {
+        hrUsable: false,
+        powerUsable: false,
+        paceUsable: true,
+        paceMayLead: false,
+        factsPrimaryMetric: 'mixed'
+      }
     )
 
     expect(ctx.primaryMetricAvailable).toBe(false)
@@ -202,7 +258,13 @@ describe('metric priority demotion against the V2 facts (CW-397)', () => {
     const promotedPaceRun = resolveMetricPriorityContext(
       'HR_PACE_POWER',
       { avg_hr: 150, distance_m: 10000, duration_s: 3300, avg_speed_ms: 3.03 },
-      { hrUsable: false, powerUsable: false, paceUsable: true, factsPrimaryMetric: 'pace' }
+      {
+        hrUsable: false,
+        powerUsable: false,
+        paceUsable: true,
+        paceMayLead: true,
+        factsPrimaryMetric: 'pace'
+      }
     )
 
     expect(promotedPaceRun.primaryMetric).toBe('PACE')

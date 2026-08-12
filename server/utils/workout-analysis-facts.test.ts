@@ -3652,12 +3652,18 @@ describe('adherence metric demotion (CW-397)', () => {
   })
 
   it('still honours primaryTarget when the metric it names is not demoted', () => {
-    // The short-circuit is skipped only for demoted metrics. A clean HR trace
-    // leaves `primaryTarget: 'heartRate'` in charge, exactly as before CW-397.
-    const facts = buildFacts(CLEAN_HR_STREAM)
+    // The discriminating case. With a clean HR trace, `primaryTarget: 'power'`
+    // must still win even though the resolved metric order is HR-first -- which
+    // is only true if the short-circuit is alive. Under an unconditional skip
+    // this scores 0 (HR-scored), so the assertion distinguishes the two
+    // implementations rather than merely passing.
+    //
+    // `primaryTarget: 'heartRate'` + clean HR would NOT discriminate: the order
+    // head and the stamp are both `heartRate`, so both paths agree.
+    const facts = buildFacts(CLEAN_HR_STREAM, 'power')
 
     expect(facts.guardrails.telemetry.hrUsable).toBe(true)
-    expect(facts.adherence.workIntervalHitRate).toBe(0)
+    expect(facts.adherence.workIntervalHitRate).toBe(100)
   })
 
   it('still scores a legacy plan on HR when the HR trace is clean', () => {
@@ -3716,8 +3722,11 @@ describe('adherence metric demotion (CW-397)', () => {
     expect(facts.guardrails.telemetry.paceUsable).toBe(true)
     expect(facts.guardrails.analysisMode).not.toBe('pace')
 
-    // Raw pace data is still reported; it just may not lead.
-    expect(deriveMetricUsabilitySignals(facts)?.paceUsable).toBe(false)
+    // Data quality and permission-to-lead are reported separately: the telemetry
+    // is fine and the facts block says so, but speed may not lead a ride.
+    const signals = deriveMetricUsabilitySignals(facts, 'Ride')
+    expect(signals?.paceUsable).toBe(true)
+    expect(signals?.paceMayLead).toBe(false)
   })
 
   it('lets pace lead a run, where it is the primary effort metric', () => {
@@ -3736,6 +3745,40 @@ describe('adherence metric demotion (CW-397)', () => {
     } as any)
 
     expect(facts.guardrails.analysisMode).toBe('pace')
-    expect(deriveMetricUsabilitySignals(facts)?.paceUsable).toBe(true)
+    expect(deriveMetricUsabilitySignals(facts, 'Run')?.paceMayLead).toBe(true)
+  })
+
+  it('leaves pace leading for swim, row, ski and walk (CW-437 is about bikes)', () => {
+    // `analysisMode === 'pace'` is far too narrow to use as the gate:
+    // `getAnalysisMode` only returns it for runs and power-carrying ski, so every
+    // one of these sports resolves to `mixed`. Gating on that alone silently
+    // demoted `PACE_*` -- a first-class, user-selectable preference -- onto HR for
+    // four sports where pace IS the effort metric. The gate is the ride family.
+    const sports: Array<[string, number]> = [
+      ['Swim', 1.2],
+      ['Rowing', 3.5],
+      ['NordicSki', 4.0],
+      ['Walk', 1.4]
+    ]
+
+    for (const [type, averageSpeed] of sports) {
+      const facts = buildWorkoutAnalysisFactsV2({
+        workout: makeWorkout({
+          title: type,
+          type,
+          durationSec: 3600,
+          distanceMeters: Math.round(averageSpeed * 3600),
+          averageSpeed,
+          averageWatts: null,
+          averageHr: 150,
+          streams: { heartrate: CLEAN_HR_STREAM }
+        }),
+        sportSettings: { loadPreference: 'PACE_HR_POWER' }
+      } as any)
+
+      // Every one of these is `mixed` -- which is exactly why the narrow gate broke them.
+      expect(facts.guardrails.analysisMode).not.toBe('pace')
+      expect(deriveMetricUsabilitySignals(facts, type)?.paceMayLead).toBe(true)
+    }
   })
 })

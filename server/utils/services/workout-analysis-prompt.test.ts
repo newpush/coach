@@ -1734,4 +1734,94 @@ describe('metric priority agrees with the facts block (CW-397)', () => {
     // The pace-primary section header must not appear either.
     expect(prompt).not.toContain('## Pace & Speed (Primary Metric)')
   })
+
+  it('leaves a pace-preference swim leading on pace (CW-437 is about bikes)', () => {
+    // The over-correction guard. `analysisMode` is `mixed` for a swim -- as it is
+    // for row, ski and walk -- so gating pace on `analysisMode === 'pace'` alone
+    // silently demoted a first-class, user-selectable `PACE_*` preference onto HR
+    // for four sports where pace IS the effort metric.
+    const SWIM = {
+      id: 'workout-cw397-swim',
+      date: new Date('2026-03-23T07:00:00Z'),
+      title: 'Endurance Swim',
+      type: 'Swim',
+      durationSec: 3600,
+      distanceMeters: 3000,
+      averageSpeed: 0.83,
+      averageHr: 140,
+      maxHr: 158,
+      streams: { heartrate: Array.from({ length: 200 }, () => 140) }
+    }
+    const PACE_FIRST = { loadPreference: 'PACE_HR_POWER' }
+
+    const facts = buildWorkoutAnalysisFactsV2({
+      workout: SWIM,
+      sportSettings: PACE_FIRST
+    } as any)
+
+    expect(facts.guardrails.analysisMode).not.toBe('pace')
+
+    const prompt = buildWorkoutAnalysisPrompt(
+      buildWorkoutAnalysisData(SWIM),
+      'Europe/Budapest',
+      'Supportive',
+      PACE_FIRST,
+      USER_PROFILE,
+      null,
+      undefined,
+      facts
+    )
+
+    expect(prompt).toContain('- **Primary Metric for this analysis**: PACE (available)')
+    expect(prompt).toContain('**Hard Rule**: Base most conclusions on PACE evidence')
+    expect(prompt).not.toContain('**Demoted Metric**')
+  })
+
+  it('tells a pace-preference ride the truth about why pace stepped aside', () => {
+    // Clean HR, real speed data. The facts block says `Pace Usable: Yes` in this
+    // same prompt, so the demotion line must not claim the telemetry is bad --
+    // that contradiction is the whole point of CW-397.
+    const OUTDOOR_RIDE_CLEAN_HR = {
+      id: 'workout-cw397-ride-pace-pref',
+      date: new Date('2026-03-24T09:00:00Z'),
+      title: 'Endurance Loop',
+      type: 'Ride',
+      durationSec: 5400,
+      distanceMeters: 48000,
+      averageSpeed: 8.9,
+      averageHr: 145,
+      maxHr: 168,
+      trainer: false,
+      streams: { heartrate: Array.from({ length: 200 }, () => 145) }
+    }
+    const PACE_FIRST = { loadPreference: 'PACE_HR_POWER' }
+
+    const facts = buildWorkoutAnalysisFactsV2({
+      workout: OUTDOOR_RIDE_CLEAN_HR,
+      sportSettings: PACE_FIRST
+    } as any)
+
+    expect(facts.guardrails.telemetry.paceUsable).toBe(true)
+
+    const prompt = buildWorkoutAnalysisPrompt(
+      buildWorkoutAnalysisData(OUTDOOR_RIDE_CLEAN_HR),
+      'Europe/Budapest',
+      'Supportive',
+      PACE_FIRST,
+      USER_PROFILE,
+      null,
+      undefined,
+      facts
+    )
+
+    // Both statements about pace appear in one document and agree.
+    expect(prompt).toContain('- Pace Usable: Yes')
+    expect(prompt).toContain(
+      '- **Secondary Metric for corroboration**: PACE (present_but_not_leading)'
+    )
+    expect(prompt).toContain('speed is not a valid proxy for cycling effort')
+    expect(prompt).not.toContain("PACE is the athlete's preferred primary, but this session's")
+    expect(prompt).not.toContain('PACE (missing_or_not_set)')
+    expect(prompt).toContain('**Hard Rule**: Base most conclusions on HR evidence')
+  })
 })

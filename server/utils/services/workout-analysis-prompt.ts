@@ -1212,7 +1212,9 @@ export function buildWorkoutAnalysisPrompt(
   const metricPriorityContext = resolveMetricPriorityContext(
     sportSettings?.loadPreference,
     workoutData,
-    deriveMetricUsabilitySignals(analysisFactsV2)
+    // `workoutType` because the facts carry no sport family, and whether pace may
+    // lead is a question about the sport (CW-437 is about bikes specifically).
+    deriveMetricUsabilitySignals(analysisFactsV2, workoutType)
   )
   const condensedHrSection = shouldCondenseHeartRateSection(metricPriorityContext)
 

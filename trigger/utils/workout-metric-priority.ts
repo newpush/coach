@@ -32,7 +32,18 @@ export interface MetricUsabilitySignals {
   hrUsable?: boolean
   hrArtifactSeverity?: 'none' | 'low' | 'moderate' | 'high' | null
   powerUsable?: boolean
+  /** Whether the pace *data* is trustworthy — a telemetry question. */
   paceUsable?: boolean
+  /**
+   * Whether pace is allowed to *lead* for this modality — a physics question,
+   * independent of data quality. False only for rides, where speed moves with
+   * wind, gradient and drafting rather than with the work done (CW-437).
+   *
+   * Kept separate from `paceUsable` on purpose: a ride's pace telemetry is often
+   * perfectly good, and the facts block says so. Folding the two together made
+   * the prompt claim the telemetry was unusable when it plainly was not.
+   */
+  paceMayLead?: boolean
   /**
    * `guardrails.archetype.primaryMetric` from the same facts block. When the
    * preference primary has to be demoted this is what gets promoted, so the
@@ -42,6 +53,18 @@ export interface MetricUsabilitySignals {
    */
   factsPrimaryMetric?: 'power' | 'pace' | 'hr' | 'subjective' | 'mixed' | null
 }
+
+/**
+ * Why a preferred primary metric had to step aside. The prompt must say which,
+ * because the two have opposite implications for the rest of the document: a
+ * `data_unusable` metric should not be quoted at all, while a
+ * `not_valid_for_modality` one is measured perfectly well and may still be
+ * described — it just cannot carry the conclusions.
+ */
+export type MetricDemotionKind = 'data_unusable' | 'not_valid_for_modality'
+
+/** How a metric should be labelled in the prompt's status parentheses. */
+export type MetricStatus = 'available' | 'unusable' | 'present_but_not_leading' | 'missing'
 
 export interface MetricPriorityContext {
   loadPreference: string
@@ -57,7 +80,10 @@ export interface MetricPriorityContext {
   usability: MetricUsability
   /** The preferred primary that was demoted, or `null` when none was. */
   demotedFrom: MetricKey | null
+  demotionKind: MetricDemotionKind | null
   demotionReason: string | null
+  /** Pace has good data but this modality forbids it from leading (CW-437). */
+  paceBlockedByModality: boolean
 }
 
 export function parseLoadPreference(loadPreference?: string | null): MetricKey[] {
@@ -123,10 +149,48 @@ export function resolveMetricUsability(
   const hrSuppressed = signals?.hrUsable === false || signals?.hrArtifactSeverity === 'high'
 
   return {
-    pace: availability.hasPace && signals?.paceUsable !== false,
+    pace: availability.hasPace && signals?.paceUsable !== false && signals?.paceMayLead !== false,
     hr: availability.hasHr && !hrSuppressed,
     power: availability.hasPower && signals?.powerUsable !== false
   }
+}
+
+/**
+ * Pace has trustworthy data but this modality forbids it from leading (CW-437).
+ * Distinct from "pace is unusable", and the distinction is load-bearing: the
+ * facts block prints `Pace Usable: Yes` for exactly these sessions, so calling
+ * the metric unusable would contradict the same document.
+ */
+function isPaceBlockedByModality(
+  availability: MetricAvailability,
+  signals?: MetricUsabilitySignals | null
+): boolean {
+  return availability.hasPace && signals?.paceUsable !== false && signals?.paceMayLead === false
+}
+
+/**
+ * How a metric should be labelled in the prompt's status parentheses.
+ * `present_but_not_leading` exists so a ride's pace is never described as missing
+ * or unusable while the facts block in the same prompt reports `Pace Usable: Yes`.
+ */
+export function describeMetricStatus(ctx: MetricPriorityContext, metric: MetricKey): MetricStatus {
+  const usable =
+    metric === 'PACE'
+      ? ctx.usability.pace
+      : metric === 'HR'
+        ? ctx.usability.hr
+        : ctx.usability.power
+  if (usable) return 'available'
+
+  if (metric === 'PACE' && ctx.paceBlockedByModality) return 'present_but_not_leading'
+
+  const present =
+    metric === 'PACE'
+      ? ctx.availability.hasPace
+      : metric === 'HR'
+        ? ctx.availability.hasHr
+        : ctx.availability.hasPower
+  return present ? 'unusable' : 'missing'
 }
 
 /**
@@ -181,6 +245,12 @@ export function resolveMetricPriorityContext(
   const primaryMetric = resolvedPriority[0] || preferredPrimary
   const secondaryMetric = resolvedPriority[1] || null
   const demoted = primaryMetric !== preferredPrimary
+  const paceBlockedByModality = isPaceBlockedByModality(availability, signals)
+  const demotionKind: MetricDemotionKind | null = !demoted
+    ? null
+    : preferredPrimary === 'PACE' && paceBlockedByModality
+      ? 'not_valid_for_modality'
+      : 'data_unusable'
 
   return {
     loadPreference: loadPreference || 'HR_PACE_POWER',
@@ -195,18 +265,24 @@ export function resolveMetricPriorityContext(
     secondaryMetricAvailable: secondaryMetric ? isUsable(secondaryMetric) : false,
     availability,
     usability,
+    paceBlockedByModality,
     demotedFrom: demoted ? preferredPrimary : null,
-    demotionReason: demoted
-      ? `${preferredPrimary} is unusable or absent for this session, so ${primaryMetric} leads instead.`
-      : null
+    demotionKind,
+    demotionReason:
+      demotionKind === 'not_valid_for_modality'
+        ? `${preferredPrimary} is measured reliably here, but speed is not a valid proxy for cycling effort -- wind, gradient and drafting move it independently of the work done -- so it may not lead. ${primaryMetric} leads instead.`
+        : demotionKind === 'data_unusable'
+          ? `${preferredPrimary} is unusable or absent for this session, so ${primaryMetric} leads instead.`
+          : null
   }
 }
 
 export function buildMetricPriorityPromptBlock(ctx: MetricPriorityContext): string {
   const priorityOrder = ctx.priority.join(' > ')
-  const primaryStatus = ctx.primaryMetricAvailable ? 'available' : 'missing'
-  const secondaryStatus =
-    ctx.secondaryMetric && ctx.secondaryMetricAvailable ? 'available' : 'missing_or_not_set'
+  const primaryStatus = describeMetricStatus(ctx, ctx.primaryMetric)
+  const secondaryStatus = ctx.secondaryMetric
+    ? describeMetricStatus(ctx, ctx.secondaryMetric)
+    : 'missing'
 
   let block = '\n## Metric Priority Rules\n'
   block += `- **Preferred Metric Order**: ${priorityOrder}\n`
@@ -214,7 +290,13 @@ export function buildMetricPriorityPromptBlock(ctx: MetricPriorityContext): stri
   if (ctx.secondaryMetric) {
     block += `- **Secondary Metric for corroboration**: ${ctx.secondaryMetric} (${secondaryStatus})\n`
   }
-  if (ctx.demotedFrom) {
+  if (ctx.demotedFrom && ctx.demotionKind === 'not_valid_for_modality') {
+    // Deliberately does NOT claim the telemetry is bad: the facts block in this
+    // same prompt reports `Pace Usable: Yes` for these sessions, and pointing the
+    // model at those facts as evidence of the opposite is the contradiction
+    // CW-397 exists to remove.
+    block += `- **Demoted Metric**: ${ctx.demotedFrom} is the athlete's preferred primary and is measured reliably here, but speed is not a valid proxy for cycling effort -- wind, gradient and drafting move it independently of the work done -- so it may not lead a ride. Quote ${ctx.demotedFrom} figures where they are informative, but do not build conclusions on them.\n`
+  } else if (ctx.demotedFrom) {
     block += `- **Demoted Metric**: ${ctx.demotedFrom} is the athlete's preferred primary, but this session's telemetry does not support it (see the analysis facts). Do not lead with ${ctx.demotedFrom}.\n`
   }
 
@@ -251,7 +333,11 @@ export function buildAnalysisRequestMetricRules(ctx: MetricPriorityContext): str
     )
   }
 
-  if (ctx.demotedFrom) {
+  if (ctx.demotedFrom && ctx.demotionKind === 'not_valid_for_modality') {
+    rules.push(
+      `The athlete's preferred primary metric ${ctx.demotedFrom} is measured reliably here but may not lead a ride, because speed reflects wind, gradient and drafting as much as effort; judge execution on ${ctx.primaryMetric}. ${ctx.demotedFrom} figures may still be reported, just not used as the basis for conclusions.`
+    )
+  } else if (ctx.demotedFrom) {
     rules.push(
       `The athlete's preferred primary metric ${ctx.demotedFrom} is unusable or absent for this session; judge execution on ${ctx.primaryMetric} and say so instead of leaning on ${ctx.demotedFrom}.`
     )
