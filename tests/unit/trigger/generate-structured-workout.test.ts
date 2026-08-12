@@ -126,6 +126,121 @@ describe('Structured Workout Generator - Repeat Block Recovery Validation', () =
     })
   })
 
+  // CW-583: repeat sets emitted flattened (no repeat wrapper) have no step with
+  // reps > 1, so the original check never inspected them and an athlete received
+  // e.g. 3x8min threshold as one continuous 24min block.
+  describe('hasValidRepeatBlockRecovery - flattened repeat sets', () => {
+    const warmup = { type: 'Warmup', name: 'Warm Up', durationSeconds: 600 }
+    const cooldown = { type: 'Cooldown', name: 'Cool Down', durationSeconds: 300 }
+    const threshold = (name = '8min Threshold') => ({
+      type: 'Active',
+      name,
+      durationSeconds: 480,
+      power: { value: 0.95 }
+    })
+
+    it('rejects 3x8min emitted as three identical Active steps with no recovery', () => {
+      const result = hasValidRepeatBlockRecovery([
+        warmup,
+        threshold(),
+        threshold(),
+        threshold(),
+        cooldown
+      ])
+
+      expect(result.valid).toBe(false)
+      expect(result.reason).toContain('no recovery between them')
+      expect(result.reason).toContain('3 consecutive')
+    })
+
+    it('rejects a flattened 2x20 pair', () => {
+      const twenty = { type: 'Active', name: '20min SST', durationSeconds: 1200 }
+
+      const result = hasValidRepeatBlockRecovery([warmup, twenty, twenty, cooldown])
+
+      expect(result.valid).toBe(false)
+      expect(result.reason).toContain('2 consecutive')
+    })
+
+    it('accepts the same reps when recovery separates them', () => {
+      const recovery = { type: 'Rest', name: '2min Easy', durationSeconds: 120 }
+
+      const result = hasValidRepeatBlockRecovery([
+        warmup,
+        threshold(),
+        recovery,
+        threshold(),
+        recovery,
+        threshold(),
+        cooldown
+      ])
+
+      expect(result.valid).toBe(true)
+      expect(result.reason).toBeNull()
+    })
+
+    it('accepts a single steady-state effort', () => {
+      const result = hasValidRepeatBlockRecovery([
+        warmup,
+        { type: 'Active', name: 'Steady Z2', durationSeconds: 2400 },
+        cooldown
+      ])
+
+      expect(result.valid).toBe(true)
+      expect(result.reason).toBeNull()
+    })
+
+    it('accepts over-unders, which are legitimately continuous', () => {
+      const over = { type: 'Active', name: 'Over', durationSeconds: 120, power: { value: 1.05 } }
+      const under = { type: 'Active', name: 'Under', durationSeconds: 120, power: { value: 0.95 } }
+
+      const result = hasValidRepeatBlockRecovery([warmup, over, under, over, under, cooldown])
+
+      expect(result.valid).toBe(true)
+      expect(result.reason).toBeNull()
+    })
+
+    it('accepts a progressive ramp of differing efforts', () => {
+      const result = hasValidRepeatBlockRecovery([
+        warmup,
+        { type: 'Active', name: 'Step 1', durationSeconds: 300, power: { value: 0.8 } },
+        { type: 'Active', name: 'Step 2', durationSeconds: 300, power: { value: 0.9 } },
+        { type: 'Active', name: 'Step 3', durationSeconds: 300, power: { value: 1.0 } },
+        cooldown
+      ])
+
+      expect(result.valid).toBe(true)
+      expect(result.reason).toBeNull()
+    })
+
+    it('accepts identical efforts separated by an intent-based recovery step', () => {
+      const spin = {
+        type: 'Active',
+        intent: 'recovery',
+        name: 'Easy Spin',
+        durationSeconds: 180
+      }
+
+      const result = hasValidRepeatBlockRecovery([threshold(), spin, threshold()])
+
+      expect(result.valid).toBe(true)
+      expect(result.reason).toBeNull()
+    })
+
+    it('detects a flattened set nested inside a container step', () => {
+      const result = hasValidRepeatBlockRecovery([
+        {
+          type: 'Active',
+          name: 'Main Block',
+          steps: [threshold(), threshold(), threshold()]
+        }
+      ])
+
+      expect(result.valid).toBe(false)
+      expect(result.reason).toContain('no recovery between them')
+    })
+  })
+
   describe('Prompt instructions for repeat block recovery', () => {
     it('buildDraftOutputRules includes mandatory recovery rules for repeat blocks', () => {
       const rules = buildDraftOutputRules({ preserveExistingStructure: false })
