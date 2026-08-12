@@ -3,6 +3,7 @@ import {
   normalizeStructuredWorkoutForPersistence,
   computeStructuredWorkoutDurationSec,
   computeStructuredWorkoutMetrics,
+  selectStepIntensity,
   toIntensityFactorFromTarget
 } from './structured-workout-persistence'
 
@@ -502,5 +503,110 @@ describe('structured workout persistence', () => {
     )
 
     expect(normalized.steps[0].power.ramp).toBe(false)
+  })
+})
+
+describe('toIntensityFactorFromTarget without references', () => {
+  const noRefs = {
+    ftp: 0,
+    lthr: 0,
+    maxHr: 0,
+    thresholdPace: 0,
+    hrZones: [],
+    powerZones: [],
+    paceZones: []
+  }
+
+  // The three absolute-unit paths must agree: with no reference value there is
+  // nothing to divide by, so the only honest answer is `null`. Returning a
+  // plausible number here (e.g. by assuming an FTP of 250) hides the missing
+  // reference from every caller — that fabrication masked CW-402.
+  it('returns null for absolute watts, bpm and pace alike when no reference exists', () => {
+    expect(toIntensityFactorFromTarget({ value: 250, units: 'w' }, 'power', noRefs)).toBeNull()
+    expect(toIntensityFactorFromTarget({ value: 300, units: 'watts' }, 'power', noRefs)).toBeNull()
+    expect(
+      toIntensityFactorFromTarget({ value: 150, units: 'bpm' }, 'heartRate', noRefs)
+    ).toBeNull()
+    expect(toIntensityFactorFromTarget({ value: 4.5, units: 'min/km' }, 'pace', noRefs)).toBeNull()
+  })
+
+  it('does not invent an FTP for a watts range either', () => {
+    expect(
+      toIntensityFactorFromTarget({ range: { start: 240, end: 260 }, units: 'w' }, 'power', noRefs)
+    ).toBeNull()
+  })
+
+  it('still converts absolute watts when an FTP is available', () => {
+    // Deliberately away from 250 so a reintroduced magic constant cannot pass.
+    const intensity = toIntensityFactorFromTarget({ value: 250, units: 'w' }, 'power', {
+      ...noRefs,
+      ftp: 265
+    })
+
+    expect(intensity).toBeCloseTo(250 / 265)
+  })
+
+  it('leaves relative and percentage power targets unaffected without an FTP', () => {
+    expect(toIntensityFactorFromTarget({ value: 85, units: '%' }, 'power', noRefs)).toBeCloseTo(
+      0.85
+    )
+    expect(
+      toIntensityFactorFromTarget({ value: 0.85, units: 'relative' }, 'power', noRefs)
+    ).toBeCloseTo(0.85)
+    expect(
+      toIntensityFactorFromTarget({ value: 95, units: 'pct_ftp' }, 'power', noRefs)
+    ).toBeCloseTo(0.95)
+  })
+
+  it('leaves power-zone targets unaffected without an FTP', () => {
+    expect(
+      toIntensityFactorFromTarget({ value: 4, units: 'power_zone' }, 'power', noRefs)
+    ).toBeCloseTo(0.85)
+    expect(toIntensityFactorFromTarget({ value: 2, units: 'zone' }, 'power', noRefs)).toBeCloseTo(
+      0.65
+    )
+  })
+
+  it('advances selectStepIntensity to the next metric when watts yield nothing', () => {
+    const intensity = selectStepIntensity(
+      {
+        type: 'Active',
+        power: { value: 250, units: 'w' },
+        heartRate: { value: 0.9, units: 'lthr' }
+      },
+      noRefs,
+      ['power', 'heartRate', 'pace', 'rpe']
+    )
+
+    expect(intensity).toBeCloseTo(0.9)
+  })
+
+  it('falls back to RPE, then to the step-type default, rather than a fabricated watts intensity', () => {
+    expect(
+      selectStepIntensity({ type: 'Active', power: { value: 250, units: 'w' }, rpe: 5 }, noRefs, [
+        'power',
+        'heartRate',
+        'pace',
+        'rpe'
+      ])
+    ).toBeCloseTo(0.5)
+
+    expect(
+      selectStepIntensity({ type: 'Warmup', power: { value: 150, units: 'w' } }, noRefs, [
+        'power',
+        'heartRate',
+        'pace',
+        'rpe'
+      ])
+    ).toBeCloseTo(0.5)
+
+    expect(
+      selectStepIntensity({ type: 'Active', power: { value: 250, units: 'w' } }, noRefs, [
+        'power',
+        'heartRate',
+        'pace',
+        'rpe'
+      ])
+    ).toBeCloseTo(0.75)
   })
 })

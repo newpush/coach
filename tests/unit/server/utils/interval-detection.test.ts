@@ -3,10 +3,12 @@ import {
   DEFAULT_PEAK_DURATIONS,
   detectIntervals,
   findPeakEfforts,
+  normalizePlannedStepType,
   resolveHrWorkThreshold,
   resolveProviderIntervalTypes,
   timeWeightedMean
 } from '../../../../server/utils/interval-detection'
+import { getActualIntervalsForAnalysis } from '../../../../server/utils/workout-analysis-facts'
 
 describe('detectIntervals', () => {
   it('preserves the final recovery block before cooldown for plan-guided detection', () => {
@@ -160,6 +162,96 @@ describe('detectIntervals', () => {
     expect(intervals[0]?.duration).toBe(2399)
   })
 
+  // CW-400: the HR branch of createIntervalObj used to be an empty block, so
+  // every HR-detected interval came back with intensity_zone undefined. Zones
+  // come from the PROFILE refs, never from the work bar (which is already
+  // scaled - 0.82 * LTHR - and would put every effort a zone or two too high).
+  describe('heart-rate intensity zones', () => {
+    const block = (bpm: number, seconds: number) => Array.from({ length: seconds }, () => bpm)
+    const heartrate = [
+      ...block(112, 300), // warmup
+      ...block(155, 240), // work 1
+      ...block(115, 180), // recovery 1
+      ...block(155, 240), // work 2
+      ...block(115, 180), // recovery 2
+      ...block(155, 240), // work 3
+      ...block(105, 300) // cooldown
+    ]
+    const time = heartrate.map((_, index) => index)
+    const LTHR = 160
+    const threshold = resolveHrWorkThreshold({ lthr: LTHR })
+
+    it('assigns zones from a profile LTHR, not from the work bar', () => {
+      const intervals = detectIntervals(
+        time,
+        heartrate,
+        'heartrate',
+        threshold,
+        undefined,
+        undefined,
+        undefined,
+        { lthr: LTHR }
+      )
+
+      expect(intervals.length).toBeGreaterThan(1)
+      // Friel LTHR bands at LTHR 160: Z1 <= 130, Z4 150-158.
+      const workIntervals = intervals.filter((interval) => interval.type === 'WORK')
+      expect(workIntervals.length).toBeGreaterThan(0)
+      workIntervals.forEach((interval) => {
+        expect(interval.intensity_zone).toBe(4)
+      })
+      intervals
+        .filter((interval) => interval.type !== 'WORK')
+        .forEach((interval) => {
+          expect(interval.intensity_zone).toBe(1)
+        })
+    })
+
+    it('falls back to the max-HR zone model when only max HR is known', () => {
+      // Max-HR bands at 190: Z2 115-133, Z4 153-171.
+      const intervals = detectIntervals(
+        time,
+        heartrate,
+        'heartrate',
+        resolveHrWorkThreshold({ maxHr: 190 }),
+        undefined,
+        undefined,
+        undefined,
+        { maxHr: 190 }
+      )
+
+      const workIntervals = intervals.filter((interval) => interval.type === 'WORK')
+      expect(workIntervals.length).toBeGreaterThan(0)
+      workIntervals.forEach((interval) => {
+        expect(interval.intensity_zone).toBe(4)
+      })
+    })
+
+    it('leaves the zone undefined when the profile carries neither LTHR nor max HR', () => {
+      const intervals = detectIntervals(time, heartrate, 'heartrate', threshold)
+
+      expect(intervals.length).toBeGreaterThan(1)
+      intervals.forEach((interval) => {
+        expect(interval.intensity_zone).toBeUndefined()
+      })
+
+      // ...and passing empty refs must not guess off the work bar either.
+      const withEmptyRefs = detectIntervals(
+        time,
+        heartrate,
+        'heartrate',
+        threshold,
+        undefined,
+        undefined,
+        undefined,
+        { lthr: null, maxHr: null }
+      )
+      withEmptyRefs.forEach((interval) => {
+        expect(interval.intensity_zone).toBeUndefined()
+      })
+    })
+  })
+
   it('classifies a long steady power session with no candidates as STEADY', () => {
     const watts = Array.from({ length: 2400 }, (_, index) => 130 + (index % 5))
     const time = watts.map((_, index) => index)
@@ -168,6 +260,297 @@ describe('detectIntervals', () => {
 
     expect(intervals).toHaveLength(1)
     expect(intervals[0]?.type).toBe('STEADY')
+  })
+
+  // CW-417: the STEADY branch was the only createIntervalObj call site that
+  // passed `undefined` instead of the cadence stream, so exactly the session
+  // type where one steady cadence figure means the most reported none.
+  it('carries the cadence stream onto a STEADY interval', () => {
+    const watts = Array.from({ length: 2400 }, (_, index) => 130 + (index % 5))
+    const time = watts.map((_, index) => index)
+    const cadence = Array.from({ length: 2400 }, (_, index) => 88 + (index % 3))
+
+    const intervals = detectIntervals(time, watts, 'power', 250, undefined, undefined, cadence)
+
+    expect(intervals).toHaveLength(1)
+    expect(intervals[0]?.type).toBe('STEADY')
+    // Cadence cycles 88/89/90 across the whole session, so the mean is 89.
+    expect(intervals[0]?.avg_cadence).toBeCloseTo(89, 5)
+    expect(intervals[0]?.cadence_start).toBe(88)
+    expect(intervals[0]?.cadence_end).toBe(cadence[cadence.length - 1])
+  })
+
+  it('leaves STEADY cadence fields absent when no cadence stream is supplied', () => {
+    const watts = Array.from({ length: 2400 }, (_, index) => 130 + (index % 5))
+    const time = watts.map((_, index) => index)
+
+    const intervals = detectIntervals(time, watts, 'power', 250)
+
+    expect(intervals).toHaveLength(1)
+    expect(intervals[0]?.type).toBe('STEADY')
+    expect(intervals[0]?.avg_cadence).toBeUndefined()
+    expect(intervals[0]?.cadence_start).toBeUndefined()
+    expect(intervals[0]?.cadence_end).toBeUndefined()
+  })
+
+  // CW-400: plan-guided labelling paired planned WORK steps with detected WORK
+  // intervals only, so a STEADY session (which has no WORK interval at all) came
+  // back unlabelled even with a planned workout linked to it.
+  it('labels a STEADY session against its planned step', () => {
+    const watts = Array.from({ length: 2400 }, (_, index) => 130 + (index % 5))
+    const time = watts.map((_, index) => index)
+    const plannedSteps = [{ type: 'STEADY', name: 'Endurance ride', durationSeconds: 2400 }]
+
+    const intervals = detectIntervals(time, watts, 'power', 250, plannedSteps)
+
+    expect(intervals).toHaveLength(1)
+    expect(intervals[0]?.type).toBe('STEADY')
+    expect(intervals[0]?.label).toBe('Endurance ride')
+    expect(intervals[0]?.match_score).toBeGreaterThan(0.99)
+  })
+
+  it('still pairs planned WORK steps with detected WORK intervals only', () => {
+    const block = (value: number, seconds: number) => Array.from({ length: seconds }, () => value)
+    const watts = [
+      ...block(120, 600), // warmup
+      ...block(260, 300), // work 1
+      ...block(120, 300), // recovery 1
+      ...block(260, 300), // work 2
+      ...block(110, 300) // cooldown
+    ]
+    const time = watts.map((_, index) => index)
+    // A single planned step keeps plan-guided detection out of it (it needs two
+    // or more), so the tail matching block runs on a session that does have WORK
+    // intervals - the case the STEADY fallback must not disturb.
+    const plannedSteps = [{ type: 'WORK', durationSeconds: 300, name: 'Rep 1' }]
+
+    const intervals = detectIntervals(time, watts, 'power', 250, plannedSteps)
+    const workIntervals = intervals.filter((interval) => interval.type === 'WORK')
+
+    expect(workIntervals).toHaveLength(2)
+    expect(workIntervals[0]?.label).toBe('Rep 1')
+    expect(workIntervals[1]?.label).toBeUndefined()
+    // The label must not leak onto the warmup/recovery/cooldown blocks.
+    intervals
+      .filter((interval) => interval.type !== 'WORK')
+      .forEach((interval) => {
+        expect(interval.label).toBeUndefined()
+      })
+  })
+
+  /**
+   * CW-426: segment boundaries are inclusive and disjoint — a block occupying
+   * samples N..M comes back as exactly `start_index: N, end_index: M`, and the
+   * next segment opens at M + 1.
+   *
+   * Both segmentation paths broke this, and they broke it DIFFERENTLY:
+   *   - the candidate/merge pass ended each segment on the first sample of the
+   *     next block, so adjacent segments overlapped on that sample (a 4min rep
+   *     came back as [600..840] and the recovery after it as [840..1020]);
+   *   - `detectIntervalsFromPlannedSteps` used the first sample at or after the
+   *     planned end time as the step's own inclusive end and then started the
+   *     next step at `end + 1`, shifting every segment to [N+1, M+1] — the
+   *     `start_index: 601, end_index: 840` measured on CW-393's fixture.
+   *
+   * Either way every work rep lost its own first sample and/or carried one
+   * sample of the block next door, which is the worst possible contamination
+   * for CW-393's rep-scoped coefficient-of-variation signals.
+   *
+   * `smoothedValues` is passed through verbatim so these assertions measure the
+   * boundary arithmetic and not the lag of the default moving average (a
+   * centred SMA necessarily rounds a sharp edge; that is a separate concern).
+   */
+  describe('segment boundaries (CW-426)', () => {
+    const BLOCKS = [
+      { type: 'WARMUP', watts: 120, seconds: 600 },
+      { type: 'WORK', watts: 280, seconds: 240 },
+      { type: 'RECOVERY', watts: 110, seconds: 180 },
+      { type: 'WORK', watts: 280, seconds: 240 },
+      { type: 'RECOVERY', watts: 110, seconds: 180 },
+      { type: 'WORK', watts: 280, seconds: 240 },
+      { type: 'RECOVERY', watts: 110, seconds: 180 },
+      { type: 'WORK', watts: 280, seconds: 240 },
+      { type: 'COOLDOWN', watts: 100, seconds: 300 }
+    ] as const
+
+    /** The fixture plus the sample range each block genuinely occupies. */
+    const buildSharpBlocks = () => {
+      const watts: number[] = []
+      const expected: { type: string; start: number; end: number }[] = []
+      for (const block of BLOCKS) {
+        const start = watts.length
+        for (let index = 0; index < block.seconds; index++) watts.push(block.watts)
+        expected.push({ type: block.type, start, end: watts.length - 1 })
+      }
+      return { watts, time: watts.map((_, index) => index), expected }
+    }
+
+    const asRanges = (intervals: { type: string; start_index: number; end_index: number }[]) =>
+      intervals.map((interval) => ({
+        type: interval.type,
+        start: interval.start_index,
+        end: interval.end_index
+      }))
+
+    it('returns a block occupying samples N..M as exactly N..M (candidate/merge pass)', () => {
+      const { watts, time, expected } = buildSharpBlocks()
+
+      const intervals = detectIntervals(time, watts, 'power', 250, undefined, watts)
+
+      // Before the fix: WARMUP [0..600], WORK [600..840], RECOVERY [840..1020]...
+      expect(asRanges(intervals)).toEqual(expected)
+    })
+
+    it('returns a block occupying samples N..M as exactly N..M (plan-guided pass)', () => {
+      const { watts, time, expected } = buildSharpBlocks()
+      const plannedSteps = BLOCKS.map((block) => ({
+        type: block.type,
+        durationSeconds: block.seconds,
+        power: { value: block.watts }
+      }))
+
+      const intervals = detectIntervals(time, watts, 'power', 250, plannedSteps, watts)
+
+      // Before the fix: WARMUP [0..600], WORK [601..840], RECOVERY [841..1020]...
+      expect(asRanges(intervals)).toEqual(expected)
+    })
+
+    it('makes the two segmentation paths agree with each other', () => {
+      // They used to disagree, which was a second latent bug: for the identical
+      // 240-sample rep the candidate pass reported [600..840] (duration 240,
+      // overlapping its neighbours) and the plan-guided pass [601..840]
+      // (duration 239, disjoint but shifted). Neither was right.
+      const { watts, time } = buildSharpBlocks()
+      const plannedSteps = BLOCKS.map((block) => ({
+        type: block.type,
+        durationSeconds: block.seconds,
+        power: { value: block.watts }
+      }))
+
+      const fromCandidates = detectIntervals(time, watts, 'power', 250, undefined, watts)
+      const fromPlan = detectIntervals(time, watts, 'power', 250, plannedSteps, watts)
+
+      expect(asRanges(fromCandidates)).toEqual(asRanges(fromPlan))
+      expect(fromCandidates.map((interval) => interval.duration)).toEqual(
+        fromPlan.map((interval) => interval.duration)
+      )
+    })
+
+    it('emits disjoint, contiguous, gap-free segments that cover the stream once', () => {
+      const { watts, time } = buildSharpBlocks()
+
+      const intervals = detectIntervals(time, watts, 'power', 250, undefined, watts)
+
+      expect(intervals[0]?.start_index).toBe(0)
+      expect(intervals.at(-1)?.end_index).toBe(time.length - 1)
+      intervals.slice(1).forEach((interval, index) => {
+        // No shared sample, no skipped sample.
+        expect(interval.start_index).toBe(intervals[index]!.end_index + 1)
+      })
+    })
+
+    it('keeps every per-segment average free of the neighbouring block', () => {
+      // The point of the whole ticket: one foreign sample in a 240-sample rep
+      // dragged the average off its true value and inflated the rep's CoV.
+      const { watts, time } = buildSharpBlocks()
+
+      const intervals = detectIntervals(time, watts, 'power', 250, undefined, watts)
+
+      intervals
+        .filter((interval) => interval.type === 'WORK')
+        .forEach((interval) => {
+          // Exactly 280 W, not the 279.29 W a stray 110 W recovery sample gave.
+          expect(interval.avg_power).toBe(280)
+          expect(interval.max_power).toBe(280)
+        })
+      intervals
+        .filter((interval) => interval.type === 'RECOVERY')
+        .forEach((interval) => expect(interval.avg_power).toBe(110))
+    })
+
+    it('reports each segment duration as its own elapsed span, counting no second twice', () => {
+      const { watts, time } = buildSharpBlocks()
+
+      const intervals = detectIntervals(time, watts, 'power', 250, undefined, watts)
+
+      intervals.forEach((interval) => {
+        expect(interval.end_time - interval.start_time).toBe(interval.duration)
+        // A K-sample block at 1 Hz spans K - 1 seconds, the same arithmetic the
+        // whole-session STEADY block has always reported (2400 samples ->
+        // 2399s). The candidate pass used to report a flat 240 for a 240-sample
+        // rep only because it was measuring out to the FIRST RECOVERY SAMPLE:
+        // that 240 was the off-by-one, not a correct duration.
+        expect(interval.duration).toBe(interval.end_index - interval.start_index)
+      })
+
+      const workDurations = intervals
+        .filter((interval) => interval.type === 'WORK')
+        .map((interval) => interval.duration)
+      expect(workDurations).toEqual([239, 239, 239, 239])
+    })
+  })
+
+  /* ------------------------------------------------------------------ */
+  /* Centred smoothing window (CW-432)                                   */
+  /* ------------------------------------------------------------------ */
+
+  describe('centred smoothing window (CW-432)', () => {
+    /**
+     * A perfectly square block occupying samples 600..839 in an otherwise flat
+     * stream. Nothing about this signal is ambiguous: every sample is either in
+     * the block or out of it, so a detector that reports anything other than
+     * 600..839 is reporting its own smoothing lag.
+     *
+     * The engine's internal smoother (`smoothData(values, 10)`) used to average
+     * `[i-5 .. i+4]` — ten samples centred on `i - 0.5`. Half a sample of lag,
+     * always in the same direction, is enough to carry one recovery sample into
+     * the end of every rep: this fixture detected 600..840. It is now centred,
+     * so both edges land where they actually are.
+     *
+     * No plan is passed, so this is the candidate/merge pass, and HR is used
+     * because that path takes the engine's own smoothing (the power path is
+     * handed rolling normalized power by its caller instead).
+     */
+    const buildSquareBlock = (hi: number, lo: number) => {
+      const values = Array.from({ length: 1500 }, (_, index) =>
+        index >= 600 && index <= 839 ? hi : lo
+      )
+      return { values, time: values.map((_, index) => index) }
+    }
+
+    it('places both edges of a sharp block exactly, with no linked plan', () => {
+      const { values, time } = buildSquareBlock(170, 120)
+
+      const detected = detectIntervals(time, values, 'heartrate', 145)
+      const work = detected.filter((interval) => interval.type === 'WORK')
+
+      expect(work).toHaveLength(1)
+      // Was [600, 840] with the asymmetric window: sample 840 is a 120 bpm
+      // recovery sample, and it was the single worst input to a CoV taken
+      // inside the rep.
+      expect([work[0]?.start_index, work[0]?.end_index]).toEqual([600, 839])
+    })
+
+    it('places the edges independently of how far the block clears the bar', () => {
+      // The lag was a property of the window, not of the contrast, so it showed
+      // up identically at every amplitude. Guard all three.
+      for (const [hi, lo, bar] of [
+        [170, 120, 145],
+        [180, 120, 150],
+        [160, 130, 145]
+      ] as const) {
+        const { values, time } = buildSquareBlock(hi, lo)
+        const work = detectIntervals(time, values, 'heartrate', bar).filter(
+          (interval) => interval.type === 'WORK'
+        )
+
+        expect({ hi, lo, bounds: [work[0]?.start_index, work[0]?.end_index] }).toEqual({
+          hi,
+          lo,
+          bounds: [600, 839]
+        })
+      }
+    })
   })
 })
 
@@ -501,5 +884,303 @@ describe('findPeakEfforts', () => {
     }
 
     expect(findPeakEfforts(times, velocity, 'pace', [{ sec: 2400, label: '40m' }])).toEqual([])
+  })
+})
+
+/**
+ * CW-414: one normaliser, one rule set.
+ *
+ * Detection used to classify a planned step twice with two different rules. The
+ * facts layer promoted a RECOVERY-labelled step to WORK when its target was at
+ * work intensity (CW-402), and then `flattenPlannedStepsForDetection` re-derived
+ * the type from `type` AND the free-text `name` and demoted it straight back —
+ * which hit essentially every promoted step, because they are named "Recovery",
+ * "Recovery Jog" or "Rest". A step name is user-authored free text and must
+ * never override a structured numeric target.
+ */
+describe('normalizePlannedStepType (CW-414)', () => {
+  it('lets a structured numeric target stand against a contradicting free-text name', () => {
+    // The step the CW-402 promotion is about: labelled recovery in both the
+    // type and the name, but prescribed at 85% of threshold.
+    expect(
+      normalizePlannedStepType({ type: 'Recovery', name: 'Recovery', intensityFactor: 0.85 })
+    ).toBe('WORK')
+    expect(
+      normalizePlannedStepType({ type: 'Active', name: 'Recovery Jog', intensityFactor: 0.9 })
+    ).toBe('WORK')
+    // The name is evidence, not an override, and with no target to check it
+    // against it is the only evidence there is — so it is still honoured here.
+    // What the detection layer must not do is consult it over a type that was
+    // already resolved with an intensity factor; that is a call-site decision
+    // (`flattenPlannedStepsForDetection`), covered by the next describe block.
+    expect(normalizePlannedStepType({ type: 'Active', name: 'Recovery' })).toBe('RECOVERY')
+  })
+
+  it('demotes on a name only when the numeric target does not contradict it', () => {
+    // No intensity factor to check against: the label is all the evidence there
+    // is, so it is honoured (this is the adherence path's long-standing rule).
+    expect(normalizePlannedStepType({ type: 'Active', name: 'Recovery' })).toBe('RECOVERY')
+    expect(
+      normalizePlannedStepType({ type: 'Active', name: 'Recovery', intensityFactor: 0.5 })
+    ).toBe('RECOVERY')
+    // 85% of threshold is work whatever it is called.
+    expect(
+      normalizePlannedStepType({ type: 'Active', name: 'Recovery', intensityFactor: 0.85 })
+    ).toBe('WORK')
+    expect(
+      normalizePlannedStepType({ type: 'Recovery', name: 'Recovery', intensityFactor: 0.85 })
+    ).toBe('WORK')
+    // ...and the boundary is inclusive, matching `flattenPlannedSteps`.
+    expect(normalizePlannedStepType({ type: 'Rest', intensityFactor: 0.8 })).toBe('WORK')
+    expect(normalizePlannedStepType({ type: 'Rest', intensityFactor: 0.79 })).toBe('RECOVERY')
+  })
+
+  it('keeps warmup and cooldown structural — intensity never overrides them', () => {
+    expect(normalizePlannedStepType({ type: 'Warmup', name: 'Warm up' })).toBe('WARMUP')
+    expect(normalizePlannedStepType({ type: 'Cooldown', name: 'Spin down' })).toBe('COOLDOWN')
+    // A warmup ramp can pass through work intensity and is still a warmup.
+    expect(normalizePlannedStepType({ type: 'Warmup', intensityFactor: 0.95 })).toBe('WARMUP')
+    expect(normalizePlannedStepType({ type: 'Cooldown', intensityFactor: 0.95 })).toBe('COOLDOWN')
+  })
+
+  it('reads Spanish labels', () => {
+    expect(normalizePlannedStepType({ name: 'calentamiento' })).toBe('WARMUP')
+    expect(normalizePlannedStepType({ name: 'enfriamiento' })).toBe('COOLDOWN')
+    expect(normalizePlannedStepType({ name: 'recuperación' })).toBe('RECOVERY')
+    expect(normalizePlannedStepType({ name: 'descanso' })).toBe('RECOVERY')
+    // Same intensity veto as the English tokens.
+    expect(normalizePlannedStepType({ name: 'recuperación', intensityFactor: 0.9 })).toBe('WORK')
+  })
+
+  it('returns undefined only when there is no evidence at all', () => {
+    expect(normalizePlannedStepType({})).toBeUndefined()
+    expect(normalizePlannedStepType({ type: '', name: '' })).toBeUndefined()
+    expect(normalizePlannedStepType({ name: 'Effort 1' })).toBe('WORK')
+  })
+})
+
+describe('plan-guided detection does not re-read the step name (CW-414)', () => {
+  const STEP_SECONDS = 300
+  const FTP = 200
+
+  function block(watts: number) {
+    return Array.from({ length: STEP_SECONDS }, () => watts)
+  }
+
+  it('keeps a step the facts layer resolved to WORK as WORK, even when it is named Recovery', () => {
+    // These are planned steps in the shape `toDetectionPlannedSteps` hands to
+    // the engine: the type is already the resolved answer. Step 2 is the
+    // promoted one — labelled "Recovery", prescribed at 170 W (85% of FTP).
+    // Before this fix the name demoted it back to RECOVERY here.
+    const plannedSteps = [
+      { type: 'WARMUP', name: 'Warm up', durationSeconds: STEP_SECONDS, power: { value: 120 } },
+      { type: 'WORK', name: 'Effort 1', durationSeconds: STEP_SECONDS, power: { value: 240 } },
+      { type: 'WORK', name: 'Recovery', durationSeconds: STEP_SECONDS, power: { value: 170 } },
+      { type: 'WORK', name: 'Effort 2', durationSeconds: STEP_SECONDS, power: { value: 240 } },
+      { type: 'RECOVERY', name: 'Recovery', durationSeconds: STEP_SECONDS, power: { value: 100 } },
+      { type: 'COOLDOWN', name: 'Cool down', durationSeconds: STEP_SECONDS, power: { value: 110 } }
+    ]
+    const watts = [
+      ...block(120),
+      ...block(240),
+      ...block(170),
+      ...block(240),
+      ...block(100),
+      ...block(110)
+    ]
+    const time = watts.map((_, index) => index)
+
+    const intervals = detectIntervals(time, watts, 'power', FTP, plannedSteps)
+
+    expect(intervals.map((interval) => interval.type)).toEqual([
+      'WARMUP',
+      'WORK',
+      'WORK',
+      'WORK',
+      'RECOVERY',
+      'COOLDOWN'
+    ])
+    // The name is still carried through as the segment label — it just no
+    // longer decides the type.
+    expect(intervals[2]?.label).toBe('Recovery')
+  })
+
+  it('still classifies from the name when the step carries no type at all', () => {
+    const plannedSteps = [
+      { name: 'calentamiento', durationSeconds: STEP_SECONDS, power: { value: 120 } },
+      { name: 'Effort 1', durationSeconds: STEP_SECONDS, power: { value: 240 } },
+      { name: 'descanso', durationSeconds: STEP_SECONDS, power: { value: 100 } },
+      { name: 'Effort 2', durationSeconds: STEP_SECONDS, power: { value: 240 } },
+      { name: 'recuperación', durationSeconds: STEP_SECONDS, power: { value: 100 } },
+      { name: 'enfriamiento', durationSeconds: STEP_SECONDS, power: { value: 110 } }
+    ]
+    const watts = [
+      ...block(120),
+      ...block(240),
+      ...block(100),
+      ...block(240),
+      ...block(100),
+      ...block(110)
+    ]
+    const time = watts.map((_, index) => index)
+
+    const intervals = detectIntervals(time, watts, 'power', FTP, plannedSteps)
+
+    expect(intervals.map((interval) => interval.type)).toEqual([
+      'WARMUP',
+      'WORK',
+      'RECOVERY',
+      'WORK',
+      'RECOVERY',
+      'COOLDOWN'
+    ])
+  })
+
+  it('promotes a work-intensity step named Recovery end to end, and leaves a genuine one alone', () => {
+    // Plan -> toDetectionPlannedSteps (which resolves the type against the
+    // athlete's FTP) -> detectIntervals. Every step here is BOTH typed
+    // Recovery-ish AND named "Recovery": only the numeric target separates them.
+    const steps = [
+      {
+        type: 'Warmup',
+        name: 'Warm up',
+        durationSeconds: STEP_SECONDS,
+        power: { value: 120, units: 'w' }
+      },
+      {
+        type: 'Interval',
+        name: 'Effort 1',
+        durationSeconds: STEP_SECONDS,
+        power: { value: 240, units: 'w' }
+      },
+      // 170 W is 85% of a 200 W FTP: work, whatever the type and name say.
+      {
+        type: 'Recovery',
+        name: 'Recovery',
+        durationSeconds: STEP_SECONDS,
+        power: { value: 170, units: 'w' }
+      },
+      {
+        type: 'Interval',
+        name: 'Effort 2',
+        durationSeconds: STEP_SECONDS,
+        power: { value: 240, units: 'w' }
+      },
+      // 100 W is 50% of FTP: a genuine recovery step, and it stays one.
+      {
+        type: 'Recovery',
+        name: 'Recovery',
+        durationSeconds: STEP_SECONDS,
+        power: { value: 100, units: 'w' }
+      },
+      {
+        type: 'Cooldown',
+        name: 'Cool down',
+        durationSeconds: STEP_SECONDS,
+        power: { value: 110, units: 'w' }
+      }
+    ]
+    const watts = [
+      ...block(120),
+      ...block(240),
+      ...block(170),
+      ...block(240),
+      ...block(100),
+      ...block(110)
+    ]
+
+    const intervals = getActualIntervalsForAnalysis(
+      {
+        id: 'workout-cw-414',
+        title: '2 x 5min with tempo floats',
+        type: 'Ride',
+        durationSec: watts.length,
+        streams: { time: watts.map((_, index) => index), watts }
+      },
+      { structuredWorkout: { steps } },
+      { ftp: FTP, lthr: 0, maxHr: 0, thresholdPace: 0 }
+    )
+
+    expect(intervals.map((interval) => interval.type)).toEqual([
+      'WARMUP',
+      'WORK',
+      'WORK',
+      'WORK',
+      'RECOVERY',
+      'COOLDOWN'
+    ])
+  })
+
+  it('leaves both steps as RECOVERY when there is no FTP to judge the target against', () => {
+    // The same plan with no usable reference: no intensity factor can be built,
+    // so nothing contradicts the labels and both steps stay recovery. This is
+    // what makes the promotion evidence-based rather than a blanket rule.
+    const steps = [
+      {
+        type: 'Warmup',
+        name: 'Warm up',
+        durationSeconds: STEP_SECONDS,
+        power: { value: 120, units: 'w' }
+      },
+      {
+        type: 'Interval',
+        name: 'Effort 1',
+        durationSeconds: STEP_SECONDS,
+        power: { value: 240, units: 'w' }
+      },
+      {
+        type: 'Recovery',
+        name: 'Recovery',
+        durationSeconds: STEP_SECONDS,
+        power: { value: 170, units: 'w' }
+      },
+      {
+        type: 'Interval',
+        name: 'Effort 2',
+        durationSeconds: STEP_SECONDS,
+        power: { value: 240, units: 'w' }
+      },
+      {
+        type: 'Recovery',
+        name: 'Recovery',
+        durationSeconds: STEP_SECONDS,
+        power: { value: 100, units: 'w' }
+      },
+      {
+        type: 'Cooldown',
+        name: 'Cool down',
+        durationSeconds: STEP_SECONDS,
+        power: { value: 110, units: 'w' }
+      }
+    ]
+    const watts = [
+      ...block(120),
+      ...block(240),
+      ...block(170),
+      ...block(240),
+      ...block(100),
+      ...block(110)
+    ]
+
+    const intervals = getActualIntervalsForAnalysis(
+      {
+        id: 'workout-cw-414-no-ftp',
+        title: '2 x 5min with tempo floats',
+        type: 'Ride',
+        durationSec: watts.length,
+        streams: { time: watts.map((_, index) => index), watts }
+      },
+      { structuredWorkout: { steps } },
+      { ftp: 0, lthr: 0, maxHr: 0, thresholdPace: 0 }
+    )
+
+    expect(intervals.map((interval) => interval.type)).toEqual([
+      'WARMUP',
+      'WORK',
+      'RECOVERY',
+      'WORK',
+      'RECOVERY',
+      'COOLDOWN'
+    ])
   })
 })

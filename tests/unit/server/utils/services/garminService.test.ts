@@ -27,6 +27,17 @@ vi.mock('../../../../../server/utils/db', () => ({
   prisma: prismaMock
 }))
 
+// CW-95: keep every real SDK export, but make `task()` hand back the raw run function so the
+// garmin-backfill task's status handling can be exercised directly.
+vi.mock('@trigger.dev/sdk/v3', async (importOriginal) => {
+  const actual = await importOriginal<Record<string, unknown>>()
+  return {
+    ...actual,
+    task: (config: any) => ({ id: config.id, run: config.run }),
+    logger: { log: vi.fn(), warn: vi.fn(), error: vi.fn(), info: vi.fn(), debug: vi.fn() }
+  }
+})
+
 describe('GarminService.extractPullToken', () => {
   it('prefers the webhook query token', () => {
     const token = GarminService.extractPullToken(
@@ -570,7 +581,11 @@ describe('GarminService.runIngestGarmin', () => {
     })
     prismaMock.integration.update.mockResolvedValue({})
 
-    const startBackfillSpy = vi.spyOn(GarminService, 'startBackfill').mockResolvedValue(undefined)
+    const startBackfillSpy = vi.spyOn(GarminService, 'startBackfill').mockResolvedValue({
+      status: 'success',
+      requested: ['activities', 'dailies', 'sleeps', 'hrv', 'bodyComps', 'userMetrics'],
+      failed: []
+    })
 
     const fetchers = await import('../../../../../server/utils/garmin')
     vi.spyOn(fetchers, 'refreshGarminIntegrationPermissions').mockImplementation(
@@ -1009,5 +1024,171 @@ describe('CW-99: concurrent Garmin OAuth callback race', () => {
     await expect(runGarminCallbackUpsert('user-c', 'garmin-ext-2')).rejects.toThrow(
       'connection reset'
     )
+  })
+})
+
+describe('CW-95: GarminService.startBackfill result reporting', () => {
+  const BACKFILL_TYPES = [
+    'activities',
+    'dailies',
+    'sleeps',
+    'hrv',
+    'bodyComps',
+    'userMetrics'
+  ] as const
+
+  async function garminModule() {
+    return await import('../../../../../server/utils/garmin')
+  }
+
+  it('reports a missing integration instead of silently returning success', async () => {
+    prismaMock.integration.findUnique.mockResolvedValue(null)
+    const fetchers = await garminModule()
+    const backfillSpy = vi.spyOn(fetchers, 'requestGarminBackfill')
+
+    const result = await GarminService.startBackfill('user-without-garmin')
+
+    expect(result).toEqual({ status: 'no-integration', requested: [], failed: [] })
+    expect(backfillSpy).not.toHaveBeenCalled()
+
+    vi.restoreAllMocks()
+  })
+
+  it('reports total failure when every backfill request is rejected', async () => {
+    prismaMock.integration.findUnique.mockResolvedValue({
+      id: 'int-1',
+      userId: 'user-1',
+      provider: 'garmin'
+    })
+    const fetchers = await garminModule()
+    vi.spyOn(fetchers, 'requestGarminBackfill').mockRejectedValue(
+      new Error('Garmin Backfill API error (403): User not registered with consumer')
+    )
+
+    const result = await GarminService.startBackfill('user-1')
+
+    expect(result.status).toBe('failed')
+    expect(result.requested).toEqual([])
+    expect(result.failed.map((f) => f.type)).toEqual([...BACKFILL_TYPES])
+    expect(result.failed[0]?.error).toContain('User not registered with consumer')
+
+    vi.restoreAllMocks()
+  })
+
+  it('reports partial success with the exact types that succeeded and failed', async () => {
+    prismaMock.integration.findUnique.mockResolvedValue({
+      id: 'int-1',
+      userId: 'user-1',
+      provider: 'garmin'
+    })
+    const fetchers = await garminModule()
+    vi.spyOn(fetchers, 'requestGarminBackfill').mockImplementation(async (_int, type) => {
+      if (type === 'hrv' || type === 'bodyComps') {
+        throw new Error(`Garmin Backfill API error (400): ${type} not permitted`)
+      }
+      return { success: true }
+    })
+
+    const result = await GarminService.startBackfill('user-1')
+
+    expect(result.status).toBe('partial')
+    expect(result.requested).toEqual(['activities', 'dailies', 'sleeps', 'userMetrics'])
+    expect(result.failed).toEqual([
+      { type: 'hrv', error: 'Garmin Backfill API error (400): hrv not permitted' },
+      { type: 'bodyComps', error: 'Garmin Backfill API error (400): bodyComps not permitted' }
+    ])
+
+    vi.restoreAllMocks()
+  })
+
+  it('reports full success for every requested type', async () => {
+    prismaMock.integration.findUnique.mockResolvedValue({
+      id: 'int-1',
+      userId: 'user-1',
+      provider: 'garmin'
+    })
+    const fetchers = await garminModule()
+    const backfillSpy = vi
+      .spyOn(fetchers, 'requestGarminBackfill')
+      .mockResolvedValue({ success: true })
+
+    const result = await GarminService.startBackfill('user-1')
+
+    expect(result).toEqual({ status: 'success', requested: [...BACKFILL_TYPES], failed: [] })
+    expect(backfillSpy).toHaveBeenCalledTimes(BACKFILL_TYPES.length)
+
+    vi.restoreAllMocks()
+  })
+})
+
+describe('CW-95: garmin-backfill task surfaces backfill status to the platform', () => {
+  async function runBackfillTask(userId: string) {
+    const { garminBackfillTask } = await import('../../../../../trigger/garmin-backfill')
+    return await (garminBackfillTask as any).run({ userId, delaySeconds: 0 })
+  }
+
+  it('fails the task when the user has no Garmin integration', async () => {
+    vi.spyOn(GarminService, 'startBackfill').mockResolvedValue({
+      status: 'no-integration',
+      requested: [],
+      failed: []
+    })
+
+    await expect(runBackfillTask('user-without-garmin')).rejects.toThrow(
+      /no Garmin integration found for user user-without-garmin/
+    )
+
+    vi.restoreAllMocks()
+  })
+
+  it('fails the task when every backfill request fails', async () => {
+    vi.spyOn(GarminService, 'startBackfill').mockResolvedValue({
+      status: 'failed',
+      requested: [],
+      failed: [
+        { type: 'activities', error: 'boom-activities' },
+        { type: 'dailies', error: 'boom-dailies' }
+      ]
+    })
+
+    await expect(runBackfillTask('user-1')).rejects.toThrow(
+      /all 2 backfill requests were rejected .*boom-activities.*boom-dailies/s
+    )
+
+    vi.restoreAllMocks()
+  })
+
+  it('succeeds with an explicit summary when only some types fail', async () => {
+    vi.spyOn(GarminService, 'startBackfill').mockResolvedValue({
+      status: 'partial',
+      requested: ['activities', 'dailies'],
+      failed: [{ type: 'hrv', error: 'hrv not permitted' }]
+    })
+
+    const result = await runBackfillTask('user-1')
+
+    expect(result).toEqual({
+      success: true,
+      status: 'partial',
+      requested: ['activities', 'dailies'],
+      failed: [{ type: 'hrv', error: 'hrv not permitted' }]
+    })
+
+    vi.restoreAllMocks()
+  })
+
+  it('keeps reporting success for a fully successful backfill', async () => {
+    vi.spyOn(GarminService, 'startBackfill').mockResolvedValue({
+      status: 'success',
+      requested: ['activities', 'dailies', 'sleeps', 'hrv', 'bodyComps', 'userMetrics'],
+      failed: []
+    })
+
+    const result = await runBackfillTask('user-1')
+
+    expect(result).toMatchObject({ success: true, status: 'success', failed: [] })
+    expect(result.requested).toHaveLength(6)
+
+    vi.restoreAllMocks()
   })
 })

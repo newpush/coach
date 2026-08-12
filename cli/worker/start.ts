@@ -1,4 +1,4 @@
-import type { Job } from 'bullmq'
+import type { Job, Queue } from 'bullmq'
 import { Worker } from 'bullmq'
 import IORedis from 'ioredis'
 import chalk from 'chalk'
@@ -12,6 +12,7 @@ import { OuraService } from '../../server/utils/services/ouraService'
 import { processStravaWebhookEvent } from '../../server/utils/services/stravaService'
 import { ResendService } from '../../server/utils/services/resendService'
 import { logWebhookRequest, updateWebhookStatus } from '../../server/utils/webhook-logger'
+import { Prisma } from '@prisma/client'
 import { prisma } from '../../server/utils/db'
 import { webhookQueue, pingQueue, streamsQueue, mainTaskQueue } from '../../server/utils/queue'
 import { executeRegisteredTask, getRegisteredTaskIds } from '../../server/utils/task-registry'
@@ -91,6 +92,199 @@ export async function registerScheduledTasks(
     )
   )
   return scheduledTasks.length
+}
+
+export const WEBHOOK_POLL_BATCH_SIZE = 50
+
+export type ClaimedWebhookLog = {
+  id: string
+  provider: string
+  eventType: string | null
+  payload: unknown
+  headers: unknown
+  query: unknown
+  error: string | null
+}
+
+type WebhookClaimClient = {
+  $queryRaw<T = unknown>(query: Prisma.Sql): Promise<T>
+  $executeRaw(query: Prisma.Sql): Promise<number>
+}
+
+/**
+ * Atomically claim a batch of PENDING webhook logs.
+ *
+ * Selection and the transition to QUEUED happen in a single statement, so two
+ * worker instances polling at the same time can never claim the same row:
+ * `FOR UPDATE SKIP LOCKED` makes the loser of the race skip the locked rows
+ * instead of waiting for them and re-reading a stale `PENDING` status.
+ */
+export async function claimPendingWebhookLogs(
+  client: WebhookClaimClient,
+  limit: number = WEBHOOK_POLL_BATCH_SIZE
+): Promise<ClaimedWebhookLog[]> {
+  const rows = await client.$queryRaw<ClaimedWebhookLog[]>(Prisma.sql`
+    UPDATE "WebhookLog"
+    SET "status" = 'QUEUED'
+    WHERE "id" IN (
+      SELECT "id"
+      FROM "WebhookLog"
+      WHERE "status" = 'PENDING'
+      ORDER BY "createdAt" ASC
+      LIMIT ${limit}
+      FOR UPDATE SKIP LOCKED
+    )
+    RETURNING "id", "provider", "eventType", "payload", "headers", "query", "error"
+  `)
+  return rows ?? []
+}
+
+/**
+ * Number of consecutive claim-query failures before the poller escalates.
+ *
+ * The poller runs every 5s, so this is ~15s of a fully halted webhook pipeline
+ * before we alert — long enough to ride out a single connection blip, short
+ * enough that a genuinely broken claim query is not silent.
+ */
+export const WEBHOOK_CLAIM_ESCALATION_THRESHOLD = 3
+
+/**
+ * Tracks consecutive failures of the webhook *claim* query specifically.
+ *
+ * A claim that fails permanently (a malformed statement, a dropped column, a
+ * bind parameter Postgres will not accept) halts all webhook processing while
+ * producing nothing louder than a `console.error` every 5 seconds — the poller's
+ * only escalation path is `isRedisConnectionError`, which such a failure is not.
+ * This distinguishes "transient blip" from "the claim query itself is broken"
+ * and escalates once per failure streak.
+ */
+export function createWebhookClaimFailureTracker(options: {
+  threshold?: number
+  onEscalate: (error: unknown, consecutiveFailures: number) => void
+}) {
+  const threshold = options.threshold ?? WEBHOOK_CLAIM_ESCALATION_THRESHOLD
+  let consecutiveFailures = 0
+  let escalated = false
+
+  return {
+    /** A successful claim ends the streak and re-arms escalation. */
+    recordSuccess(): void {
+      consecutiveFailures = 0
+      escalated = false
+    },
+    /** Returns the current streak length. Escalates once when it crosses the threshold. */
+    recordFailure(error: unknown): number {
+      consecutiveFailures++
+      if (consecutiveFailures >= threshold && !escalated) {
+        escalated = true
+        options.onEscalate(error, consecutiveFailures)
+      }
+      return consecutiveFailures
+    },
+    get consecutiveFailures(): number {
+      return consecutiveFailures
+    },
+    get hasEscalated(): boolean {
+      return escalated
+    }
+  }
+}
+
+/**
+ * Hand a claimed webhook log back to the poller when the BullMQ enqueue failed,
+ * so the webhook is retried instead of being stranded in QUEUED with no job.
+ * Guarded on `status = 'QUEUED'` so it can never resurrect a row that another
+ * code path has already moved to a terminal status.
+ */
+export async function releaseClaimedWebhookLog(
+  client: WebhookClaimClient,
+  id: string
+): Promise<void> {
+  await client.$executeRaw(Prisma.sql`
+    UPDATE "WebhookLog"
+    SET "status" = 'PENDING'
+    WHERE "id" = ${id} AND "status" = 'QUEUED'
+  `)
+}
+
+/**
+ * Map a claimed webhook log onto the BullMQ job name + payload the webhook
+ * worker expects.
+ */
+export function buildWebhookJob(log: ClaimedWebhookLog): {
+  queueJobName: string
+  jobData: Record<string, unknown>
+} {
+  let queueJobName = `${log.provider}-webhook`
+  let provider = log.provider
+  let jobData: Record<string, unknown> = {
+    provider,
+    type: log.eventType,
+    payload: log.payload,
+    headers: log.headers,
+    query: log.query,
+    logId: log.id,
+    // Oauth specific fields if any were stored in error or similar
+    appName: log.eventType?.startsWith('oauth:') ? log.eventType.split(':')[1] : 'unknown',
+    secretMatched: log.error === 'SECRET_MATCHED'
+  }
+
+  if (provider === 'intervals-bulk' || provider === 'intervals') {
+    queueJobName = 'intervals-webhook-bulk'
+    provider = 'intervals-bulk' // Force bulk handler for both
+    jobData.provider = provider
+  } else if (provider === 'oauth-generic') {
+    queueJobName = 'oauth-webhook'
+  } else if (provider === 'resend') {
+    const payload = (log.payload || {}) as Record<string, any>
+    jobData = {
+      provider: 'resend',
+      type: payload.type || log.eventType,
+      data: payload.data,
+      createdAt: payload.created_at,
+      logId: log.id
+    }
+  }
+
+  return { queueJobName, jobData }
+}
+
+/**
+ * Enqueue an already-claimed batch of webhook logs.
+ *
+ * The claim flips the whole batch to QUEUED up front, so this function owns the
+ * invariant that every row it was handed either ends up with a job or goes back
+ * to PENDING. If an enqueue throws we abandon the batch (the caller treats it as
+ * a poll-level failure and may restart the worker), which means every row we
+ * have not enqueued yet must be released first — nothing re-picks a QUEUED row,
+ * since the claim query selects only PENDING and there is no reaper for stale
+ * QUEUED rows.
+ */
+export async function drainClaimedWebhookLogs(
+  client: WebhookClaimClient,
+  queue: Pick<Queue, 'add'>,
+  claimedLogs: ClaimedWebhookLog[]
+): Promise<void> {
+  for (let i = 0; i < claimedLogs.length; i++) {
+    const log = claimedLogs[i]!
+    const { queueJobName, jobData } = buildWebhookJob(log)
+
+    try {
+      await queue.add(queueJobName, jobData)
+    } catch (addErr) {
+      for (const stranded of claimedLogs.slice(i)) {
+        try {
+          await releaseClaimedWebhookLog(client, stranded.id)
+        } catch (releaseErr) {
+          console.error(
+            chalk.red(`[Poller] Failed to release webhook log ${stranded.id} back to PENDING:`),
+            releaseErr
+          )
+        }
+      }
+      throw addErr
+    }
+  }
 }
 
 export const startCommand = new Command('start')
@@ -292,6 +486,7 @@ export const startCommand = new Command('start')
             )?.id
 
           let queuedCount = 0
+          let orphanedCount = 0
           try {
             for (const intervalEvent of events) {
               const { athlete_id, type: eventType } = intervalEvent
@@ -305,9 +500,17 @@ export const startCommand = new Command('start')
               })
 
               if (!integration) {
-                console.warn(
-                  `[BulkJob ${job.id}] No integration found for athlete_id: ${athlete_id}`
-                )
+                // Routine: the athlete deleted their account or unlinked Intervals.icu
+                // and the provider is still sending events. Not a failure — keep it out
+                // of the default log stream; the count is persisted on the parent log.
+                orphanedCount++
+                if (verboseWorkerLogs) {
+                  console.debug(
+                    chalk.gray(
+                      `[BulkJob ${job.id}] Skipping orphaned event, no integration for athlete_id: ${athlete_id}`
+                    )
+                  )
+                }
                 continue
               }
 
@@ -333,7 +536,9 @@ export const startCommand = new Command('start')
               await updateWebhookStatus(
                 parentLogId,
                 queuedCount > 0 ? 'PROCESSED' : 'IGNORED',
-                `Dispatched ${queuedCount} child events`
+                orphanedCount > 0
+                  ? `Dispatched ${queuedCount} child events (${orphanedCount} orphaned, no integration)`
+                  : `Dispatched ${queuedCount} child events`
               )
             }
             return { queuedCount }
@@ -625,7 +830,14 @@ export const startCommand = new Command('start')
           }
 
           if (!userId) {
-            console.warn(`[StravaJob ${job.id}] No user found for strava payload`)
+            // Routine: Strava keeps delivering events for athletes who deleted their
+            // account or revoked the connection. Not a failure — the IGNORED webhook
+            // log below is the durable record, so keep it out of the default stream.
+            if (verboseWorkerLogs) {
+              console.debug(
+                chalk.gray(`[StravaJob ${job.id}] Skipping orphaned event, no user for payload`)
+              )
+            }
             if (logId) await updateWebhookStatus(logId, 'IGNORED', 'User not found')
             return { handled: false, message: 'User not found' }
           }
@@ -750,64 +962,62 @@ export const startCommand = new Command('start')
     })
 
     // --- Webhook Log Poller ---
-    // This loop checks for PENDING webhooks in SQL and moves them to BullMQ
-    const pollWebhooks = async () => {
-      try {
-        const pendingLogs = await prisma.webhookLog.findMany({
-          where: { status: 'PENDING' },
-          orderBy: { createdAt: 'asc' },
-          take: 50
-        })
-
-        if (pendingLogs.length > 0) {
-          if (verboseWorkerLogs) {
-            console.log(chalk.gray(`[Poller] Found ${pendingLogs.length} pending webhooks in SQL`))
-          }
-
-          for (const log of pendingLogs) {
-            let queueJobName = `${log.provider}-webhook`
-            let provider = log.provider
-            let jobData: Record<string, unknown> = {
-              provider,
-              type: log.eventType,
-              payload: log.payload,
-              headers: log.headers,
-              query: log.query,
-              logId: log.id,
-              // Oauth specific fields if any were stored in error or similar
-              appName: log.eventType?.startsWith('oauth:')
-                ? log.eventType.split(':')[1]
-                : 'unknown',
-              secretMatched: log.error === 'SECRET_MATCHED'
-            }
-
-            if (provider === 'intervals-bulk' || provider === 'intervals') {
-              queueJobName = 'intervals-webhook-bulk'
-              provider = 'intervals-bulk' // Force bulk handler for both
-              jobData.provider = provider
-            } else if (provider === 'oauth-generic') {
-              queueJobName = 'oauth-webhook'
-            } else if (provider === 'resend') {
-              const payload = (log.payload || {}) as Record<string, any>
-              jobData = {
-                provider: 'resend',
-                type: payload.type || log.eventType,
-                data: payload.data,
-                createdAt: payload.created_at,
-                logId: log.id
-              }
-            }
-
-            await webhookQueue.add(queueJobName, jobData)
-
-            await prisma.webhookLog.update({
-              where: { id: log.id },
-              data: { status: 'QUEUED' }
-            })
-          }
+    // This loop checks for PENDING webhooks in SQL and moves them to BullMQ.
+    //
+    // A claim query that is broken rather than merely unlucky halts every
+    // webhook in the system. Escalate it loudly instead of letting it scroll
+    // past as a console.error once every 5 seconds.
+    const claimFailures = createWebhookClaimFailureTracker({
+      onEscalate: (error, consecutiveFailures) => {
+        const detail = formatErrorMessage(error)
+        console.error(
+          chalk.red.bold(
+            `[Poller] WEBHOOK INGESTION HALTED — the claim query has failed ${consecutiveFailures} consecutive times. ` +
+              `No webhook has been queued since the streak began. This is not a transient error; ` +
+              `the claim statement itself is likely broken. Last error: ${detail}`
+          )
+        )
+        if (process.env.SENTRY_DSN) {
+          Sentry.captureException(error, {
+            level: 'fatal',
+            tags: { worker: 'webhookPoller', failure: 'claim-query' },
+            extra: { consecutiveFailures, batchSize: WEBHOOK_POLL_BATCH_SIZE }
+          })
         }
+      }
+    })
+
+    const pollWebhooks = async () => {
+      // Claim the batch atomically: the rows come back already flipped to
+      // QUEUED, so a second worker polling concurrently cannot pick them up.
+      let claimedLogs: ClaimedWebhookLog[]
+      try {
+        claimedLogs = await claimPendingWebhookLogs(prisma, WEBHOOK_POLL_BATCH_SIZE)
+        claimFailures.recordSuccess()
       } catch (err) {
-        console.error(chalk.red('[Poller] Error polling webhooks:'), err)
+        const streak = claimFailures.recordFailure(err)
+        console.error(
+          chalk.red(`[Poller] Claim query failed (consecutive failures: ${streak}):`),
+          err
+        )
+        if (isRedisConnectionError(err)) {
+          requestRestart('sql-to-queue poller lost redis connectivity', err)
+        }
+        return
+      }
+
+      if (claimedLogs.length === 0) return
+
+      if (verboseWorkerLogs) {
+        console.log(chalk.gray(`[Poller] Claimed ${claimedLogs.length} pending webhooks in SQL`))
+      }
+
+      try {
+        await drainClaimedWebhookLogs(prisma, webhookQueue, claimedLogs)
+      } catch (err) {
+        // Drain failures are already self-healing: drainClaimedWebhookLogs hands
+        // every un-enqueued row back to PENDING before rethrowing.
+        console.error(chalk.red('[Poller] Error draining claimed webhooks:'), err)
         if (isRedisConnectionError(err)) {
           requestRestart('sql-to-queue poller lost redis connectivity', err)
         }

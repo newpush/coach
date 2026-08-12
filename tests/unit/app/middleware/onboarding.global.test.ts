@@ -147,6 +147,28 @@ describe('onboarding.global middleware', () => {
     expect(result).toBeUndefined()
   })
 
+  // CW-538: the ONLY thing keeping an authenticated-but-unconsented invitee off the
+  // consent gate is the `/join` allowlist in this middleware. The route-resolution
+  // test in tests/unit/app/pages/join-route.test.ts cannot see it — `route.meta.middleware`
+  // excludes global middleware — so without these two cases, deleting that allowlist
+  // line would break every invite link for signed-in users with the whole suite green.
+  it.each(['/join/ABC123', '/join'])(
+    'lets an unconsented user reach %s, so invite links work before the consent gate',
+    async (path) => {
+      const auth = buildAuthMock({
+        status: 'authenticated',
+        user: { termsAcceptedAt: null, deactivatedAt: null }
+      })
+      authMockRef.current = auth
+
+      const to = makeRoute(path)
+      const result = await onboardingMiddleware(to, to)
+
+      expect(navigateToMock).not.toHaveBeenCalled()
+      expect(result).toBeUndefined()
+    }
+  )
+
   it('does not treat an unauthenticated visitor as deactivated after the forced refresh', async () => {
     const auth = buildAuthMock({ status: 'unauthenticated' })
     authMockRef.current = auth

@@ -1,15 +1,25 @@
 import { describe, expect, it } from 'vitest'
 import {
+  ANALYSIS_SCORE_MAX,
+  ANALYSIS_SCORE_MIN,
+  ANALYSIS_SECTION_STATUSES,
+  analysisSchema,
   buildAnalysisFactsPromptBlock,
   buildAnalysisGuardrailInstructions,
   buildWorkoutAnalysisData,
   buildWorkoutAnalysisPrompt,
+  clampAnalysisScore,
   getAnalysisSectionsGuidance,
   getWorkoutTypeGuidance,
-  normalizeRunningCadence
+  normalizeRunningCadence,
+  resolveSplitPacingVerdictApplicability
 } from './workout-analysis-prompt'
 import * as analyzeWorkoutTrigger from '../../../trigger/analyze-workout'
-import { buildWorkoutAnalysisFactsV2 } from '../workout-analysis-facts'
+import {
+  buildWorkoutAnalysisFactsV2,
+  getActualIntervalsForAnalysis,
+  getActualIntervalsSourceForAnalysis
+} from '../workout-analysis-facts'
 
 /**
  * CW-392 regression coverage.
@@ -221,6 +231,40 @@ describe('buildAnalysisFactsPromptBlock / buildAnalysisGuardrailInstructions', (
     expect(buildAnalysisGuardrailInstructions('Ride', undefined)).toContain(
       'Do not use ATL, CTL, or TSB alone as proof of technique breakdown'
     )
+
+    // The soft guardrail above asks the model to disregard non-constant pace;
+    // the same session must also stop being handed the hard split verdict that
+    // contradicts it (CW-389).
+    expect(resolveSplitPacingVerdictApplicability(facts).applicable).toBe(false)
+  })
+})
+
+describe('resolveSplitPacingVerdictApplicability', () => {
+  const withSteadiness = (sessionSteadiness: string, primaryArchetype = 'endurance') =>
+    ({ guardrails: { archetype: { sessionSteadiness, primaryArchetype } } }) as any
+
+  it('withholds the verdict for intervalled and stochastic sessions, with a reason', () => {
+    for (const steadiness of ['intervalled', 'stochastic']) {
+      const verdict = resolveSplitPacingVerdictApplicability(withSteadiness(steadiness))
+      expect(verdict.applicable).toBe(false)
+      expect(verdict.reason).toContain(`session steadiness is ${steadiness}`)
+    }
+  })
+
+  it('allows the verdict for steady and rolling sessions', () => {
+    for (const steadiness of ['steady', 'rolling']) {
+      expect(resolveSplitPacingVerdictApplicability(withSteadiness(steadiness))).toEqual({
+        applicable: true,
+        reason: null
+      })
+    }
+  })
+
+  it('leaves the legacy no-facts path applicable so the prompt is unchanged', () => {
+    expect(resolveSplitPacingVerdictApplicability(undefined)).toEqual({
+      applicable: true,
+      reason: null
+    })
   })
 })
 
@@ -335,8 +379,9 @@ describe('buildWorkoutAnalysisPrompt', () => {
       }),
       'Europe/Budapest',
       'Supportive',
-      // HR-primary so the session cadence line is not condensed away; the
-      // Interval Breakdown prints cadence either way.
+      // HR-primary. Since CW-412 the session cadence line no longer depends on
+      // the metric priority at all -- the pace-primary variant is pinned by the
+      // test below.
       { loadPreference: 'HR' },
       USER_PROFILE
     )
@@ -353,6 +398,84 @@ describe('buildWorkoutAnalysisPrompt', () => {
     expect(prompt).not.toContain('RPM')
   })
 
+  it('gives a pace-primary run a session cadence baseline for its interval rows (CW-412)', () => {
+    // `shouldCondenseHeartRateSection` fires for a pace-primary run, and the
+    // session-level cadence lines used to sit inside that branch. The Interval
+    // Breakdown prints per-interval cadence unconditionally, so the exact case
+    // where running cadence matters most handed the model per-rep numbers with
+    // nothing session-wide to compare them against. Cadence now follows
+    // `isCadenceRelevant` alone.
+    //
+    // `loadPreference: 'PACE'` rather than an omitted setting: the default
+    // priority is HR > PACE > POWER, so a bare default is HR-primary and would
+    // not condense at all. (That default contradicting the pace guardrail is
+    // CW-397, out of scope here.)
+    const prompt = buildWorkoutAnalysisPrompt(
+      buildWorkoutAnalysisData({
+        id: 'workout-fixture-run-pace-primary-cadence',
+        date: new Date('2026-03-18T06:00:00Z'),
+        title: '3 x 1km Threshold',
+        type: 'Run',
+        durationSec: 3000,
+        distanceMeters: 9000,
+        averageSpeed: 3.0,
+        averageHr: 158,
+        maxHr: 176,
+        // One-legged, exactly as Strava / Intervals.icu store run cadence.
+        averageCadence: 88,
+        maxCadence: 95,
+        rawJson: {
+          icu_intervals: [
+            {
+              type: 'WORK',
+              label: 'Rep 1',
+              moving_time: 240,
+              distance: 1000,
+              average_heartrate: 168,
+              average_cadence: 90,
+              average_speed: 4.1667,
+              intensity: 101
+            },
+            {
+              type: 'RECOVERY',
+              label: 'Jog 1',
+              moving_time: 120,
+              distance: 400,
+              average_heartrate: 138,
+              average_cadence: 76,
+              average_speed: 3.0,
+              intensity: 68
+            }
+          ]
+        }
+      }),
+      'Europe/Budapest',
+      'Supportive',
+      { loadPreference: 'PACE' },
+      USER_PROFILE
+    )
+
+    // Pace really is primary here, i.e. the condensing branch is live.
+    expect(prompt).toContain('## Pace & Speed (Primary Metric)')
+
+    // Heart-rate condensing itself is untouched: condensed heading, same HR lines.
+    expect(prompt).toContain('## Heart Rate (Secondary Corroboration) & Cadence')
+    expect(prompt).not.toContain('## Heart Rate & Cadence')
+    expect(prompt).toContain('- Average HR: 158 bpm')
+    expect(prompt).toContain('- Max HR: 176 bpm')
+
+    // The baseline the interval rows are read against -- this is what regressed.
+    expect(prompt).toContain('- Average Cadence: 176 spm')
+    expect(prompt).toContain('- Max Cadence: 190 spm')
+
+    // ...and the per-interval rows it explains, in the same CW-387 convention.
+    expect(prompt).toContain('## Interval Breakdown')
+    expect(prompt).toContain('- Avg Cadence: 180 spm')
+    expect(prompt).toContain('- Avg Cadence: 152 spm')
+    expect(prompt).not.toContain('rpm')
+    expect(prompt).not.toContain('RPM')
+  })
+
   it('keeps rpm for a ride in both the session line and the interval rows (CW-387)', () => {
     const prompt = buildWorkoutAnalysisPrompt(
       buildWorkoutAnalysisData(RIDE_WORKOUT),
@@ -365,6 +488,221 @@ describe('buildWorkoutAnalysisPrompt', () => {
     expect(prompt).toContain('- Average Cadence: 88 rpm')
     expect(prompt).toContain('- Avg Cadence: 90 rpm')
     expect(prompt).not.toContain('spm')
+  })
+
+  it('floors the minutes term of an interval duration instead of rounding it (CW-388)', () => {
+    // The seconds term is a true remainder, so rounding the minutes counted it
+    // twice: 150s rendered as "3m 30s" and 110s as "2m 50s".
+    const prompt = buildWorkoutAnalysisPrompt(
+      buildWorkoutAnalysisData({
+        id: 'workout-fixture-duration',
+        date: new Date('2026-03-18T06:00:00Z'),
+        title: 'Short reps',
+        type: 'Ride',
+        durationSec: 1800,
+        ftp: 275,
+        rawJson: {
+          icu_intervals: [
+            { type: 'WORK', label: 'Rep 1', moving_time: 150, average_watts: 300 },
+            { type: 'WORK', label: 'Rep 2', moving_time: 110, average_watts: 295 },
+            { type: 'WORK', label: 'Rep 3', moving_time: 720, average_watts: 260 }
+          ]
+        }
+      }),
+      'Europe/Budapest',
+      'Supportive',
+      { loadPreference: 'POWER' },
+      USER_PROFILE
+    )
+
+    expect(prompt).toContain('- Duration: 2m 30s')
+    expect(prompt).toContain('- Duration: 1m 50s')
+    // A whole number of minutes is unaffected.
+    expect(prompt).toContain('- Duration: 12m 0s')
+    expect(prompt).not.toContain('- Duration: 3m 30s')
+    expect(prompt).not.toContain('- Duration: 2m 50s')
+  })
+
+  it('puts interval intensity on the session Intensity Factor scale and labels it (CW-388)', () => {
+    // Intervals.icu hands us `icu_intervals[].intensity` as a PERCENTAGE of
+    // threshold, while the session line is a factor. Both must read as one scale.
+    const prompt = buildWorkoutAnalysisPrompt(
+      buildWorkoutAnalysisData({
+        id: 'workout-fixture-intensity',
+        date: new Date('2026-03-18T06:00:00Z'),
+        title: 'Threshold blocks',
+        type: 'Ride',
+        durationSec: 3600,
+        ftp: 275,
+        averageWatts: 230,
+        intensity: 0.83,
+        rawJson: {
+          icu_intervals: [
+            // Percent scale, as the provider sends it.
+            { type: 'WORK', label: 'Block 1', moving_time: 600, intensity: 101 },
+            // Already on the factor scale -- must pass through, not be divided again.
+            { type: 'WORK', label: 'Block 2', moving_time: 600, intensity: 0.93 }
+          ]
+        }
+      }),
+      'Europe/Budapest',
+      'Supportive',
+      { loadPreference: 'POWER' },
+      USER_PROFILE
+    )
+
+    expect(prompt).toContain('- Intensity Factor: 0.830')
+    expect(prompt).toContain('- Intensity: 1.01 IF (101% of threshold)')
+    expect(prompt).toContain('- Intensity: 0.93 IF (93% of threshold)')
+    // The raw provider percentage must never reach the model unlabelled.
+    expect(prompt).not.toContain('- Intensity: 101.00')
+  })
+
+  it('normalises interval intensity in the payload, not in the renderer (CW-388)', () => {
+    const data = buildWorkoutAnalysisData({
+      id: 'workout-fixture-intensity-payload',
+      date: new Date('2026-03-18T06:00:00Z'),
+      title: 'Threshold blocks',
+      type: 'Ride',
+      durationSec: 3600,
+      rawJson: {
+        icu_intervals: [
+          { type: 'WORK', label: 'Block 1', moving_time: 600, intensity: 101 },
+          { type: 'WORK', label: 'Block 2', moving_time: 600, intensity: 0.93 }
+        ]
+      }
+    })
+
+    expect(data.intervals[0].intensity).toBeCloseTo(1.01, 5)
+    expect(data.intervals[1].intensity).toBeCloseTo(0.93, 5)
+  })
+
+  /**
+   * CW-389 fixtures.
+   *
+   * Six automatic per-kilometre splits from one interval session: a warmup km,
+   * three rep-ish kms, then a jog and a cooldown km. First half averages 278s/km
+   * and second half 307s/km, so the unconditional verdict called it a
+   * "Positive Split (slowed down)"; the SD across them is ~41s, which the grade
+   * band called "Variable pacing". Both numbers describe the warmup and the
+   * cooldown, not the athlete's execution.
+   */
+  const KM_SPLITS = [
+    { distance: 1000, moving_time: 330, average_speed: 3.03, average_heartrate: 132 },
+    { distance: 1000, moving_time: 250, average_speed: 4.0, average_heartrate: 165 },
+    { distance: 1000, moving_time: 255, average_speed: 3.92, average_heartrate: 168 },
+    { distance: 1000, moving_time: 262, average_speed: 3.82, average_heartrate: 170 },
+    { distance: 1000, moving_time: 300, average_speed: 3.33, average_heartrate: 158 },
+    { distance: 1000, moving_time: 360, average_speed: 2.78, average_heartrate: 138 }
+  ]
+
+  const INTERVAL_RUN = {
+    id: 'workout-fixture-interval-splits',
+    date: new Date('2026-03-19T06:00:00Z'),
+    title: '4 x 1km Threshold',
+    type: 'Run',
+    durationSec: 1757,
+    distanceMeters: 6000,
+    averageSpeed: 3.42,
+    averageHr: 155,
+    maxHr: 182,
+    variabilityIndex: 1.14,
+    rawJson: {
+      splits_metric: KM_SPLITS,
+      icu_intervals: [
+        { type: 'WORK', label: 'Rep 1', moving_time: 240, distance: 1000, average_speed: 4.17 },
+        { type: 'RECOVERY', label: 'Jog 1', moving_time: 120, distance: 400, average_speed: 3.0 },
+        { type: 'WORK', label: 'Rep 2', moving_time: 242, distance: 1000, average_speed: 4.13 },
+        { type: 'RECOVERY', label: 'Jog 2', moving_time: 120, distance: 400, average_speed: 3.0 },
+        { type: 'WORK', label: 'Rep 3', moving_time: 245, distance: 1000, average_speed: 4.08 },
+        { type: 'RECOVERY', label: 'Jog 3', moving_time: 120, distance: 400, average_speed: 3.0 },
+        { type: 'WORK', label: 'Rep 4', moving_time: 247, distance: 1000, average_speed: 4.05 }
+      ]
+    }
+  }
+
+  const STEADY_RUN = {
+    id: 'workout-fixture-steady-splits',
+    date: new Date('2026-03-19T06:00:00Z'),
+    title: 'Steady Long Run',
+    type: 'Run',
+    durationSec: 3600,
+    distanceMeters: 6000,
+    averageSpeed: 3.42,
+    averageHr: 148,
+    maxHr: 162,
+    variabilityIndex: 1.02,
+    rawJson: { splits_metric: KM_SPLITS }
+  }
+
+  it('withholds the split-strategy verdict on an intervalled session (CW-389)', () => {
+    const facts = buildWorkoutAnalysisFactsV2({ workout: INTERVAL_RUN } as any)
+    expect(facts.guardrails.archetype.sessionSteadiness).toBe('intervalled')
+
+    const prompt = buildWorkoutAnalysisPrompt(
+      buildWorkoutAnalysisData(INTERVAL_RUN),
+      'Europe/Budapest',
+      'Supportive',
+      { loadPreference: 'PACE' },
+      USER_PROFILE,
+      null,
+      undefined,
+      facts
+    )
+
+    // The measurements survive: every split row, plus the raw dispersion.
+    expect(prompt).toContain('## Distance Split Pacing')
+    expect(prompt).toContain('**Split 1**')
+    expect(prompt).toContain('**Split 6**')
+    expect(prompt).toContain('**Split Pace Consistency**')
+
+    // The derived verdicts do not.
+    expect(prompt).not.toContain('**Split Strategy**')
+    expect(prompt).not.toContain('Positive Split (slowed down)')
+    expect(prompt).not.toContain('>20s = Variable pacing')
+    expect(prompt).not.toContain('Lower is better (more consistent pacing)')
+
+    // ...and the gap says why, because "do not infer meaning from omitted
+    // facts" is a stated rule of the facts contract.
+    expect(prompt).toContain('Split-strategy verdict omitted: session steadiness is intervalled')
+    expect(prompt).toContain('Consistency grading omitted: session steadiness is intervalled')
+
+    // These were never laps -- they are the provider's automatic distance splits.
+    expect(prompt).not.toContain('## Lap Pacing Analysis')
+    expect(prompt).not.toContain('**Lap 1**')
+  })
+
+  it('still emits both verdicts for a steady session (CW-389)', () => {
+    const facts = buildWorkoutAnalysisFactsV2({ workout: STEADY_RUN } as any)
+    expect(facts.guardrails.archetype.sessionSteadiness).toBe('steady')
+
+    const prompt = buildWorkoutAnalysisPrompt(
+      buildWorkoutAnalysisData(STEADY_RUN),
+      'Europe/Budapest',
+      'Supportive',
+      { loadPreference: 'PACE' },
+      USER_PROFILE,
+      null,
+      undefined,
+      facts
+    )
+
+    expect(prompt).toContain('**Split Strategy**: Positive Split (slowed down)')
+    expect(prompt).toContain('>20s = Variable pacing')
+    expect(prompt).not.toContain('Split-strategy verdict omitted')
+  })
+
+  it('leaves the no-facts legacy path exactly as it was (CW-389)', () => {
+    const prompt = buildWorkoutAnalysisPrompt(
+      buildWorkoutAnalysisData(INTERVAL_RUN),
+      'Europe/Budapest',
+      'Supportive',
+      { loadPreference: 'PACE' },
+      USER_PROFILE
+    )
+
+    expect(prompt).toContain('**Split Strategy**: Positive Split (slowed down)')
+    expect(prompt).toContain('>20s = Variable pacing')
   })
 
   it('respects the athlete distanceUnits preference for strength set distances', () => {
@@ -432,5 +770,581 @@ describe('shared-module wiring', () => {
     expect(serviceSource).toContain("} from './workout-analysis-prompt'")
     expect(serviceSource).not.toContain('function buildWorkoutAnalysisPrompt')
     expect(serviceSource).not.toContain('function buildWorkoutAnalysisData')
+  })
+})
+
+/**
+ * CW-403 regression coverage.
+ *
+ * The response schema used to exist twice -- once in `trigger/analyze-workout.ts`
+ * (1-10 scores, `excellent/good/moderate/needs_improvement/poor`) and once in
+ * `server/utils/services/workoutAnalysisService.ts` (0-100 scores,
+ * `excellent/good/fair/needs_attention/info`). Gemini enforces whichever schema it is
+ * handed, so the service path -- the one that actually runs in production -- forced the
+ * model off the vocabulary the prompt asks for, and every UI status->colour mapper fell
+ * through to `neutral`: problem sections rendered grey instead of red.
+ *
+ * These tests read the vocabulary and the score scale back out of the *prompt string*
+ * and compare them to the schema, so the two cannot drift apart again silently.
+ */
+describe('analysisSchema matches the prompt it is handed with', () => {
+  const sectionStatusEnum = (analysisSchema.properties.sections as any).items.properties.status.enum
+  const scoreProps = (analysisSchema.properties.scores as any).properties
+  const scoreKeys = ['overall', 'technical', 'effort', 'pacing', 'execution'] as const
+
+  /** Every distinct "Assign status: a/b/c" vocabulary the prompt instructs, across sports. */
+  function statusVocabulariesInstructedByPrompt(): string[][] {
+    const guidance = [
+      getAnalysisSectionsGuidance('Strength', false, true),
+      getAnalysisSectionsGuidance('Run', true, false),
+      getAnalysisSectionsGuidance('Ride', true, false)
+    ].join('\n')
+
+    const matches = [...guidance.matchAll(/Assign status: ([a-z_/]+)/g)]
+    expect(matches.length).toBeGreaterThan(0)
+    return matches.map((m) => m[1]!.split('/'))
+  }
+
+  it('instructs exactly one status vocabulary across every sport variant', () => {
+    const vocabularies = statusVocabulariesInstructedByPrompt()
+    for (const vocabulary of vocabularies) {
+      expect(vocabulary).toEqual(vocabularies[0])
+    }
+  })
+
+  it('declares the section status enum the prompt asks for, and nothing else', () => {
+    const [instructed] = statusVocabulariesInstructedByPrompt()
+
+    expect(sectionStatusEnum).toEqual(instructed)
+    expect(sectionStatusEnum).toEqual([...ANALYSIS_SECTION_STATUSES])
+    // The retired vocabulary must never come back: the UI mappers do not understand it.
+    expect(sectionStatusEnum).not.toContain('fair')
+    expect(sectionStatusEnum).not.toContain('needs_attention')
+    expect(sectionStatusEnum).not.toContain('info')
+  })
+
+  it('declares 1-10 score bounds, matching the scale the prompt states', () => {
+    const prompt = buildWorkoutAnalysisPrompt(
+      buildWorkoutAnalysisData(RIDE_WORKOUT),
+      'Europe/Budapest',
+      'Supportive',
+      undefined,
+      USER_PROFILE
+    )
+    expect(prompt).toContain('**Performance Scores** (1-10 scale for tracking progress over time)')
+
+    expect(ANALYSIS_SCORE_MIN).toBe(1)
+    expect(ANALYSIS_SCORE_MAX).toBe(10)
+    for (const key of scoreKeys) {
+      expect(scoreProps[key].minimum).toBe(1)
+      expect(scoreProps[key].maximum).toBe(10)
+      expect(scoreProps[key].description).toContain('(1-10)')
+    }
+  })
+
+  it('is the exact same object on both analysis entry points', () => {
+    expect(analyzeWorkoutTrigger.analysisSchema).toBe(analysisSchema)
+  })
+
+  it('is not redefined by either entry point', async () => {
+    const fs = await import('node:fs')
+    const serviceSource = fs.readFileSync(
+      new URL('./workoutAnalysisService.ts', import.meta.url),
+      'utf-8'
+    )
+    const triggerSource = fs.readFileSync(
+      new URL('../../../trigger/analyze-workout.ts', import.meta.url),
+      'utf-8'
+    )
+
+    expect(serviceSource).not.toContain('const analysisSchema')
+    expect(triggerSource).not.toContain('const analysisSchema')
+    expect(serviceSource).not.toContain('interface StructuredAnalysis')
+    expect(triggerSource).not.toContain('interface StructuredAnalysis')
+
+    // ...and neither by any of the three report tasks, which carried their own
+    // near-copies of the same shape until CW-425.
+    for (const reportTask of [
+      'generate-weekly-report.ts',
+      'generate-custom-report.ts',
+      'analyze-last-3-workouts.ts'
+    ]) {
+      const reportSource = fs.readFileSync(
+        new URL(`../../../trigger/${reportTask}`, import.meta.url),
+        'utf-8'
+      )
+      expect(reportSource, reportTask).not.toContain('const analysisSchema')
+      expect(reportSource, reportTask).not.toContain('interface StructuredAnalysis')
+    }
+
+    // The service must import, never re-export: server/utils is Nitro auto-imported and
+    // re-exporting produces "Duplicated imports" warnings (CW-392 NOTE, CW-404).
+    expect(serviceSource).not.toMatch(/^export \{/m)
+  })
+})
+
+describe('clampAnalysisScore', () => {
+  it('is the single implementation both entry points call', async () => {
+    expect(analyzeWorkoutTrigger.clampAnalysisScore).toBe(clampAnalysisScore)
+
+    const fs = await import('node:fs')
+    const serviceSource = fs.readFileSync(
+      new URL('./workoutAnalysisService.ts', import.meta.url),
+      'utf-8'
+    )
+    const triggerSource = fs.readFileSync(
+      new URL('../../../trigger/analyze-workout.ts', import.meta.url),
+      'utf-8'
+    )
+    expect(serviceSource).not.toContain('const clampScore')
+    expect(triggerSource).not.toContain('const clampScore')
+  })
+
+  it('keeps 1-10 scores on the stored scale', () => {
+    expect(clampAnalysisScore(1)).toBe(1)
+    expect(clampAnalysisScore(7.4)).toBe(7)
+    expect(clampAnalysisScore(10)).toBe(10)
+  })
+
+  it('folds a stray 0-100 score back onto the stored 1-10 scale', () => {
+    // Safety net for responses produced while one entry point still declared 0-100.
+    expect(clampAnalysisScore(88)).toBe(9)
+    expect(clampAnalysisScore(100)).toBe(10)
+  })
+
+  it('returns null for non-numeric input', () => {
+    expect(clampAnalysisScore(null)).toBeNull()
+    expect(clampAnalysisScore(undefined)).toBeNull()
+    expect(clampAnalysisScore(Number.NaN)).toBeNull()
+  })
+})
+
+/**
+ * CW-391 regression coverage: ONE segmentation per prompt.
+ *
+ * `buildWorkoutAnalysisData` used to read `rawJson.icu_intervals` directly, so
+ * the "## Interval Breakdown" table could enumerate a different set of reps
+ * than the "## Calculated Workout Facts v2" block printed above it. The v2
+ * hit rates, `firstVsLastIntervalDeltaPct` and the rep-scoped CW-393 signals
+ * are all computed over the arbitrated set returned by
+ * `getActualIntervalsForAnalysis`; the table the model quotes has to be the
+ * same set or every cross-reference the model makes is arithmetic over
+ * mismatched rows.
+ */
+describe('interval segmentation provenance (CW-391)', () => {
+  const SEGMENTATION_SPORT_SETTINGS = { ftp: 250, loadPreference: 'POWER' }
+
+  /**
+   * A session where the provider laps and the engine disagree as loudly as
+   * possible: the file arrived with ONE lap covering the whole ride, while the
+   * power stream and the linked plan both describe 4 x 5 min at ~115% of FTP.
+   */
+  const DISAGREEING_WORKOUT = {
+    id: 'workout-fixture-segmentation',
+    date: new Date('2026-03-19T06:00:00Z'),
+    title: '4x5 VO2',
+    type: 'Ride',
+    durationSec: 3600,
+    ftp: 250,
+    averageWatts: 190,
+    streams: {
+      time: Array.from({ length: 3600 }, (_, index) => index),
+      watts: [
+        ...Array.from({ length: 600 }, () => 150),
+        ...Array.from({ length: 4 }, () => [
+          ...Array.from({ length: 300 }, () => 285),
+          ...Array.from({ length: 300 }, () => 120)
+        ]).flat(),
+        ...Array.from({ length: 600 }, () => 130)
+      ]
+    },
+    rawJson: {
+      icu_intervals: [
+        { type: 'WORK', label: 'Whole ride', moving_time: 3600, average_watts: 190, intensity: 76 }
+      ]
+    }
+  }
+
+  const DISAGREEING_PLAN = {
+    title: '4x5 VO2',
+    durationSec: 3600,
+    structuredWorkout: {
+      steps: [
+        { type: 'Warmup', durationSeconds: 600, power: { range: { start: 0.55, end: 0.62 } } },
+        ...Array.from({ length: 4 }, () => [
+          { type: 'Active', durationSeconds: 300, power: { range: { start: 1.1, end: 1.18 } } },
+          { type: 'Rest', durationSeconds: 300, power: { range: { start: 0.45, end: 0.52 } } }
+        ]).flat(),
+        { type: 'Cooldown', durationSeconds: 600, power: { range: { start: 0.55, end: 0.45 } } }
+      ]
+    }
+  }
+
+  const buildDisagreeingPrompt = () => {
+    const workoutData = buildWorkoutAnalysisData(DISAGREEING_WORKOUT, {
+      plannedWorkout: DISAGREEING_PLAN,
+      sportSettings: SEGMENTATION_SPORT_SETTINGS
+    })
+    const facts = buildWorkoutAnalysisFactsV2({
+      workout: DISAGREEING_WORKOUT,
+      sportSettings: SEGMENTATION_SPORT_SETTINGS,
+      plannedWorkout: DISAGREEING_PLAN
+    })
+    const prompt = buildWorkoutAnalysisPrompt(
+      workoutData,
+      'Europe/Budapest',
+      'Supportive',
+      SEGMENTATION_SPORT_SETTINGS,
+      USER_PROFILE,
+      undefined,
+      DISAGREEING_PLAN,
+      facts
+    )
+    return { workoutData, facts, prompt }
+  }
+
+  it('is the fixture the whole ticket is about: laps and detection disagree', () => {
+    // Guard the guard. If a future arbitration change makes the provider lap
+    // win here, this suite stops testing anything and has to be re-fixtured.
+    expect(
+      getActualIntervalsSourceForAnalysis(
+        DISAGREEING_WORKOUT,
+        DISAGREEING_PLAN,
+        SEGMENTATION_SPORT_SETTINGS as any
+      )
+    ).toBe('detected')
+    expect(DISAGREEING_WORKOUT.rawJson.icu_intervals).toHaveLength(1)
+  })
+
+  it('renders the interval table from the arbitrated set, not the provider laps', () => {
+    const { workoutData, prompt } = buildDisagreeingPrompt()
+    const arbitrated = getActualIntervalsForAnalysis(
+      DISAGREEING_WORKOUT,
+      DISAGREEING_PLAN,
+      SEGMENTATION_SPORT_SETTINGS as any
+    )
+
+    // Same rep COUNT as the facts are computed over -- and not the single lap.
+    expect(arbitrated.length).toBeGreaterThan(1)
+    expect(workoutData.intervals).toHaveLength(arbitrated.length)
+    expect(prompt.match(/^### Interval \d+: /gm) || []).toHaveLength(arbitrated.length)
+
+    // Same rep BOUNDARIES: durations and stream offsets, in order.
+    expect(workoutData.intervals.map((i: any) => i.duration_s)).toEqual(
+      arbitrated.map((i) => i.durationSeconds)
+    )
+    expect(workoutData.intervals.map((i: any) => i.start_index)).toEqual(
+      arbitrated.map((i) => i.startIndex)
+    )
+    expect(workoutData.intervals.map((i: any) => i.end_index)).toEqual(
+      arbitrated.map((i) => i.endIndex)
+    )
+    for (const interval of arbitrated) {
+      const minutes = Math.floor(interval.durationSeconds / 60)
+      const seconds = interval.durationSeconds % 60
+      expect(prompt).toContain(`- Duration: ${minutes}m ${seconds}s`)
+    }
+
+    // The provider's lap label and its whole-ride row must not reach the model.
+    expect(prompt).not.toContain('Whole ride')
+    expect(prompt).not.toContain('- Duration: 60m 0s')
+  })
+
+  it('names the segmentation source in the facts block and above the table', () => {
+    const { prompt } = buildDisagreeingPrompt()
+
+    expect(prompt).toContain(
+      '- Interval Segmentation Source: engine detection over the recorded streams'
+    )
+    expect(prompt).toContain(
+      'Segmentation source: engine detection over the recorded streams. These are the same segments the Calculated Workout Facts v2 block above is computed over'
+    )
+  })
+
+  it('reports provider laps as the source when they win the arbitration', () => {
+    const data = buildWorkoutAnalysisData(RIDE_WORKOUT)
+    expect(data.interval_segmentation_source).toBe('raw')
+
+    const prompt = buildWorkoutAnalysisPrompt(
+      data,
+      'Europe/Budapest',
+      'Supportive',
+      { loadPreference: 'POWER' },
+      USER_PROFILE
+    )
+    expect(prompt).toContain('Segmentation source: provider laps (labels re-derived)')
+  })
+
+  it('omits the section entirely when there are no laps and nothing detected', () => {
+    const data = buildWorkoutAnalysisData({
+      id: 'workout-fixture-no-intervals',
+      date: new Date('2026-03-20T06:00:00Z'),
+      title: 'Easy spin',
+      type: 'Ride',
+      durationSec: 1800,
+      averageWatts: 140
+    })
+
+    expect(data.intervals).toBeUndefined()
+    expect(data.interval_segmentation_source).toBeUndefined()
+
+    const prompt = buildWorkoutAnalysisPrompt(
+      data,
+      'Europe/Budapest',
+      'Supportive',
+      { loadPreference: 'POWER' },
+      USER_PROFILE
+    )
+    expect(prompt).not.toContain('## Interval Breakdown')
+    expect(prompt).not.toContain('Segmentation source:')
+  })
+
+  it('prints a per-rep pace for a run and never for a ride', () => {
+    const runPrompt = buildWorkoutAnalysisPrompt(
+      buildWorkoutAnalysisData({
+        id: 'workout-fixture-run-interval-pace',
+        date: new Date('2026-03-21T06:00:00Z'),
+        title: '3 x 1km',
+        type: 'Run',
+        durationSec: 3000,
+        distanceMeters: 9000,
+        averageSpeed: 3.0,
+        rawJson: {
+          icu_intervals: [
+            { type: 'WORK', moving_time: 240, distance: 1000, average_speed: 4.1667 },
+            { type: 'RECOVERY', moving_time: 120, distance: 400, average_speed: 3.3333 }
+          ]
+        }
+      }),
+      'Europe/Budapest',
+      'Supportive',
+      { loadPreference: 'PACE' },
+      USER_PROFILE
+    )
+
+    // 4.1667 m/s = 240 s/km = 4:00/km; 3.3333 m/s = 300 s/km = 5:00/km.
+    expect(runPrompt).toContain('- Avg Pace: 4:00/km')
+    expect(runPrompt).toContain('- Avg Pace: 5:00/km')
+
+    const ridePrompt = buildWorkoutAnalysisPrompt(
+      buildWorkoutAnalysisData(RIDE_WORKOUT),
+      'Europe/Budapest',
+      'Supportive',
+      { loadPreference: 'POWER' },
+      USER_PROFILE
+    )
+    expect(ridePrompt).not.toContain('- Avg Pace:')
+  })
+})
+
+/**
+ * CW-425 regression coverage: the three report tasks.
+ *
+ * `trigger/generate-weekly-report.ts`, `trigger/generate-custom-report.ts` and
+ * `trigger/analyze-last-3-workouts.ts` each carried their own inline
+ * `const analysisSchema = { ... }`, restating the section-status vocabulary and
+ * the score bounds as literals. They happened to agree with their prompts, but
+ * nothing held them there -- which is precisely the state the workout schema was
+ * in before CW-403 broke it.
+ *
+ * They now build from `buildReportAnalysisSchema`, so the enum and the bounds
+ * come from `ANALYSIS_SECTION_STATUSES` / `ANALYSIS_SCORE_MIN|MAX`. A shared
+ * schema that can still drift from its prompt has only moved the problem, so
+ * these tests extend the CW-403 technique to each report: they read the status
+ * vocabulary and the score scale back out of each task's own *prompt source*
+ * and compare them to the schema that task actually hands Gemini.
+ */
+describe('report analysis schemas match the prompts they are handed with (CW-425)', () => {
+  const REPORT_TASKS = [
+    { file: 'generate-weekly-report.ts', schemaExport: 'weeklyReportAnalysisSchema' },
+    { file: 'generate-custom-report.ts', schemaExport: 'customReportAnalysisSchema' },
+    { file: 'analyze-last-3-workouts.ts', schemaExport: 'lastThreeWorkoutsAnalysisSchema' }
+  ] as const
+
+  async function loadReportTask(task: (typeof REPORT_TASKS)[number]) {
+    const fs = await import('node:fs')
+    const source = fs.readFileSync(
+      new URL(`../../../trigger/${task.file}`, import.meta.url),
+      'utf-8'
+    )
+    const mod: Record<string, any> = await import(`../../../trigger/${task.file.slice(0, -3)}`)
+    return { source, schema: mod[task.schemaExport] as any }
+  }
+
+  /** Human label for a score key, as the prompts spell it ("training_load" -> "Training Load"). */
+  function scoreLabel(key: string): string {
+    return key
+      .split('_')
+      .map((word) => `${word[0]!.toUpperCase()}${word.slice(1)}`)
+      .join(' ')
+  }
+
+  it('builds from the shared builder instead of an inline literal', async () => {
+    for (const task of REPORT_TASKS) {
+      const { source, schema } = await loadReportTask(task)
+
+      expect(source, task.file).toContain('buildReportAnalysisSchema({')
+      // No re-declared vocabulary or bounds: those may only reach the schema
+      // through ANALYSIS_SECTION_STATUSES / ANALYSIS_SCORE_MIN|MAX.
+      expect(source, task.file).not.toContain("'needs_improvement'")
+      expect(source, task.file).not.toMatch(/^\s*minimum: \d+,$/m)
+      expect(source, task.file).not.toMatch(/^\s*maximum: \d+$/m)
+
+      expect(schema, task.file).toBeTruthy()
+      expect(schema.type, task.file).toBe('object')
+    }
+  })
+
+  it('hands that exact schema to generateStructuredAnalysis', async () => {
+    for (const task of REPORT_TASKS) {
+      const { source } = await loadReportTask(task)
+
+      const call = source.match(/generateStructuredAnalysis(?:<[^>]*>)?\(([\s\S]{0,200})/)
+      expect(call, task.file).not.toBeNull()
+      expect(call![1], task.file).toContain(task.schemaExport)
+    }
+  })
+
+  it('declares the shared section-status enum, and never the retired vocabulary', async () => {
+    for (const task of REPORT_TASKS) {
+      const { schema } = await loadReportTask(task)
+      const statusEnum = schema.properties.sections.items.properties.status.enum
+
+      expect(statusEnum, task.file).toEqual([...ANALYSIS_SECTION_STATUSES])
+      // The CW-403 failure mode: an enum the UI status->colour mappers do not
+      // understand, so problem sections render grey instead of red.
+      expect(statusEnum, task.file).not.toContain('fair')
+      expect(statusEnum, task.file).not.toContain('needs_attention')
+      expect(statusEnum, task.file).not.toContain('info')
+    }
+  })
+
+  it('declares the status vocabulary its own prompt instructs', async () => {
+    let vocabulariesFound = 0
+
+    for (const task of REPORT_TASKS) {
+      const { source, schema } = await loadReportTask(task)
+      const statusEnum = schema.properties.sections.items.properties.status.enum
+
+      // e.g. "- Provide a status assessment (excellent/good/moderate/needs_improvement/poor)"
+      for (const match of source.matchAll(/status assessment \(([a-z_/]+)\)/g)) {
+        vocabulariesFound += 1
+        expect(match[1]!.split('/'), task.file).toEqual(statusEnum)
+      }
+    }
+
+    // If every prompt stops naming the vocabulary this guard quietly stops
+    // guarding, so require that at least one still states it.
+    expect(vocabulariesFound).toBeGreaterThan(0)
+  })
+
+  it('declares scores exactly when its own prompt asks for them', async () => {
+    for (const task of REPORT_TASKS) {
+      const { source, schema } = await loadReportTask(task)
+
+      // A schema that declares scores the prompt never asks for makes Gemini
+      // invent numbers with no basis; a prompt that asks for scores the schema
+      // does not declare gets them silently dropped from the response.
+      expect(Boolean(schema.properties.scores), task.file).toBe(
+        source.includes('Performance Scores')
+      )
+      // ...and the top-level `required` may only demand scores that exist.
+      if (schema.required.includes('scores')) {
+        expect(schema.properties.scores, task.file).toBeTruthy()
+      }
+    }
+  })
+
+  it('declares the score scale its own prompt states', async () => {
+    let scalesFound = 0
+
+    for (const task of REPORT_TASKS) {
+      const { source, schema } = await loadReportTask(task)
+
+      // e.g. "**Performance Scores** (1-10 scale for tracking progress over time)"
+      for (const match of source.matchAll(/Performance Scores\*{0,2} \((\d+)-(\d+) scale/g)) {
+        scalesFound += 1
+        expect(Number(match[1]), task.file).toBe(ANALYSIS_SCORE_MIN)
+        expect(Number(match[2]), task.file).toBe(ANALYSIS_SCORE_MAX)
+      }
+
+      if (!schema.properties.scores) continue
+
+      for (const [key, prop] of Object.entries<any>(schema.properties.scores.properties)) {
+        if (key.endsWith('_explanation')) continue
+        expect(prop.minimum, `${task.file}:${key}`).toBe(ANALYSIS_SCORE_MIN)
+        expect(prop.maximum, `${task.file}:${key}`).toBe(ANALYSIS_SCORE_MAX)
+        expect(prop.description, `${task.file}:${key}`).toContain(
+          `(${ANALYSIS_SCORE_MIN}-${ANALYSIS_SCORE_MAX})`
+        )
+      }
+      expect(schema.properties.scores.description, task.file).toContain(
+        `${ANALYSIS_SCORE_MIN}-${ANALYSIS_SCORE_MAX} scale`
+      )
+    }
+
+    expect(scalesFound).toBeGreaterThan(0)
+  })
+
+  it('names in the prompt every score dimension its schema declares', async () => {
+    for (const task of REPORT_TASKS) {
+      const { source, schema } = await loadReportTask(task)
+      if (!schema.properties.scores) continue
+
+      for (const key of Object.keys(schema.properties.scores.properties)) {
+        if (key.endsWith('_explanation')) continue
+        expect(source, `${task.file}:${key}`).toContain(scoreLabel(key))
+      }
+    }
+  })
+
+  it('keeps the per-report differences the tasks depend on', async () => {
+    const byFile = new Map<string, any>()
+    for (const task of REPORT_TASKS) {
+      byFile.set(task.file, (await loadReportTask(task)).schema)
+    }
+
+    for (const [file, schema] of byFile) {
+      // Reports render `status_label` directly (see each task's markdown
+      // converter), so unlike the workout schema it must be required.
+      expect(schema.properties.sections.items.required, file).toEqual([
+        'title',
+        'status',
+        'status_label',
+        'analysis_points'
+      ])
+      expect(schema.properties.recommendations.items.required, file).toEqual([
+        'title',
+        'priority',
+        'description'
+      ])
+    }
+
+    // Only the weekly report is invalid without scores.
+    expect(byFile.get('generate-weekly-report.ts').required).toEqual([
+      'type',
+      'title',
+      'executive_summary',
+      'sections',
+      'scores'
+    ])
+    // A nutrition-only custom report legitimately has none.
+    expect(byFile.get('generate-custom-report.ts').required).toEqual([
+      'type',
+      'title',
+      'executive_summary',
+      'sections'
+    ])
+    expect(byFile.get('generate-custom-report.ts').properties.scores.required).toBeUndefined()
+    // The three-workout comparison asks for no scores at all.
+    expect(byFile.get('analyze-last-3-workouts.ts').properties.scores).toBeUndefined()
+
+    // Nutrition metrics belong to the custom report only.
+    expect(
+      Object.keys(byFile.get('generate-custom-report.ts').properties.metrics_summary.properties)
+    ).toContain('avg_protein_g')
+    expect(
+      Object.keys(byFile.get('generate-weekly-report.ts').properties.metrics_summary.properties)
+    ).not.toContain('avg_protein_g')
   })
 })

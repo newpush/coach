@@ -16,7 +16,6 @@ import {
   formatPromptTemperature,
   formatPromptPace
 } from '../ai-prompt-format'
-import { resolveProviderIntervalTypes } from '../interval-detection'
 import {
   buildAnalysisRequestMetricRules,
   buildMetricPriorityPromptBlock,
@@ -26,6 +25,8 @@ import {
 import { formatStructuredPlanForPrompt } from '../../../trigger/utils/planned-workout-targets'
 import {
   formatCadenceWithUnit,
+  getActualIntervalsForAnalysis,
+  getActualIntervalsSourceForAnalysis,
   isRunningCadenceFamily,
   toCanonicalCadence,
   type WorkoutAnalysisFactsV2
@@ -55,6 +56,289 @@ export interface WorkoutAnalysisPromptRecentContext {
 }
 
 /**
+ * The section-status vocabulary the prompt instructs the model to emit -- see the
+ * repeated "Assign status: excellent/good/moderate/needs_improvement/poor" lines in
+ * {@link getAnalysisSectionsGuidance}.
+ *
+ * This is also the vocabulary every UI status->colour mapper understands
+ * (`app/pages/workouts/[id]/index.vue`, `app/components/ScoreDetailModal.vue`,
+ * `app/pages/report/[id].vue`, `app/pages/share/workouts/[token].vue`). Until CW-403
+ * the Redis-worker service handed Gemini a *different* enum
+ * (`fair`/`needs_attention`/`info`), which those mappers fall through to `neutral`,
+ * so problem sections rendered grey instead of red. Keep this list, the schema enum
+ * below, and the prompt text in lockstep; `workout-analysis-prompt.test.ts` fails if
+ * they drift.
+ */
+export const ANALYSIS_SECTION_STATUSES = [
+  'excellent',
+  'good',
+  'moderate',
+  'needs_improvement',
+  'poor'
+] as const
+
+export type AnalysisSectionStatus = (typeof ANALYSIS_SECTION_STATUSES)[number]
+
+/**
+ * Inclusive bounds of the performance-score scale. The prompt asks for
+ * "**Performance Scores** (1-10 scale for tracking progress over time)" and the DB
+ * columns (`overallScore`, `technicalScore`, ...) already hold 1-10 values, so this
+ * is the scale the schema must declare too. Do not change without a data migration.
+ */
+export const ANALYSIS_SCORE_MIN = 1
+export const ANALYSIS_SCORE_MAX = 10
+
+/**
+ * Shape of the structured analysis Gemini returns for {@link analysisSchema}.
+ *
+ * `status` is typed as a plain `string` on purpose: analyses stored before CW-403 can
+ * contain the retired `fair`/`needs_attention`/`info` values, and the renderers must
+ * keep accepting them.
+ */
+export interface StructuredAnalysis {
+  type: string
+  title: string
+  date?: string
+  executive_summary: string
+  sections?: Array<{
+    title: string
+    status: string
+    status_label?: string
+    analysis_points: string[]
+  }>
+  recommendations?: Array<{
+    title: string
+    description: string
+    priority?: string
+  }>
+  strengths?: string[]
+  weaknesses?: string[]
+  scores?: {
+    overall: number
+    overall_explanation: string
+    technical: number
+    technical_explanation: string
+    effort: number
+    effort_explanation: string
+    pacing: number
+    pacing_explanation: string
+    execution: number
+    execution_explanation: string
+  }
+  metrics_summary?: {
+    avg_power?: number
+    ftp?: number
+    intensity?: number
+    duration_minutes?: number
+    tss?: number
+  }
+}
+
+/**
+ * The single response schema handed to `generateStructuredAnalysis` by BOTH workout
+ * analysis entry points -- the Redis-worker service
+ * (`server/utils/services/workoutAnalysisService.ts`, the one that runs in production)
+ * and the Trigger.dev task (`trigger/analyze-workout.ts`).
+ *
+ * It lives next to the prompt that describes it so the two cannot drift (CW-403).
+ * Gemini enforces the schema, so anything declared here overrides what the prompt
+ * text asks for.
+ */
+export const analysisSchema = {
+  type: 'object',
+  properties: {
+    type: {
+      type: 'string',
+      description: 'Type of analysis: workout, weekly_report, planning, etc.',
+      enum: ['workout', 'weekly_report', 'planning', 'comparison']
+    },
+    title: {
+      type: 'string',
+      description: 'Title of the analysis'
+    },
+    date: {
+      type: 'string',
+      description: 'Date or date range of the analysis'
+    },
+    executive_summary: {
+      type: 'string',
+      description: '2-3 sentence high-level summary of key findings'
+    },
+    sections: {
+      type: 'array',
+      description: 'Analysis sections with status and points',
+      items: {
+        type: 'object',
+        properties: {
+          title: {
+            type: 'string',
+            description: 'Section title (e.g., Pacing Strategy, Power Application)'
+          },
+          status: {
+            type: 'string',
+            description: 'Overall assessment',
+            enum: [...ANALYSIS_SECTION_STATUSES]
+          },
+          status_label: {
+            type: 'string',
+            description: 'Display label for status'
+          },
+          analysis_points: {
+            type: 'array',
+            description: 'Detailed analysis points for this section',
+            items: {
+              type: 'string'
+            }
+          }
+        },
+        required: ['title', 'status', 'analysis_points']
+      }
+    },
+    recommendations: {
+      type: 'array',
+      description: 'Actionable recommendations',
+      items: {
+        type: 'object',
+        properties: {
+          title: {
+            type: 'string',
+            description: 'Recommendation title'
+          },
+          description: {
+            type: 'string',
+            description: 'Detailed recommendation'
+          },
+          priority: {
+            type: 'string',
+            description: 'Priority level',
+            enum: ['high', 'medium', 'low']
+          }
+        },
+        required: ['title', 'description']
+      }
+    },
+    strengths: {
+      type: 'array',
+      description: 'Key strengths identified',
+      items: {
+        type: 'string'
+      }
+    },
+    weaknesses: {
+      type: 'array',
+      description: 'Areas needing improvement',
+      items: {
+        type: 'string'
+      }
+    },
+    scores: {
+      type: 'object',
+      description:
+        'Performance scores on 1-10 scale for tracking over time, with detailed explanations',
+      properties: {
+        overall: {
+          type: 'number',
+          description: 'Overall workout quality (1-10)',
+          minimum: ANALYSIS_SCORE_MIN,
+          maximum: ANALYSIS_SCORE_MAX
+        },
+        overall_explanation: {
+          type: 'string',
+          description:
+            'Detailed explanation of overall quality: key factors contributing to score, what went well, what could improve, and 2-3 specific actionable improvements'
+        },
+        technical: {
+          type: 'number',
+          description: 'Technical execution score - form, technique, efficiency (1-10)',
+          minimum: ANALYSIS_SCORE_MIN,
+          maximum: ANALYSIS_SCORE_MAX
+        },
+        technical_explanation: {
+          type: 'string',
+          description:
+            'Technical analysis: power application smoothness, cadence consistency, form observations, and specific technique improvements needed'
+        },
+        effort: {
+          type: 'number',
+          description: 'Effort appropriateness relative to plan and goals (1-10)',
+          minimum: ANALYSIS_SCORE_MIN,
+          maximum: ANALYSIS_SCORE_MAX
+        },
+        effort_explanation: {
+          type: 'string',
+          description:
+            'Effort management analysis: whether intensity matched goals, HR/power relationship, and recommendations for effort control'
+        },
+        pacing: {
+          type: 'number',
+          description: 'Pacing strategy and execution quality (1-10)',
+          minimum: ANALYSIS_SCORE_MIN,
+          maximum: ANALYSIS_SCORE_MAX
+        },
+        pacing_explanation: {
+          type: 'string',
+          description:
+            'Pacing strategy analysis: consistency throughout workout, whether pacing was appropriate, and specific pacing improvements'
+        },
+        execution: {
+          type: 'number',
+          description: 'How well the workout plan was executed (1-10)',
+          minimum: ANALYSIS_SCORE_MIN,
+          maximum: ANALYSIS_SCORE_MAX
+        },
+        execution_explanation: {
+          type: 'string',
+          description:
+            'Execution quality analysis: adherence to workout structure, target achievement, and recommendations for better execution'
+        }
+      },
+      required: [
+        'overall',
+        'overall_explanation',
+        'technical',
+        'technical_explanation',
+        'effort',
+        'effort_explanation',
+        'pacing',
+        'pacing_explanation',
+        'execution',
+        'execution_explanation'
+      ]
+    },
+    metrics_summary: {
+      type: 'object',
+      description: 'Key metrics at a glance',
+      properties: {
+        avg_power: { type: 'number' },
+        ftp: { type: 'number' },
+        intensity: { type: 'number' },
+        duration_minutes: { type: 'number' },
+        tss: { type: 'number' }
+      }
+    }
+  },
+  required: ['type', 'title', 'executive_summary', 'sections', 'scores']
+}
+
+/**
+ * Normalise a model-supplied performance score to the 1-10 integer scale the
+ * `*Score` workout columns hold.
+ *
+ * The `> 10` branch is a safety net for historic responses produced while one entry
+ * point still declared a 0-100 schema; it is kept so a stray 0-100 score is folded
+ * back onto the stored scale instead of being clamped flat to 10.
+ *
+ * Named `clampAnalysisScore` rather than `clampScore` because everything under
+ * `server/utils` is Nitro auto-imported and `clampScore` is already used as a local
+ * (0-100) helper elsewhere in the server tree.
+ */
+export function clampAnalysisScore(val?: number | null): number | null {
+  if (typeof val !== 'number' || Number.isNaN(val)) return null
+  const num = val > ANALYSIS_SCORE_MAX ? val / 10 : val
+  return Math.min(ANALYSIS_SCORE_MAX, Math.max(ANALYSIS_SCORE_MIN, Math.round(num)))
+}
+
+/**
  * Running exports sometimes report "per-foot" cadence (< 120). Convert those into
  * total steps per minute so the model never reads a 85 spm run as a form problem.
  *
@@ -69,7 +353,47 @@ export function normalizeRunningCadence(
   return toCanonicalCadence(cadence, isRunningWorkout)
 }
 
-export function buildWorkoutAnalysisData(workout: any) {
+/**
+ * Everything `buildWorkoutAnalysisData` needs beyond the workout row itself to
+ * segment the session the same way the v2 facts do.
+ *
+ * Both are optional so the payload builder still works from a bare workout row
+ * (scripts, older tests), but the two production entry points
+ * (`trigger/analyze-workout.ts`, `services/workoutAnalysisService.ts`) must pass
+ * them: without the athlete's real references the arbitration between provider
+ * laps and engine detection can resolve differently here than it does inside
+ * `buildWorkoutAnalysisFactsV2`, which is exactly the split this payload exists
+ * to close (CW-391, and CW-384 on why zeroed refs are a bug in their own right).
+ */
+export interface WorkoutAnalysisDataOptions {
+  plannedWorkout?: any
+  sportSettings?: any
+}
+
+/**
+ * Resolve the athlete's reference values for interval arbitration.
+ *
+ * Deliberately identical to the `refs` literal in `buildWorkoutAnalysisFactsV2`
+ * (`server/utils/workout-analysis-facts.ts`): profile-level sport settings
+ * first, `workout.ftp` only as the documented FTP fallback, and the session's
+ * own max HR never used as a stand-in for the athlete's ceiling. The facts
+ * module does not export its resolver, so this mirror carries the invariant --
+ * if that literal changes, this one has to change with it or the prompt and the
+ * facts can once again disagree about which segmentation won.
+ */
+function resolveIntervalArbitrationRefs(workout: any, sportSettings: any) {
+  return {
+    ftp: Number(sportSettings?.ftp || workout?.ftp || 0),
+    lthr: Number(sportSettings?.lthr || 0),
+    maxHr: Number(sportSettings?.maxHr || 0),
+    thresholdPace: Number(sportSettings?.thresholdPace || 0),
+    hrZones: sportSettings?.hrZones || [],
+    powerZones: sportSettings?.powerZones || [],
+    paceZones: sportSettings?.paceZones || []
+  }
+}
+
+export function buildWorkoutAnalysisData(workout: any, options: WorkoutAnalysisDataOptions = {}) {
   const workoutType = String(workout.type || '')
   const isRunningWorkout = isRunningCadenceFamily(workoutType)
   // The ONLY place session and interval cadence gets converted to the canonical
@@ -188,49 +512,54 @@ export function buildWorkoutAnalysisData(workout: any) {
     }))
   }
 
-  // Extract intervals and pacing splits from rawJson if available
+  // Interval segmentation.
+  //
+  // ONE segmentation per prompt. This used to read `rawJson.icu_intervals`
+  // directly, so the "## Interval Breakdown" table could enumerate a different
+  // set of reps than the "## Calculated Workout Facts v2" block printed above
+  // it -- the hit rates, `firstVsLastIntervalDeltaPct` and every rep-scoped
+  // CW-393 signal are computed over the arbitrated set, while the table the
+  // model actually quotes was the provider laps. When the two disagreed the
+  // model did silent arithmetic across mismatched rows and no claim could be
+  // traced back to a segmentation (CW-391).
+  //
+  // `getActualIntervalsForAnalysis` is the single arbitration point
+  // (`extractActualIntervals`): provider laps with re-derived labels (CW-376)
+  // when they describe the session better, engine detection when they do not.
+  const plannedWorkout = options.plannedWorkout ?? workout?.plannedWorkout
+  const arbitrationRefs = resolveIntervalArbitrationRefs(workout, options.sportSettings)
+  const actualIntervals = getActualIntervalsForAnalysis(workout, plannedWorkout, arbitrationRefs)
+  if (actualIntervals.length > 0) {
+    data.interval_segmentation_source = getActualIntervalsSourceForAnalysis(
+      workout,
+      plannedWorkout,
+      arbitrationRefs
+    )
+    data.intervals = actualIntervals.map((interval) => ({
+      type: interval.type,
+      classification: interval.classification,
+      duration_s: interval.durationSeconds,
+      avg_power: interval.avgPower,
+      // Already an intensity FACTOR: `mapIntervalsToActual` runs the shared
+      // CW-385 heuristic (`toIntervalIntensityFactor`) over the provider's
+      // percentage, and engine-detected segments carry no intensity at all. The
+      // renderer may only label it (CW-388).
+      intensity: interval.intensity,
+      avg_hr: interval.avgHr,
+      avg_cadence: normalizeCadence(interval.avgCadence),
+      avg_speed_ms: interval.avgSpeed,
+      confidence: interval.confidence,
+      ambiguity_note: interval.ambiguityNote,
+      // Stream offsets, so a claim about "your fourth rep" can be reconciled
+      // against the chart afterwards. Null for sources that carry none.
+      start_index: interval.startIndex,
+      end_index: interval.endIndex
+    }))
+  }
+
+  // Extract pacing splits from rawJson if available
   if (workout.rawJson && typeof workout.rawJson === 'object') {
     const raw = workout.rawJson as any
-
-    // Intervals.icu intervals
-    const rawIntervals = Array.isArray(raw.icu_intervals)
-      ? raw.icu_intervals
-      : Array.isArray(raw.intervals)
-        ? raw.intervals
-        : null
-    if (rawIntervals) {
-      // Provider lap labels are unreliable (Intervals.icu marks nearly every
-      // lap WORK); re-derive them so the model does not read recovery jogs as
-      // work reps.
-      const resolvedTypes = resolveProviderIntervalTypes(
-        rawIntervals.map((interval: any) => ({
-          type: interval.type,
-          intensity: Number(interval.intensity),
-          avgPower: Number(interval.average_watts),
-          avgSpeed: Number(interval.average_speed)
-        }))
-      )
-      data.intervals = rawIntervals.map((interval: any, index: number) => ({
-        type: resolvedTypes[index],
-        label: interval.label,
-        // Prefer moving time for pace analysis (elapsed_time can include pauses/stops and distort run interval pace).
-        duration_s: interval.moving_time ?? interval.elapsed_time,
-        distance_m: interval.distance,
-        avg_power: interval.average_watts,
-        max_power: interval.max_watts,
-        weighted_avg_power: interval.weighted_average_watts,
-        intensity: interval.intensity,
-        avg_hr: interval.average_heartrate,
-        max_hr: interval.max_heartrate,
-        avg_cadence: normalizeCadence(interval.average_cadence),
-        max_cadence: normalizeCadence(interval.max_cadence),
-        avg_speed_ms: interval.average_speed,
-        decoupling: interval.decoupling,
-        variability: interval.w5s_variability,
-        elevation_gain: interval.total_elevation_gain,
-        avg_gradient: interval.average_gradient
-      }))
-    }
 
     // Strava splits (lap pacing data)
     const splits = raw.splits_metric || raw.splits_standard
@@ -401,11 +730,50 @@ function formatPromptFactValue(value: unknown): string | null {
   return String(value)
 }
 
-export function buildAnalysisFactsPromptBlock(analysisFacts?: WorkoutAnalysisFactsV2): string {
+/**
+ * Say which segmentation the whole prompt is built on, in human terms.
+ *
+ * `getActualIntervalsSourceForAnalysis` returns the arbitration verdict as
+ * `'raw' | 'detected' | 'none'`, which means nothing to the model. Naming it in
+ * the prompt is what lets an AI claim about "your fourth rep" be reconciled
+ * against the chart afterwards (CW-391). `'none'` renders as `null` -- with no
+ * segments there is no source to report and the interval section is omitted
+ * entirely.
+ */
+export function describeIntervalSegmentationSource(
+  source: 'raw' | 'detected' | 'none' | null | undefined
+): string | null {
+  if (source === 'raw') return 'provider laps (labels re-derived)'
+  if (source === 'detected') return 'engine detection over the recorded streams'
+  return null
+}
+
+export interface AnalysisFactsPromptBlockOptions {
+  /** Arbitration verdict from `getActualIntervalsSourceForAnalysis`. */
+  intervalSegmentationSource?: 'raw' | 'detected' | 'none' | null
+}
+
+/**
+ * A row of the facts block.
+ *
+ * `path` reads a value out of the facts object and is gated on that path's
+ * `promptDecisions` entry. `value` carries an already-resolved string for facts
+ * that are not part of `WorkoutAnalysisFactsV2` itself -- currently only the
+ * interval-segmentation provenance, which is computed in the payload builder
+ * because that is where the workout row (and therefore the streams) is in
+ * scope. Such rows render whenever the value is non-null; there is no
+ * `promptDecisions` entry to gate them on.
+ */
+type AnalysisFactItem = { label: string; path?: string; value?: string | null }
+
+export function buildAnalysisFactsPromptBlock(
+  analysisFacts?: WorkoutAnalysisFactsV2,
+  options: AnalysisFactsPromptBlockOptions = {}
+): string {
   if (!analysisFacts) return ''
 
   const promptDecisions = analysisFacts.confidence.debugMeta.promptDecisions || {}
-  const groups: Array<{ title: string; items: Array<{ path: string; label: string }> }> = [
+  const groups: Array<{ title: string; items: AnalysisFactItem[] }> = [
     {
       title: 'Guardrails',
       items: [
@@ -425,7 +793,11 @@ export function buildAnalysisFactsPromptBlock(analysisFacts?: WorkoutAnalysisFac
         { path: 'guardrails.telemetry.lrInterpretationMode', label: 'L/R Interpretation Mode' },
         { path: 'guardrails.erg.detected', label: 'ERG Detected' },
         { path: 'guardrails.erg.powerControlMode', label: 'Power Control Mode' },
-        { path: 'guardrails.suppressions', label: 'Suppressions' }
+        { path: 'guardrails.suppressions', label: 'Suppressions' },
+        {
+          label: 'Interval Segmentation Source',
+          value: describeIntervalSegmentationSource(options.intervalSegmentationSource)
+        }
       ]
     },
     {
@@ -541,8 +913,11 @@ export function buildAnalysisFactsPromptBlock(analysisFacts?: WorkoutAnalysisFac
   const sections = groups
     .map((group) => {
       const lines = group.items
-        .filter((item) => promptDecisions[item.path]?.include)
         .map((item) => {
+          if (item.path === undefined) {
+            return item.value ? `- ${item.label}: ${item.value}` : null
+          }
+          if (!promptDecisions[item.path]?.include) return null
           const rawValue = getFactValueByPath(analysisFacts, item.path)
           const formatted = formatPromptFactValue(rawValue)
           return formatted ? `- ${item.label}: ${formatted}` : null
@@ -625,6 +1000,83 @@ export function buildAnalysisGuardrailInstructions(
   }
 
   return rules.map((rule) => `- ${rule}`).join('\n')
+}
+
+/**
+ * Render an interval's duration as `<minutes>m <seconds>s`.
+ *
+ * The minutes term must FLOOR: the seconds term is a true remainder, so
+ * rounding the minutes counts the remainder twice and invents up to a full
+ * minute of work (150s used to render as "3m 30s" instead of "2m 30s", and the
+ * model quoted the inflated number back to the athlete). Same convention as
+ * `formatActualIntervalsForPrompt` in `workout-analysis-facts.ts` and as the
+ * lap-split renderer below (CW-388).
+ */
+export function formatIntervalDuration(durationSeconds: number): string {
+  const minutes = Math.floor(durationSeconds / 60)
+  const seconds = durationSeconds % 60
+  return `${minutes}m ${seconds}s`
+}
+
+/**
+ * Label an interval intensity that `buildWorkoutAnalysisData` has ALREADY put
+ * on the intensity-factor scale (`toIntervalIntensityFactor`).
+ *
+ * The prompt used to print a bare `Intensity: 101.00` a few lines from
+ * `Intensity Factor: 0.83` -- two scales for one concept, neither labelled. The
+ * percentage in brackets is a restatement of the same number, not a second
+ * scale, so the model can tie the row to the session line either way (CW-388).
+ */
+export function formatIntervalIntensity(intensityFactor: number): string {
+  return `${intensityFactor.toFixed(2)} IF (${Math.round(intensityFactor * 100)}% of threshold)`
+}
+
+/**
+ * Decide whether the derived pacing verdicts over `lap_splits` -- the
+ * first-half/second-half "split strategy" call and the pace-variability grade
+ * band -- mean anything for this session (CW-389).
+ *
+ * `lap_splits` are NOT laps. `buildWorkoutAnalysisData` fills them from
+ * `raw.splits_metric || raw.splits_standard` (and the FIT/Rouvy path from
+ * `calculateLapSplits(..., 1000)`), i.e. automatic per-kilometre or per-mile
+ * splits. On an intervalled or stochastic session those splits straddle warmup,
+ * work reps, recovery jogs and cooldown arbitrarily, so comparing the first half
+ * against the second half compares "mostly warmup" against "mostly cooldown" and
+ * reliably reports `Positive Split (slowed down)` for a workout that was simply
+ * intervals. The prompt used to assert that verdict as fact several hundred
+ * lines after `buildAnalysisGuardrailInstructions` had politely asked the model
+ * to disregard non-constant pace on such sessions (CW-393) -- a soft request
+ * losing to a hard assertion. The fix is to stop emitting the verdict.
+ *
+ * Gated on `guardrails.archetype.sessionSteadiness` rather than on an entry of
+ * `performanceSignals.applicability`: the closest neighbour there,
+ * `lateSessionFade`, also reports `applicable: false` whenever its own value
+ * could not be computed, which says nothing about whether half-splits are
+ * comparable. Session steadiness is the shape question this verdict actually
+ * poses -- `primaryArchetype` is an intent label (an interval run still reads
+ * `endurance` when no plan is linked) and does not answer it. The return shape
+ * follows `SignalApplicability` so a withheld verdict carries the reason it was
+ * withheld.
+ *
+ * Without v2 facts there is no session-shape evidence to gate on, so the legacy
+ * path is left exactly as it was.
+ */
+export function resolveSplitPacingVerdictApplicability(analysisFacts?: WorkoutAnalysisFactsV2): {
+  applicable: boolean
+  reason: string | null
+} {
+  if (!analysisFacts) return { applicable: true, reason: null }
+
+  const { sessionSteadiness } = analysisFacts.guardrails.archetype
+
+  if (sessionSteadiness === 'intervalled' || sessionSteadiness === 'stochastic') {
+    return {
+      applicable: false,
+      reason: `session steadiness is ${sessionSteadiness}, so automatic distance splits cut across warmup, work reps, recoveries and cooldown; their halves are not comparable`
+    }
+  }
+
+  return { applicable: true, reason: null }
 }
 
 export function buildWorkoutAnalysisPrompt(
@@ -758,7 +1210,9 @@ ${
     : ''
 }
 
-${buildAnalysisFactsPromptBlock(analysisFactsV2)}
+${buildAnalysisFactsPromptBlock(analysisFactsV2, {
+  intervalSegmentationSource: workoutData.interval_segmentation_source
+})}
 
 
 
@@ -919,8 +1373,14 @@ When analyzing "Execution" and "Effort", specifically reference how well the ath
 
     if (workoutData.max_hr) prompt += `- Max HR: ${workoutData.max_hr} bpm\n`
 
-    // Cadence is only relevant for cycling/running-like workouts
-    if (isCadenceRelevant && !condensedHrSection) {
+    // Cadence is only relevant for cycling/running-like workouts. It is gated on
+    // `isCadenceRelevant` alone and deliberately NOT on `condensedHrSection`
+    // (CW-412): condensing exists to stop heart rate dominating the narrative
+    // when pace leads, and cadence is not heart rate. Coupling the two meant a
+    // pace-primary run -- the case where running cadence matters most -- got the
+    // unconditional per-interval cadence rows in `## Interval Breakdown` with no
+    // session baseline to compare them against.
+    if (isCadenceRelevant) {
       if (workoutData.avg_cadence)
         prompt += `- Average Cadence: ${formatCadenceWithUnit(workoutData.avg_cadence, workoutType)}\n`
       else prompt += `- Average Cadence: N/A\n`
@@ -1057,13 +1517,20 @@ When analyzing "Execution" and "Effort", specifically reference how well the ath
     })
   }
 
-  // Add lap splits pacing analysis if available
+  // Add distance-split pacing analysis if available.
+  //
+  // These rows are the provider's automatic per-distance splits, not laps the
+  // athlete triggered and not the session's work intervals; the section used to
+  // be headed "Lap Pacing Analysis", which invited the model to talk about
+  // "laps" that never existed (CW-389).
   if (workoutData.lap_splits && workoutData.lap_splits.length > 0) {
-    prompt += '\n## Lap Pacing Analysis\n'
-    prompt += `Split-by-split pacing data showing consistency and strategy:\n\n`
+    const splitVerdict = resolveSplitPacingVerdictApplicability(analysisFactsV2)
+
+    prompt += '\n## Distance Split Pacing\n'
+    prompt += `Automatic per-distance splits (1 km / 1 mi) recorded for this session. These are not laps and not the workout's work intervals:\n\n`
 
     workoutData.lap_splits.forEach((split: any) => {
-      prompt += `**Lap ${split.lap}**: `
+      prompt += `**Split ${split.lap}**: `
       prompt += `${formatPromptDistance(split.distance_m, userProfile?.distanceUnits)} in ${Math.floor(split.time_s / 60)}:${(split.time_s % 60).toString().padStart(2, '0')} `
 
       const paceSecondsPerKm =
@@ -1075,13 +1542,19 @@ When analyzing "Execution" and "Effort", specifically reference how well the ath
     })
 
     if (workoutData.pace_variability_seconds) {
-      prompt += `\n**Pace Consistency**: ${formatMetric(workoutData.pace_variability_seconds, 1)} seconds standard deviation\n`
-      prompt += `- Lower is better (more consistent pacing)\n`
-      prompt += `- <10s = Excellent consistency, 10-20s = Good, >20s = Variable pacing\n`
+      // The raw dispersion is a measurement and may stay; the grade band is a
+      // verdict and only applies to a session that was meant to hold one pace.
+      prompt += `\n**Split Pace Consistency**: ${formatMetric(workoutData.pace_variability_seconds, 1)} seconds standard deviation\n`
+      if (splitVerdict.applicable) {
+        prompt += `- Lower is better (more consistent pacing)\n`
+        prompt += `- <10s = Excellent consistency, 10-20s = Good, >20s = Variable pacing\n`
+      } else {
+        prompt += `- Consistency grading omitted: ${splitVerdict.reason}. Do not read this number as a pacing grade.\n`
+      }
     }
 
     // Add first/second half comparison
-    if (workoutData.lap_splits.length >= 2) {
+    if (workoutData.lap_splits.length >= 2 && splitVerdict.applicable) {
       const halfwayIndex = Math.floor(workoutData.lap_splits.length / 2)
       const firstHalf = workoutData.lap_splits.slice(0, halfwayIndex)
       const secondHalf = workoutData.lap_splits.slice(halfwayIndex)
@@ -1105,28 +1578,61 @@ When analyzing "Execution" and "Effort", specifically reference how well the ath
       prompt += `- First half avg: ${formatPromptPace(firstHalfAvgPace, userProfile?.distanceUnits)}\n`
       prompt += `- Second half avg: ${formatPromptPace(secondHalfAvgPace, userProfile?.distanceUnits)}\n`
       prompt += `- Difference: ${Math.abs(splitDiff).toFixed(1)}s ${splitDiff > 0 ? 'slower' : 'faster'} in second half\n`
+    } else if (workoutData.lap_splits.length >= 2) {
+      // Stated rather than left as a silent gap: "do not infer meaning from
+      // omitted facts" is already a rule in the v2 facts contract, so a missing
+      // section has to say why it is missing.
+      prompt += `\nSplit-strategy verdict omitted: ${splitVerdict.reason}.\n`
     }
 
     prompt += '\n'
   }
 
-  // Add interval analysis if available
+  // Add interval analysis if available.
+  //
+  // These rows ARE the arbitrated segmentation -- the same `ActualInterval[]`
+  // the v2 facts block above is computed over, resolved once in
+  // `buildWorkoutAnalysisData` (CW-391). The renderer only labels; it never
+  // re-derives boundaries and never re-scales a value.
   if (workoutData.intervals && workoutData.intervals.length > 0) {
+    const segmentationSource = describeIntervalSegmentationSource(
+      workoutData.interval_segmentation_source
+    )
+    // Pace is the leading metric for runs and noise for power-primary rides and
+    // indoor/strength work. Gated on the exported running-family predicate
+    // rather than on a second copy of the facts module's family table: narrower
+    // than `formatActualIntervalsForPrompt`'s rule, but exact, and runs are the
+    // family where a per-rep pace is what the athlete is actually judged on.
+    const paceCapable = isRunningCadenceFamily(workoutType)
+
     prompt += '\n## Interval Breakdown\n'
+    if (segmentationSource) {
+      prompt += `Segmentation source: ${segmentationSource}. These are the same segments the Calculated Workout Facts v2 block above is computed over -- quote reps from this table only.\n`
+    }
     workoutData.intervals.forEach((interval: any, index: number) => {
-      prompt += `\n### Interval ${index + 1}: ${interval.label || interval.type || 'Unnamed'}\n`
+      // Headed by the RESOLVED type, not the provider's lap label: the label
+      // only exists for provider laps, it is the untrusted field CW-376 stopped
+      // believing, and it would have read "Rest 1" over a segment the engine
+      // classified as work.
+      prompt += `\n### Interval ${index + 1}: ${interval.type || 'Unnamed'}\n`
       if (interval.duration_s)
-        prompt += `- Duration: ${Math.round(interval.duration_s / 60)}m ${interval.duration_s % 60}s\n`
-      if (interval.avg_power) prompt += `- Avg Power: ${interval.avg_power}W\n`
-      if (interval.intensity) prompt += `- Intensity: ${formatMetric(interval.intensity, 2)}\n`
-      if (interval.avg_hr) prompt += `- Avg HR: ${interval.avg_hr} bpm\n`
+        prompt += `- Duration: ${formatIntervalDuration(interval.duration_s)}\n`
+      if (interval.avg_power) prompt += `- Avg Power: ${Math.round(interval.avg_power)}W\n`
+      if (interval.intensity)
+        prompt += `- Intensity: ${formatIntervalIntensity(Number(interval.intensity))}\n`
+      if (interval.avg_hr) prompt += `- Avg HR: ${Math.round(interval.avg_hr)} bpm\n`
       // Values are already canonical (buildWorkoutAnalysisData normalised them);
       // this only attaches the unit the workout family uses, so a run no longer
       // reads "177 rpm" (CW-387).
       if (interval.avg_cadence)
         prompt += `- Avg Cadence: ${formatCadenceWithUnit(interval.avg_cadence, workoutType)}\n`
-      if (interval.variability)
-        prompt += `- Power Variability: ${formatMetric(interval.variability, 2)}\n`
+      // `avg_speed_ms` is m/s; 1000 / (m/s) is seconds per km, which
+      // `formatPromptPace` then puts in the athlete's distance units.
+      if (paceCapable && interval.avg_speed_ms > 0)
+        prompt += `- Avg Pace: ${formatPromptPace(1000 / interval.avg_speed_ms, userProfile?.distanceUnits)}\n`
+      if (interval.confidence != null)
+        prompt += `- Detection Confidence: ${Math.round(interval.confidence * 100)}%\n`
+      if (interval.ambiguity_note) prompt += `- Note: ${interval.ambiguity_note}\n`
     })
   }
 

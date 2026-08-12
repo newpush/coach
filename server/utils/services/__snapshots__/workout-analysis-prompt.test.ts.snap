@@ -128,19 +128,19 @@ When analyzing "Execution" and "Effort", specifically reference how well the ath
 - Avg Temperature: 21.0°C
 
 ## Interval Breakdown
+Segmentation source: provider laps (labels re-derived). These are the same segments the Calculated Workout Facts v2 block above is computed over -- quote reps from this table only.
 
-### Interval 1: Block 1
+### Interval 1: WORK
 - Duration: 12m 0s
 - Avg Power: 255W
-- Intensity: 0.93
+- Intensity: 0.93 IF (93% of threshold)
 - Avg HR: 155 bpm
 - Avg Cadence: 90 rpm
-- Power Variability: 1.04
 
-### Interval 2: Rest 1
+### Interval 2: RECOVERY
 - Duration: 5m 0s
 - Avg Power: 120W
-- Intensity: 0.44
+- Intensity: 0.44 IF (44% of threshold)
 - Avg HR: 128 bpm
 - Avg Cadence: 78 rpm
 

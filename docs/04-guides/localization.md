@@ -36,9 +36,10 @@ The Tolgee instance is initialized in a Nuxt plugin. It handles:
 
 1. **Static Data**: Importing and registering local JSON files for SSR and initial load.
 2. **Language Detection**: Using `@tolgee/web`'s `LanguageDetector` and `LanguageStorage`.
-3. **DevTools**: Enabling the in-context editor in development mode when API keys are present.
+3. **Fallback Language**: `fallbackLanguage: 'en'` — see [§6](#6-missing-translations-and-the-english-fallback).
+4. **DevTools**: Enabling the in-context editor in development mode when API keys are present.
 
-> **Critical**: Every namespace JSON file must be explicitly imported and added to `staticData` in this plugin. If a namespace is missing here, the page will show raw keys instead of translations — even in English.
+> **Critical**: Every namespace JSON file must be explicitly imported and added to `staticData` in this plugin. A namespace missing for **`en`** shows raw keys in every locale — the English fallback has nothing to resolve against. A namespace missing for a translated locale falls back to English ([§6](#6-missing-translations-and-the-english-fallback)), which is degraded but not broken.
 
 ### Adding a New Language
 
@@ -135,14 +136,55 @@ After pulling, any new language files (e.g. `app/i18n/hu/{namespace}.json`) will
 | `useHead()`            | `useHead(computed(() => ({ title: t.value('key') })))` |
 | Dynamic data arrays    | `computed(() => [{ label: t.value('key') }])`          |
 
-## 6. npm Scripts
+## 6. Missing Translations and the English Fallback
+
+### The rule
+
+**`app/plugins/tolgee.ts` sets `fallbackLanguage: 'en'`. Rely on it. New code writes plain `t('key')` and does not need a per-call English default.**
+
+### Why it exists
+
+Tolgee renders the **raw key** when a key is absent from the active locale's data — a Hungarian visitor literally sees `upload_title` instead of "Manual Ingestion". This is not an edge case: `en` is the source of truth, so **every newly-added English key is a raw-key defect in every other locale until it is translated**. Whole namespaces are affected too — a namespace registered for `en` but not yet for `hu` renders every one of its keys raw.
+
+`fallbackLanguage: 'en'` fixes the whole app in one place: a lookup that misses in the active locale resolves against `en` instead of falling through to the identifier. A locale that _does_ have the key still wins — the fallback only fills gaps (CW-524).
+
+### Per-call `defaultValue` — legacy, kept deliberately
+
+Tolgee also supports a per-call English default:
+
+```vue
+{{ t('upload_title', 'Manual Ingestion') }}
+```
+
+CW-11 and CW-106 shipped roughly 240 of these across `reports.vue`, `workouts/upload.vue` and the coaching pages, as a workaround **before** the fallback existed. They are now redundant but harmless — the two mechanisms do not conflict, and the per-call default is simply never reached once the `en` record resolves.
+
+**They were intentionally left in place.** Stripping ~240 call sites is a large, risky diff across many page files for zero user-visible gain. Do not remove them opportunistically as drive-by cleanup; if a page is being substantially rewritten anyway, dropping them there is fine.
+
+So, when you encounter them:
+
+| Situation                                 | What to do                                      |
+| ----------------------------------------- | ----------------------------------------------- |
+| Writing new code                          | `t('key')` — no default, the fallback covers it |
+| Editing a line that already has a default | Leave it, or drop the default; both are correct |
+| Tempted to bulk-remove the existing ~240  | Don't — separate ticket, not a drive-by         |
+
+### Verifying
+
+Typecheck and lint cannot catch a missing translation — the only gate is looking at a page. Load it under `?lang=hu` (or any locale whose JSON is behind `en`) and confirm English words render where the translation is missing, and that no `snake_case` identifiers appear as visible text:
+
+```bash
+bin/worktree-dev.sh   # NOT bare `pnpm dev` — that binds the main checkout's port
+curl -sL "http://localhost:<port>/activities?lang=hu" | grep -o 'controls_view_calendar'
+```
+
+## 7. npm Scripts
 
 | Command          | What it does                                                                                        |
 | ---------------- | --------------------------------------------------------------------------------------------------- |
 | `pnpm i18n:pull` | Pull all translated files from the Tolgee platform                                                  |
 | `pnpm i18n:push` | Push `en/` and `hu/` files to the platform — **use only for existing namespaces with known values** |
 
-## 7. `cw:cli translations` Commands
+## 8. `cw:cli translations` Commands
 
 Prefer these over raw Tolgee CLI calls — they handle env vars, error output, and namespace parsing automatically.
 
@@ -165,19 +207,19 @@ pnpm i18n:pull
 
 Without pulling, the deleted keys remain in local JSON files. The next `pnpm i18n:push` or `cw:cli translations push-values` would re-create them on the platform. Commit the updated JSON files after pulling.
 
-## 8. Development In-Context Editor
+## 9. Development In-Context Editor
 
 1. Set `TOLGEE_API_URL` and `TOLGEE_API_KEY` in `.env`.
 2. In development, `Alt + Click` (or `Option + Click`) on any translated string to open the Tolgee dialog.
 3. Changes made in the Tolgee UI can be pulled back with `pnpm i18n:pull`.
 
-## 9. Best Practices
+## 10. Best Practices
 
 1. **One namespace per page/feature** — keep JSON files small and focused. Use `common.json` only for shared elements (nav, footer).
 2. **Flat keys** — use `section_element` format (e.g., `header_title`, `cta_button`). Match the convention in `bento.json` and `community.json`. Dotted nesting is supported but only used in `common.json` and `support.json` for historical reasons.
-3. **Always register in the plugin** — any namespace not in `staticData` in `tolgee.ts` will render as raw keys.
+3. **Always register in the plugin** — a namespace not in `staticData` for **`en`** in `tolgee.ts` renders as raw keys in every locale, because the English fallback has nothing to resolve against. Missing it for a _translated_ locale only is now survivable — that locale falls back to English ([§6](#6-missing-translations-and-the-english-fallback)) — but register it anyway.
 4. **Use `cw:cli translations sync` for new namespaces** — `pnpm i18n:push` does not correctly namespace new keys on the platform. Use `sync` + `push-values` instead.
 5. **Pull after deleting keys** — after deleting keys in the Tolgee UI, run `pnpm i18n:pull` to remove them from local JSON files. Otherwise the next push will re-create them.
-6. **English is the source of truth** — always provide an English value for every key. Other languages fall back to English if untranslated.
+6. **English is the source of truth** — always provide an English value for every key. Other languages fall back to English if untranslated, via `fallbackLanguage: 'en'` in the plugin ([§6](#6-missing-translations-and-the-english-fallback)). Write plain `t('key')`; a per-call English default is not needed.
 7. **Proper nouns don't need translation** — names like "Sarah Jenkins" can stay as literals in computed arrays.
 8. **Admin pages exclusion** — pages and components under `/admin/` (e.g., `app/pages/admin/**`) are intended for internal use only and **do not need to be translated**. They should remain in English.

@@ -5,15 +5,13 @@ import { attachStreamToWorkout } from '../../../utils/repositories/workoutStream
 import { sportSettingsRepository } from '../../../utils/repositories/sportSettingsRepository'
 import { calculateRollingNormalizedPower } from '../../../utils/power-metrics'
 import {
-  detectIntervals,
   findPeakEfforts,
   calculateHeartRateRecovery,
   calculateAerobicDecoupling,
   calculateCoastingStats,
   detectSurgesAndFades,
   calculateRecoveryRateTrend,
-  resolveProviderIntervalTypes,
-  resolveHrWorkThreshold
+  resolveProviderIntervalTypes
 } from '../../../utils/interval-detection'
 import {
   calculateWPrimeBalance,
@@ -22,6 +20,10 @@ import {
   calculateFatigueSensitivity,
   calculateStabilityMetrics
 } from '../../../utils/performance-metrics'
+import {
+  buildDetectedIntervalCandidate,
+  getActualIntervalsSourceForAnalysis
+} from '../../../utils/workout-analysis-facts'
 
 defineRouteMeta({
   openAPI: {
@@ -185,6 +187,32 @@ export default defineEventHandler(async (event) => {
   // Threshold pace is stored in m/s (same convention as calculatePaceZones), so it can be
   // handed to the detection engine directly as the pace work/recovery reference.
   const calculationThresholdPace = Number(sportSettings?.thresholdPace || 0) || undefined
+  // Source the HR references from the athlete's PROFILE (the `sportSettings` loaded above,
+  // then the user record). Using this workout's own max HR would make the bar
+  // self-referential and drift session to session, so it is only reached as an explicit last
+  // resort inside `resolveHrWorkThreshold` when the profile carries neither LTHR nor max HR.
+  const hrRefs = {
+    lthr: sportSettings?.lthr ?? user.lthr,
+    maxHr: sportSettings?.maxHr ?? user.maxHr
+  }
+
+  /**
+   * The athlete's real reference values, in the shape the analysis/facts layer expects.
+   *
+   * These are deliberately the SAME numbers this endpoint hands to its own detection run
+   * below, so when the facts layer re-derives its candidates to arbitrate between them it
+   * scores the same two segmentations the chart is choosing from. Passing zeroed
+   * placeholders here would make the arbitration score blind — that exact bug was CW-384.
+   */
+  const analysisRefs = {
+    ftp: Number(calculationFtp || 0),
+    lthr: Number(hrRefs.lthr || 0),
+    maxHr: Number(hrRefs.maxHr || 0),
+    thresholdPace: Number(calculationThresholdPace || 0),
+    hrZones: sportSettings?.hrZones || [],
+    powerZones: sportSettings?.powerZones || [],
+    paceZones: sportSettings?.paceZones || []
+  }
 
   // 1. INTERVAL DETECTION LOGIC
 
@@ -224,73 +252,75 @@ export default defineEventHandler(async (event) => {
 
   const syncedIntervals = mapSyncedIntervals(icuIntervalsRaw)
 
+  // Audit-only since CW-434: the detection run gets its planned steps from the shared
+  // builder (which flattens them through `toDetectionPlannedSteps`), so this raw list is
+  // used purely to report whether a plan was available to arbitrate against.
   const plannedSteps = (workout.plannedWorkout?.structuredWorkout as any)?.steps || []
 
   // B. Intervals from our engine
-  let detectedEngineIntervals: any[] = []
-  let autoDetectionMetric = ''
-
-  if (hasWatts) {
-    autoDetectionMetric = 'power'
-    const smoothedPowerStream = calculateRollingNormalizedPower(wattsStream!)
-    detectedEngineIntervals = detectIntervals(
-      time,
-      wattsStream!,
-      'power',
-      calculationFtp,
-      plannedSteps,
-      smoothedPowerStream,
-      cadenceStream || undefined
-    )
-  } else if (
-    velocityStream &&
-    velocityStream.length > 0 &&
-    (workout.type === 'Run' || workout.type === 'Swim')
-  ) {
-    autoDetectionMetric = 'pace'
-    detectedEngineIntervals = detectIntervals(
-      time,
-      velocityStream!,
-      'pace',
-      calculationThresholdPace,
-      plannedSteps,
-      undefined,
-      cadenceStream || undefined
-    )
-  } else if (hasHr) {
-    autoDetectionMetric = 'heartrate'
-    // Source the reference from the athlete's PROFILE (the `sportSettings`
-    // already loaded above, then the user record). Using this workout's own max
-    // HR would make the bar self-referential and drift session to session, so it
-    // is only reached as an explicit last resort inside `resolveHrWorkThreshold`
-    // when the profile carries neither LTHR nor max HR.
-    const threshold = resolveHrWorkThreshold({
-      lthr: sportSettings?.lthr ?? user.lthr,
-      maxHr: sportSettings?.maxHr ?? user.maxHr,
-      sessionMaxHr: workout.maxHr
-    })
-    detectedEngineIntervals = detectIntervals(
-      time,
-      hrStream!,
-      'heartrate',
-      threshold,
-      plannedSteps,
-      undefined,
-      cadenceStream || undefined
-    )
-  }
+  //
+  // Built by the shared builder in the facts layer, NOT rebuilt here (CW-434). This
+  // endpoint used to have its own copy of the metric-priority rule, and it disagreed
+  // with the facts layer's on three points — watts before pace regardless of sport, a
+  // raw `type === 'Run' || 'Swim'` string match instead of `getWorkoutFamily`, and no
+  // `stream.length === time.length` check. The arbitration below is computed in the
+  // facts layer, so it scored ITS candidate while the chart rendered this one: for a
+  // power-metered run the verdict described a pace-detected segmentation the athlete
+  // never saw. One builder, one candidate, one verdict.
+  //
+  // `buildDetectedIntervalCandidate` returns engine-shaped `Interval`s, so the
+  // `start_index`/`end_index` that enrichment and charting need are already here and
+  // nothing is converted between shapes.
+  const detectionCandidate = buildDetectedIntervalCandidate(
+    workout,
+    workout.plannedWorkout,
+    analysisRefs
+  )
+  const detectedEngineIntervals: any[] = detectionCandidate.intervals
+  // The metric the shared builder actually segmented on, not a guess re-derived here.
+  const autoDetectionMetric = detectionCandidate.metric ?? ''
 
   // C. Selection Logic
-  let finalIntervals: typeof syncedIntervals
-  let detectionMetric: string
-
-  if (syncedIntervals.length > 0) {
-    finalIntervals = syncedIntervals
-    detectionMetric = 'intervals.icu'
-  } else {
-    finalIntervals = detectedEngineIntervals
-    detectionMetric = autoDetectionMetric
+  //
+  // Provider laps used to win unconditionally here, while the analysis side arbitrates
+  // between the same two candidates (`chooseActualIntervalsSource`) and can pick either.
+  // The chart and every AI claim could therefore describe the same session with different
+  // reps. The chart now follows the arbitration too (CW-430).
+  //
+  // The facts layer works in `ActualInterval` shape, which carries no stream indices, so we
+  // ask it ONLY which source won and then select between the `Interval`-shaped objects this
+  // endpoint has already built. Nothing is converted between the two shapes.
+  //
+  // Nothing is persisted: the verdict is recomputed on every request, so a chart picks up
+  // detection and threshold fixes as soon as they ship (accepted tradeoff: the segmentation
+  // of a historical workout can change between two views of it).
+  //
+  // `arbitratedSource` stays `null` when there is nothing to arbitrate (one side has no
+  // candidates at all); the fallback below is then the endpoint's long-standing behaviour.
+  let arbitratedSource: 'raw' | 'detected' | 'none' | null = null
+  if (syncedIntervals.length > 0 && detectedEngineIntervals.length > 0) {
+    arbitratedSource = getActualIntervalsSourceForAnalysis(
+      workout,
+      workout.plannedWorkout,
+      analysisRefs
+    )
   }
+
+  // With no linked plan there is nothing to score the two candidates against, and
+  // `getActualIntervalsSourceForAnalysis` returns `'raw'` — provider laps win, which is the
+  // same answer this endpoint gave before CW-430 and a defensible default: without a plan we
+  // have no evidence the engine's segmentation describes the session any better. `'none'`
+  // (the facts layer found neither candidate, e.g. streams it cannot read) also falls back to
+  // provider laps rather than rendering an empty chart.
+  const useDetectedIntervals =
+    arbitratedSource === null ? syncedIntervals.length === 0 : arbitratedSource === 'detected'
+
+  const finalIntervals: typeof syncedIntervals = useDetectedIntervals
+    ? detectedEngineIntervals
+    : syncedIntervals
+  // Keep the reported metric meaningful for existing consumers: the provider name when its
+  // laps won, the detection metric when our engine did.
+  const detectionMetric: string = useDetectedIntervals ? autoDetectionMetric : 'intervals.icu'
 
   // 2. PEAKS & RECOVERY
   const peakPower = hasWatts ? findPeakEfforts(time, wattsStream!, 'power') : []
@@ -434,7 +464,24 @@ export default defineEventHandler(async (event) => {
       plannedTitle: workout.plannedWorkout?.title || null,
       calculationFtp,
       calculationThresholdPace: calculationThresholdPace ?? null,
-      autoDetectionMetric
+      autoDetectionMetric,
+      // Provenance of the segmentation the athlete is actually looking at (CW-430).
+      // Debug-only on purpose: divergence between the two candidates is never surfaced to
+      // athletes, it is only inspectable here when troubleshooting.
+      intervalSource: {
+        // What the chart rendered: provider laps ('raw') or our engine ('detected').
+        chosen: useDetectedIntervals ? 'detected' : 'raw',
+        // What the arbitration returned, or null when there was nothing to arbitrate
+        // because one of the two candidate sets was empty.
+        arbitrated: arbitratedSource,
+        syncedCount: syncedIntervals.length,
+        detectedCount: detectedEngineIntervals.length,
+        // Arbitration can only score the candidates when a plan is linked; without one it
+        // returns 'raw' by definition.
+        planAvailable: plannedSteps.length > 0,
+        plannedStepCount: plannedSteps.length,
+        detectionMetric
+      }
     }
 
     // Generate a planned power stream that matches the recorded time samples

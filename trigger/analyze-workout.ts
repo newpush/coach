@@ -22,240 +22,32 @@ import { pbDetectionService } from '../server/utils/services/pbDetectionService'
 import { isWorkoutEligibleForAutomaticInsights } from '../server/utils/automatic-workout-insights'
 import { buildWorkoutAnalysisFactsV2 } from '../server/utils/workout-analysis-facts'
 import {
+  analysisSchema,
   buildWorkoutAnalysisData,
-  buildWorkoutAnalysisPrompt
+  buildWorkoutAnalysisPrompt,
+  clampAnalysisScore,
+  type StructuredAnalysis
 } from '../server/utils/services/workout-analysis-prompt'
 
 // The payload/prompt builders live in the shared module so this task and the
 // Redis-worker service (server/utils/services/workoutAnalysisService.ts) cannot
-// drift apart again (CW-392). Re-exported here for backwards compatibility with
-// existing importers of this module.
+// drift apart again (CW-392); the response schema, the StructuredAnalysis type and
+// the score clamp joined them there in CW-403. Re-exported here for backwards
+// compatibility with existing importers of this module -- safe because trigger/ is
+// not Nitro auto-import scanned (server/utils is, which is why the service side
+// imports without re-exporting).
 export {
+  analysisSchema,
   buildAnalysisFactsPromptBlock,
   buildAnalysisGuardrailInstructions,
   buildWorkoutAnalysisData,
   buildWorkoutAnalysisPrompt,
+  clampAnalysisScore,
   getAnalysisSectionsGuidance,
   getWorkoutTypeGuidance,
   normalizeRunningCadence
 } from '../server/utils/services/workout-analysis-prompt'
-
-// TypeScript interface for the structured analysis
-interface StructuredAnalysis {
-  type: string
-  title: string
-  date?: string
-  executive_summary: string
-  sections?: Array<{
-    title: string
-    status: string
-    status_label?: string
-    analysis_points: string[]
-  }>
-  recommendations?: Array<{
-    title: string
-    description: string
-    priority?: string
-  }>
-  strengths?: string[]
-  weaknesses?: string[]
-  scores?: {
-    overall: number
-    overall_explanation: string
-    technical: number
-    technical_explanation: string
-    effort: number
-    effort_explanation: string
-    pacing: number
-    pacing_explanation: string
-    execution: number
-    execution_explanation: string
-  }
-  metrics_summary?: {
-    avg_power?: number
-    ftp?: number
-    intensity?: number
-    duration_minutes?: number
-    tss?: number
-  }
-}
-
-// Flexible analysis schema that works for workouts, reports, planning, etc.
-export const analysisSchema = {
-  type: 'object',
-  properties: {
-    type: {
-      type: 'string',
-      description: 'Type of analysis: workout, weekly_report, planning, etc.',
-      enum: ['workout', 'weekly_report', 'planning', 'comparison']
-    },
-    title: {
-      type: 'string',
-      description: 'Title of the analysis'
-    },
-    date: {
-      type: 'string',
-      description: 'Date or date range of the analysis'
-    },
-    executive_summary: {
-      type: 'string',
-      description: '2-3 sentence high-level summary of key findings'
-    },
-    sections: {
-      type: 'array',
-      description: 'Analysis sections with status and points',
-      items: {
-        type: 'object',
-        properties: {
-          title: {
-            type: 'string',
-            description: 'Section title (e.g., Pacing Strategy, Power Application)'
-          },
-          status: {
-            type: 'string',
-            description: 'Overall assessment',
-            enum: ['excellent', 'good', 'moderate', 'needs_improvement', 'poor']
-          },
-          status_label: {
-            type: 'string',
-            description: 'Display label for status'
-          },
-          analysis_points: {
-            type: 'array',
-            description: 'Detailed analysis points for this section',
-            items: {
-              type: 'string'
-            }
-          }
-        },
-        required: ['title', 'status', 'analysis_points']
-      }
-    },
-    recommendations: {
-      type: 'array',
-      description: 'Actionable recommendations',
-      items: {
-        type: 'object',
-        properties: {
-          title: {
-            type: 'string',
-            description: 'Recommendation title'
-          },
-          description: {
-            type: 'string',
-            description: 'Detailed recommendation'
-          },
-          priority: {
-            type: 'string',
-            description: 'Priority level',
-            enum: ['high', 'medium', 'low']
-          }
-        },
-        required: ['title', 'description']
-      }
-    },
-    strengths: {
-      type: 'array',
-      description: 'Key strengths identified',
-      items: {
-        type: 'string'
-      }
-    },
-    weaknesses: {
-      type: 'array',
-      description: 'Areas needing improvement',
-      items: {
-        type: 'string'
-      }
-    },
-    scores: {
-      type: 'object',
-      description:
-        'Performance scores on 1-10 scale for tracking over time, with detailed explanations',
-      properties: {
-        overall: {
-          type: 'number',
-          description: 'Overall workout quality (1-10)',
-          minimum: 1,
-          maximum: 10
-        },
-        overall_explanation: {
-          type: 'string',
-          description:
-            'Detailed explanation of overall quality: key factors contributing to score, what went well, what could improve, and 2-3 specific actionable improvements'
-        },
-        technical: {
-          type: 'number',
-          description: 'Technical execution score - form, technique, efficiency (1-10)',
-          minimum: 1,
-          maximum: 10
-        },
-        technical_explanation: {
-          type: 'string',
-          description:
-            'Technical analysis: power application smoothness, cadence consistency, form observations, and specific technique improvements needed'
-        },
-        effort: {
-          type: 'number',
-          description: 'Effort appropriateness relative to plan and goals (1-10)',
-          minimum: 1,
-          maximum: 10
-        },
-        effort_explanation: {
-          type: 'string',
-          description:
-            'Effort management analysis: whether intensity matched goals, HR/power relationship, and recommendations for effort control'
-        },
-        pacing: {
-          type: 'number',
-          description: 'Pacing strategy and execution quality (1-10)',
-          minimum: 1,
-          maximum: 10
-        },
-        pacing_explanation: {
-          type: 'string',
-          description:
-            'Pacing strategy analysis: consistency throughout workout, whether pacing was appropriate, and specific pacing improvements'
-        },
-        execution: {
-          type: 'number',
-          description: 'How well the workout plan was executed (1-10)',
-          minimum: 1,
-          maximum: 10
-        },
-        execution_explanation: {
-          type: 'string',
-          description:
-            'Execution quality analysis: adherence to workout structure, target achievement, and recommendations for better execution'
-        }
-      },
-      required: [
-        'overall',
-        'overall_explanation',
-        'technical',
-        'technical_explanation',
-        'effort',
-        'effort_explanation',
-        'pacing',
-        'pacing_explanation',
-        'execution',
-        'execution_explanation'
-      ]
-    },
-    metrics_summary: {
-      type: 'object',
-      description: 'Key metrics at a glance',
-      properties: {
-        avg_power: { type: 'number' },
-        ftp: { type: 'number' },
-        intensity: { type: 'number' },
-        duration_minutes: { type: 'number' },
-        tss: { type: 'number' }
-      }
-    }
-  },
-  required: ['type', 'title', 'executive_summary', 'sections', 'scores']
-}
+export type { StructuredAnalysis } from '../server/utils/services/workout-analysis-prompt'
 
 export const analyzeWorkoutTask = task({
   id: 'analyze-workout',
@@ -422,8 +214,17 @@ export const analyzeWorkoutTask = task({
         persona: aiSettings.aiPersona
       })
 
-      // Build comprehensive workout data for analysis
-      const workoutData = buildWorkoutAnalysisData(workout)
+      // Build comprehensive workout data for analysis.
+      //
+      // The plan and the athlete's sport settings are passed in so the payload
+      // segments the session with the SAME references the v2 facts below use --
+      // the arbitration between provider laps and engine detection depends on
+      // them, and a zeroed-refs payload can pick a different set of reps than
+      // the facts block (CW-391, CW-384).
+      const workoutData = buildWorkoutAnalysisData(workout, {
+        plannedWorkout: workout.plannedWorkout,
+        sportSettings
+      })
       const analysisFactsV2 = buildWorkoutAnalysisFactsV2({
         workout,
         sportSettings,
@@ -490,12 +291,6 @@ export const analyzeWorkoutTask = task({
       })
 
       // Clamp 1-10 (and normalize 0-100 style values) so DB check constraints hold.
-      const clampScore = (val?: number | null) => {
-        if (typeof val !== 'number' || Number.isNaN(val)) return null
-        const num = val > 10 ? val / 10 : val
-        return Math.min(10, Math.max(1, Math.round(num)))
-      }
-
       // Save both formats to the database, including scores and explanations
       await workoutRepository.update(workoutId, {
         aiAnalysis: markdownAnalysis,
@@ -503,11 +298,11 @@ export const analyzeWorkoutTask = task({
         aiAnalysisStatus: 'COMPLETED',
         aiAnalyzedAt: new Date(),
         // Store scores for easy querying and tracking
-        overallScore: clampScore(structuredAnalysis.scores?.overall),
-        technicalScore: clampScore(structuredAnalysis.scores?.technical),
-        effortScore: clampScore(structuredAnalysis.scores?.effort),
-        pacingScore: clampScore(structuredAnalysis.scores?.pacing),
-        executionScore: clampScore(structuredAnalysis.scores?.execution),
+        overallScore: clampAnalysisScore(structuredAnalysis.scores?.overall),
+        technicalScore: clampAnalysisScore(structuredAnalysis.scores?.technical),
+        effortScore: clampAnalysisScore(structuredAnalysis.scores?.effort),
+        pacingScore: clampAnalysisScore(structuredAnalysis.scores?.pacing),
+        executionScore: clampAnalysisScore(structuredAnalysis.scores?.execution),
         // Store explanations for user guidance
         overallQualityExplanation: structuredAnalysis.scores?.overall_explanation,
         technicalExecutionExplanation: structuredAnalysis.scores?.technical_explanation,

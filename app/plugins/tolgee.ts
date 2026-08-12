@@ -383,6 +383,13 @@ export default defineNuxtPlugin((nuxtApp) => {
 
   const tolgee = builder.init({
     language: initialLanguage,
+    // English is the source of truth: any key missing from the active locale's
+    // static data resolves against `en` instead of rendering the raw key.
+    // Without this, a Hungarian visitor sees the literal identifier
+    // (`upload_title`) wherever a translation has not landed yet.
+    // See docs/04-guides/localization.md, "Missing Translations and the
+    // English Fallback" (CW-524).
+    fallbackLanguage: 'en',
     staticData: {
       'en:common': enCommon,
       'en:dashboard': enDashboard,

@@ -1,6 +1,7 @@
+import { MPS_TO_KPH } from '#shared/units'
+
 export const KG_TO_LBS = 2.20462262185
 export const LBS_TO_KG = 0.45359237
-const MPS_TO_KPH = 3.6
 const MPS_TO_MPH = 2.2369362921
 const KM_TO_MILE_PACE_FACTOR = 1.609344
 const METERS_TO_FEET = 3.28084

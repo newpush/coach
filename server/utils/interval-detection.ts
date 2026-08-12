@@ -1,4 +1,4 @@
-import { calculatePowerZones, calculateHrZones, identifyZone } from './zones'
+import { calculatePowerZones, calculateHrZones, identifyZone, type Zone } from './zones'
 
 /**
  * Utility for detecting intervals and peak efforts in workout stream data
@@ -207,6 +207,25 @@ export function resolveHrWorkThreshold(refs: {
 }
 
 /**
+ * The athlete's PROFILE heart-rate references, used to build HR training zones.
+ *
+ * Deliberately separate from the `threshold` argument. For `heartrate` that
+ * argument is the final work BAR in bpm (`resolveHrWorkThreshold`: 0.82 * LTHR
+ * or 0.7 * max HR), which is a segmentation bar, not a zone reference —
+ * `calculateHrZones` wants LTHR/max HR themselves. The bar cannot be turned
+ * back into them either: it carries no record of which of the two fractions
+ * produced it, so dividing by one of them would silently invent the other
+ * athlete's physiology (CW-400).
+ *
+ * Optional throughout: with neither value the HR zone stays `undefined` rather
+ * than being guessed off the work bar.
+ */
+export interface HrZoneRefs {
+  lthr?: number | null
+  maxHr?: number | null
+}
+
+/**
  * Detect intervals in a workout based on power or heart rate data
  * Uses a moving average and threshold-based approach
  *
@@ -226,6 +245,34 @@ export function resolveHrWorkThreshold(refs: {
  *                into a function that multiplied by 0.65 again, putting the work
  *                bar at ~46% of max HR: every sample read as work and the merge
  *                pass welded whole sessions into one interval (CW-383).
+ *
+ * `hrRefs` is the separate, optional channel for the athlete's profile LTHR/max
+ * HR. It exists only so HR intervals can be assigned an `intensity_zone`, and is
+ * never used for segmentation — see `HrZoneRefs`.
+ *
+ * SEGMENT BOUNDARY CONVENTION (`start_index` / `end_index`):
+ * - **Fully inclusive.** A block occupying samples N..M is returned as
+ *   `start_index: N, end_index: M`. Both endpoints belong to the segment, which
+ *   is why every consumer slices it as `stream.slice(start_index, end_index + 1)`
+ *   (`createIntervalObj`, `computeSegmentAverage`, `calculateStabilityMetrics`,
+ *   the intervals endpoints).
+ * - **Disjoint and contiguous.** Consecutive segments never share a sample:
+ *   `next.start_index === prev.end_index + 1`. No sample is counted twice and
+ *   none is dropped.
+ * - This is the same convention providers use for synced laps
+ *   (Intervals.icu `icu_intervals[].start_index`/`end_index`), and both sources
+ *   are normalised through one code path downstream, so they must agree.
+ * - `start_time`/`end_time` are the timestamps of those two samples and
+ *   `duration` is the elapsed span between them. At 1 Hz a K-sample block is
+ *   therefore `K - 1` seconds long — the same arithmetic the whole-session
+ *   STEADY block has always reported.
+ *
+ * Neither path honoured this before CW-426, and they were broken differently:
+ * the candidate/merge pass below ended each segment on the FIRST sample of the
+ * next block (so adjacent segments overlapped by one sample), while
+ * `detectIntervalsFromPlannedSteps` shifted every segment one sample later at
+ * both ends. Either way a work rep carried one out-of-band sample, which is the
+ * single worst input to a coefficient of variation computed inside that rep.
  */
 export function detectIntervals(
   times: number[],
@@ -234,7 +281,8 @@ export function detectIntervals(
   threshold?: number, // FTP, reference pace, or the final HR work bar in bpm
   plannedSteps?: PlannedStep[],
   smoothedValues?: number[],
-  cadenceValues?: number[]
+  cadenceValues?: number[],
+  hrRefs?: HrZoneRefs
 ): Interval[] {
   if (!times || !values || times.length !== values.length || times.length === 0) {
     return []
@@ -251,7 +299,8 @@ export function detectIntervals(
     threshold,
     plannedSteps,
     smoothed,
-    cadenceValues
+    cadenceValues,
+    hrRefs
   )
   if (plannedGuided.length > 0) {
     return plannedGuided
@@ -301,16 +350,23 @@ export function detectIntervals(
       inInterval = true
       startIndex = i
     } else if (!isWork && inInterval) {
-      // End of potential interval
+      // End of potential interval. `i` is the first sample that is NOT work, so
+      // the last sample the interval owns is `i - 1` — ends are inclusive (see
+      // the boundary convention above). Using `i` handed every work rep the
+      // first sample of the recovery that follows it and left adjacent segments
+      // overlapping on that sample (CW-426).
       inInterval = false
-      const currentTime = times[i]
+      const endIndex = i - 1
+      const currentTime = times[endIndex]
       const startTime = times[startIndex]
 
       if (currentTime !== undefined && startTime !== undefined) {
+        // Gate on the duration of the segment actually emitted, not on the span
+        // out to the first recovery sample.
         const duration = currentTime - startTime
 
         if (duration >= minDuration) {
-          candidates.push({ start: startIndex, end: i })
+          candidates.push({ start: startIndex, end: endIndex })
         }
       }
     }
@@ -360,7 +416,10 @@ export function detectIntervals(
   // Identify warmup (first segment before first work interval)
   // Identify cooldown (segment after last work interval)
 
-  let lastEndIndex = 0
+  // Index of the first sample not yet claimed by an emitted segment. Segments
+  // are inclusive and disjoint, so a filler block runs from here up to the
+  // sample before the next work interval starts (CW-426).
+  let nextSegmentStart = 0
 
   // SPECIAL CASE: If no intervals detected but the duration is long (> 15 min),
   // and average is reasonable (> 40% FTP), classify the whole thing as STEADY.
@@ -381,25 +440,39 @@ export function detectIntervals(
       // Downstream consumers that count reps filter on `type === 'WORK'`, and
       // labelling this WORK made every endurance session look like a 1x session.
       intervals = [
-        createIntervalObj(times, values, 0, times.length - 1, 'STEADY', threshold, metricType)
+        createIntervalObj(
+          times,
+          values,
+          0,
+          times.length - 1,
+          'STEADY',
+          threshold,
+          metricType,
+          cadenceValues,
+          hrRefs
+        )
       ]
     }
   } else {
     merged.forEach((candidate, index) => {
-      // Add recovery/warmup segment before this work interval
-      if (candidate.start > lastEndIndex) {
+      // Add recovery/warmup segment before this work interval. It ends on the
+      // sample BEFORE the work interval starts: `candidate.start` is the rep's
+      // own first sample and belongs to the rep, not to the block feeding it.
+      const fillerEnd = candidate.start - 1
+      if (fillerEnd >= nextSegmentStart) {
         const type = index === 0 ? 'WARMUP' : 'RECOVERY'
-        if (times[lastEndIndex] !== undefined && times[candidate.start] !== undefined) {
+        if (times[nextSegmentStart] !== undefined && times[fillerEnd] !== undefined) {
           intervals.push(
             createIntervalObj(
               times,
               values,
-              lastEndIndex,
-              candidate.start,
+              nextSegmentStart,
+              fillerEnd,
               type,
               threshold,
               metricType,
-              cadenceValues
+              cadenceValues,
+              hrRefs
             )
           )
         }
@@ -416,30 +489,32 @@ export function detectIntervals(
             'WORK',
             threshold,
             metricType,
-            cadenceValues
+            cadenceValues,
+            hrRefs
           )
         )
       }
 
-      lastEndIndex = candidate.end
+      nextSegmentStart = candidate.end + 1
     })
 
     // Add cooldown if there's data after the last interval
     if (
-      lastEndIndex < times.length - 1 &&
-      times[lastEndIndex] !== undefined &&
+      nextSegmentStart <= times.length - 1 &&
+      times[nextSegmentStart] !== undefined &&
       times[times.length - 1] !== undefined
     ) {
       intervals.push(
         createIntervalObj(
           times,
           values,
-          lastEndIndex,
+          nextSegmentStart,
           times.length - 1,
           'COOLDOWN',
           threshold,
           metricType,
-          cadenceValues
+          cadenceValues,
+          hrRefs
         )
       )
     }
@@ -451,9 +526,18 @@ export function detectIntervals(
     const plannedWorkSteps = plannedSteps.filter((s) => s.type === 'WORK' || !s.type)
     const detectedWorkIntervals = intervals.filter((i) => i.type === 'WORK')
 
-    if (plannedWorkSteps.length > 0 && detectedWorkIntervals.length > 0) {
-      detectedWorkIntervals.forEach((interval, idx) => {
-        const plannedStep = plannedWorkSteps[idx]
+    // A STEADY session has no WORK interval at all, so the WORK-only pairing
+    // above left it with no label and no match score even when the athlete had
+    // linked a planned workout. Fall back to the unfiltered lists whenever
+    // either side of the WORK pairing is empty — when both sides have WORK the
+    // pairing is unchanged (CW-400).
+    const canPairWork = plannedWorkSteps.length > 0 && detectedWorkIntervals.length > 0
+    const stepsToMatch = canPairWork ? plannedWorkSteps : plannedSteps
+    const intervalsToMatch = canPairWork ? detectedWorkIntervals : intervals
+
+    if (stepsToMatch.length > 0 && intervalsToMatch.length > 0) {
+      intervalsToMatch.forEach((interval, idx) => {
+        const plannedStep = stepsToMatch[idx]
         if (plannedStep) {
           interval.label = plannedStep.name
           // Calculate match score based on duration
@@ -481,20 +565,87 @@ type NormalizedPlannedDetectionStep = {
   ramp: boolean
 }
 
-function normalizePlannedStepType(type: unknown, name?: string): Interval['type'] {
-  const normalized = String(type || '').toLowerCase()
-  const normalizedName = String(name || '').toLowerCase()
-  const recoveryTokens = ['rest', 'recovery', 'cooldown', 'warmup', 'recuperación', 'enfriamiento']
+/**
+ * A planned step whose target sits at or above this fraction of threshold is
+ * working, whatever its label says. Shared by every planned-step classifier so
+ * the promotion and the demotion below use one number (CW-402, CW-414).
+ */
+export const PLANNED_WORK_INTENSITY_FACTOR = 0.8
 
-  if (normalized.includes('warm') || normalizedName.includes('calentamiento')) return 'WARMUP'
-  if (normalized.includes('cool') || normalizedName.includes('enfriamiento')) return 'COOLDOWN'
-  if (
-    recoveryTokens.some((t) => normalized.includes(t) || normalizedName.includes(t)) ||
-    normalizedName.includes('descanso')
-  ) {
-    return 'RECOVERY'
-  }
-  return 'WORK'
+const PLANNED_RECOVERY_TOKENS = [
+  'rest',
+  // 'recover' rather than 'recovery' so 'Recover', 'Recovery' and 'Recovering'
+  // all match — the type-side rule this replaced already used the short form.
+  'recover',
+  'cooldown',
+  'warmup',
+  'recuperación',
+  'recuperacion',
+  'enfriamiento',
+  'descanso'
+]
+
+export type PlannedStepTypeEvidence = {
+  /** The structured step type, e.g. 'Warmup' | 'Active' | 'Rest' | 'Cooldown'. */
+  type?: unknown
+  /**
+   * The step's free-text, user-authored name. Evidence, never an override: see
+   * the intensity veto below and the note on `flattenPlannedStepsForDetection`.
+   */
+  name?: unknown
+  /**
+   * This step's target expressed as a fraction of threshold
+   * (`toIntensityFactorFromTarget`). Pass it whenever the athlete's references
+   * are resolvable; leave it out when they are not — it only ever *vetoes* a
+   * recovery label, so its absence reproduces the label-only classification.
+   */
+  intensityFactor?: number | null
+}
+
+/**
+ * THE planned-step type normaliser. One rule, used by every path that has to
+ * decide whether a planned step is work.
+ *
+ * The rule (lifted from `flattenPlannedSteps` in `workout-analysis-facts.ts`,
+ * which has always had it right):
+ *
+ * 1. Warmup and cooldown are STRUCTURAL, not intensity-based — a warmup ramp
+ *    can pass through work intensity and is still a warmup — so a `warm`/`cool`
+ *    type wins outright.
+ * 2. A recovery token in the type OR in the name marks the step recovery...
+ * 3. ...unless the step's own numeric target contradicts it. A step prescribed
+ *    at >= 80% of threshold is work no matter what it is called.
+ *
+ * Rule 3 is the point. A step name is user-authored free text — the analysis
+ * prompt itself tells the model that step names carry stale labels and must
+ * never override the structured values — and this used to be the one place that
+ * let free text beat a structured numeric target. Two normalisers disagreed:
+ * the facts layer promoted a work-intensity `Recovery` step to WORK on its
+ * intensity factor (CW-402), and then detection re-derived the type from the
+ * name and demoted it straight back, which is most recovery-labelled steps
+ * ("Recovery", "Recovery Jog", "Rest"). CW-414 folded both into this function.
+ *
+ * Returns `undefined` only when there is no evidence at all (no type, no name).
+ */
+export function normalizePlannedStepType(
+  step: PlannedStepTypeEvidence
+): Interval['type'] | undefined {
+  const type = String(step.type ?? '').toLowerCase()
+  const name = String(step.name ?? '').toLowerCase()
+  if (!type && !name) return undefined
+
+  if (type.includes('warm') || name.includes('calentamiento')) return 'WARMUP'
+  if (type.includes('cool') || name.includes('enfriamiento')) return 'COOLDOWN'
+
+  const hasRecoveryLabel = PLANNED_RECOVERY_TOKENS.some(
+    (token) => type.includes(token) || name.includes(token)
+  )
+  if (!hasRecoveryLabel) return 'WORK'
+
+  const intensityFactor = Number(step.intensityFactor)
+  const targetSaysWork =
+    Number.isFinite(intensityFactor) && intensityFactor >= PLANNED_WORK_INTENSITY_FACTOR
+  return targetSaysWork ? 'WORK' : 'RECOVERY'
 }
 
 function getTargetMidpoint(
@@ -548,25 +699,56 @@ function flattenPlannedStepsForDetection(
       continue
     }
     if (!Number.isFinite(durationSeconds) || durationSeconds <= 0) continue
+    // The free-text name is offered ONLY when the step carries no type at all.
+    //
+    // This layer cannot resolve an intensity factor — it never sees the
+    // athlete's references — so it has no way to check a name against the
+    // step's structured target, and `normalizePlannedStepType`'s intensity veto
+    // cannot fire here. A plan that reached detection through the facts layer
+    // has already been classified once by that same function WITH the intensity
+    // factor (`toDetectionPlannedSteps`), so its type is a resolved answer, not
+    // a raw label. Re-reading the name over it is exactly the bug: it demoted
+    // every step the CW-402 promotion had just moved to WORK, because those
+    // steps are named "Recovery" (CW-414). With no type, the name is the only
+    // evidence there is, and it is used as before.
+    const resolvedType =
+      normalizePlannedStepType({
+        type: step.type,
+        name: step.type ? undefined : step.name
+      }) ?? 'WORK'
     flattened.push({
       id: `${path}-${index}`,
       name: step.name,
       durationSeconds,
-      type: normalizePlannedStepType(step.type, step.name),
+      type: resolvedType,
       metricTarget: getPlannedTargetForMetric(step, metricType),
       cadence:
         typeof step.cadence === 'number' && Number.isFinite(step.cadence) ? step.cadence : null,
-      ramp: Boolean((step as any).ramp || normalizePlannedStepType(step.type) === 'COOLDOWN')
+      ramp: Boolean((step as any).ramp || resolvedType === 'COOLDOWN')
     })
   }
   return flattened
 }
 
-function findIndexAtOrAfterTime(times: number[], targetTime: number, fallbackIndex: number) {
+/**
+ * Index of the LAST sample belonging to a step that ends at `targetTime`.
+ *
+ * Segment ends are inclusive (see the boundary convention on `detectIntervals`),
+ * so a step owns every sample recorded strictly before its end time and the
+ * first sample at or after that time is the next step's opening sample. This
+ * used to return that next-step sample instead, which pushed the step's own end
+ * one sample too far and — because the following step then started at
+ * `endIdx + 1` — pushed its start one sample too far as well. Every planned
+ * segment came back as [N+1, M+1] (CW-426).
+ *
+ * Never returns less than `fallbackIndex`, so a step always keeps one sample.
+ */
+function findLastIndexBeforeTime(times: number[], targetTime: number, fallbackIndex: number) {
   for (let index = fallbackIndex; index < times.length; index++) {
     const time = times[index]
-    if (time !== undefined && time >= targetTime) return index
+    if (time !== undefined && time >= targetTime) return Math.max(fallbackIndex, index - 1)
   }
+  // Every remaining sample precedes the target: the step runs to the end.
   return times.length - 1
 }
 
@@ -605,6 +787,12 @@ function normalizeMetricDelta(
   return Math.abs(actualValue - targetValue) / targetValue
 }
 
+/**
+ * Score `candidateIndex` as the INCLUSIVE last sample of `currentStep` — the
+ * "before" window ends on it and the "after" window opens at `candidateIndex + 1`.
+ * This scorer always used the inclusive reading; it was the seed boundary handed
+ * to it that did not (CW-426).
+ */
 function scoreBoundaryCandidate(params: {
   candidateIndex: number
   currentStartIdx: number
@@ -704,7 +892,8 @@ function detectIntervalsFromPlannedSteps(
   threshold?: number,
   plannedSteps?: PlannedStep[],
   smoothedValues?: number[],
-  cadenceValues?: number[]
+  cadenceValues?: number[],
+  hrRefs?: HrZoneRefs
 ): Interval[] {
   const flattened = flattenPlannedStepsForDetection(plannedSteps, metricType)
   if (flattened.length < 2) return []
@@ -729,7 +918,7 @@ function detectIntervalsFromPlannedSteps(
     const isLast = index === flattened.length - 1
     let endIdx = isLast
       ? times.length - 1
-      : findIndexAtOrAfterTime(times, plannedEndTime, currentStartIdx)
+      : findLastIndexBeforeTime(times, plannedEndTime, currentStartIdx)
     let confidence = 0.7
     let ambiguityNote: string | undefined
 
@@ -792,7 +981,8 @@ function detectIntervalsFromPlannedSteps(
       step.type,
       threshold,
       metricType,
-      cadenceValues
+      cadenceValues,
+      hrRefs
     )
     interval.label = step.name
     interval.planned_step_id = step.id
@@ -1032,11 +1222,38 @@ export function findPeakEfforts(
 
 // --- Helper Functions ---
 
+/**
+ * Centred moving average — the smoothed value at `i` is the mean of a window
+ * whose centre of mass is `i` itself, so a smoothed edge sits where the real
+ * edge sits.
+ *
+ * This used to take `[i - floor(w/2) .. i + ceil(w/2) - 1]`. For the `w = 10`
+ * both call sites use, that is `[i-5 .. i+4]`: ten samples centred on `i - 0.5`.
+ * Half a sample of lag is small, but it is a lag in one direction only, so it
+ * moved every detected rising edge early and every falling edge late — and the
+ * detector runs on this signal, so the shift lands directly in rep boundaries
+ * and therefore in every per-rep statistic (CW-432).
+ *
+ * Even/odd `windowSize` (CW-432 acceptance criterion): the window is always
+ * `[i - half .. i + half]` inclusive with `half = floor(windowSize / 2)`, i.e.
+ * `2 * half + 1` samples. An ODD window is therefore exactly `windowSize`
+ * samples wide, as asked. An EVEN window cannot be centred on an integer index
+ * at its requested width — any 10-sample window is centred on a half-sample —
+ * so it is widened by one to 11. Widening rather than narrowing keeps at least
+ * the smoothing strength the caller asked for; the alternative (dropping to 9)
+ * would quietly under-smooth. Callers that need an exact width should pass an
+ * odd one.
+ *
+ * Near the array ends the window is clipped to the available data, so the first
+ * and last `half` outputs are means of fewer samples. That is unchanged, and is
+ * the standard trade for not inventing data outside the stream.
+ */
 function smoothData(data: number[], windowSize: number): number[] {
+  const half = Math.floor(windowSize / 2)
   const result: number[] = []
   for (let i = 0; i < data.length; i++) {
-    const start = Math.max(0, i - Math.floor(windowSize / 2))
-    const end = Math.min(data.length, i + Math.ceil(windowSize / 2))
+    const start = Math.max(0, i - half)
+    const end = Math.min(data.length, i + half + 1)
     const subset = data.slice(start, end)
     const avg = subset.reduce((a, b) => a + (b || 0), 0) / subset.length
     result.push(avg)
@@ -1052,6 +1269,29 @@ function calculateBaseline(data: number[]): number {
   return median !== undefined ? median : 0
 }
 
+/**
+ * Zone number from a zone definition list: "Z2 Endurance" -> 2. HR zones split
+ * the top zone into Z5a/Z5b/Z5c, which all collapse to 5. Returns `undefined`
+ * for an empty zone list or a value outside every band.
+ */
+function resolveZoneNumber(value: number, zones: Zone[]): number | undefined {
+  const zone = identifyZone(value, zones)
+  if (!zone) return undefined
+  const match = zone.name.match(/^Z(\d+)/)
+  if (!match || !match[1]) return undefined
+  return parseInt(match[1])
+}
+
+/**
+ * Build one segment over the INCLUSIVE sample range [`startIdx`, `endIdx`] —
+ * see the boundary convention on `detectIntervals`. Every average here is taken
+ * over `slice(startIdx, endIdx + 1)`, so both callers must hand in the segment's
+ * own last sample and never the first sample of the block that follows it.
+ *
+ * `duration` is the elapsed span between those two samples. It deliberately does
+ * not reach out to the next block's timestamp: adjacent segments are disjoint,
+ * so the second between them is claimed by exactly one of them.
+ */
 function createIntervalObj(
   times: number[],
   values: number[],
@@ -1060,7 +1300,8 @@ function createIntervalObj(
   type: Interval['type'],
   threshold?: number,
   metricType?: 'power' | 'heartrate' | 'pace',
-  cadenceValues?: number[]
+  cadenceValues?: number[],
+  hrRefs?: HrZoneRefs
 ): Interval {
   const segmentValues = values.slice(startIdx, endIdx + 1)
   const sum = segmentValues.reduce((a, b) => a + (b || 0), 0)
@@ -1076,24 +1317,18 @@ function createIntervalObj(
 
   let intensity_zone: number | undefined
 
-  if (threshold && metricType) {
-    if (metricType === 'power') {
-      const zones = calculatePowerZones(threshold)
-      const zone = identifyZone(avg, zones)
-      if (zone) {
-        // Extract zone number from name "Z2 Endurance" -> 2
-        const match = zone.name.match(/^Z(\d+)/)
-        if (match && match[1]) intensity_zone = parseInt(match[1])
-      }
-    } else if (metricType === 'heartrate') {
-      // Estimate maxHR roughly if threshold is LTHR
-      // Or assume threshold passed IS MaxHR? The function signature says "FTP or Threshold Pace/HR"
-      // Let's assume for HR detection, threshold passed is usually MaxHR or LTHR.
-      // The identifyZone logic expects LTHR for HrZones usually.
-      // This is a bit ambiguous in the original code.
-      // For now, let's skip zone detection for HR here to avoid breakage,
-      // or implement a simple check if we want.
-    }
+  if (metricType === 'power' && threshold) {
+    // `threshold` is the athlete's FTP here, which IS the power zone reference.
+    intensity_zone = resolveZoneNumber(avg, calculatePowerZones(threshold))
+  } else if (metricType === 'heartrate') {
+    // HR zones do NOT come from `threshold`: for heartrate that argument is the
+    // final work bar in bpm (CW-383), a segmentation bar rather than a zone
+    // reference. Zones come from the athlete's profile LTHR/max HR, handed in
+    // separately as `hrRefs`. With neither available `calculateHrZones` returns
+    // an empty list and the zone stays undefined - the work bar is never used
+    // as a stand-in for LTHR (CW-400).
+    const zones = calculateHrZones(hrRefs?.lthr ?? null, hrRefs?.maxHr ?? null)
+    if (zones.length > 0) intensity_zone = resolveZoneNumber(avg, zones)
   }
 
   const startTimeValue = times[startIdx] || 0
