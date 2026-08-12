@@ -113,6 +113,326 @@ function normalizeAiSdkUsage(usage?: AiSdkUsage) {
   }
 }
 
+/* -------------------------------------------------------------------------- *
+ * Deliberate Gemini call policy (CW-328)
+ *
+ * On 2026-08-02 a ~90 minute upstream incident produced 12 `ConnectTimeoutError`s
+ * against generativelanguage.googleapis.com:443 across four background tasks, all
+ * funnelling through `generateStructuredAnalysis`. The values below are *chosen*,
+ * not inherited from a library default. Change them deliberately.
+ *
+ * Note on where retries live. There are already two retry layers around every
+ * call in this file:
+ *   1. the AI SDK's in-process retry (`maxRetries` below), and
+ *   2. Trigger.dev's task-level retry (`trigger.config.ts`: maxAttempts 3,
+ *      backoff 1s -> 10s), which re-runs the whole task.
+ * This module deliberately does NOT add a third. `generateStructuredAnalysis` is
+ * shared by ~45 call sites including synchronous HTTP handlers, so a deferral or
+ * long backoff here would hang user-facing requests; and stacking retry layers
+ * multiplies load against an already-degraded upstream. Riding out a multi-minute
+ * outage is the task scheduler's job, not this function's.
+ * -------------------------------------------------------------------------- */
+
+/**
+ * In-process attempts per call = 1 + GEMINI_MAX_RETRIES.
+ *
+ * Kept at 3 (4 attempts). The AI SDK applies this uniformly to every error class,
+ * and the classes it actually rescues are 429/quota and transient 5xx, where a
+ * short in-process retry is much cheaper than rebuilding the prompt and re-running
+ * the whole task. Lowering it to reclaim the ~40s burned during a connect-timeout
+ * outage would trade a frequent win for a rare one.
+ */
+export const GEMINI_MAX_RETRIES = 3
+
+/**
+ * Connect (TCP+TLS establishment) timeout, in ms.
+ *
+ * 10s — undici's default, deliberately retained. Failing to establish a connection
+ * to Google within 10s means the network path is down rather than slow: raising it
+ * would burn proportionally more worker time before the identical failure, and
+ * lowering it risks false negatives on cold or marginal egress.
+ *
+ * IMPORTANT: this constant is currently documentation, not enforcement. Pinning the
+ * connect timeout requires passing an undici `Agent` dispatcher to a custom `fetch`,
+ * and undici is not a dependency of this project (not even transitively). It is
+ * recorded here so the value is a stated intent rather than an accident, and so the
+ * next incident starts from a number someone chose.
+ */
+export const GEMINI_CONNECT_TIMEOUT_MS = 10_000
+
+/**
+ * Overall per-call timeout, in ms.
+ *
+ * 240s. Previously there was effectively NO bound at all on `generateObject`:
+ * `trackingContext.timeoutMs` was opt-in, none of the four tasks in the incident
+ * passed it, and — see the comment at the `generateObject` call — the option it fed
+ * was silently inert, so even the callers that did pass a budget ran unbounded. A
+ * hung socket was therefore limited only by Trigger.dev's `maxDuration` (300s for
+ * most tasks), which kills the run with no classified error and no usage row.
+ *
+ * 240s sits deliberately *below* that 300s platform budget so we time out first and
+ * fail with a logged, classified `timeout`, and comfortably above both the slowest
+ * legitimate generation (Pro + high thinking on a large prompt) and the explicit
+ * per-call budgets callers already set (20s–60s elsewhere in the codebase). It
+ * exists to bound a stuck connection, not to pace the model. Callers needing a
+ * tighter or looser bound still pass `timeoutMs`.
+ */
+export const GEMINI_REQUEST_TIMEOUT_MS = 240_000
+
+/**
+ * Failure classes for a Gemini call.
+ *
+ * The point of this union is triage: a transport failure and a bad model response
+ * are different incidents with different owners, and before CW-328 both were logged
+ * as `api_error` with an identical `console.error` line. That is the mechanical
+ * reason one upstream blip produced four separate tickets.
+ *
+ * `transient` classes are upstream/infrastructure and are expected to clear on their
+ * own; the rest indicate our prompt, our schema, or the model's output and will not
+ * improve by retrying.
+ */
+export type GeminiErrorType =
+  /** TCP+TLS to the API never established (undici UND_ERR_CONNECT_TIMEOUT). Transient. */
+  | 'connect_timeout'
+  /** Connection established but the call exceeded its time budget, or was aborted. Transient. */
+  | 'timeout'
+  /** DNS / socket / reset / `fetch failed`. Transient. */
+  | 'network'
+  /** 429 or quota exhaustion. Transient. */
+  | 'rate_limit'
+  /** Upstream 5xx. Transient. */
+  | 'server_error'
+  /** 401/403, missing or rejected API key. Not transient — a config problem. */
+  | 'auth'
+  /** 400: the request itself is malformed (prompt or schema). Not transient. */
+  | 'invalid_request'
+  /** Model returned no object, or output that failed schema/JSON validation. Not transient. */
+  | 'schema_validation'
+  /** Blocked by safety filters, recitation, or another content policy. Not transient. */
+  | 'content_filter'
+  /** Nothing matched — inspect `errorMessage`, and consider adding a class. */
+  | 'api_error'
+
+export interface GeminiErrorClassification {
+  type: GeminiErrorType
+  /** Upstream/infrastructure fault expected to clear on its own. */
+  transient: boolean
+  /** HTTP status, when the call actually reached the API. */
+  statusCode?: number
+  /** In-process attempts the AI SDK made before giving up, when it reports them. */
+  attempts?: number
+  /** Low-cardinality summary safe to put in a log prefix or a Sentry tag. */
+  detail: string
+}
+
+const TRANSIENT_GEMINI_ERROR_TYPES: ReadonlySet<GeminiErrorType> = new Set<GeminiErrorType>([
+  'connect_timeout',
+  'timeout',
+  'network',
+  'rate_limit',
+  'server_error'
+])
+
+/**
+ * Flatten an error's cause chain.
+ *
+ * The decisive error is usually buried: the AI SDK throws `AI_RetryError`, which
+ * holds the final `APICallError` in `lastError`, which in turn wraps undici's
+ * `ConnectTimeoutError` in `cause`. Classifying only the outermost error is exactly
+ * how a connect timeout ends up indistinguishable from a schema failure.
+ */
+function collectErrorChain(error: unknown, maxDepth = 10): any[] {
+  const chain: any[] = []
+  let current: any = error
+
+  while (current && typeof current === 'object' && chain.length < maxDepth) {
+    chain.push(current)
+    const next = current.lastError ?? current.cause
+    if (!next || typeof next !== 'object' || chain.includes(next)) break
+    current = next
+  }
+
+  return chain
+}
+
+/**
+ * Classify a Gemini/AI SDK failure into a stable, queryable bucket.
+ *
+ * Matching is duck-typed on `name`/`code`/`statusCode` rather than `instanceof` so it
+ * survives bundling (Trigger.dev, Nitro) duplicating the AI SDK's error classes.
+ */
+export function classifyGeminiError(error: unknown): GeminiErrorClassification {
+  const chain = collectErrorChain(error)
+
+  const names = new Set(chain.map((e) => String(e?.name ?? '')))
+  const codes = new Set(chain.map((e) => String(e?.code ?? '')))
+  const messages = chain.map((e) => String(e?.message ?? '')).join(' | ')
+  const haystack = messages.toLowerCase()
+
+  const statusCode = chain.find((e) => typeof e?.statusCode === 'number')?.statusCode as
+    number | undefined
+
+  // AI SDK RetryError exposes every attempt it made; fall back to parsing its message.
+  const attemptsFromErrors = chain.find((e) => Array.isArray(e?.errors))?.errors?.length
+  const attemptsFromMessage = messages.match(/after (\d+) attempts?/i)?.[1]
+  const attempts =
+    attemptsFromErrors ?? (attemptsFromMessage ? Number(attemptsFromMessage) : undefined)
+
+  const has = (...needles: string[]) => needles.some((n) => haystack.includes(n))
+
+  const build = (type: GeminiErrorType, detail: string): GeminiErrorClassification => ({
+    type,
+    transient: TRANSIENT_GEMINI_ERROR_TYPES.has(type),
+    statusCode,
+    attempts,
+    detail
+  })
+
+  const looksLikeContentFilter = () =>
+    has('safety', 'prohibited_content', 'recitation', 'content policy', 'blocked by')
+
+  /* --- Pass 1: structured signals (error codes, class names, HTTP status).
+     These are unambiguous, so they win over any message text. --- */
+
+  // Transport. These never reached the model.
+  if (codes.has('UND_ERR_CONNECT_TIMEOUT') || names.has('ConnectTimeoutError')) {
+    return build('connect_timeout', `could not connect within ${GEMINI_CONNECT_TIMEOUT_MS}ms`)
+  }
+
+  if (
+    codes.has('UND_ERR_HEADERS_TIMEOUT') ||
+    codes.has('UND_ERR_BODY_TIMEOUT') ||
+    codes.has('ETIMEDOUT') ||
+    names.has('TimeoutError') ||
+    names.has('AbortError')
+  ) {
+    return build('timeout', 'call exceeded its time budget')
+  }
+
+  if (
+    codes.has('ENOTFOUND') ||
+    codes.has('EAI_AGAIN') ||
+    codes.has('ECONNREFUSED') ||
+    codes.has('ECONNRESET') ||
+    codes.has('EPIPE') ||
+    codes.has('EHOSTUNREACH') ||
+    codes.has('ENETUNREACH') ||
+    codes.has('UND_ERR_SOCKET')
+  ) {
+    return build('network', 'network failure reaching the API')
+  }
+
+  // Model output problems. These carry no HTTP status, so they cannot collide below.
+  if (
+    names.has('AI_NoObjectGeneratedError') ||
+    names.has('NoObjectGeneratedError') ||
+    names.has('AI_TypeValidationError') ||
+    names.has('TypeValidationError') ||
+    names.has('AI_JSONParseError') ||
+    names.has('JSONParseError')
+  ) {
+    return looksLikeContentFilter()
+      ? build('content_filter', 'response withheld by a content filter')
+      : build('schema_validation', 'model output did not satisfy the schema')
+  }
+
+  if (names.has('AI_LoadAPIKeyError') || names.has('LoadAPIKeyError')) {
+    return build('auth', 'credentials rejected or missing')
+  }
+
+  // HTTP status.
+  if (statusCode === 429) return build('rate_limit', 'rate limited or out of quota')
+  if (statusCode === 401 || statusCode === 403) {
+    return build('auth', 'credentials rejected or missing')
+  }
+  if (typeof statusCode === 'number' && statusCode >= 500) {
+    return build('server_error', `upstream returned ${statusCode}`)
+  }
+  if (statusCode === 400) {
+    return looksLikeContentFilter()
+      ? build('content_filter', 'response withheld by a content filter')
+      : build('invalid_request', 'request rejected as malformed')
+  }
+
+  /* --- Pass 2: message heuristics, only once no structured signal survived the
+     wrapping. Ordered most- to least-distinctive. --- */
+
+  if (has('quota', 'rate limit', 'resource_exhausted', 'too many requests')) {
+    return build('rate_limit', 'rate limited or out of quota')
+  }
+  if (has('api key', 'permission denied', 'unauthenticated')) {
+    return build('auth', 'credentials rejected or missing')
+  }
+  if (looksLikeContentFilter()) {
+    return build('content_filter', 'response withheld by a content filter')
+  }
+  if (has('connect timeout')) {
+    return build('connect_timeout', `could not connect within ${GEMINI_CONNECT_TIMEOUT_MS}ms`)
+  }
+  if (has('timed out', 'timeout', 'aborted')) {
+    return build('timeout', 'call exceeded its time budget')
+  }
+  if (has('fetch failed', 'socket hang up', 'network error')) {
+    return build('network', 'network failure reaching the API')
+  }
+  if (has('invalid argument', 'invalid_argument')) {
+    return build('invalid_request', 'request rejected as malformed')
+  }
+
+  return build('api_error', 'unclassified failure')
+}
+
+/**
+ * Emit a triage-shaped log line and tag the error for Sentry.
+ *
+ * The `[Gemini][<type>]` prefix is stable and low-cardinality, so a connect timeout
+ * and a schema failure land in different Sentry groups and are greppable apart in
+ * Trigger.dev logs — which is the whole point of CW-328.
+ *
+ * The original error is rethrown unchanged by callers: ~45 call sites already catch
+ * these, so this deliberately does not wrap or re-type the error, only annotate it.
+ */
+function reportGeminiFailure(params: {
+  fn: string
+  error: any
+  operation?: string
+  modelId: string
+  durationMs: number
+}): GeminiErrorClassification {
+  const classification = classifyGeminiError(params.error)
+
+  const fields = [
+    `operation=${params.operation ?? 'unknown'}`,
+    `model=${params.modelId}`,
+    `transient=${classification.transient}`,
+    classification.statusCode !== undefined ? `status=${classification.statusCode}` : undefined,
+    classification.attempts !== undefined ? `attempts=${classification.attempts}` : undefined,
+    `durationMs=${params.durationMs}`
+  ]
+    .filter(Boolean)
+    .join(' ')
+
+  console.error(
+    `[Gemini][${classification.type}] ${params.fn} failed — ${classification.detail} (${fields})`,
+    params.error
+  )
+
+  // Surface the classification as error properties so Sentry captures it as context
+  // without this module taking a dependency on a Sentry SDK (it runs in both the
+  // Nitro server and the Trigger.dev worker bundles).
+  try {
+    Object.assign(params.error, {
+      geminiErrorType: classification.type,
+      geminiErrorTransient: classification.transient,
+      geminiOperation: params.operation
+    })
+  } catch {
+    // Error object frozen or a primitive — classification still reached logs and LlmUsage.
+  }
+
+  return classification
+}
+
 /**
  * Internal helper to log usage from Vercel AI SDK events
  */
@@ -133,6 +453,8 @@ async function logUsage(params: {
   }
   success: boolean
   error?: any
+  /** Pre-computed classification from `reportGeminiFailure`; derived from `error` if omitted. */
+  errorType?: GeminiErrorType
   durationMs?: number
   counted?: boolean
 }) {
@@ -167,7 +489,11 @@ async function logUsage(params: {
     durationMs,
     retryCount: 0,
     success: params.success,
-    errorType: params.error ? 'api_error' : undefined,
+    // CW-328: previously hardcoded to 'api_error', which made every failure — connect
+    // timeout, bad schema, rate limit — indistinguishable in LlmUsage.
+    errorType: params.error
+      ? (params.errorType ?? classifyGeminiError(params.error).type)
+      : undefined,
     errorMessage: params.error?.message,
     promptPreview: getPreview(params.prompt),
     responsePreview: params.text ? getPreview(params.text) : undefined,
@@ -499,7 +825,9 @@ export async function generateCoachAnalysis(
     const { text, usage } = await generateText({
       model: google(modelName),
       prompt: prompt,
-      maxRetries: trackingContext?.maxRetries ?? 3,
+      // CW-328: deliberate policy — see GEMINI_MAX_RETRIES / GEMINI_REQUEST_TIMEOUT_MS.
+      maxRetries: trackingContext?.maxRetries ?? GEMINI_MAX_RETRIES,
+      timeout: { totalMs: trackingContext?.timeoutMs ?? GEMINI_REQUEST_TIMEOUT_MS },
       providerOptions
     })
     if (trackingContext) {
@@ -520,7 +848,13 @@ export async function generateCoachAnalysis(
 
     return text
   } catch (error: any) {
-    console.error(`[Gemini] generateCoachAnalysis failed:`, error)
+    const classification = reportGeminiFailure({
+      fn: 'generateCoachAnalysis',
+      error,
+      operation: trackingContext?.operation,
+      modelId: modelName,
+      durationMs: Date.now() - startTime
+    })
     if (trackingContext) {
       await logUsage({
         userId: trackingContext.userId,
@@ -536,6 +870,7 @@ export async function generateCoachAnalysis(
         },
         success: false,
         error,
+        errorType: classification.type,
         durationMs: Date.now() - startTime
       })
     }
@@ -607,8 +942,15 @@ export async function generateStructuredAnalysis<T>(
       model: google(modelName),
       prompt: prompt,
       schema: jsonSchema(schema),
-      maxRetries: trackingContext?.maxRetries ?? 3,
-      ...(trackingContext?.timeoutMs ? { timeout: { totalMs: trackingContext.timeoutMs } } : {}),
+      // CW-328: deliberate policy — see GEMINI_MAX_RETRIES / GEMINI_REQUEST_TIMEOUT_MS.
+      maxRetries: trackingContext?.maxRetries ?? GEMINI_MAX_RETRIES,
+      // `generateObject` is typed `Omit<RequestOptions, 'timeout'>` — unlike
+      // `generateText` it accepts no `timeout` option. The previous
+      // `...(timeoutMs ? { timeout: { totalMs } } : {})` spread therefore compiled
+      // (conditional spreads skip excess-property checking) but did nothing, so every
+      // caller passing `timeoutMs` was in fact running unbounded. `abortSignal` is the
+      // supported mechanism and bounds total wall clock across all retries.
+      abortSignal: AbortSignal.timeout(trackingContext?.timeoutMs ?? GEMINI_REQUEST_TIMEOUT_MS),
       providerOptions
     })
     if (trackingContext) {
@@ -630,7 +972,13 @@ export async function generateStructuredAnalysis<T>(
 
     return object as T
   } catch (error: any) {
-    console.error(`[Gemini] generateStructuredAnalysis failed:`, error)
+    const classification = reportGeminiFailure({
+      fn: 'generateStructuredAnalysis',
+      error,
+      operation: trackingContext?.operation,
+      modelId: modelName,
+      durationMs: Date.now() - startTime
+    })
     if (trackingContext) {
       await logUsage({
         userId: trackingContext.userId,
@@ -646,10 +994,14 @@ export async function generateStructuredAnalysis<T>(
         },
         success: false,
         error,
+        errorType: classification.type,
         durationMs: Date.now() - startTime,
         counted: trackingContext.counted
       })
     }
+    // Rethrown unchanged: the caller (and, for background tasks, Trigger.dev's own
+    // task-level retry) decides what happens next. See the policy note above for why
+    // this function deliberately does not defer or re-enqueue.
     throw error
   }
 }
