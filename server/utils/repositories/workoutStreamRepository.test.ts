@@ -160,9 +160,10 @@ describe('findManyByWorkoutIds', () => {
   })
 
   it('returns every row it can decode and omits only the undecodable one', async () => {
-    // Both the typed read and the SQL repair fail, forcing the per-row path.
+    // Both the typed read and the SQL repair hit a decode error (a column the
+    // repair does not cover), which is the only thing that earns the per-row path.
     db.workoutStreamV2.findMany.mockRejectedValue(decodeError('cadence[593]'))
-    db.$queryRaw.mockRejectedValue(new Error('relation "WorkoutStreamV2" is not available'))
+    db.$queryRaw.mockRejectedValue(decodeError('cadence[593]'))
     db.workoutStreamV2.findUnique.mockImplementation(async ({ where }: any) => {
       if (where.workoutId === 'bad-1') throw decodeError('cadence[593]')
       return repairedRow(where.workoutId)
@@ -184,6 +185,34 @@ describe('findManyByWorkoutIds', () => {
         workoutIds: ['bad-1']
       })
     )
+  })
+
+  it('does not escalate an infrastructure failure into a per-row fan-out', async () => {
+    // A pool/statement timeout is not a decode error: there is nothing for the
+    // repair read to fix, and answering an unhealthy database with one query
+    // per id (200 per chunk, and chunks run concurrently) is the worst possible
+    // response. It must degrade immediately, as it did before CW-453.
+    db.workoutStreamV2.findMany.mockRejectedValue(
+      new Error('Timed out fetching a new connection from the connection pool')
+    )
+
+    const streams = await workoutStreamRepository.findManyByWorkoutIds(['a', 'b', 'c'])
+
+    expect(streams.size).toBe(0)
+    expect(db.$queryRaw).not.toHaveBeenCalled()
+    expect(db.workoutStreamV2.findUnique).not.toHaveBeenCalled()
+    // One log line for the chunk, not one per id.
+    expect(consoleErrorSpy).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not fan out per row when the repair read itself fails on infrastructure', async () => {
+    db.workoutStreamV2.findMany.mockRejectedValue(decodeError('cadence[593]'))
+    db.$queryRaw.mockRejectedValue(new Error('canceling statement due to statement timeout'))
+
+    const streams = await workoutStreamRepository.findManyByWorkoutIds(['a', 'b', 'c'])
+
+    expect(streams.size).toBe(0)
+    expect(db.workoutStreamV2.findUnique).not.toHaveBeenCalled()
   })
 
   it('leaves the clean path untouched', async () => {

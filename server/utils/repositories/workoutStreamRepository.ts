@@ -322,10 +322,14 @@ function buildV1Select(
  * **NULL element -> 0, never dropped.** Every series in a WorkoutStreamV2 row
  * is index-aligned with `time`; `array_remove()` would shorten one series and
  * silently shift every later sample against the clock, corrupting the chart
- * rather than patching it. Coercing to 0 keeps the alignment and matches what
- * the write path already does (see sanitizeIntStreamArray/
- * sanitizeFloatStreamArray), so a row read back after a repair looks exactly
- * like a row written today. For `moving`, the boolean analogue is `false`.
+ * rather than patching it. Coercing to 0 keeps the alignment and follows the
+ * same rule the write path applies (see sanitizeIntStreamArray/
+ * sanitizeFloatStreamArray). For `moving`, the boolean analogue is `false`.
+ *
+ * The repair writes an exact `0`, whereas sanitizeFloatStreamArray writes
+ * `1e-9` for whole numbers on Float[] columns -- so a repaired float sample is
+ * not bit-identical to a freshly written one. Both read back as 0 for every
+ * consumer; the difference is only worth knowing when comparing rows directly.
  */
 const V2_INT_ARRAY_COLUMNS = [
   'time',
@@ -465,8 +469,17 @@ async function readV2WithNullRepair(
  *
  * 1. typed Prisma client (fast path, unchanged for clean rows);
  * 2. on a decode error, the raw repair read for the whole chunk;
- * 3. if even that fails, one typed read per id, so the batch loses only the
- *    rows that genuinely cannot be decoded rather than all of them.
+ * 3. if that *also* hits a decode error, one typed read per id, so the batch
+ *    loses only the rows that genuinely cannot be decoded rather than all.
+ *
+ * **Every escalation is gated on the error actually being a decode failure.**
+ * Tiers 2 and 3 exist to repair NULL array elements and nothing else, so an
+ * infrastructure error (pool timeout, statement timeout, connection reset)
+ * degrades immediately to the pre-CW-453 behaviour of returning nothing.
+ * Without that gate a single unhealthy database would fan a 200-id chunk out
+ * into 200 concurrent `findUnique` calls -- and `findManyByWorkoutIds` runs its
+ * chunks through `Promise.all`, so a 1000-id read would answer a database that
+ * just reported itself unhealthy with ~1000 simultaneous pool acquisitions.
  */
 async function readV2Chunk(
   workoutIds: readonly string[],
@@ -483,6 +496,9 @@ async function readV2Chunk(
     return await (prisma as any).workoutStreamV2.findMany(findManyArgs)
   } catch (error) {
     logStreamReadFailure(operation, 'WorkoutStreamV2', workoutIds, error)
+    // Not a decode failure -> there is nothing for the repair read to fix, and
+    // retrying a struggling database harder is the last thing it needs.
+    if (extractDecodeColumn(error) === null) return []
   }
 
   const columns = select ? Object.keys(select) : ALL_V2_COLUMNS
@@ -490,6 +506,9 @@ async function readV2Chunk(
     return await readV2WithNullRepair(workoutIds, columns)
   } catch (error) {
     logStreamReadFailure(`${operation}:null-repair`, 'WorkoutStreamV2', workoutIds, error)
+    // Same gate: per-row isolation only earns its N queries when the failure is
+    // a decode error that a subset of the rows may not share.
+    if (extractDecodeColumn(error) === null) return []
   }
 
   const rows = await Promise.all(
