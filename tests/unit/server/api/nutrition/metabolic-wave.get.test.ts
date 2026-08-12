@@ -32,13 +32,15 @@ async function get(params: Record<string, unknown>) {
   return handler({} as any)
 }
 
+// File-level, not per-describe: the stubbed globals are shared by every block below, so tearing
+// them down when the first describe finishes would break the ones after it.
+afterAll(() => {
+  vi.unstubAllGlobals()
+})
+
 // CW-73: startDate/endDate went straight from the query string into getWaveRange, so
 // `endDate=2100-01-01` ran decades of day simulations in a single request.
 describe('GET /api/nutrition/metabolic-wave range bounds (CW-73)', () => {
-  afterAll(() => {
-    vi.unstubAllGlobals()
-  })
-
   beforeEach(() => {
     vi.clearAllMocks()
     vi.mocked(getServerSession).mockResolvedValue({ user: { id: 'user-1' } } as any)
@@ -115,5 +117,101 @@ describe('GET /api/nutrition/metabolic-wave range bounds (CW-73)', () => {
     await expect(get({ startDate: '2026-01-01', endDate: '2026-01-02' })).rejects.toMatchObject({
       statusCode: 401
     })
+  })
+})
+
+// CW-506: parseDateOnlyUtc did `String(value).slice(0, 10)`, so a repeated query parameter was
+// joined and silently truncated to its first value, and trailing junk was quietly dropped —
+// while the sibling extended-wave endpoint 400s on the same class of input.
+describe('GET /api/nutrition/metabolic-wave date parameter strictness (CW-506)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(getServerSession).mockResolvedValue({ user: { id: 'user-1' } } as any)
+    vi.mocked(isNutritionTrackingEnabled).mockResolvedValue(true)
+    vi.mocked(metabolicService.getWaveRange).mockResolvedValue({
+      points: [],
+      journeyEvents: []
+    } as any)
+  })
+
+  it('rejects a repeated startDate instead of silently using the first value', async () => {
+    await expect(
+      get({ startDate: ['2026-02-01', '2026-02-05'], endDate: '2026-02-10' })
+    ).rejects.toMatchObject({ statusCode: 400 })
+    expect(metabolicService.getWaveRange).not.toHaveBeenCalled()
+  })
+
+  it('rejects a repeated endDate instead of silently using the first value', async () => {
+    await expect(
+      get({ startDate: '2026-02-01', endDate: ['2026-02-10', '2100-01-01'] })
+    ).rejects.toMatchObject({ statusCode: 400 })
+    expect(metabolicService.getWaveRange).not.toHaveBeenCalled()
+  })
+
+  it('rejects trailing junk rather than slicing it off', async () => {
+    await expect(get({ startDate: '2026-02-01junk', endDate: '2026-02-10' })).rejects.toMatchObject(
+      {
+        statusCode: 400
+      }
+    )
+    await expect(get({ startDate: '2026-02-01', endDate: '2026-02-10junk' })).rejects.toMatchObject(
+      {
+        statusCode: 400
+      }
+    )
+    expect(metabolicService.getWaveRange).not.toHaveBeenCalled()
+  })
+
+  it('rejects a full ISO timestamp, which the old slice quietly accepted', async () => {
+    await expect(
+      get({ startDate: '2026-02-01T12:34:56Z', endDate: '2026-02-10' })
+    ).rejects.toMatchObject({ statusCode: 400 })
+    expect(metabolicService.getWaveRange).not.toHaveBeenCalled()
+  })
+
+  it('rejects a non-string scalar such as a bare number', async () => {
+    await expect(get({ startDate: 20260201, endDate: '2026-02-10' })).rejects.toMatchObject({
+      statusCode: 400
+    })
+    expect(metabolicService.getWaveRange).not.toHaveBeenCalled()
+  })
+
+  it('rejects a shape-valid but non-existent calendar date', async () => {
+    await expect(get({ startDate: '2026-02-30', endDate: '2026-03-01' })).rejects.toMatchObject({
+      statusCode: 400
+    })
+    await expect(get({ startDate: '2026-13-01', endDate: '2026-13-02' })).rejects.toMatchObject({
+      statusCode: 400
+    })
+    expect(metabolicService.getWaveRange).not.toHaveBeenCalled()
+  })
+
+  it('rejects an implausible year even when the span itself is within the cap', async () => {
+    // A legal 32-day span, but 32 days of simulation for a nonsense date.
+    await expect(get({ startDate: '9999-01-01', endDate: '9999-02-01' })).rejects.toMatchObject({
+      statusCode: 400
+    })
+    await expect(get({ startDate: '0001-01-01', endDate: '0001-02-01' })).rejects.toMatchObject({
+      statusCode: 400
+    })
+    expect(metabolicService.getWaveRange).not.toHaveBeenCalled()
+  })
+
+  it('reports the offending field and value, like extended-wave does', async () => {
+    await expect(get({ startDate: '2026-02-01junk', endDate: '2026-02-10' })).rejects.toThrow(
+      /Invalid startDate: 2026-02-01junk/
+    )
+    await expect(get({ startDate: '2026-02-01', endDate: 'not-a-date' })).rejects.toThrow(
+      /Invalid endDate: not-a-date/
+    )
+  })
+
+  it('still accepts a well-formed range', async () => {
+    const result: any = await get({ startDate: '2026-02-01', endDate: '2026-02-10' })
+
+    expect(result.success).toBe(true)
+    const [, start, end] = vi.mocked(metabolicService.getWaveRange).mock.calls[0] as any
+    expect(start.toISOString()).toBe('2026-02-01T00:00:00.000Z')
+    expect(end.toISOString()).toBe('2026-02-10T00:00:00.000Z')
   })
 })
