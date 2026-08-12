@@ -3586,26 +3586,39 @@ describe('adherence metric demotion (CW-397)', () => {
 
   // Power targets are hit exactly; HR targets are ~30-40% off. Whichever metric
   // adherence chose is legible straight off the hit rate.
-  const step = (type: string, durationSeconds: number, watts: number, bpm: number) => ({
+  //
+  // `primaryTarget: 'heartRate'` is the production shape, not decoration: every
+  // structured workout the app persists goes through
+  // `normalizeStructuredWorkoutForPersistence`, which stamps `primaryTarget` from
+  // the athlete's `loadPreference` -- HR-first at the seeded default. A fixture
+  // without it exercises only legacy plans written before that field existed.
+  const step = (
+    type: string,
+    durationSeconds: number,
+    watts: number,
+    bpm: number,
+    primaryTarget: string | null = 'heartRate'
+  ) => ({
     type,
     durationSeconds,
+    ...(primaryTarget ? { primaryTarget } : {}),
     power: { value: watts, units: 'watts' },
     heartRate: { value: bpm, units: 'bpm' }
   })
 
-  const PLANNED = {
+  const plan = (primaryTarget: string | null) => ({
     durationSec: 1200,
     structuredWorkout: {
       steps: [
-        step('Active', 480, 260, 120),
-        step('Rest', 120, 180, 95),
-        step('Active', 480, 260, 120),
-        step('Rest', 120, 180, 95)
+        step('Active', 480, 260, 120, primaryTarget),
+        step('Rest', 120, 180, 95, primaryTarget),
+        step('Active', 480, 260, 120, primaryTarget),
+        step('Rest', 120, 180, 95, primaryTarget)
       ]
     }
-  }
+  })
 
-  const buildFacts = (heartrate: number[]) =>
+  const buildFacts = (heartrate: number[], primaryTarget: string | null = 'heartRate') =>
     buildWorkoutAnalysisFactsV2({
       workout: makeWorkout({
         title: 'Sweet Spot Intervals',
@@ -3619,10 +3632,11 @@ describe('adherence metric demotion (CW-397)', () => {
       }),
       // The seeded default, verbatim. Nothing about the athlete's settings changes.
       sportSettings: { loadPreference: 'HR_PACE_POWER', ftp: 275 },
-      plannedWorkout: PLANNED
+      plannedWorkout: plan(primaryTarget)
     })
 
   it('scores a power+HR step on power when the facts mark HR unusable', () => {
+    // The production shape: `primaryTarget: 'heartRate'` stamped on every step.
     const facts = buildFacts(DROPOUT_HR_STREAM)
 
     expect(facts.guardrails.telemetry.hrUsable).toBe(false)
@@ -3630,10 +3644,26 @@ describe('adherence metric demotion (CW-397)', () => {
     expect(facts.adherence.recoveryHitRate).toBe(100)
   })
 
-  it('still scores the same step on HR when the HR trace is clean', () => {
-    // The control. Without it the test above would also pass if adherence had
-    // simply stopped looking at HR altogether.
+  it('scores a legacy plan without primaryTarget on power too', () => {
+    const facts = buildFacts(DROPOUT_HR_STREAM, null)
+
+    expect(facts.adherence.workIntervalHitRate).toBe(100)
+    expect(facts.adherence.recoveryHitRate).toBe(100)
+  })
+
+  it('still honours primaryTarget when the metric it names is not demoted', () => {
+    // The short-circuit is skipped only for demoted metrics. A clean HR trace
+    // leaves `primaryTarget: 'heartRate'` in charge, exactly as before CW-397.
     const facts = buildFacts(CLEAN_HR_STREAM)
+
+    expect(facts.guardrails.telemetry.hrUsable).toBe(true)
+    expect(facts.adherence.workIntervalHitRate).toBe(0)
+  })
+
+  it('still scores a legacy plan on HR when the HR trace is clean', () => {
+    // The control, on the legacy shape. Without it the demotion tests would also
+    // pass if adherence had simply stopped looking at HR altogether.
+    const facts = buildFacts(CLEAN_HR_STREAM, null)
 
     expect(facts.guardrails.telemetry.hrUsable).toBe(true)
     expect(facts.adherence.workIntervalHitRate).toBe(0)
@@ -3661,5 +3691,51 @@ describe('adherence metric demotion (CW-397)', () => {
       factsPrimaryMetric: facts.guardrails.archetype.primaryMetric
     })
     expect(deriveMetricUsabilitySignals(undefined)).toBeUndefined()
+  })
+
+  it('refuses to let pace lead a ride even when the session has speed data (CW-437)', () => {
+    // The regression the first cut of CW-397 introduced: an outdoor ride with no
+    // power meter and a dropout-riddled HR trace demoted HR and promoted PACE.
+    // `getAnalysisMode` resolves this session to `mixed` precisely so speed cannot
+    // lead it, and the demotion path must respect that.
+    const facts = buildWorkoutAnalysisFactsV2({
+      workout: makeWorkout({
+        title: 'Outdoor Ride',
+        type: 'Ride',
+        durationSec: 5400,
+        distanceMeters: 48000,
+        averageSpeed: 8.9,
+        averageWatts: null,
+        averageHr: 150,
+        trainer: false,
+        streams: { heartrate: DROPOUT_HR_STREAM }
+      }),
+      sportSettings: { loadPreference: 'HR_PACE_POWER' }
+    } as any)
+
+    expect(facts.guardrails.telemetry.paceUsable).toBe(true)
+    expect(facts.guardrails.analysisMode).not.toBe('pace')
+
+    // Raw pace data is still reported; it just may not lead.
+    expect(deriveMetricUsabilitySignals(facts)?.paceUsable).toBe(false)
+  })
+
+  it('lets pace lead a run, where it is the primary effort metric', () => {
+    const facts = buildWorkoutAnalysisFactsV2({
+      workout: makeWorkout({
+        title: 'Easy Endurance',
+        type: 'Run',
+        durationSec: 3300,
+        distanceMeters: 10000,
+        averageSpeed: 3.03,
+        averageWatts: null,
+        averageHr: 148,
+        streams: { heartrate: DROPOUT_HR_STREAM }
+      }),
+      sportSettings: { loadPreference: 'HR_PACE_POWER' }
+    } as any)
+
+    expect(facts.guardrails.analysisMode).toBe('pace')
+    expect(deriveMetricUsabilitySignals(facts)?.paceUsable).toBe(true)
   })
 })

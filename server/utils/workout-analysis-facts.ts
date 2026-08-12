@@ -1576,16 +1576,41 @@ export function deriveMetricUsabilitySignals(
   facts?: WorkoutAnalysisFactsV2 | null
 ): MetricUsabilitySignals | undefined {
   if (!facts?.guardrails) return undefined
-  const { telemetry, archetype } = facts.guardrails
+  const { telemetry, archetype, analysisMode } = facts.guardrails
   return {
     hrUsable: telemetry.hrUsable,
     hrArtifactSeverity: telemetry.hrArtifactSeverity,
     // Relative usability is enough to lead an analysis: an estimated-power ride
     // can still be judged on its own power trace, just not benchmarked absolutely.
     powerUsable: telemetry.powerAbsoluteUsable || telemetry.powerRelativeUsable,
-    paceUsable: telemetry.paceUsable,
+    paceUsable: mayPaceLeadTheAnalysis(telemetry.paceUsable, analysisMode),
     factsPrimaryMetric: archetype?.primaryMetric ?? null
   }
+}
+
+/**
+ * Whether pace is allowed to *lead* -- a stricter question than
+ * `telemetry.paceUsable`, which only says the session has pace data at all.
+ *
+ * `getAnalysisMode` resolves to `'pace'` exactly when pace is the primary effort
+ * metric for the modality: true for runs (and pace-carrying ski/row), and never
+ * for a ride, because cycling speed moves with wind, gradient and drafting
+ * independently of the work done. That reasoning is CW-437's, written out at
+ * length in `getAnalysisMode`, and an estimated-power ride resolves to `'mixed'`
+ * precisely so speed cannot lead it.
+ *
+ * Without this gate the CW-397 demotion path reintroduced the bug CW-437 removed:
+ * an outdoor ride with no power meter and a dropout-riddled HR trace demoted HR
+ * and promoted PACE, producing `**Hard Rule**: Base most conclusions on PACE
+ * evidence` on a session whose facts decline to name any leading metric. When
+ * nothing may lead, `**Fallback Rule**` is the honest output.
+ *
+ * Note the cost, which is deliberate: an athlete who set a `PACE_*` preference on
+ * a ride now has pace demoted there too. That is the CW-437 position -- speed is
+ * the wrong signal for a bike, whatever the preference says.
+ */
+function mayPaceLeadTheAnalysis(paceUsable: boolean, analysisMode: AnalysisMode): boolean {
+  return paceUsable && analysisMode === 'pace'
 }
 
 const METRIC_KEY_TO_TARGET: Record<string, MetricTarget> = {
@@ -1696,12 +1721,29 @@ function normalizePlannedMetricOrder(
   return ordered
 }
 
+/**
+ * `demotedMetrics` names the metrics this session's telemetry cannot support
+ * (CW-397). It exists because `primaryTarget` short-circuits everything below it:
+ * `normalizeStructuredWorkoutForPersistence` stamps that field onto every
+ * structured workout the app writes, derived from the athlete's `loadPreference`,
+ * so at the HR-first seeded default a step is labelled `heartRate` and scored on
+ * HR no matter what the metric order says. Reordering alone therefore fixed
+ * nothing for any plan the product actually produces -- only for legacy plans
+ * written before `primaryTarget` existed.
+ *
+ * A demoted `primaryTarget` is skipped and the (already demoted) `metricOrder`
+ * decides instead. A step whose only target is the demoted metric still resolves
+ * to it via the loop, which is no worse than before. Callers that pass no
+ * `demotedMetrics` keep the original short-circuit exactly.
+ */
 function resolvePlannedStepMetric(
   step: any,
-  metricOrder?: PlannedStepMetric[] | null
+  metricOrder?: PlannedStepMetric[] | null,
+  demotedMetrics?: PlannedStepMetric[] | null
 ): FlattenedPlannedStep['metric'] {
   const currentPrimary = String(step?.primaryTarget || '')
   if (
+    !demotedMetrics?.includes(currentPrimary as PlannedStepMetric) &&
     (['power', 'heartRate', 'pace', 'rpe'] as string[]).includes(currentPrimary) &&
     hasPlannedMetricTarget(step, currentPrimary as PlannedStepMetric)
   ) {
@@ -1718,7 +1760,8 @@ function resolvePlannedStepMetric(
 function flattenPlannedSteps(
   steps: any[],
   refs: AnalysisRefs,
-  metricOrder?: PlannedStepMetric[] | null
+  metricOrder?: PlannedStepMetric[] | null,
+  demotedMetrics?: PlannedStepMetric[] | null
 ): FlattenedPlannedStep[] {
   const flattened: FlattenedPlannedStep[] = []
 
@@ -1748,7 +1791,7 @@ function flattenPlannedSteps(
         'recuperación',
         'enfriamiento'
       ]
-      const metric = resolvePlannedStepMetric(step, metricOrder)
+      const metric = resolvePlannedStepMetric(step, metricOrder, demotedMetrics)
       const targetValue =
         metric === 'power'
           ? getTargetValue(step.power)
@@ -4086,8 +4129,9 @@ function deriveAdherence(params: {
   family: ReturnType<typeof getWorkoutFamily>
   refs: AnalysisRefs
   metricOrder?: PlannedStepMetric[] | null
+  demotedMetrics?: PlannedStepMetric[] | null
 }): WorkoutAnalysisFactsV2['adherence'] {
-  const { workout, plannedWorkout, family, refs, metricOrder } = params
+  const { workout, plannedWorkout, family, refs, metricOrder, demotedMetrics } = params
   if (!plannedWorkout) {
     return {
       planLinked: false,
@@ -4116,7 +4160,8 @@ function deriveAdherence(params: {
   const plannedSteps = flattenPlannedSteps(
     getStructuredSteps(plannedWorkout?.structuredWorkout),
     refs,
-    metricOrder
+    metricOrder,
+    demotedMetrics
   )
   const actualIntervals = extractActualIntervals(workout, plannedWorkout, refs)
   // One alignment for every comparison below: work steps, recovery steps and
@@ -4807,7 +4852,9 @@ export function buildWorkoutAnalysisFactsV2({
   const metricUsability: MetricUsability = {
     hr: hrStats.usable && inferHrArtifactSeverity(hrStats) !== 'high',
     power: powerAbsoluteUsable || powerRelativeUsable,
-    pace: hasPace
+    // Same CW-437 gate the prompt side applies, so adherence and the prompt
+    // cannot disagree about whether pace may lead.
+    pace: mayPaceLeadTheAnalysis(hasPace, analysisMode)
   }
   const adherence = deriveAdherence({
     workout,
@@ -4818,6 +4865,19 @@ export function buildWorkoutAnalysisFactsV2({
       sportSettings?.loadPreference,
       metricUsability,
       archetype.primaryMetric
+    ),
+    // `primaryTarget` is stamped onto every persisted structured workout by
+    // `normalizeStructuredWorkoutForPersistence`, from the athlete's HR-first
+    // `loadPreference`. Without this list `resolvePlannedStepMetric` would honour
+    // that stamp and score on a demoted metric anyway, which is how the CW-397
+    // adherence fix originally missed every plan the app actually writes.
+    demotedMetrics: (['heartRate', 'pace', 'power'] as MetricTarget[]).filter(
+      (metric) =>
+        !(metric === 'heartRate'
+          ? metricUsability.hr
+          : metric === 'pace'
+            ? metricUsability.pace
+            : metricUsability.power)
     )
   })
   // One comparable-rep resolution, shared by every rep-scoped signal, so the

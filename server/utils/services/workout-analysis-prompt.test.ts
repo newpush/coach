@@ -1686,4 +1686,52 @@ describe('metric priority agrees with the facts block (CW-397)', () => {
     expect(prompt).toContain('- **Primary Metric for this analysis**: HR (available)')
     expect(prompt).not.toContain('**Demoted Metric**')
   })
+
+  it('never hands an outdoor ride a pace-led hard rule when HR drops out (CW-437)', () => {
+    // The most likely real trigger of the demotion path, and the case that made
+    // the first cut of this fix a CW-437 regression: outdoor ride, no power
+    // meter, dropout-riddled HR. Demoting HR leaves pace as the next metric the
+    // session has data for -- but cycling speed moves with wind, gradient and
+    // drafting, so the facts resolve this session to `mixed` and decline to name
+    // a leading metric. The prompt must decline too.
+    const OUTDOOR_RIDE_NO_POWER = {
+      id: 'workout-cw397-outdoor-ride',
+      date: new Date('2026-03-22T09:00:00Z'),
+      title: 'Sunday Loop',
+      type: 'Ride',
+      durationSec: 5400,
+      distanceMeters: 48000,
+      averageSpeed: 8.9,
+      averageHr: 150,
+      maxHr: 172,
+      trainer: false,
+      streams: { heartrate: DROPOUT_HR_STREAM }
+    }
+
+    const facts = buildWorkoutAnalysisFactsV2({
+      workout: OUTDOOR_RIDE_NO_POWER,
+      sportSettings: DEFAULT_SPORT_SETTINGS
+    } as any)
+
+    expect(facts.guardrails.telemetry.hrUsable).toBe(false)
+    expect(facts.guardrails.analysisMode).not.toBe('pace')
+
+    const prompt = buildWorkoutAnalysisPrompt(
+      buildWorkoutAnalysisData(OUTDOOR_RIDE_NO_POWER),
+      'Europe/Budapest',
+      'Supportive',
+      DEFAULT_SPORT_SETTINGS,
+      USER_PROFILE,
+      null,
+      undefined,
+      facts
+    )
+
+    expect(prompt).not.toContain('Base most conclusions on PACE evidence')
+    expect(prompt).not.toContain('Base most conclusions on HR evidence')
+    expect(prompt).not.toContain('Do not make heart-rate zones the primary narrative')
+    expect(prompt).toContain('**Fallback Rule**')
+    // The pace-primary section header must not appear either.
+    expect(prompt).not.toContain('## Pace & Speed (Primary Metric)')
+  })
 })

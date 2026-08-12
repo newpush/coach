@@ -158,13 +158,59 @@ describe('metric priority demotion against the V2 facts (CW-397)', () => {
     const ctx = resolveMetricPriorityContext('HR_PACE_POWER', POWER_METER_RIDE, {
       hrUsable: false,
       powerUsable: true,
-      paceUsable: true,
+      // A ride: `deriveMetricUsabilitySignals` reports pace as unable to lead,
+      // because `analysisMode` is not `'pace'` (CW-437).
+      paceUsable: false,
       factsPrimaryMetric: 'mixed'
     })
 
     // `mixed` names no metric, so preference order decides among the usable ones.
-    expect(ctx.primaryMetric).toBe('PACE')
-    expect(ctx.resolvedPriority).toEqual(['PACE', 'POWER', 'HR'])
+    expect(ctx.primaryMetric).toBe('POWER')
+    expect(ctx.resolvedPriority).toEqual(['POWER', 'HR', 'PACE'])
+  })
+
+  it('never promotes pace on a ride, and says so honestly when nothing may lead', () => {
+    // The regression the first cut of CW-397 introduced. Outdoor ride, no power
+    // meter, dropout-riddled HR: HR is demoted and PACE is the next metric in the
+    // preference order the session has data for. Promoting it would put
+    // `**Hard Rule**: Base most conclusions on PACE evidence` on a session whose
+    // facts say `analysisMode: mixed` -- the same ride-leads-on-speed defect
+    // CW-437 removed. Cycling speed moves with wind, gradient and drafting.
+    const ctx = resolveMetricPriorityContext(
+      'HR_PACE_POWER',
+      { avg_hr: 150, distance_m: 48000, duration_s: 5400, avg_speed_ms: 8.9 },
+      { hrUsable: false, powerUsable: false, paceUsable: false, factsPrimaryMetric: 'mixed' }
+    )
+
+    expect(ctx.primaryMetricAvailable).toBe(false)
+
+    const block = buildMetricPriorityPromptBlock(ctx)
+    expect(block).not.toContain('**Hard Rule**')
+    expect(block).toContain('**Fallback Rule**')
+    expect(block).not.toContain('Do not make heart-rate zones the primary narrative')
+
+    // ...and the HR section is not condensed away on a ride, which would have
+    // stripped the only telemetry left worth discussing.
+    expect(shouldCondenseHeartRateSection(ctx)).toBe(false)
+  })
+
+  it('condenses the HR section only when a usable PACE actually leads', () => {
+    // `shouldCondenseHeartRateSection` keys off the *resolved* primary, so a
+    // promoted PACE now condenses HR where it previously would not have. That is
+    // correct for a run -- CW-412 pins that behaviour -- and unreachable for a
+    // ride, which can never have `paceUsable: true` from the facts adapter.
+    const promotedPaceRun = resolveMetricPriorityContext(
+      'HR_PACE_POWER',
+      { avg_hr: 150, distance_m: 10000, duration_s: 3300, avg_speed_ms: 3.03 },
+      { hrUsable: false, powerUsable: false, paceUsable: true, factsPrimaryMetric: 'pace' }
+    )
+
+    expect(promotedPaceRun.primaryMetric).toBe('PACE')
+    expect(shouldCondenseHeartRateSection(promotedPaceRun)).toBe(true)
+
+    // The demoted metric is HR itself, so the prompt must still say why the HR
+    // discussion shrank rather than leaving the model to guess.
+    expect(buildMetricPriorityPromptBlock(promotedPaceRun)).toContain('**Demoted Metric**: HR')
   })
 
   it('never names an unusable metric in a hard rule, for any preference order', () => {
