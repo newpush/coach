@@ -1,10 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 /**
- * CW-294: the Telegram webhook builds its prompt from stored chat history without the
- * `sanitizeCoreMessagesForToolApprovals` guard the main chat turn executor applies, so a
- * Telegram-linked conversation holding malformed `tool-approval-response` parts reproduced
- * the AI_TypeValidationError class fixed by CW-209 / CW-293 on that path.
+ * CW-294: the Telegram webhook built its prompt from stored chat history without the
+ * `sanitizeCoreMessagesForToolApprovals` guard the main chat turn executor applies. No
+ * DB-derived history shape reaches `generateText` with a `tool-approval-response` part
+ * today, so this is parity hardening rather than a fix for a reproducible crash — these
+ * tests pin the guard's presence and its no-op behaviour on valid history.
  */
 
 vi.stubGlobal('defineEventHandler', (fn: any) => fn)
@@ -30,6 +31,13 @@ const sendTelegramMessage = vi.fn()
 const sendTelegramAction = vi.fn()
 
 /**
+ * Records every `sanitizeCoreMessagesForToolApprovals` call the handler makes, with the real
+ * implementation still doing the work. Reverting the handler change leaves this spy uncalled,
+ * which is what keeps the assertions below honest.
+ */
+const sanitizeSpy = vi.fn()
+
+/**
  * `transformHistoryToCoreMessages` is shared with the main chat path; overriding it per test
  * pins the contract this ticket is about — whatever model messages the transform produces,
  * the webhook must sanitize them before the prompt is built.
@@ -52,6 +60,18 @@ vi.mock('../../../../server/utils/ai-history', async (importOriginal) => {
       transformOverride
         ? transformOverride(history)
         : actual.transformHistoryToCoreMessages(history)
+  }
+})
+
+vi.mock('../../../../server/api/chat/sanitize-tool-approval', async (importOriginal) => {
+  const actual = await importOriginal<any>()
+  return {
+    ...actual,
+    sanitizeCoreMessagesForToolApprovals: (messages: any[]) => {
+      const output = actual.sanitizeCoreMessagesForToolApprovals(messages)
+      sanitizeSpy({ input: messages, output })
+      return output
+    }
   }
 })
 
@@ -180,7 +200,7 @@ describe('POST /api/integrations/telegram/webhook tool-approval sanitization (CW
     )
   })
 
-  it('repairs recoverable tool-role approval responses instead of dropping the turn', async () => {
+  it('runs the transformed history through the sanitizer, repairing recoverable tool-role responses', async () => {
     transformOverride = () => [
       {
         role: 'tool',
@@ -194,13 +214,21 @@ describe('POST /api/integrations/telegram/webhook tool-approval sanitization (CW
       { role: 'user', content: [{ type: 'text', text: 'and my sleep?' }] }
     ]
 
-    const { sanitizeCoreMessagesForToolApprovals } =
-      await import('../../../../server/api/chat/sanitize-tool-approval')
+    await runWebhook()
 
-    // The webhook's sanitizer step must produce exactly this before Gemini normalization.
-    expect(
-      sanitizeCoreMessagesForToolApprovals(await (transformOverride as any)([]))[0].content
-    ).toEqual([
+    // Asserted at the sanitizer boundary inside the handler, not on the messages that reach
+    // generateText: normalizeCoreMessagesForGemini keeps only `tool-result` parts in tool
+    // messages, so a post-normalization assertion about approval parts would be vacuously
+    // true whether or not the handler sanitizes anything.
+    expect(sanitizeSpy).toHaveBeenCalledTimes(1)
+    const { input, output } = sanitizeSpy.mock.calls[0][0]
+
+    // The handler hands the sanitizer the transform output, unmodified
+    expect(input[0].content).toHaveLength(2)
+
+    // Recoverable response repaired (approvalId filled in, `approved` coerced to boolean),
+    // irreparable one dropped — the turn itself survives.
+    expect(output[0].content).toEqual([
       {
         type: 'tool-approval-response',
         approvalId: 'call_1',
@@ -208,21 +236,10 @@ describe('POST /api/integrations/telegram/webhook tool-approval sanitization (CW
         approved: true
       }
     ])
+    expect(output[1]).toEqual({ role: 'user', content: [{ type: 'text', text: 'and my sleep?' }] })
 
-    await runWebhook()
-
-    const messages = messagesSentToModel()
-    const approvalParts = collectParts(messages).filter(
-      ({ part }) => part.type === 'tool-approval-response'
-    )
-
-    // No approval response may survive with a missing approvalId or a non-boolean `approved`
-    expect(
-      approvalParts.every(
-        ({ part }) => typeof part.approvalId === 'string' && typeof part.approved === 'boolean'
-      )
-    ).toBe(true)
-    expect(messages.at(-1)).toEqual({ role: 'user', content: 'and my sleep?' })
+    // ...and the sanitized array is what the prompt is built from
+    expect(messagesSentToModel().at(-1)).toEqual({ role: 'user', content: 'and my sleep?' })
   })
 
   it('leaves valid tool-call history untouched on the Telegram path', async () => {
@@ -310,5 +327,11 @@ describe('POST /api/integrations/telegram/webhook tool-approval sanitization (CW
       }
     ])
     expect(sendTelegramMessage).toHaveBeenCalledWith('12345', 'Logged your oats.')
+
+    // The guard ran and was a strict no-op on this history — a sanitizer that eats valid
+    // tool-call history would be worse than the gap it closes.
+    expect(sanitizeSpy).toHaveBeenCalledTimes(1)
+    const { input, output } = sanitizeSpy.mock.calls[0][0]
+    expect(output).toEqual(input)
   })
 })
