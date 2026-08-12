@@ -1348,3 +1348,216 @@ describe('report analysis schemas match the prompts they are handed with (CW-425
     ).not.toContain('avg_protein_g')
   })
 })
+
+/**
+ * CW-381: the payload carried per-lap rows and session means with nothing in
+ * between, so the model reached for the session mean whenever it wanted an
+ * interval number. A live 4x4min threshold run was told "your average cadence
+ * of 162 spm is somewhat low for threshold work" -- 162 being the whole-session
+ * mean, dragged down by warmup, recovery jogs and cooldown, while the four reps
+ * averaged 177 spm. The advice was inverted, not merely imprecise.
+ */
+describe('work-only interval aggregates', () => {
+  /** The reference session from the ticket, lapped the way Intervals.icu sends it. */
+  const THRESHOLD_RUN_LAPS = [
+    { seconds: 600, speed: 2.6, cadence: 76, hr: 130 },
+    { seconds: 240, speed: 4.1, cadence: 89, hr: 168 },
+    { seconds: 120, speed: 2.8, cadence: 78, hr: 140 },
+    { seconds: 240, speed: 4.1, cadence: 88, hr: 172 },
+    { seconds: 120, speed: 2.8, cadence: 78, hr: 142 },
+    { seconds: 240, speed: 4.0, cadence: 89, hr: 174 },
+    { seconds: 120, speed: 2.8, cadence: 77, hr: 143 },
+    { seconds: 240, speed: 4.0, cadence: 88, hr: 175 },
+    { seconds: 600, speed: 2.5, cadence: 74, hr: 128 }
+  ]
+
+  function buildThresholdRun(overrides: Record<string, unknown> = {}) {
+    return {
+      id: 'workout-fixture-cw381',
+      date: new Date('2026-03-22T06:00:00Z'),
+      title: '4 x 4min Threshold',
+      type: 'Run',
+      durationSec: 2520,
+      distanceMeters: 8000,
+      averageSpeed: 3.17,
+      averageHr: 149,
+      maxHr: 178,
+      // One-legged, as every provider stores run cadence: 81 doubles to the
+      // 162 spm the model quoted as if it were a threshold figure.
+      averageCadence: 81,
+      rawJson: {
+        // Every lap labelled WORK, exactly as the provider sends it. The
+        // aggregate must be built from the labels CW-376 re-derives, not these.
+        icu_intervals: THRESHOLD_RUN_LAPS.map((lap) => ({
+          type: 'WORK',
+          moving_time: lap.seconds,
+          average_speed: lap.speed,
+          average_cadence: lap.cadence,
+          average_heartrate: lap.hr
+        }))
+      },
+      ...overrides
+    }
+  }
+
+  it('puts a duration-weighted work-only aggregate in the payload', () => {
+    const data = buildWorkoutAnalysisData(buildThresholdRun())
+
+    // Four reps of 240s. Cadence is normalised here and only here: the weighted
+    // one-legged mean is 88.5, i.e. the 177 spm the athlete actually ran, and
+    // NOT the 162 spm session mean sitting in `avg_cadence`.
+    expect(data.avg_cadence).toBe(162)
+    expect(data.work_interval_summary).toMatchObject({
+      rep_count: 4,
+      total_duration_s: 960,
+      avg_duration_s: 240,
+      avg_cadence: 177
+    })
+    expect(Math.round(data.work_interval_summary.avg_hr)).toBe(172)
+
+    // Recovery jogs only -- warmup and cooldown are not recoveries between reps.
+    expect(data.recovery_interval_summary).toMatchObject({
+      rep_count: 3,
+      total_duration_s: 360
+    })
+    expect(Math.round(data.recovery_interval_summary.avg_cadence)).toBe(155)
+
+    // Nothing an aggregate emits may be NaN, whatever the metric coverage.
+    for (const summary of [data.work_interval_summary, data.recovery_interval_summary]) {
+      for (const value of Object.values(summary)) {
+        expect(Number.isNaN(value as number)).toBe(false)
+      }
+    }
+  })
+
+  it('prints the work-only figures in the prompt and forbids quoting the session means', () => {
+    const prompt = buildWorkoutAnalysisPrompt(
+      buildWorkoutAnalysisData(buildThresholdRun()),
+      'Europe/Budapest',
+      'Supportive',
+      { loadPreference: 'PACE' },
+      USER_PROFILE
+    )
+
+    expect(prompt).toContain('## Work vs Recovery Aggregates')
+    expect(prompt).toContain('### Work Intervals')
+    expect(prompt).toContain('- Segments: 4')
+    expect(prompt).toContain('- Total Time: 16m 0s')
+    expect(prompt).toContain('- Average Segment Length: 4m 0s')
+    // The number the model should have quoted, in the same canonical unit as
+    // the session line and the per-rep rows (CW-387).
+    expect(prompt).toContain('- Average Cadence (duration-weighted): 177 spm')
+    expect(prompt).toContain('- Average HR (duration-weighted): 172 bpm')
+    // 4.05 m/s duration-weighted over the four reps is 247 s/km.
+    expect(prompt).toContain('- Average Pace (duration-weighted): 4:07/km')
+
+    // The session mean is still printed -- it is a true session fact -- but it
+    // is now unmistakably the session's, not the reps'.
+    expect(prompt).toContain('- Average Cadence: 162 spm')
+
+    expect(prompt).toContain('### Recovery Between Work')
+    expect(prompt).toContain('- Segments: 3')
+
+    // The instruction, both at the section and next to the hard rules.
+    expect(prompt).toContain(
+      'Any claim about interval, rep, or threshold execution MUST quote these figures, never the session averages above.'
+    )
+    expect(prompt).toContain('must never be described as interval, rep or threshold values')
+  })
+
+  it('does not derive the aggregate from lap_splits (CW-389)', () => {
+    // Automatic per-distance splits are present and deliberately disagree with
+    // the laps: they cut across warmup, reps, recoveries and cooldown, so an
+    // aggregate built from them would be another session-wide average wearing
+    // an interval label.
+    const data = buildWorkoutAnalysisData(
+      buildThresholdRun({
+        rawJson: {
+          icu_intervals: THRESHOLD_RUN_LAPS.map((lap) => ({
+            type: 'WORK',
+            moving_time: lap.seconds,
+            average_speed: lap.speed,
+            average_cadence: lap.cadence,
+            average_heartrate: lap.hr
+          })),
+          splits_metric: [
+            { distance: 1000, moving_time: 315, average_speed: 3.17, average_heartrate: 150 },
+            { distance: 1000, moving_time: 315, average_speed: 3.17, average_heartrate: 151 },
+            { distance: 1000, moving_time: 315, average_speed: 3.17, average_heartrate: 152 }
+          ]
+        }
+      })
+    )
+
+    expect(data.lap_splits).toHaveLength(3)
+    // Three splits, four reps: the aggregate followed the resolved laps.
+    expect(data.work_interval_summary.rep_count).toBe(4)
+    expect(data.work_interval_summary.total_duration_s).toBe(960)
+    expect(data.work_interval_summary.avg_cadence).toBe(177)
+  })
+
+  it('states the absence rather than printing a fabricated zero when a session has no reps', () => {
+    // A steady ride: one lap, no recoveries. `resolveProviderIntervalTypes`
+    // leaves a sub-3-lap session alone, so this is work-only by construction.
+    const data = buildWorkoutAnalysisData({
+      id: 'workout-fixture-cw381-steady',
+      date: new Date('2026-03-23T06:00:00Z'),
+      title: 'Endurance',
+      type: 'Ride',
+      durationSec: 3600,
+      averageWatts: 180,
+      averageCadence: 86,
+      rawJson: {
+        icu_intervals: [
+          {
+            type: 'WORK',
+            moving_time: 3600,
+            average_watts: 180,
+            average_cadence: 86,
+            average_heartrate: 132
+          }
+        ]
+      }
+    })
+
+    expect(data.work_interval_summary).toMatchObject({ rep_count: 1, avg_power: 180 })
+    expect(data.recovery_interval_summary).toBeUndefined()
+
+    const prompt = buildWorkoutAnalysisPrompt(
+      data,
+      'Europe/Budapest',
+      'Supportive',
+      { loadPreference: 'POWER' },
+      USER_PROFILE
+    )
+
+    expect(prompt).toContain('### Recovery Between Work')
+    expect(prompt).toContain('- None: no recovery segments between work')
+    expect(prompt).toContain('- Average Cadence (duration-weighted): 86 rpm')
+    expect(prompt).not.toContain('spm')
+  })
+
+  it('omits the section entirely for a session with no resolved intervals', () => {
+    const data = buildWorkoutAnalysisData({
+      id: 'workout-fixture-cw381-no-intervals',
+      date: new Date('2026-03-24T06:00:00Z'),
+      title: 'Easy spin',
+      type: 'Ride',
+      durationSec: 1800,
+      averageWatts: 140
+    })
+
+    expect(data.work_interval_summary).toBeUndefined()
+    expect(data.recovery_interval_summary).toBeUndefined()
+
+    const prompt = buildWorkoutAnalysisPrompt(
+      data,
+      'Europe/Budapest',
+      'Supportive',
+      { loadPreference: 'POWER' },
+      USER_PROFILE
+    )
+
+    expect(prompt).not.toContain('## Work vs Recovery Aggregates')
+  })
+})

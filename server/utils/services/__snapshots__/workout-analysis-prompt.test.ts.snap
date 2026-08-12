@@ -127,6 +127,25 @@ When analyzing "Execution" and "Effort", specifically reference how well the ath
 - Indoor Trainer: No
 - Avg Temperature: 21.0°C
 
+## Work vs Recovery Aggregates
+Duration-weighted averages over the resolved WORK and RECOVERY segments of the Interval Breakdown below (warmup and cooldown excluded). Any claim about interval, rep, or threshold execution MUST quote these figures, never the session averages above.
+
+### Work Intervals
+- Segments: 1
+- Total Time: 12m 0s
+- Average Segment Length: 12m 0s
+- Average Power (duration-weighted): 255W
+- Average HR (duration-weighted): 155 bpm
+- Average Cadence (duration-weighted): 90 rpm
+
+### Recovery Between Work
+- Segments: 1
+- Total Time: 5m 0s
+- Average Segment Length: 5m 0s
+- Average Power (duration-weighted): 120W
+- Average HR (duration-weighted): 128 bpm
+- Average Cadence (duration-weighted): 78 rpm
+
 ## Interval Breakdown
 Segmentation source: provider laps (labels re-derived). These are the same segments the Calculated Workout Facts v2 block above is computed over -- quote reps from this table only.
 
@@ -218,5 +237,7 @@ IMPORTANT:
 - Do not recommend purchasing new hardware or equipment from a single-workout analysis unless there is an explicit, repeated measurement limitation clearly stated in the facts.
 - Do not use ATL, CTL, or TSB alone as proof of technique breakdown; they are context only.
 - Prioritize metrics in this order: POWER > HR > PACE.
-- Use POWER as the primary evidence base whenever available."
+- Use POWER as the primary evidence base whenever available.
+- Every claim about interval, rep, or threshold execution must quote the figures from "## Work vs Recovery Aggregates" (or a specific row of "## Interval Breakdown"). The session averages under Power Metrics, Heart Rate & Cadence and Pace & Speed cover the whole file including warmup, recoveries and cooldown, so they must never be described as interval, rep or threshold values.
+- When a work-only figure and the session average disagree, that gap is the shape of the session, not an error to reconcile; judge the intervals on the work-only figure."
 `;

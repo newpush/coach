@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   alignPlannedToActualIntervals,
+  buildIntervalGroupSummaries,
   buildWorkoutAnalysisFacts,
   buildWorkoutAnalysisFactsV2,
   formatActualIntervalsForPrompt,
@@ -3341,5 +3342,222 @@ describe('actual-interval source arbitration and hard-repeat scale (CW-408)', ()
           .every((interval) => (interval.avgPower ?? 0) >= ARBITRATION_FIXTURE_FTP * 0.95)
       ).toBe(true)
     })
+  })
+})
+
+/**
+ * CW-381: duration-weighted work-only / recovery-only aggregates.
+ *
+ * The payload used to hand the model per-lap rows and session means with
+ * nothing in between, so interval-level claims were made from the session mean.
+ * These cover the aggregate helper directly: the grouping (resolved type, never
+ * `lap_splits`), the weighting (duration, not lap count), and the three shapes
+ * a session can take -- all work, no work, mixed.
+ */
+describe('buildIntervalGroupSummaries', () => {
+  function makeInterval(
+    overrides: Partial<ActualIntervalForAnalysis> = {}
+  ): ActualIntervalForAnalysis {
+    const type = String(overrides.type ?? 'WORK')
+    const lower = type.toLowerCase()
+    const classification =
+      lower.includes('rest') ||
+      lower.includes('recovery') ||
+      lower.includes('warm') ||
+      lower.includes('cool')
+        ? ('recovery' as const)
+        : ('work' as const)
+
+    return {
+      type,
+      durationSeconds: 240,
+      avgPower: null,
+      avgHr: null,
+      avgSpeed: null,
+      avgCadence: null,
+      intensity: null,
+      matchScore: null,
+      confidence: null,
+      ambiguityNote: null,
+      classification,
+      startIndex: null,
+      endIndex: null,
+      ...overrides
+    }
+  }
+
+  /** Nothing an aggregate emits may ever be NaN — the model would quote it. */
+  function expectNoNaN(summary: Record<string, unknown> | null) {
+    expect(summary).not.toBeNull()
+    for (const [key, value] of Object.entries(summary || {})) {
+      if (typeof value === 'number') {
+        expect(Number.isNaN(value), `${key} is NaN`).toBe(false)
+      }
+    }
+  }
+
+  it('weights by duration, not by lap count', () => {
+    // A 6-minute rep at 90 and a 2-minute rep at 60. The mean-of-lap-means is
+    // 75; the duration-weighted mean is 82.5, because the athlete spent three
+    // times as long at 90. This gap is exactly the 162-vs-177 spm inversion the
+    // ticket is about, in miniature.
+    const summaries = buildIntervalGroupSummaries([
+      makeInterval({ durationSeconds: 360, avgCadence: 90, avgPower: 300 }),
+      makeInterval({ durationSeconds: 120, avgCadence: 60, avgPower: 180 })
+    ])
+
+    expect(summaries.work?.avgCadence).toBe(82.5)
+    expect(summaries.work?.avgPower).toBe(270)
+    expect(summaries.work?.repCount).toBe(2)
+    expect(summaries.work?.totalDurationSeconds).toBe(480)
+    expect(summaries.work?.avgDurationSeconds).toBe(240)
+    expectNoNaN(summaries.work)
+  })
+
+  it('summarises a session where every lap is work and there are no recoveries', () => {
+    const summaries = buildIntervalGroupSummaries([
+      makeInterval({ durationSeconds: 600, avgPower: 200, avgHr: 140, avgCadence: 88 }),
+      makeInterval({ durationSeconds: 600, avgPower: 220, avgHr: 150, avgCadence: 90 })
+    ])
+
+    expect(summaries.work?.repCount).toBe(2)
+    expect(summaries.work?.avgPower).toBe(210)
+    expect(summaries.work?.avgHr).toBe(145)
+    expect(summaries.work?.avgCadence).toBe(89)
+    expectNoNaN(summaries.work)
+
+    // No recoveries is not "recoveries averaging zero": the aggregate is absent
+    // so the prompt can say there were none instead of printing a fabricated 0.
+    expect(summaries.recovery).toBeNull()
+  })
+
+  it('returns no work aggregate at all for a session with no work laps', () => {
+    const summaries = buildIntervalGroupSummaries([
+      makeInterval({ type: 'WARMUP', durationSeconds: 600, avgHr: 120 }),
+      makeInterval({ type: 'RECOVERY', durationSeconds: 300, avgHr: 128 }),
+      makeInterval({ type: 'COOLDOWN', durationSeconds: 600, avgHr: 115 })
+    ])
+
+    expect(summaries.work).toBeNull()
+
+    // Warmup and cooldown are classified `recovery` but are not the recoveries
+    // between reps; only the genuine RECOVERY lap is aggregated.
+    expect(summaries.recovery?.repCount).toBe(1)
+    expect(summaries.recovery?.totalDurationSeconds).toBe(300)
+    expect(summaries.recovery?.avgHr).toBe(128)
+    expectNoNaN(summaries.recovery)
+  })
+
+  it('splits a mixed session into work and recovery without letting either leak', () => {
+    const summaries = buildIntervalGroupSummaries([
+      makeInterval({ type: 'WARMUP', durationSeconds: 600, avgCadence: 76, avgHr: 130 }),
+      makeInterval({ type: 'WORK', durationSeconds: 240, avgCadence: 89, avgHr: 168 }),
+      makeInterval({ type: 'RECOVERY', durationSeconds: 120, avgCadence: 78, avgHr: 140 }),
+      makeInterval({ type: 'WORK', durationSeconds: 240, avgCadence: 88, avgHr: 172 }),
+      makeInterval({ type: 'RECOVERY', durationSeconds: 120, avgCadence: 78, avgHr: 142 }),
+      makeInterval({ type: 'COOLDOWN', durationSeconds: 600, avgCadence: 74, avgHr: 128 })
+    ])
+
+    expect(summaries.work?.repCount).toBe(2)
+    expect(summaries.work?.totalDurationSeconds).toBe(480)
+    expect(summaries.work?.avgCadence).toBe(88.5)
+    expect(summaries.work?.avgHr).toBe(170)
+
+    expect(summaries.recovery?.repCount).toBe(2)
+    expect(summaries.recovery?.totalDurationSeconds).toBe(240)
+    expect(summaries.recovery?.avgCadence).toBe(78)
+    expect(summaries.recovery?.avgHr).toBe(141)
+
+    expectNoNaN(summaries.work)
+    expectNoNaN(summaries.recovery)
+  })
+
+  it('skips laps missing a metric rather than counting them as zero', () => {
+    // A rep with no power meter must not halve the work power average.
+    const summaries = buildIntervalGroupSummaries([
+      makeInterval({ durationSeconds: 240, avgPower: 300, avgHr: 170 }),
+      makeInterval({ durationSeconds: 240, avgPower: null, avgHr: 172 })
+    ])
+
+    expect(summaries.work?.avgPower).toBe(300)
+    expect(summaries.work?.avgHr).toBe(171)
+    // Nothing carried cadence or speed, so those stay absent instead of 0.
+    expect(summaries.work?.avgCadence).toBeNull()
+    expect(summaries.work?.avgSpeed).toBeNull()
+    expect(summaries.work?.avgPaceSecondsPerKm).toBeNull()
+    expectNoNaN(summaries.work)
+  })
+
+  it('falls back to an unweighted mean instead of NaN when no lap carries a duration', () => {
+    const summaries = buildIntervalGroupSummaries([
+      makeInterval({ durationSeconds: 0, avgHr: 160 }),
+      makeInterval({ durationSeconds: 0, avgHr: 170 })
+    ])
+
+    expect(summaries.work?.avgHr).toBe(165)
+    expect(summaries.work?.totalDurationSeconds).toBe(0)
+    expect(summaries.work?.avgDurationSeconds).toBe(0)
+    expectNoNaN(summaries.work)
+  })
+
+  it('returns both aggregates as null for an empty interval list', () => {
+    expect(buildIntervalGroupSummaries([])).toEqual({ work: null, recovery: null })
+  })
+
+  it('derives pace from total distance over total time, not from a mean of lap paces', () => {
+    // 4.0 m/s for 300s (1200 m) and 2.0 m/s for 100s (200 m): 1400 m in 400 s
+    // is 3.5 m/s, i.e. 285.7 s/km. Averaging the two lap paces would say 375.
+    const summaries = buildIntervalGroupSummaries([
+      makeInterval({ durationSeconds: 300, avgSpeed: 4 }),
+      makeInterval({ durationSeconds: 100, avgSpeed: 2 })
+    ])
+
+    expect(summaries.work?.avgSpeed).toBe(3.5)
+    expect(summaries.work?.avgPaceSecondsPerKm).toBeCloseTo(285.71, 2)
+  })
+
+  it('groups by the RE-DERIVED provider labels, not the ones the provider sent (CW-376)', () => {
+    // Intervals.icu marks nearly every lap WORK. Straight off the provider this
+    // would be nine work laps averaging the whole session; after CW-376's
+    // re-derivation only the four reps are work.
+    const laps = [
+      { seconds: 600, speed: 2.6, cadence: 76, hr: 130 },
+      { seconds: 240, speed: 4.1, cadence: 89, hr: 168 },
+      { seconds: 120, speed: 2.8, cadence: 78, hr: 140 },
+      { seconds: 240, speed: 4.1, cadence: 88, hr: 172 },
+      { seconds: 120, speed: 2.8, cadence: 78, hr: 142 },
+      { seconds: 240, speed: 4.0, cadence: 89, hr: 174 },
+      { seconds: 120, speed: 2.8, cadence: 77, hr: 143 },
+      { seconds: 240, speed: 4.0, cadence: 88, hr: 175 },
+      { seconds: 600, speed: 2.5, cadence: 74, hr: 128 }
+    ]
+
+    const intervals = getActualIntervalsForAnalysis({
+      id: 'cw-381-fixture',
+      type: 'Run',
+      durationSec: 2520,
+      rawJson: {
+        icu_intervals: laps.map((lap) => ({
+          type: 'WORK',
+          moving_time: lap.seconds,
+          average_speed: lap.speed,
+          average_cadence: lap.cadence,
+          average_heartrate: lap.hr
+        }))
+      }
+    })
+
+    const summaries = buildIntervalGroupSummaries(intervals)
+
+    expect(summaries.work?.repCount).toBe(4)
+    expect(summaries.work?.totalDurationSeconds).toBe(960)
+    // Still one-legged here: the facts module never re-scales running cadence
+    // (`buildWorkoutAnalysisData` is the single conversion point), so 88.5 is
+    // the 177 spm the athlete actually ran.
+    expect(summaries.work?.avgCadence).toBe(88.5)
+    expect(summaries.recovery?.repCount).toBe(3)
+    expect(summaries.recovery?.totalDurationSeconds).toBe(360)
+    expectNoNaN(summaries.work)
+    expectNoNaN(summaries.recovery)
   })
 })
