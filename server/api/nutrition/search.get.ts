@@ -40,9 +40,16 @@ export default defineEventHandler(async (event) => {
   const limit = limitRaw ? parseInt(limitRaw as string, 10) : 10
   const items = await nutritionDatabaseService.searchFoodDatabase(q, limit)
 
+  // Drop items the database has no energy or macro data for. Their zeros are
+  // placeholders, and offering them as selectable results silently under-reports
+  // intake, which then feeds fuelling recommendations. Items that genuinely
+  // state 0 kcal (water, black coffee, diet drinks) report has_nutrition_data
+  // true and are kept.
+  const usable = items.filter((item) => item.has_nutrition_data !== false)
+
   return {
     success: true,
-    count: items.length,
-    items
+    count: usable.length,
+    items: usable
   }
 })
