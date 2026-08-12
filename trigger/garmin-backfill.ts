@@ -26,8 +26,12 @@ export const garminBackfillTask = task({
       //  - `no-integration`: nothing was requested at all; the run did no work. CW-512: this is
       //    deterministic — the user has no Garmin integration, and no retry can create one — so
       //    it throws `AbortTaskRunError`, which Trigger.dev treats as terminal and fails without
-      //    consuming the remaining attempts. Retrying it burned ~90s of queue time re-running the
-      //    `delaySeconds` wait below from the top of the run on each of the 3 attempts.
+      //    consuming the remaining attempts. Retrying it re-ran the `delaySeconds` wait from the
+      //    top of the run on each of the 3 attempts, ~90s of queue time in total; aborting cuts
+      //    that to ~30s. Attempt 1 still pays the initial wait: the wait runs before
+      //    `startBackfill()`, and it is `startBackfill()` that reports the integration is
+      //    missing, so the status is not knowable any earlier. Skipping the wait entirely would
+      //    mean hoisting an integration-existence check above it.
       //  - `failed`: every backfill request was rejected — almost always a token/registration
       //    problem that a retry can genuinely resolve (typically the "User not registered with
       //    consumer" propagation race right after connect). This keeps the plain `Error` throw

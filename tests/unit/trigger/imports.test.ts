@@ -15,6 +15,7 @@ const triggers = [
   'daily-coach',
   'deduplicate-workouts',
   'delete-user-account',
+  'garmin-backfill',
   'generate-ad-hoc-workout',
   'generate-athlete-profile',
   'generate-custom-report',
