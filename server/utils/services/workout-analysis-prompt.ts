@@ -25,6 +25,7 @@ import {
 import { formatStructuredPlanForPrompt } from '../../../trigger/utils/planned-workout-targets'
 import {
   buildIntervalGroupSummaries,
+  deriveMetricUsabilitySignals,
   formatCadenceWithUnit,
   getActualIntervalsForAnalysis,
   getActualIntervalsSourceForAnalysis,
@@ -1205,9 +1206,13 @@ export function buildWorkoutAnalysisPrompt(
   const isCadenceRelevant = ['run', 'ride', 'bike', 'cycle'].some((t) =>
     workoutType.toLowerCase().includes(t)
   )
+  // The V2 facts get a vote here so the "## Metric Priority Rules" block cannot
+  // name a primary metric the facts block in this same prompt reports as unusable
+  // or absent (CW-397).
   const metricPriorityContext = resolveMetricPriorityContext(
     sportSettings?.loadPreference,
-    workoutData
+    workoutData,
+    deriveMetricUsabilitySignals(analysisFactsV2)
   )
   const condensedHrSection = shouldCondenseHeartRateSection(metricPriorityContext)
 

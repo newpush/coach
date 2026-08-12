@@ -1561,3 +1561,129 @@ describe('work-only interval aggregates', () => {
     expect(prompt).not.toContain('## Work vs Recovery Aggregates')
   })
 })
+
+/**
+ * CW-397. The sport profile is seeded `loadPreference: 'HR_PACE_POWER'` -- HR-first
+ * on purpose, so it works for athletes without a power meter. The bug was never the
+ * default: it was the prompt asserting `**Hard Rule**: Base most conclusions on HR
+ * evidence` while the V2 facts block a few sections further down in the *same* prompt
+ * reported `HR Usable: No`. "Hard Rule" phrasing wins that argument, so a power-meter
+ * ride got an HR-led analysis.
+ */
+describe('metric priority agrees with the facts block (CW-397)', () => {
+  // 10% dropouts: `getHrStats` marks the stream unusable, exactly as a chest strap
+  // that kept losing contact would.
+  const DROPOUT_HR_STREAM = Array.from({ length: 200 }, (_, index) => (index % 10 === 0 ? 0 : 148))
+
+  // Verbatim what `sportSettingsRepository.createDefault()` seeds. Unchanged by
+  // this ticket -- the fix is at prompt-assembly time.
+  const DEFAULT_SPORT_SETTINGS = { ftp: 275, lthr: 168, loadPreference: 'HR_PACE_POWER' }
+
+  const POWER_METER_RIDE = {
+    id: 'workout-cw397-power-ride',
+    date: new Date('2026-03-20T10:00:00Z'),
+    title: 'Sweet Spot Intervals',
+    type: 'Ride',
+    durationSec: 5400,
+    distanceMeters: 48000,
+    averageSpeed: 8.9,
+    averageWatts: 231,
+    normalizedPower: 248,
+    maxWatts: 640,
+    ftp: 275,
+    averageHr: 148,
+    maxHr: 176,
+    trainer: false,
+    streams: { heartrate: DROPOUT_HR_STREAM }
+  }
+
+  const HR_ONLY_RUN = {
+    id: 'workout-cw397-hr-run',
+    date: new Date('2026-03-21T06:00:00Z'),
+    title: 'Easy Endurance',
+    type: 'Run',
+    durationSec: 3300,
+    distanceMeters: 10000,
+    averageSpeed: 3.03,
+    averageHr: 148,
+    maxHr: 166,
+    streams: { heartrate: Array.from({ length: 200 }, () => 148) }
+  }
+
+  it('leads a default-settings power ride with power once the facts disown HR', () => {
+    const facts = buildWorkoutAnalysisFactsV2({
+      workout: POWER_METER_RIDE,
+      sportSettings: DEFAULT_SPORT_SETTINGS
+    } as any)
+
+    expect(facts.guardrails.telemetry.hrUsable).toBe(false)
+    expect(facts.guardrails.archetype.primaryMetric).toBe('power')
+
+    const prompt = buildWorkoutAnalysisPrompt(
+      buildWorkoutAnalysisData(POWER_METER_RIDE),
+      'Europe/Budapest',
+      'Supportive',
+      DEFAULT_SPORT_SETTINGS,
+      USER_PROFILE,
+      null,
+      undefined,
+      facts
+    )
+
+    // The facts block and the metric priority block now name the same metric.
+    expect(prompt).toContain('- HR Usable: No')
+    expect(prompt).toContain('- Primary Metric: power')
+    expect(prompt).toContain('- **Primary Metric for this analysis**: POWER (available)')
+    expect(prompt).toContain(
+      '- **Hard Rule**: Base most conclusions on POWER evidence. Use other metrics mainly for corroboration.'
+    )
+
+    // And the contradiction is gone: nothing in the prompt orders the model to
+    // base its conclusions on the metric the facts just disowned.
+    expect(prompt).not.toContain('Base most conclusions on HR evidence')
+    expect(prompt).toContain("**Demoted Metric**: HR is the athlete's preferred primary")
+  })
+
+  it('leaves an HR-only athlete on the HR-first default untouched', () => {
+    // The case the seeded default exists to serve: no power meter, clean HR.
+    // A regression here would be worse than the bug being fixed.
+    const facts = buildWorkoutAnalysisFactsV2({
+      workout: HR_ONLY_RUN,
+      sportSettings: { loadPreference: 'HR_PACE_POWER', lthr: 160 }
+    } as any)
+
+    expect(facts.guardrails.telemetry.hrUsable).toBe(true)
+
+    const prompt = buildWorkoutAnalysisPrompt(
+      buildWorkoutAnalysisData(HR_ONLY_RUN),
+      'Europe/Budapest',
+      'Supportive',
+      { loadPreference: 'HR_PACE_POWER', lthr: 160 },
+      USER_PROFILE,
+      null,
+      undefined,
+      facts
+    )
+
+    expect(prompt).toContain('- **Primary Metric for this analysis**: HR (available)')
+    expect(prompt).toContain(
+      '- **Hard Rule**: Base most conclusions on HR evidence. Use other metrics mainly for corroboration.'
+    )
+    expect(prompt).not.toContain('**Demoted Metric**')
+  })
+
+  it('leaves the no-facts legacy path exactly as it was', () => {
+    // Without a facts block there is nothing to contradict, so raw availability
+    // still decides and the HR-first default still leads.
+    const prompt = buildWorkoutAnalysisPrompt(
+      buildWorkoutAnalysisData(POWER_METER_RIDE),
+      'Europe/Budapest',
+      'Supportive',
+      DEFAULT_SPORT_SETTINGS,
+      USER_PROFILE
+    )
+
+    expect(prompt).toContain('- **Primary Metric for this analysis**: HR (available)')
+    expect(prompt).not.toContain('**Demoted Metric**')
+  })
+})

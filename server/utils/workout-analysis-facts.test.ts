@@ -4,10 +4,12 @@ import {
   buildIntervalGroupSummaries,
   buildWorkoutAnalysisFacts,
   buildWorkoutAnalysisFactsV2,
+  deriveMetricUsabilitySignals,
   formatActualIntervalsForPrompt,
   formatCadenceWithUnit,
   getActualIntervalsForAnalysis,
   getActualIntervalsSourceForAnalysis,
+  resolveAdherenceMetricOrder,
   resolveCadenceUnit,
   toCanonicalCadence,
   toIntervalIntensityFactor
@@ -3559,5 +3561,105 @@ describe('buildIntervalGroupSummaries', () => {
     expect(summaries.recovery?.totalDurationSeconds).toBe(360)
     expectNoNaN(summaries.work)
     expectNoNaN(summaries.recovery)
+  })
+})
+
+/**
+ * CW-397. `deriveAdherence` picks which planned target a step is scored against
+ * from the athlete's `loadPreference`. At the seeded `HR_PACE_POWER` default that
+ * meant a step carrying *both* a power and an HR target was judged on HR -- even
+ * on a power-meter ride whose HR trace the same facts object had already marked
+ * unusable. The order now runs through the same demotion the prompt uses.
+ */
+describe('adherence metric demotion (CW-397)', () => {
+  // 10% zero samples trips the dropout flag, so `getHrStats().usable` is false --
+  // the same shape a chest strap that kept losing contact produces.
+  const DROPOUT_HR_STREAM = Array.from({ length: 200 }, (_, index) => (index % 10 === 0 ? 0 : 150))
+  const CLEAN_HR_STREAM = Array.from({ length: 200 }, () => 150)
+
+  const INTERVALS = [
+    { type: 'WORK', moving_time: 480, average_watts: 260, average_heartrate: 168 },
+    { type: 'REST', moving_time: 120, average_watts: 180, average_heartrate: 132 },
+    { type: 'WORK', moving_time: 480, average_watts: 260, average_heartrate: 168 },
+    { type: 'REST', moving_time: 120, average_watts: 180, average_heartrate: 132 }
+  ]
+
+  // Power targets are hit exactly; HR targets are ~30-40% off. Whichever metric
+  // adherence chose is legible straight off the hit rate.
+  const step = (type: string, durationSeconds: number, watts: number, bpm: number) => ({
+    type,
+    durationSeconds,
+    power: { value: watts, units: 'watts' },
+    heartRate: { value: bpm, units: 'bpm' }
+  })
+
+  const PLANNED = {
+    durationSec: 1200,
+    structuredWorkout: {
+      steps: [
+        step('Active', 480, 260, 120),
+        step('Rest', 120, 180, 95),
+        step('Active', 480, 260, 120),
+        step('Rest', 120, 180, 95)
+      ]
+    }
+  }
+
+  const buildFacts = (heartrate: number[]) =>
+    buildWorkoutAnalysisFactsV2({
+      workout: makeWorkout({
+        title: 'Sweet Spot Intervals',
+        type: 'Ride',
+        durationSec: 1200,
+        averageWatts: 231,
+        averageHr: 150,
+        trainer: true,
+        streams: { heartrate },
+        rawJson: { icu_intervals: INTERVALS }
+      }),
+      // The seeded default, verbatim. Nothing about the athlete's settings changes.
+      sportSettings: { loadPreference: 'HR_PACE_POWER', ftp: 275 },
+      plannedWorkout: PLANNED
+    })
+
+  it('scores a power+HR step on power when the facts mark HR unusable', () => {
+    const facts = buildFacts(DROPOUT_HR_STREAM)
+
+    expect(facts.guardrails.telemetry.hrUsable).toBe(false)
+    expect(facts.adherence.workIntervalHitRate).toBe(100)
+    expect(facts.adherence.recoveryHitRate).toBe(100)
+  })
+
+  it('still scores the same step on HR when the HR trace is clean', () => {
+    // The control. Without it the test above would also pass if adherence had
+    // simply stopped looking at HR altogether.
+    const facts = buildFacts(CLEAN_HR_STREAM)
+
+    expect(facts.guardrails.telemetry.hrUsable).toBe(true)
+    expect(facts.adherence.workIntervalHitRate).toBe(0)
+  })
+
+  it('leaves rpe last so a demotion never promotes it over a real target', () => {
+    expect(
+      resolveAdherenceMetricOrder('HR_PACE_POWER', { hr: false, pace: true, power: true }, 'power')
+    ).toEqual(['power', 'pace', 'heartRate', 'rpe'])
+  })
+
+  it('returns the preference order untouched when the preferred primary is usable', () => {
+    expect(
+      resolveAdherenceMetricOrder('HR_PACE_POWER', { hr: true, pace: true, power: true }, 'mixed')
+    ).toEqual(['heartRate', 'pace', 'power', 'rpe'])
+  })
+
+  it('exposes the facts usability signals the prompt resolver consumes', () => {
+    const facts = buildFacts(DROPOUT_HR_STREAM)
+    const signals = deriveMetricUsabilitySignals(facts)
+
+    expect(signals).toMatchObject({
+      hrUsable: false,
+      powerUsable: true,
+      factsPrimaryMetric: facts.guardrails.archetype.primaryMetric
+    })
+    expect(deriveMetricUsabilitySignals(undefined)).toBeUndefined()
   })
 })

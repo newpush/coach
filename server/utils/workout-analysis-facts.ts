@@ -10,6 +10,12 @@ import {
   type Interval
 } from './interval-detection'
 import { parseLegacyLoadPreference, type MetricTarget } from './workout-target-policy'
+import {
+  parseLoadPreference,
+  resolveMetricPriorityOrder,
+  type MetricUsability,
+  type MetricUsabilitySignals
+} from '../../trigger/utils/workout-metric-priority'
 import { formatPromptPace } from './ai-prompt-format'
 
 type FactConfidence = 'low' | 'medium' | 'high'
@@ -1556,6 +1562,68 @@ function inferHrArtifactSeverity(stats: ReturnType<typeof getHrStats>): HrArtifa
   if (!stats.usable && dropoutRatio >= 0.1) return 'moderate'
   if (stats.artifactFlag || dropoutRatio > 0 || corruptionRatio > 0) return 'low'
   return 'none'
+}
+
+/**
+ * Adapter from the V2 facts to the metric-priority resolver (CW-397).
+ *
+ * The prompt used to state a `**Hard Rule**` naming the athlete's preferred
+ * primary metric while the facts block a few sections away reported that same
+ * metric as unusable. Feeding the facts back into the resolver is what makes the
+ * two sections agree by construction rather than by luck.
+ */
+export function deriveMetricUsabilitySignals(
+  facts?: WorkoutAnalysisFactsV2 | null
+): MetricUsabilitySignals | undefined {
+  if (!facts?.guardrails) return undefined
+  const { telemetry, archetype } = facts.guardrails
+  return {
+    hrUsable: telemetry.hrUsable,
+    hrArtifactSeverity: telemetry.hrArtifactSeverity,
+    // Relative usability is enough to lead an analysis: an estimated-power ride
+    // can still be judged on its own power trace, just not benchmarked absolutely.
+    powerUsable: telemetry.powerAbsoluteUsable || telemetry.powerRelativeUsable,
+    paceUsable: telemetry.paceUsable,
+    factsPrimaryMetric: archetype?.primaryMetric ?? null
+  }
+}
+
+const METRIC_KEY_TO_TARGET: Record<string, MetricTarget> = {
+  HR: 'heartRate',
+  PACE: 'pace',
+  POWER: 'power'
+}
+
+/**
+ * Adherence target order after unusable metrics are demoted (CW-397).
+ *
+ * `deriveAdherence` picks which target a planned step is scored against, so a
+ * step carrying both a power and an HR target used to be judged on HR at the
+ * seeded `HR_PACE_POWER` default even when the HR trace was unusable. Reordering
+ * here routes adherence through the same demotion the prompt uses. `rpe` is not
+ * part of the preference order and stays last: it is a fallback, never a promotion.
+ */
+export function resolveAdherenceMetricOrder(
+  loadPreference: string | null | undefined,
+  usability: MetricUsability,
+  factsPrimaryMetric?: MetricUsabilitySignals['factsPrimaryMetric']
+): MetricTarget[] {
+  const legacyOrder = parseLegacyLoadPreference(loadPreference)
+  const resolved = resolveMetricPriorityOrder(
+    parseLoadPreference(loadPreference),
+    usability,
+    factsPrimaryMetric
+  )
+
+  const order: MetricTarget[] = []
+  for (const key of resolved) {
+    const metric = METRIC_KEY_TO_TARGET[key]
+    if (metric && legacyOrder.includes(metric) && !order.includes(metric)) order.push(metric)
+  }
+  for (const metric of legacyOrder) {
+    if (!order.includes(metric)) order.push(metric)
+  }
+  return order
 }
 
 function inferPaceConfidence(
@@ -4734,12 +4802,23 @@ export function buildWorkoutAnalysisFactsV2({
       'Stop-and-go motion pattern detected; do not criticize lack of constant pace or invent steady-state drift narratives.'
     )
 
+  // Same usability verdicts the guardrail telemetry below publishes, so adherence
+  // scores a planned step on the metric the prompt is told to lead with (CW-397).
+  const metricUsability: MetricUsability = {
+    hr: hrStats.usable && inferHrArtifactSeverity(hrStats) !== 'high',
+    power: powerAbsoluteUsable || powerRelativeUsable,
+    pace: hasPace
+  }
   const adherence = deriveAdherence({
     workout,
     plannedWorkout,
     family,
     refs,
-    metricOrder: parseLegacyLoadPreference(sportSettings?.loadPreference)
+    metricOrder: resolveAdherenceMetricOrder(
+      sportSettings?.loadPreference,
+      metricUsability,
+      archetype.primaryMetric
+    )
   })
   // One comparable-rep resolution, shared by every rep-scoped signal, so the
   // durability and sport-specific blocks cannot disagree about which segments
