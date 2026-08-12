@@ -48,9 +48,19 @@ function parseDateOnlyUtc(value: unknown, field: string) {
     })
   }
 
-  // Shape-valid but not a real calendar date (e.g. 2026-02-30, 2026-13-01) parses to Invalid Date.
+  // Shape-valid but not a real calendar date. Two distinct failure modes, both caught here:
+  //
+  //   - Out-of-range month/day (`2026-13-01`, `2026-01-00`, `2026-01-32`) -> Invalid Date.
+  //   - A day that overflows its month (`2026-02-30`, `2026-04-31`, `2025-02-29`) does NOT produce
+  //     an Invalid Date: V8 falls back to its lenient legacy parser and rolls the date over, so
+  //     `2026-02-30T00:00:00Z` becomes 2026-03-02. Round-tripping back to `YYYY-MM-DD` is what
+  //     catches that — otherwise the endpoint would quietly answer for a range the caller never
+  //     asked for, which is exactly the silent coercion this ticket removes.
+  //
+  // The round-trip introduces no false rejections: any in-window real date formats back identically
+  // (`toISOString()` pads years to 4 digits, and the whole window is 1900-2200).
   const parsed = new Date(`${value}T00:00:00Z`)
-  if (Number.isNaN(parsed.getTime())) {
+  if (Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== value) {
     throw createError({ statusCode: 400, message: `Invalid ${field}: ${value}. ${expected}` })
   }
 
