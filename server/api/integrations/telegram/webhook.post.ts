@@ -6,6 +6,7 @@ import { generateText, isStepCount } from 'ai'
 import { buildPersistedToolCalls, expandStoredChatMessages } from '../../../utils/chat/history'
 import { transformHistoryToCoreMessages } from '../../../utils/ai-history'
 import { normalizeCoreMessagesForGemini } from '../../../utils/chat/core-message-normalizer'
+import { sanitizeCoreMessagesForToolApprovals } from '../../chat/sanitize-tool-approval'
 
 export default defineEventHandler(async (event) => {
   const secretToken = getHeader(event, 'x-telegram-bot-api-secret-token')
@@ -209,7 +210,12 @@ export default defineEventHandler(async (event) => {
     })
 
     const expandedHistory = expandStoredChatMessages(history.reverse())
-    const coreMessages = await transformHistoryToCoreMessages(expandedHistory)
+    // Mirror the main chat turn executor: malformed `tool-approval-response` parts in
+    // stored history crash `standardizePrompt` with AI_TypeValidationError (CW-209 /
+    // CW-293), so repair or drop them before the prompt is built. (CW-294)
+    const coreMessages = sanitizeCoreMessagesForToolApprovals(
+      await transformHistoryToCoreMessages(expandedHistory)
+    )
     const normalizedMessages = normalizeCoreMessagesForGemini(coreMessages)
 
     // Generate Response
