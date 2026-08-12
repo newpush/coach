@@ -14,8 +14,8 @@
             <h2
               class="font-athletic mt-6 text-3xl font-bold uppercase leading-[0.95] tracking-tight text-white"
             >
-              {{ t('join.hero_title') }}
-              <span class="text-primary-400">{{ t('join.hero_title_accent') }}</span>
+              {{ joinHeroTitle }}
+              <span class="text-primary-400">{{ joinHeroTitleAccent }}</span>
             </h2>
             <p class="mt-4 text-sm font-medium leading-relaxed text-gray-400">
               {{ joinTagline }}
@@ -162,6 +162,17 @@
   import { buildAcquisitionContext } from '#shared/analytics-events'
 
   const { t } = useTranslate('auth')
+
+  // Tolgee resolves these keys from bundled static data in production, but in dev it
+  // replaces the namespace with whatever the Tolgee platform returns. Any key that has
+  // not been pushed to the platform yet would then render as its raw key, so every
+  // lookup on this public page carries its English source string as a fallback.
+  const translateOrFallback = (key: string, fallback: string, invalidValues: string[] = []) =>
+    computed(() => {
+      const translated = t.value(key)
+      return translated === key || invalidValues.includes(translated) ? fallback : translated
+    })
+
   const { signIn } = useAuth()
   const route = useRoute()
   const toast = useToast()
@@ -179,15 +190,27 @@
 
   const callbackUrl = (route.query.callbackUrl as string) || '/dashboard'
 
+  const joinHeroTitle = translateOrFallback('join.hero_title', 'Eliminate the')
+  const joinHeroTitleAccent = translateOrFallback('join.hero_title_accent', 'guesswork')
+  const joinSeoTitle = translateOrFallback('join.seo_title', 'Create your account')
+  const joinSeoOgTitle = translateOrFallback(
+    'join.seo_og_title',
+    'Join Coach Watts - AI Endurance Coaching'
+  )
+  const joinSeoDescription = translateOrFallback(
+    'join.seo_description',
+    'Create your Coach Watts account and get personalized AI training, recovery analytics, and daily coaching insights.'
+  )
+
   useSeoMeta({
-    title: () => t.value('join.seo_title'),
-    ogTitle: () => t.value('join.seo_og_title'),
-    description: () => t.value('join.seo_description'),
-    ogDescription: () => t.value('join.seo_description'),
+    title: () => joinSeoTitle.value,
+    ogTitle: () => joinSeoOgTitle.value,
+    description: () => joinSeoDescription.value,
+    ogDescription: () => joinSeoDescription.value,
     ogImage: '/images/og-image.png',
     twitterCard: 'summary_large_image',
-    twitterTitle: () => t.value('join.seo_og_title'),
-    twitterDescription: () => t.value('join.seo_description'),
+    twitterTitle: () => joinSeoOgTitle.value,
+    twitterDescription: () => joinSeoDescription.value,
     twitterImage: '/images/og-image.png'
   })
 
@@ -195,12 +218,6 @@
   const loadingApple = ref(false)
   const loadingStrava = ref(false)
   const loadingIntervals = ref(false)
-
-  const translateOrFallback = (key: string, fallback: string, invalidValues: string[] = []) =>
-    computed(() => {
-      const translated = t.value(key)
-      return translated === key || invalidValues.includes(translated) ? fallback : translated
-    })
 
   const joinTitle = translateOrFallback('join.title', 'Create your')
   const joinSubtitle = translateOrFallback('join.subtitle', 'account')
@@ -247,26 +264,42 @@
 
   const referral = computed(() => (route.query.ref as string) || '')
 
-  const userInquiry = computed(() => {
-    if (referral.value === 'hall-of-fame') {
-      return t.value('join.hall_of_fame_user_message')
-    }
-    return t.value('join.user_message')
-  })
+  const joinUserMessage = translateOrFallback(
+    'join.user_message',
+    'My legs feel super heavy today. Should I push through?'
+  )
+  const joinHallOfFameUserMessage = translateOrFallback(
+    'join.hall_of_fame_user_message',
+    'I want to break my 5K personal best. Can you help?'
+  )
+  const joinAiGreeting = translateOrFallback(
+    'join.ai_greeting',
+    "I noticed your <span class='text-primary-400 font-bold'>HRV</span> dropped to 28ms overnight."
+  )
+  const joinHallOfFameAiGreeting = translateOrFallback(
+    'join.hall_of_fame_ai_greeting',
+    'Absolutely. I see your current best is 18:42 from last June.'
+  )
+  const joinAiAdvice = translateOrFallback(
+    'join.ai_advice',
+    "Let's swap your intervals for a <span class='font-bold text-primary-400'>Zone 2 Recovery Ride</span>. We'll get back to intensity tomorrow."
+  )
+  const joinHallOfFameAiAdvice = translateOrFallback(
+    'join.hall_of_fame_ai_advice',
+    "Based on your current fatigue profile, we need to focus on <span class='font-bold text-primary-400'>Threshold Intervals</span> this week to push that ceiling."
+  )
 
-  const aiGreeting = computed(() => {
-    if (referral.value === 'hall-of-fame') {
-      return t.value('join.hall_of_fame_ai_greeting')
-    }
-    return t.value('join.ai_greeting')
-  })
+  const userInquiry = computed(() =>
+    referral.value === 'hall-of-fame' ? joinHallOfFameUserMessage.value : joinUserMessage.value
+  )
 
-  const aiAdvice = computed(() => {
-    if (referral.value === 'hall-of-fame') {
-      return t.value('join.hall_of_fame_ai_advice')
-    }
-    return t.value('join.ai_advice')
-  })
+  const aiGreeting = computed(() =>
+    referral.value === 'hall-of-fame' ? joinHallOfFameAiGreeting.value : joinAiGreeting.value
+  )
+
+  const aiAdvice = computed(() =>
+    referral.value === 'hall-of-fame' ? joinHallOfFameAiAdvice.value : joinAiAdvice.value
+  )
 
   function showSignupError(
     description: string,
