@@ -25,6 +25,18 @@ const ACTIVE_MEMORY_STATUS: UserMemoryStatus = 'ACTIVE'
 const PROMPT_GLOBAL_LIMIT = 8
 const PROMPT_ROOM_LIMIT = 4
 
+/**
+ * How long a TEMPORARY memory stays eligible for the prompt.
+ *
+ * TEMPORARY is the classifier's default bucket, so it collects things that are
+ * only true for a few days — "HRV is 45ms today", "sore after Sunday's race",
+ * "unavailable 19-25 July". Nothing ever expired them, so they kept their place
+ * in the prompt indefinitely and crowded out durable facts: one athlete's
+ * memory block still described soreness and a rest period from a race six weeks
+ * earlier, which is why the coach kept treating a finished event as current.
+ */
+const TEMPORARY_MEMORY_TTL_DAYS = 30
+
 function createServiceError(statusCode: number, message: string) {
   const error = new Error(message) as Error & {
     statusCode: number
@@ -89,6 +101,32 @@ export function isSensitiveMemoryContent(content: string) {
   return /\b(injury|injured|pain|medical|health|surgery|illness|allergy|menstru|pregnan|anxiety|depression)\b/i.test(
     content
   )
+}
+
+/**
+ * True when a TEMPORARY memory has aged out of usefulness.
+ *
+ * Only TEMPORARY is subject to this — PREFERENCE, CONSTRAINT, GOAL, PROFILE and
+ * COMMUNICATION describe durable facts and instructions and must never expire.
+ * That distinction matters: the same athlete whose stale soreness notes caused
+ * this bug had also told the coach to stop mentioning a race, and that
+ * instruction is a PREFERENCE which has to survive.
+ *
+ * Pinned memories are exempt — pinning is an explicit "keep this".
+ */
+export function isStaleTemporaryMemory(
+  memory: Pick<UserMemory, 'category' | 'pinned' | 'lastConfirmedAt' | 'updatedAt'>,
+  now: Date = new Date()
+) {
+  if (memory.category !== 'TEMPORARY' || memory.pinned) return false
+
+  const lastTouched = Math.max(
+    memory.lastConfirmedAt ? new Date(memory.lastConfirmedAt).getTime() : 0,
+    memory.updatedAt ? new Date(memory.updatedAt).getTime() : 0
+  )
+  if (!lastTouched) return false
+
+  return now.getTime() - lastTouched > TEMPORARY_MEMORY_TTL_DAYS * 24 * 60 * 60 * 1000
 }
 
 function rankMemory(
@@ -373,7 +411,14 @@ class UserMemoryService {
       }
     }
 
-    const globalMemories = (
+    // Stale TEMPORARY memories are dropped from the prompt only. They stay in
+    // the store and remain visible to the memory management tools, so nothing
+    // the athlete saved silently disappears from their view.
+    const now = new Date()
+    const promptEligible = (memories: UserMemory[]) =>
+      memories.filter((memory) => !isStaleTemporaryMemory(memory, now))
+
+    const globalMemories = promptEligible(
       await this.listMemories({
         userId: params.userId,
         scope: 'GLOBAL',
@@ -384,7 +429,7 @@ class UserMemoryService {
       .slice(0, PROMPT_GLOBAL_LIMIT)
 
     const roomMemories = params.roomId
-      ? (
+      ? promptEligible(
           await this.listMemories({
             userId: params.userId,
             scope: 'ROOM',
