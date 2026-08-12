@@ -1,5 +1,8 @@
 <script setup lang="ts">
   import QRCode from 'qrcode'
+  import { useTranslate } from '@tolgee/vue'
+
+  const { t } = useTranslate('coaching')
 
   const props = defineProps<{
     code: string
@@ -23,12 +26,15 @@
 
   function copyUrl() {
     navigator.clipboard.writeText(joinUrl.value)
-    toast.add({ title: 'Join URL copied to clipboard!', color: 'success' })
+    toast.add({
+      title: t.value('invite_link_toast_url_copied', 'Join URL copied to clipboard!'),
+      color: 'success'
+    })
   }
 
   function copyCode() {
     navigator.clipboard.writeText(props.code.toUpperCase())
-    toast.add({ title: 'Code copied!', color: 'primary' })
+    toast.add({ title: t.value('invite_link_toast_code_copied', 'Code copied!'), color: 'primary' })
   }
 
   const isQrModalOpen = ref(false)
@@ -68,7 +74,7 @@
         {{ code.toUpperCase() }}
       </span>
       <div class="flex items-center border-l border-gray-100 dark:border-gray-800 ml-2 pl-2 gap-1">
-        <UTooltip text="Copy Join URL">
+        <UTooltip :text="t('invite_link_copy_url', 'Copy Join URL')">
           <UButton
             color="neutral"
             variant="ghost"
@@ -81,7 +87,7 @@
             "
           />
         </UTooltip>
-        <UTooltip text="Show QR Code">
+        <UTooltip :text="t('invite_link_show_qr', 'Show QR Code')">
           <UButton
             color="neutral"
             variant="ghost"
@@ -94,7 +100,7 @@
             "
           />
         </UTooltip>
-        <UTooltip text="Copy Code Only">
+        <UTooltip :text="t('invite_link_copy_code', 'Copy Code Only')">
           <UButton
             color="neutral"
             variant="ghost"
@@ -110,22 +116,29 @@
       </div>
     </div>
 
-    <UModal v-model:open="isQrModalOpen" title="Invite QR Code">
+    <UModal v-model:open="isQrModalOpen" :title="t('invite_link_qr_title', 'Invite QR Code')">
       <template #body>
         <div class="flex flex-col items-center p-6 space-y-6">
           <div class="text-center space-y-1">
             <p class="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-tight">
-              Scan to Join
+              {{ t('invite_link_qr_heading', 'Scan to Join') }}
             </p>
             <p class="text-xs text-neutral-500">
-              Hold your camera over the code to open the join link.
+              {{
+                t('invite_link_qr_desc', 'Hold your camera over the code to open the join link.')
+              }}
             </p>
           </div>
 
           <div
             class="p-4 bg-white rounded-2xl shadow-xl border-4 border-primary-500/10 transition-transform hover:scale-105 duration-300"
           >
-            <img v-if="qrCodeDataUrl" :src="qrCodeDataUrl" class="w-64 h-64" alt="Invite QR Code" />
+            <img
+              v-if="qrCodeDataUrl"
+              :src="qrCodeDataUrl"
+              class="w-64 h-64"
+              :alt="t('invite_link_qr_title', 'Invite QR Code')"
+            />
             <div v-else class="w-64 h-64 flex items-center justify-center">
               <UIcon name="i-heroicons-arrow-path" class="w-8 h-8 animate-spin text-primary-500" />
             </div>
@@ -134,7 +147,9 @@
           <div
             class="w-full bg-neutral-50 dark:bg-neutral-900 p-4 rounded-xl text-center space-y-2"
           >
-            <p class="text-[10px] font-black uppercase text-neutral-400">Join URL</p>
+            <p class="text-[10px] font-black uppercase text-neutral-400">
+              {{ t('invite_link_join_url_label', 'Join URL') }}
+            </p>
             <p
               class="text-xs font-mono break-all text-primary-600 dark:text-primary-400 font-bold px-2"
             >
@@ -147,7 +162,7 @@
         <UButton
           color="neutral"
           variant="ghost"
-          label="Close"
+          :label="t('invite_link_close', 'Close')"
           block
           @click="
             () => {

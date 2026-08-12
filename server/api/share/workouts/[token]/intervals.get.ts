@@ -1,6 +1,7 @@
 import { defineEventHandler, createError, getRouterParam } from 'h3'
 import { prisma } from '../../../../utils/db'
 import { attachStreamToWorkout } from '../../../../utils/repositories/workoutStreamRepository'
+import { sportSettingsRepository } from '../../../../utils/repositories/sportSettingsRepository'
 import {
   detectIntervals,
   findPeakEfforts,
@@ -8,7 +9,8 @@ import {
   calculateAerobicDecoupling,
   calculateCoastingStats,
   detectSurgesAndFades,
-  calculateRecoveryRateTrend
+  calculateRecoveryRateTrend,
+  resolveHrWorkThreshold
 } from '../../../../utils/interval-detection'
 import {
   calculateWPrimeBalance,
@@ -93,7 +95,8 @@ export default defineEventHandler(async (event) => {
         select: {
           id: true,
           ftp: true,
-          maxHr: true
+          maxHr: true,
+          lthr: true
         }
       }
     }
@@ -192,8 +195,29 @@ export default defineEventHandler(async (event) => {
   } else if (hasHr) {
     // Detect based on HR (least reliable for short intervals due to lag, but good for steady state)
     detectionMetric = 'heartrate'
-    const maxHr = workout.maxHr || (workout as any).user?.maxHr
-    const threshold = maxHr ? maxHr * 0.7 : undefined // approx Z2 border
+
+    // This endpoint is authenticated by share token, not by session user, so the HR
+    // references must come from the workout OWNER's profile - never from whoever is viewing
+    // the link. `workout.userId` is the owner, and the sport settings are read server-side
+    // only: they feed the detection engine and are NOT added to the response, so the shared
+    // payload gains no athlete profile fields (see share-response-sanitize.test.ts).
+    const ownerId = (workout as any).userId || (workout as any).user?.id
+    const ownerSportSettings = ownerId
+      ? await sportSettingsRepository.getForActivityType(ownerId, workout.type || '')
+      : null
+
+    // Profile first (sport settings, then the user record); `resolveHrWorkThreshold` prefers
+    // 0.82 * LTHR and falls back to 0.7 * max HR, with this workout's own max HR only as an
+    // explicit last resort. Scaling belongs to that helper alone (CW-383/CW-418).
+    const hrRefs = {
+      lthr: ownerSportSettings?.lthr ?? (workout as any).user?.lthr,
+      maxHr: ownerSportSettings?.maxHr ?? (workout as any).user?.maxHr
+    }
+    const threshold = resolveHrWorkThreshold({
+      ...hrRefs,
+      sessionMaxHr: workout.maxHr
+    })
+
     detectedIntervals = detectIntervals(
       time,
       hrStream!,
@@ -201,7 +225,9 @@ export default defineEventHandler(async (event) => {
       threshold,
       undefined,
       undefined,
-      cadenceStream || undefined
+      cadenceStream || undefined,
+      // Zone reference, kept separate from the work bar above (CW-400).
+      hrRefs
     )
   }
 

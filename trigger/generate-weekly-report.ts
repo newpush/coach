@@ -24,170 +24,40 @@ import {
   formatPromptDistance
 } from '../server/utils/ai-prompt-format'
 import { bodyMetricResolver } from '../server/utils/services/bodyMetricResolver'
+import {
+  buildReportAnalysisSchema,
+  REPORT_SCORE_SCALE_TEXT
+} from '../server/utils/services/report-analysis-schema'
 
-// Analysis schema for structured JSON output
-const analysisSchema = {
-  type: 'object',
-  properties: {
-    type: {
-      type: 'string',
-      description: 'Type of analysis: workout, weekly_report, planning, comparison',
-      enum: ['workout', 'weekly_report', 'planning', 'comparison']
-    },
-    title: {
-      type: 'string',
-      description: 'Title of the analysis'
-    },
-    date: {
-      type: 'string',
-      description: 'Date or date range of the analysis'
-    },
-    executive_summary: {
-      type: 'string',
-      description: '2-3 sentence high-level summary of key findings'
-    },
-    sections: {
-      type: 'array',
-      description: 'Analysis sections with status and points',
-      items: {
-        type: 'object',
-        properties: {
-          title: {
-            type: 'string',
-            description: 'Section title (e.g., Training Load Analysis, Recovery Trends)'
-          },
-          status: {
-            type: 'string',
-            description: 'Overall assessment',
-            enum: ['excellent', 'good', 'moderate', 'needs_improvement', 'poor']
-          },
-          status_label: {
-            type: 'string',
-            description: 'Display label for status'
-          },
-          analysis_points: {
-            type: 'array',
-            description:
-              'Detailed analysis points for this section. Each point should be 1-2 sentences maximum as a separate array item. Do NOT combine multiple points into paragraph blocks.',
-            items: {
-              type: 'string'
-            }
-          }
-        },
-        required: ['title', 'status', 'status_label', 'analysis_points']
-      }
-    },
-    recommendations: {
-      type: 'array',
-      description: 'Actionable coaching recommendations',
-      items: {
-        type: 'object',
-        properties: {
-          title: {
-            type: 'string',
-            description: 'Recommendation title'
-          },
-          priority: {
-            type: 'string',
-            description: 'Priority level',
-            enum: ['high', 'medium', 'low']
-          },
-          description: {
-            type: 'string',
-            description: 'Detailed recommendation'
-          }
-        },
-        required: ['title', 'priority', 'description']
-      }
-    },
-    scores: {
-      type: 'object',
-      description:
-        'Period performance scores on 1-10 scale for tracking over time, with detailed explanations',
-      properties: {
-        overall: {
-          type: 'number',
-          description: 'Overall period assessment (1-10)',
-          minimum: 1,
-          maximum: 10
-        },
-        overall_explanation: {
-          type: 'string',
-          description:
-            'Detailed explanation of overall assessment: key highlights from the period, major achievements or concerns, and 2-3 specific actions for next period'
-        },
-        training_load: {
-          type: 'number',
-          description: 'Training load management quality (1-10)',
-          minimum: 1,
-          maximum: 10
-        },
-        training_load_explanation: {
-          type: 'string',
-          description:
-            'Training load analysis: TSS trends, load appropriateness, fatigue vs fitness balance, and specific recommendations for load management'
-        },
-        recovery: {
-          type: 'number',
-          description: 'Recovery adequacy score (1-10)',
-          minimum: 1,
-          maximum: 10
-        },
-        recovery_explanation: {
-          type: 'string',
-          description:
-            'Recovery analysis: HRV trends, sleep quality observations, recovery adequacy relative to training load, and specific recovery optimization strategies'
-        },
-        progress: {
-          type: 'number',
-          description: 'Progress and adaptation score (1-10)',
-          minimum: 1,
-          maximum: 10
-        },
-        progress_explanation: {
-          type: 'string',
-          description:
-            'Progress assessment: performance trends, adaptation signals, whether training is effective, and recommendations for continued progress'
-        },
-        consistency: {
-          type: 'number',
-          description: 'Training consistency score (1-10)',
-          minimum: 1,
-          maximum: 10
-        },
-        consistency_explanation: {
-          type: 'string',
-          description:
-            'Consistency analysis: adherence patterns, missed sessions analysis, consistency relative to plan, and strategies to improve adherence'
-        }
-      },
-      required: [
-        'overall',
-        'overall_explanation',
-        'training_load',
-        'training_load_explanation',
-        'recovery',
-        'recovery_explanation',
-        'progress',
-        'progress_explanation',
-        'consistency',
-        'consistency_explanation'
-      ]
-    },
-    metrics_summary: {
-      type: 'object',
-      description: 'Key metrics across the period',
-      properties: {
-        total_duration_minutes: { type: 'number' },
-        total_tss: { type: 'number' },
-        avg_power: { type: 'number' },
-        avg_heart_rate: { type: 'number' },
-        total_distance_km: { type: 'number' }
-      }
+/**
+ * Analysis schema for structured JSON output.
+ *
+ * Built from the shared report builder so the section-status vocabulary and the
+ * score bounds come from `ANALYSIS_SECTION_STATUSES` / `ANALYSIS_SCORE_MIN|MAX`
+ * rather than from a literal that can drift from the prompt below (CW-425).
+ * Only this report's copy is declared here.
+ */
+export const weeklyReportAnalysisSchema = buildReportAnalysisSchema({
+  sectionTitleDescription: 'Section title (e.g., Training Load Analysis, Recovery Trends)',
+  forbidParagraphBlocks: true,
+  scores: {
+    description: `Period performance scores on ${REPORT_SCORE_SCALE_TEXT} for tracking over time, with detailed explanations`,
+    required: true,
+    explanations: {
+      overall:
+        'Detailed explanation of overall assessment: key highlights from the period, major achievements or concerns, and 2-3 specific actions for next period',
+      training_load:
+        'Training load analysis: TSS trends, load appropriateness, fatigue vs fitness balance, and specific recommendations for load management',
+      recovery:
+        'Recovery analysis: HRV trends, sleep quality observations, recovery adequacy relative to training load, and specific recovery optimization strategies',
+      progress:
+        'Progress assessment: performance trends, adaptation signals, whether training is effective, and recommendations for continued progress',
+      consistency:
+        'Consistency analysis: adherence patterns, missed sessions analysis, consistency relative to plan, and strategies to improve adherence'
     }
   },
-  required: ['type', 'title', 'executive_summary', 'sections', 'scores']
-}
+  metricsSummaryDescription: 'Key metrics across the period'
+})
 
 export const generateWeeklyReportTask = task({
   id: 'generate-weekly-report',
@@ -366,7 +236,7 @@ Maintain your **${aiSettings.aiPersona}** persona throughout. Be specific with n
       // Generate structured analysis
       const analysisJson = await generateStructuredAnalysis<any>(
         prompt,
-        analysisSchema,
+        weeklyReportAnalysisSchema,
         aiSettings.aiModelPreference,
         {
           userId,

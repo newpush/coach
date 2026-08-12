@@ -86,7 +86,7 @@
         </div>
 
         <div
-          v-if="streams.pacingStrategy"
+          v-if="streams.pacingStrategy && splitVerdictApplicable"
           class="p-5 bg-emerald-50 dark:bg-emerald-900/20 rounded-xl border border-emerald-100 dark:border-emerald-800/50 md:col-span-2 lg:col-span-1 group transition-all cursor-pointer hover:border-emerald-500/50 active:scale-[0.98]"
           @click="
             () => {
@@ -116,6 +116,34 @@
             >{{ streams.pacingStrategy.description }}</span
           >
         </div>
+
+        <!--
+          Session shapes whose distance splits are not comparable get an
+          explanation in place of the verdict, never a missing tile (CW-436).
+        -->
+        <div
+          v-else-if="streams.pacingStrategy"
+          class="p-5 bg-gray-50 dark:bg-gray-900/40 rounded-xl border border-gray-200 dark:border-gray-800 md:col-span-2 lg:col-span-1"
+        >
+          <!--
+            No magnifying-glass affordance here: every other tile opens a metric
+            modal on click, so borrowing the icon on a tile that cannot would read
+            as broken rather than as deliberately withheld.
+          -->
+          <div class="flex items-center justify-between mb-4">
+            <span
+              class="block text-[10px] font-black uppercase text-gray-500 dark:text-gray-400 tracking-[0.2em]"
+              >Execution Strategy</span
+            >
+          </div>
+          <span
+            class="block text-2xl font-black text-gray-700 dark:text-gray-300 uppercase tracking-tight"
+            >Not Graded</span
+          >
+          <span class="block text-[10px] text-gray-500 dark:text-gray-400 font-medium italic mt-2"
+            >Distance splits are not comparable for a session shaped like this one.</span
+          >
+        </div>
       </div>
 
       <!-- Lap Splits Table -->
@@ -130,7 +158,7 @@
         >
           <div class="flex items-center gap-2">
             <h3 class="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">
-              Segment Splits
+              Distance Splits
             </h3>
             <UIcon
               :name="showSplits ? 'i-heroicons-chevron-up' : 'i-heroicons-chevron-down'"
@@ -139,6 +167,14 @@
           </div>
         </div>
 
+        <p
+          v-if="showSplits"
+          class="-mt-2 mb-4 text-xs font-medium text-gray-500 dark:text-gray-400"
+        >
+          Automatic markers cut at a fixed distance each. These are not laps and not this workout's
+          work intervals.
+        </p>
+
         <div v-if="showSplits" class="overflow-hidden">
           <table class="min-w-full divide-y divide-gray-100 dark:divide-gray-800">
             <thead class="bg-gray-50/50 dark:bg-gray-950/50">
@@ -146,7 +182,7 @@
                 <th
                   class="px-5 py-3 text-left text-[9px] font-black text-gray-400 uppercase tracking-widest"
                 >
-                  Lap
+                  Split
                 </th>
                 <th
                   class="px-5 py-3 text-left text-[9px] font-black text-gray-400 uppercase tracking-widest"
@@ -192,9 +228,12 @@
       </div>
 
       <!-- Pacing Strategy Details -->
-      <div v-if="streams.pacingStrategy" class="pt-6 border-t border-gray-100 dark:border-gray-800">
+      <div
+        v-if="streams.pacingStrategy && splitVerdictApplicable"
+        class="pt-6 border-t border-gray-100 dark:border-gray-800"
+      >
         <h3 class="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-4">
-          Split Analysis
+          Split Strategy
         </h3>
         <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div class="p-4 bg-gray-50 dark:bg-gray-950 rounded-xl">
@@ -231,15 +270,54 @@
               >Steady State Integrity</span
             >
             <span class="text-[10px] font-black text-gray-900 dark:text-white tracking-widest"
-              >{{ streams.pacingStrategy.evenness }}/100</span
+              >{{ streams.pacingStrategy.evenness ?? 0 }}/100</span
             >
           </div>
           <div class="h-2 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden shadow-inner">
             <div
               class="h-full transition-all duration-1000 ease-out"
-              :style="{ width: streams.pacingStrategy.evenness + '%' }"
-              :class="getEvennessClass(streams.pacingStrategy.evenness)"
+              :style="{ width: (streams.pacingStrategy.evenness ?? 0) + '%' }"
+              :class="getEvennessClass(streams.pacingStrategy.evenness ?? 0)"
             />
+          </div>
+        </div>
+      </div>
+
+      <!--
+        The halves, the delta and the evenness grade are all verdicts drawn from a
+        first-half vs second-half comparison, so they are withheld together for a
+        session whose distance splits are not comparable. The split rows above and
+        the consistency variance measurement are untouched (CW-436).
+      -->
+      <div
+        v-else-if="streams.pacingStrategy"
+        class="pt-6 border-t border-gray-100 dark:border-gray-800"
+      >
+        <h3 class="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-4">
+          Split Strategy
+        </h3>
+        <div
+          class="p-5 bg-gray-50 dark:bg-gray-950 rounded-xl border border-gray-100 dark:border-gray-800"
+        >
+          <div class="flex items-start gap-3">
+            <UIcon
+              name="i-heroicons-information-circle"
+              class="w-5 h-5 text-gray-400 shrink-0 mt-0.5"
+            />
+            <div>
+              <p
+                class="text-[10px] font-black text-gray-700 dark:text-gray-300 uppercase tracking-widest mb-2"
+              >
+                Not graded for this session
+              </p>
+              <p class="text-sm font-medium text-gray-600 dark:text-gray-400 leading-relaxed">
+                These splits are cut at a fixed distance each, not at your efforts, so a single
+                split can hold part of a hard effort and part of a recovery. Comparing the first
+                half against the second half here would tell you where the splits landed, not how
+                you paced the session. Your split times and the consistency variance above are
+                measured as usual.
+              </p>
+            </div>
           </div>
         </div>
       </div>
@@ -369,10 +447,14 @@
     pacingStrategy: {
       strategy: string
       description: string
-      firstHalfPace: number
-      secondHalfPace: number
-      paceDifference: number
-      evenness: number
+      // Withheld together when the split-strategy verdict does not apply to this
+      // session shape (CW-436); the split rows and the variance stay regardless.
+      firstHalfPace?: number
+      secondHalfPace?: number
+      paceDifference?: number
+      evenness?: number
+      verdictApplicable?: boolean
+      verdictWithheldReason?: string | null
     }
     lapSplits: Array<{
       lap: number
@@ -421,6 +503,17 @@
   const validSurges = computed(() => {
     return (streams.value?.surges || []).filter((s) => s && s.time !== undefined)
   })
+
+  /**
+   * Whether the split-strategy verdict applies to this session. Decided server-side
+   * by `resolveSplitPacingVerdictApplicability` -- the same gate CW-389 applied to
+   * the AI prompt -- so this card and the AI analysis never contradict each other
+   * about whether pacing was gradeable (CW-436). Responses predating the gate carry
+   * no flag and stay graded.
+   */
+  const splitVerdictApplicable = computed(
+    () => streams.value?.pacingStrategy?.verdictApplicable !== false
+  )
 
   // Calculate surge position as percentage of total workout time
   function getSurgePosition(surgeTime: number): number {
@@ -550,7 +643,8 @@
       positive_split: 'Positive Split',
       negative_split: 'Negative Split',
       slightly_uneven: 'Slightly Uneven',
-      insufficient_data: 'Insufficient Data'
+      insufficient_data: 'Insufficient Data',
+      not_graded: 'Not Graded'
     }
     return strategies[strategy] || strategy
   }
@@ -567,10 +661,10 @@
     return 'bg-green-50/50 dark:bg-green-900/10'
   }
 
-  function getDifferenceBgClass(difference: number): string {
-    if (Math.abs(difference) < 5)
+  function getDifferenceBgClass(difference: number | null | undefined): string {
+    if (Math.abs(difference ?? 0) < 5)
       return 'bg-green-50 dark:bg-green-900/20 border-green-100 dark:border-green-800/50 text-green-700 dark:text-green-300'
-    if (difference > 0)
+    if ((difference ?? 0) > 0)
       return 'bg-orange-50 dark:bg-orange-900/20 border-orange-100 dark:border-orange-800/50 text-orange-700 dark:text-orange-300'
     return 'bg-blue-50 dark:bg-blue-900/20 border-blue-100 dark:border-blue-800/50 text-blue-700 dark:text-blue-300'
   }

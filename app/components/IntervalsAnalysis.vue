@@ -47,17 +47,30 @@
           class="bg-white/[0.02] dark:bg-black rounded-2xl p-6 border border-white/5 shadow-inner group transition-all hover:bg-white/[0.04]"
         >
           <div
-            class="font-mono text-[9px] font-black uppercase tracking-[0.3em] text-primary-500 mb-4"
+            class="font-mono text-[9px] font-black uppercase tracking-[0.3em] mb-4"
+            :class="isSteadySession ? 'text-cyan-700 dark:text-cyan-400' : 'text-primary-500'"
           >
-            Work Intervals
+            {{ effortCardLabel }}
           </div>
+          <!-- A steady session always has exactly one block, so "1" would be a useless
+               headline. Lead with the duration instead - that is the number the athlete
+               actually cares about on a continuous ride. -->
           <div
             class="text-4xl font-black text-gray-900 dark:text-white tabular-nums tracking-tighter"
           >
-            {{ workIntervals.length }}
+            {{ isSteadySession ? formatBlockDuration(effortCardDuration) : effortCardCount }}
           </div>
-          <div class="font-mono text-[9px] font-bold text-zinc-500 uppercase tracking-widest mt-2">
-            Duration: {{ formatDuration(totalWorkDuration) }}
+          <div
+            v-if="!isSteadySession"
+            class="font-mono text-[9px] font-bold text-zinc-500 uppercase tracking-widest mt-2"
+          >
+            Duration: {{ formatDuration(effortCardDuration) }}
+          </div>
+          <div
+            v-else
+            class="font-mono text-[9px] font-bold text-cyan-700 dark:text-cyan-400 uppercase tracking-widest mt-2"
+          >
+            {{ steadySubLabel }}
           </div>
         </div>
 
@@ -180,7 +193,13 @@
               <tr
                 v-for="(interval, index) in data.intervals"
                 :key="index"
-                :class="interval.type === 'WORK' ? 'bg-primary-500/[0.02]' : ''"
+                :class="
+                  interval.type === 'WORK'
+                    ? 'bg-primary-500/[0.02]'
+                    : interval.type === 'STEADY'
+                      ? 'bg-cyan-500/[0.02]'
+                      : ''
+                "
                 class="hover:bg-white/[0.02] transition-colors"
               >
                 <td class="px-6 py-4 whitespace-nowrap">
@@ -189,9 +208,11 @@
                     :class="[
                       interval.type === 'WORK'
                         ? 'border-primary-500/30 text-primary-500 bg-primary-500/5'
-                        : interval.type === 'RECOVERY'
-                          ? 'border-blue-500/30 text-blue-400 bg-blue-500/5'
-                          : 'border-zinc-500/30 text-zinc-400 bg-zinc-500/5'
+                        : interval.type === 'STEADY'
+                          ? 'border-cyan-500/30 text-cyan-700 dark:text-cyan-400 bg-cyan-500/5'
+                          : interval.type === 'RECOVERY'
+                            ? 'border-blue-500/30 text-blue-400 bg-blue-500/5'
+                            : 'border-zinc-500/30 text-zinc-400 bg-zinc-500/5'
                     ]"
                   >
                     {{ interval.type }}
@@ -216,7 +237,7 @@
                       >W</span
                     ></span
                   >
-                  <span class="text-zinc-600">-</span>
+                  <span v-else class="text-zinc-600">-</span>
                 </td>
                 <td
                   class="px-6 py-4 whitespace-nowrap text-sm font-black text-gray-900 dark:text-white tabular-nums"
@@ -227,7 +248,7 @@
                       >bpm</span
                     ></span
                   >
-                  <span class="text-zinc-600">-</span>
+                  <span v-else class="text-zinc-600">-</span>
                 </td>
               </tr>
             </tbody>
@@ -362,17 +383,50 @@
       unit = 'm/s'
     }
 
-    // Create annotations for intervals
+    // Create annotations for intervals.
+    // The chart series is downsampled, and `formatTime` collapses everything past the
+    // first hour to whole minutes, so label strings are ambiguous/duplicated and the
+    // annotation plugin cannot resolve them. Resolve the category index instead.
+    const chartTimes: number[] = data.value.chartData.time || []
+    const indexForTime = (seconds: number) => {
+      if (!chartTimes.length) return 0
+      let lo = 0
+      let hi = chartTimes.length - 1
+      while (lo < hi) {
+        const mid = (lo + hi) >> 1
+        if ((chartTimes[mid] as number) < seconds) lo = mid + 1
+        else hi = mid
+      }
+      return lo
+    }
+
     const annotations: any = {}
 
     if (data.value.intervals) {
       data.value.intervals.forEach((interval: any, index: number) => {
-        if (interval.type === 'WORK') {
+        // STEADY is the whole-session block emitted for a continuous ride/run; it is
+        // the athlete's entire effort, so it has to be shaded too - just in its own
+        // hue so it never reads as a work rep.
+        const shading =
+          interval.type === 'WORK'
+            ? isDark
+              ? 'rgba(74, 222, 128, 0.1)'
+              : 'rgba(74, 222, 128, 0.2)' // Green tint
+            : interval.type === 'STEADY'
+              ? isDark
+                ? 'rgba(34, 211, 238, 0.18)'
+                : 'rgba(34, 211, 238, 0.22)' // Cyan tint - a STEADY box covers the whole
+              : null // trace, so it needs enough alpha to read against the black panel
+
+        if (shading) {
           annotations[`box${index}`] = {
             type: 'box',
-            xMin: formatTime(interval.start_time),
-            xMax: formatTime(interval.end_time),
-            backgroundColor: isDark ? 'rgba(74, 222, 128, 0.1)' : 'rgba(74, 222, 128, 0.2)', // Green tint
+            xMin: indexForTime(interval.start_time),
+            xMax: indexForTime(interval.end_time),
+            backgroundColor: shading,
+            // No `drawTime` here on purpose: `ensureChartJsAnnotationDefaults` now merges
+            // into the plugin's defaults instead of replacing them, so the plugin's own
+            // `afterDatasetsDraw` default applies (CW-422). One source of truth.
             borderWidth: 0
           }
         }
@@ -424,16 +478,22 @@
                 const time = data.value.chartData.time[index]
 
                 const interval = data.value.intervals.find(
-                  (i: any) => i.start_time <= time && i.end_time >= time && i.type === 'WORK'
+                  (i: any) =>
+                    i.start_time <= time &&
+                    i.end_time >= time &&
+                    (i.type === 'WORK' || i.type === 'STEADY')
                 )
 
                 if (interval) {
-                  return [
+                  const lines = [
                     '',
-                    `Interval: ${formatDuration(interval.duration)}`,
-                    `Avg Power: ${Math.round(interval.avg_power || 0)}W`,
-                    `Avg HR: ${Math.round(interval.avg_heartrate || 0)} bpm`
+                    `${interval.type === 'STEADY' ? 'Steady block' : 'Interval'}: ${formatDuration(interval.duration)}`
                   ]
+                  if (interval.avg_power)
+                    lines.push(`Avg Power: ${Math.round(interval.avg_power)}W`)
+                  if (interval.avg_heartrate)
+                    lines.push(`Avg HR: ${Math.round(interval.avg_heartrate)} bpm`)
+                  return lines
                 }
                 return []
               }
@@ -472,6 +532,43 @@
     return workIntervals.value.reduce((sum: number, i: any) => sum + i.duration, 0)
   })
 
+  // STEADY is the single whole-session block the engine emits for a continuous
+  // endurance ride/run. It is deliberately counted separately from WORK (folding it
+  // in would undo CW-383) but it must not leave the summary reading "0 intervals".
+  const steadyIntervals = computed(() => {
+    return data.value?.intervals?.filter((i: any) => i.type === 'STEADY') || []
+  })
+
+  const totalSteadyDuration = computed(() => {
+    return steadyIntervals.value.reduce((sum: number, i: any) => sum + i.duration, 0)
+  })
+
+  const isSteadySession = computed(
+    () => workIntervals.value.length === 0 && steadyIntervals.value.length > 0
+  )
+
+  const effortCardLabel = computed(() =>
+    isSteadySession.value
+      ? steadyIntervals.value.length === 1
+        ? 'Steady Block'
+        : 'Steady Blocks'
+      : 'Work Intervals'
+  )
+
+  const effortCardCount = computed(() =>
+    isSteadySession.value ? steadyIntervals.value.length : workIntervals.value.length
+  )
+
+  const effortCardDuration = computed(() =>
+    isSteadySession.value ? totalSteadyDuration.value : totalWorkDuration.value
+  )
+
+  const steadySubLabel = computed(() =>
+    steadyIntervals.value.length > 1
+      ? `${steadyIntervals.value.length} Continuous Blocks`
+      : 'Continuous Effort — No Reps'
+  )
+
   const bestEffort = computed(() => {
     if (!data.value?.peaks) return null
 
@@ -505,6 +602,8 @@
     switch (type) {
       case 'WORK':
         return 'primary'
+      case 'STEADY':
+        return 'cyan'
       case 'RECOVERY':
         return 'neutral'
       case 'WARMUP':
@@ -520,6 +619,17 @@
     const mins = Math.floor(seconds / 60)
     const secs = Math.round(seconds % 60)
     return `${mins}:${secs.toString().padStart(2, '0')}`
+  }
+
+  /**
+   * Headline duration for the steady card. `formatTime` floors the minutes, which makes a
+   * 1:14:59 block read "1h 14m" next to the workout header's "1:15:00"; round instead.
+   */
+  function formatBlockDuration(seconds: number) {
+    const totalMins = Math.round(seconds / 60)
+    const hours = Math.floor(totalMins / 60)
+    const mins = totalMins % 60
+    return hours > 0 ? `${hours}h ${mins}m` : `${mins}m`
   }
 
   function formatTime(seconds: number) {

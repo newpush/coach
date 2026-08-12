@@ -91,12 +91,28 @@ export function calculateFatigueSensitivity(
 }
 
 /**
+ * Minimal structural shape `calculateStabilityMetrics` needs from an interval.
+ *
+ * Deliberately NOT the full `Interval` from `./interval-detection`: callers pass
+ * a mix of detected `Interval` objects and ad-hoc rep bounds built inline (see
+ * `repScopedStabilityCoV` in `workout-analysis-facts.ts`), whose `type` widens to
+ * `string`. Keeping this a structural subset means every existing caller
+ * type-checks unchanged while a missing `start_index` / `end_index` — the fields
+ * actually read below — becomes a compile error instead of a silent `NaN`.
+ */
+export interface StabilityInterval {
+  type?: string
+  start_index: number
+  end_index: number
+}
+
+/**
  * Calculate Stability Metrics (Consistency)
  * Uses Coefficient of Variation (StdDev / Mean)
  */
 export function calculateStabilityMetrics(
   stream: number[],
-  intervals: any[] = []
+  intervals: StabilityInterval[] = []
 ): StabilityMetrics | null {
   if (!stream || stream.length === 0) return null
 
@@ -111,7 +127,10 @@ export function calculateStabilityMetrics(
   const overallCoV = getCoV(stream.filter((v) => v > 10))
 
   const intervalStability = intervals
-    .filter((interval) => interval.type === 'WORK')
+    // STEADY is the whole-session block emitted for a continuous ride/run
+    // (CW-383). Its coefficient of variation is exactly the number a steady
+    // session cares about, so it belongs here alongside WORK reps.
+    .filter((interval) => interval.type === 'WORK' || interval.type === 'STEADY')
     .map((interval, idx) => {
       const segment = stream.slice(interval.start_index, interval.end_index + 1)
       return {

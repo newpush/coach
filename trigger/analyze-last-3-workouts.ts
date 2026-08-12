@@ -16,102 +16,24 @@ import {
   formatPromptHeight,
   formatPromptDistance
 } from '../server/utils/ai-prompt-format'
+import { buildReportAnalysisSchema } from '../server/utils/services/report-analysis-schema'
 
-// Reuse the flexible analysis schema (same as workout analysis)
-const analysisSchema = {
-  type: 'object',
-  properties: {
-    type: {
-      type: 'string',
-      description: 'Type of analysis: workout, weekly_report, planning, comparison',
-      enum: ['workout', 'weekly_report', 'planning', 'comparison']
-    },
-    title: {
-      type: 'string',
-      description: 'Title of the analysis'
-    },
-    date: {
-      type: 'string',
-      description: 'Date or date range of the analysis'
-    },
-    executive_summary: {
-      type: 'string',
-      description: '2-3 sentence high-level summary of key findings'
-    },
-    sections: {
-      type: 'array',
-      description: 'Analysis sections with status and points',
-      items: {
-        type: 'object',
-        properties: {
-          title: {
-            type: 'string',
-            description: 'Section title (e.g., Training Progression, Recovery Patterns)'
-          },
-          status: {
-            type: 'string',
-            description: 'Overall assessment',
-            enum: ['excellent', 'good', 'moderate', 'needs_improvement', 'poor']
-          },
-          status_label: {
-            type: 'string',
-            description: 'Display label for status'
-          },
-          analysis_points: {
-            type: 'array',
-            description:
-              'Detailed analysis points for this section. Each point should be 1-2 sentences maximum as a separate array item. Do NOT combine multiple points into paragraph blocks.',
-            items: {
-              type: 'string'
-            }
-          }
-        },
-        required: ['title', 'status', 'status_label', 'analysis_points']
-      }
-    },
-    recommendations: {
-      type: 'array',
-      description: 'Actionable coaching recommendations',
-      items: {
-        type: 'object',
-        properties: {
-          title: {
-            type: 'string',
-            description: 'Recommendation title'
-          },
-          priority: {
-            type: 'string',
-            description: 'Priority level',
-            enum: ['high', 'medium', 'low']
-          },
-          description: {
-            type: 'string',
-            description: 'Detailed recommendation'
-          }
-        },
-        required: ['title', 'priority', 'description']
-      }
-    },
-    metrics_summary: {
-      type: 'object',
-      description: 'Key metrics across the workouts',
-      properties: {
-        total_duration_minutes: { type: 'number' },
-        total_tss: { type: 'number' },
-        avg_power: { type: 'number' },
-        avg_heart_rate: { type: 'number' },
-        // NOTE: kept as kilometers (not renamed to a unit-agnostic name) because this exact
-        // field name/shape is a shared contract also consumed by app/pages/report/[id].vue
-        // (which independently converts to meters and re-formats via the user's distanceUnits
-        // client-side) and mirrored by the schemas in generate-weekly-report.ts and
-        // generate-custom-report.ts. Kilometers is treated as the canonical storage unit here;
-        // unit-aware formatting happens at render time (see convertStructuredToMarkdown below).
-        total_distance_km: { type: 'number' }
-      }
-    }
-  },
-  required: ['type', 'title', 'executive_summary', 'sections']
-}
+/**
+ * Analysis schema for structured JSON output.
+ *
+ * Built from the shared report builder so the section-status vocabulary comes
+ * from `ANALYSIS_SECTION_STATUSES` rather than from a literal that can drift
+ * from the prompt below (CW-425).
+ *
+ * No `scores` block: this is a three-workout comparison, and `buildAnalysisPrompt`
+ * never asks the model for performance scores. Declaring them would make Gemini
+ * invent numbers the prompt gives it no basis for and that nothing renders.
+ */
+export const lastThreeWorkoutsAnalysisSchema = buildReportAnalysisSchema({
+  sectionTitleDescription: 'Section title (e.g., Training Progression, Recovery Patterns)',
+  forbidParagraphBlocks: true,
+  metricsSummaryDescription: 'Key metrics across the workouts'
+})
 
 function buildAnalysisPrompt(workouts: any[], user: any, timezone: string, sportSettings?: any) {
   const dateRange =
@@ -317,12 +239,17 @@ export const analyzeLast3WorkoutsTask = task({
       logger.log('Generating structured analysis with Gemini 3.0 Flash')
 
       // Generate structured JSON analysis
-      const structuredAnalysis = await generateStructuredAnalysis(prompt, analysisSchema, 'flash', {
-        userId,
-        operation: 'last_3_workouts_analysis',
-        entityType: 'Workout',
-        entityId: undefined
-      })
+      const structuredAnalysis = await generateStructuredAnalysis(
+        prompt,
+        lastThreeWorkoutsAnalysisSchema,
+        'flash',
+        {
+          userId,
+          operation: 'last_3_workouts_analysis',
+          entityType: 'Workout',
+          entityId: undefined
+        }
+      )
 
       // Also generate markdown for fallback/export
       const markdownAnalysis = convertStructuredToMarkdown(structuredAnalysis, user?.distanceUnits)

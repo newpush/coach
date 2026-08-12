@@ -1,5 +1,6 @@
 import { defineEventHandler, getQuery, createError } from 'h3'
 import { workoutRepository } from '../../utils/repositories/workoutRepository'
+import { workoutStreamRepository } from '../../utils/repositories/workoutStreamRepository'
 import { getServerSession } from '../../utils/session'
 import { subDays } from 'date-fns'
 import { getUserTimezone, getStartOfYearUTC } from '../../utils/date'
@@ -131,6 +132,8 @@ export default defineEventHandler(async (event) => {
   const sport = query.sport === 'all' ? undefined : (query.sport as string)
   const tags = parseTagQueryParam(query.tags)
 
+  const workoutSelect = { id: true, date: true }
+
   // 1. Fetch workouts for the selected period (Current Curve)
   const currentWorkouts = await workoutRepository.getForUser(userId, {
     startDate,
@@ -138,13 +141,7 @@ export default defineEventHandler(async (event) => {
     tags,
     includeDuplicates: false,
     where: sport ? { type: sport } : undefined,
-    include: {
-      streams: {
-        select: {
-          watts: true
-        }
-      }
-    }
+    select: workoutSelect
   })
 
   // 2. Fetch all-time bests (All-Time Curve)
@@ -155,14 +152,17 @@ export default defineEventHandler(async (event) => {
     tags,
     includeDuplicates: false,
     where: sport ? { type: sport } : undefined,
-    include: {
-      streams: {
-        select: {
-          watts: true
-        }
-      }
-    }
+    select: workoutSelect
   })
+
+  // Power streams live in WorkoutStreamV2 for anything ingested since the
+  // stream migration, with the legacy WorkoutStream table as fallback. Reading
+  // the `streams` relation directly would only ever see the legacy table and
+  // return an empty curve for V2-only athletes. The two workout sets overlap
+  // heavily, so resolve the union once instead of fetching streams twice.
+  const wattsByWorkoutId = await workoutStreamRepository.findWattsByWorkoutIds([
+    ...new Set([...currentWorkouts, ...allTimeWorkouts].map((workout: any) => workout.id))
+  ])
 
   const processWorkoutsToCurve = (
     workouts: any[],
@@ -178,11 +178,11 @@ export default defineEventHandler(async (event) => {
     })
 
     workouts.forEach((workout) => {
-      const watts = workout.streams?.watts
-      if (!Array.isArray(watts) || watts.length === 0) return
+      const watts = wattsByWorkoutId.get(workout.id)
+      if (!watts || watts.length === 0) return
 
       DURATIONS.forEach((duration) => {
-        const best = calculateBestPowerForDuration(watts as number[], duration)
+        const best = calculateBestPowerForDuration(watts, duration)
         if (best <= 0) return
 
         const current = bestByDuration.get(duration)

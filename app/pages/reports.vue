@@ -2,8 +2,13 @@
   <!-- Configure Custom Report Modal (Legacy/Advanced) -->
   <UModal
     v-model:open="showConfigModal"
-    title="Configure Custom Report"
-    description="Create a customized analysis report with your specified filters and timeframe"
+    :title="t('config_title', 'Configure Custom Report')"
+    :description="
+      t(
+        'config_description',
+        'Create a customized analysis report with your specified filters and timeframe'
+      )
+    "
     :ui="{ content: 'sm:max-w-2xl', body: 'p-0 sm:p-0' }"
   >
     <template #body>
@@ -14,8 +19,8 @@
   <!-- Select Report Template Modal (New) -->
   <UModal
     v-model:open="showSelectModal"
-    title="Create New Report"
-    description="Select a report template to analyze your training data"
+    :title="t('select_title', 'Create New Report')"
+    :description="t('select_description', 'Select a report template to analyze your training data')"
     :ui="{ content: 'sm:max-w-3xl' }"
   >
     <template #body>
@@ -43,9 +48,9 @@
                 class="w-6 h-6 text-primary shrink-0"
               />
               <span class="font-bold text-base flex-1">{{ template.name }}</span>
-              <UBadge v-if="template.isSystem" size="sm" variant="subtle" color="neutral"
-                >System</UBadge
-              >
+              <UBadge v-if="template.isSystem" size="sm" variant="subtle" color="neutral">{{
+                t('select_system_badge', 'System')
+              }}</UBadge>
             </div>
             <p class="text-sm text-muted line-clamp-2">{{ template.description }}</p>
           </UButton>
@@ -63,10 +68,15 @@
           >
             <div class="flex items-center gap-3 mb-2">
               <UIcon name="i-heroicons-adjustments-horizontal" class="w-6 h-6 shrink-0" />
-              <span class="font-bold text-base">Custom Report</span>
+              <span class="font-bold text-base">{{ t('type_custom', 'Custom Report') }}</span>
             </div>
             <p class="text-sm text-muted">
-              Configure a one-off report with custom filters and timeframe.
+              {{
+                t(
+                  'select_custom_description',
+                  'Configure a one-off report with custom filters and timeframe.'
+                )
+              }}
             </p>
           </UButton>
         </div>
@@ -74,7 +84,9 @@
         <div
           class="mt-8 pt-4 border-t border-gray-100 dark:border-gray-800 flex justify-between items-center"
         >
-          <p class="text-xs text-muted">You can define your own report templates soon.</p>
+          <p class="text-xs text-muted">
+            {{ t('select_templates_hint', 'You can define your own report templates soon.') }}
+          </p>
           <UButton
             color="neutral"
             variant="ghost"
@@ -83,7 +95,7 @@
                 showSelectModal = false
               }
             "
-            >Cancel</UButton
+            >{{ t('select_cancel', 'Cancel') }}</UButton
           >
         </div>
       </div>
@@ -92,7 +104,7 @@
 
   <UDashboardPanel id="reports">
     <template #header>
-      <UDashboardNavbar title="Reports">
+      <UDashboardNavbar :title="t('list_title', 'Reports')">
         <template #leading>
           <UDashboardSidebarCollapse />
         </template>
@@ -111,8 +123,8 @@
                 }
               "
             >
-              <span class="hidden sm:inline">New Report</span>
-              <span class="sm:hidden">New</span>
+              <span class="hidden sm:inline">{{ t('list_new_report', 'New Report') }}</span>
+              <span class="sm:hidden">{{ t('list_new_report_short', 'New') }}</span>
             </UButton>
           </div>
         </template>
@@ -124,12 +136,12 @@
         <!-- Dashboard Branding -->
         <div class="px-4 sm:px-0">
           <h1 class="text-4xl font-black text-gray-900 dark:text-white uppercase tracking-tight">
-            Reports
+            {{ t('list_title', 'Reports') }}
           </h1>
           <p
             class="text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-[0.2em] mt-1 italic"
           >
-            AI Insights & Performance Summaries
+            {{ t('list_subtitle', 'AI Insights & Performance Summaries') }}
           </p>
         </div>
 
@@ -144,27 +156,27 @@
                   <th
                     class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
                   >
-                    Report Type
+                    {{ t('list_column_type', 'Report Type') }}
                   </th>
                   <th
                     class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
                   >
-                    Date Range
+                    {{ t('list_column_date_range', 'Date Range') }}
                   </th>
                   <th
                     class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
                   >
-                    Status
+                    {{ t('list_column_status', 'Status') }}
                   </th>
                   <th
                     class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
                   >
-                    Created
+                    {{ t('list_column_created', 'Created') }}
                   </th>
                   <th
                     class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
                   >
-                    Actions
+                    {{ t('list_column_actions', 'Actions') }}
                   </th>
                 </tr>
               </thead>
@@ -203,14 +215,14 @@
             class="p-8 text-center text-red-600 dark:text-red-400"
           >
             <UIcon name="i-heroicons-exclamation-circle" class="w-8 h-8 mx-auto mb-2" />
-            <p>Error loading reports</p>
+            <p>{{ t('list_error_title', 'Error loading reports') }}</p>
             <UButton
               size="sm"
               color="neutral"
               variant="solid"
               class="mt-2"
               @click="() => reportStore.fetchReports()"
-              >Retry</UButton
+              >{{ t('list_error_retry', 'Retry') }}</UButton
             >
           </div>
 
@@ -219,7 +231,7 @@
             class="p-8 text-center text-gray-600 dark:text-gray-400"
           >
             <UIcon name="i-heroicons-document-text" class="w-16 h-16 text-muted mx-auto mb-4" />
-            <p class="mb-4">No reports yet</p>
+            <p class="mb-4">{{ t('list_empty_title', 'No reports yet') }}</p>
             <div class="flex flex-col sm:flex-row gap-3 justify-center flex-wrap">
               <UButton
                 :loading="reportStore.generating"
@@ -231,7 +243,7 @@
                 "
               >
                 <UIcon name="i-heroicons-plus" class="w-5 h-5 mr-2" />
-                Create First Report
+                {{ t('list_empty_cta', 'Create First Report') }}
               </UButton>
             </div>
           </div>
@@ -244,27 +256,27 @@
                     <th
                       class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
                     >
-                      Report Type
+                      {{ t('list_column_type', 'Report Type') }}
                     </th>
                     <th
                       class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
                     >
-                      Date Range
+                      {{ t('list_column_date_range', 'Date Range') }}
                     </th>
                     <th
                       class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
                     >
-                      Status
+                      {{ t('list_column_status', 'Status') }}
                     </th>
                     <th
                       class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
                     >
-                      Created
+                      {{ t('list_column_created', 'Created') }}
                     </th>
                     <th
                       class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
                     >
-                      Actions
+                      {{ t('list_column_actions', 'Actions') }}
                     </th>
                   </tr>
                 </thead>
@@ -309,7 +321,7 @@
                             }
                           "
                         >
-                          View Report
+                          {{ t('list_view_report', 'View Report') }}
                         </UButton>
                         <AiFeedback
                           v-if="report.llmUsageId"
@@ -363,7 +375,7 @@
                       }
                     "
                   >
-                    View Report
+                    {{ t('list_view_report', 'View Report') }}
                   </UButton>
                   <AiFeedback
                     v-if="report.llmUsageId"
@@ -382,6 +394,10 @@
 </template>
 
 <script setup lang="ts">
+  import { useTranslate } from '@tolgee/vue'
+
+  const { t } = useTranslate('report')
+
   // State
   const showConfigModal = ref(false)
   const showSelectModal = ref(false)
@@ -396,22 +412,28 @@
     middleware: 'auth'
   })
 
-  useHead({
-    title: 'Reports',
-    meta: [
-      {
-        name: 'description',
-        content:
-          'Generate and view AI-powered coaching reports, including weekly analysis, workout insights, and nutrition reviews.'
-      },
-      { property: 'og:title', content: 'Reports | Coach Watts' },
-      {
-        property: 'og:description',
-        content:
-          'Generate and view AI-powered coaching reports, including weekly analysis, workout insights, and nutrition reviews.'
-      }
-    ]
-  })
+  useHead(
+    computed(() => ({
+      title: t.value('list_title', 'Reports'),
+      meta: [
+        {
+          name: 'description',
+          content: t.value(
+            'list_meta_description',
+            'Generate and view AI-powered coaching reports, including weekly analysis, workout insights, and nutrition reviews.'
+          )
+        },
+        { property: 'og:title', content: t.value('list_og_title', 'Reports | Coach Watts') },
+        {
+          property: 'og:description',
+          content: t.value(
+            'list_meta_description',
+            'Generate and view AI-powered coaching reports, including weekly analysis, workout insights, and nutrition reviews.'
+          )
+        }
+      ]
+    }))
+  )
 
   // Fetch data on mount
   onMounted(async () => {
@@ -430,47 +452,45 @@
     }
   }
 
-  // Centralized report type configuration (Legacy fallback + overrides)
-  const REPORT_TYPE_CONFIG: any = {
+  // Centralized report type configuration (Legacy fallback + overrides).
+  // Labels reuse the `type_*` keys already used by the report detail page so both
+  // surfaces name a report type identically. `label` is the English default handed
+  // to Tolgee for locales that have not translated the key yet.
+  const REPORT_TYPE_CONFIG: Record<string, { labelKey: string; label: string; icon: string }> = {
     LAST_3_WORKOUTS: {
+      labelKey: 'type_last_3_workouts',
       label: 'Last 3 Workouts Analysis',
-      icon: 'i-heroicons-chart-bar',
-      description:
-        'Analyze your 3 most recent endurance workouts to identify trends, progression, and recovery patterns.'
+      icon: 'i-heroicons-chart-bar'
     },
     WEEKLY_ANALYSIS: {
+      labelKey: 'type_weekly_analysis',
       label: 'Weekly Training Analysis',
-      icon: 'i-heroicons-calendar',
-      description:
-        'Comprehensive analysis of the last 30 days of training including workouts, recovery metrics, and recommendations.'
+      icon: 'i-heroicons-calendar'
     },
     LAST_3_NUTRITION: {
-      label: 'Last 3 Days Nutrition',
-      icon: 'i-heroicons-cake',
-      description:
-        'Nutrition analysis of your last 3 days of dietary intake including macros, calories, and recommendations.'
+      labelKey: 'type_last_3_nutrition',
+      label: 'Last 3 Days Nutrition Analysis',
+      icon: 'i-heroicons-cake'
     },
     LAST_7_NUTRITION: {
+      labelKey: 'type_last_7_nutrition',
       label: 'Weekly Nutrition Analysis',
-      icon: 'i-heroicons-cake',
-      description:
-        'Comprehensive weekly nutrition analysis including patterns, consistency, and optimization opportunities.'
+      icon: 'i-heroicons-cake'
     },
     RACE_PREP: {
+      labelKey: 'type_race_prep',
       label: 'Race Preparation Report',
-      icon: 'i-heroicons-trophy',
-      description:
-        'Comprehensive race preparation analysis with taper recommendations and readiness assessment.'
+      icon: 'i-heroicons-trophy'
     },
     DAILY_SUGGESTION: {
+      labelKey: 'type_daily_suggestion',
       label: 'Daily Coaching Brief',
-      icon: 'i-heroicons-light-bulb',
-      description: 'Daily training suggestions based on your current fitness and recovery status.'
+      icon: 'i-heroicons-light-bulb'
     },
     CUSTOM: {
+      labelKey: 'type_custom',
       label: 'Custom Report',
-      icon: 'i-heroicons-adjustments-horizontal',
-      description: 'Custom training analysis report with your specified filters.'
+      icon: 'i-heroicons-adjustments-horizontal'
     }
   }
 
@@ -505,28 +525,25 @@
 
   const getReportTitle = (report: any): string => {
     if (report.templateId) {
-      const template = templates.value.find((t) => t.id === report.templateId)
+      const template = templates.value.find((tpl) => tpl.id === report.templateId)
       if (template) return template.name
     }
 
     const type = report.type
-    if (type in REPORT_TYPE_CONFIG) {
-      return REPORT_TYPE_CONFIG[type].label
+    const config = REPORT_TYPE_CONFIG[type]
+    if (config) {
+      return t.value(config.labelKey, config.label)
     }
     return type.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())
   }
 
   const getReportIcon = (report: any): string => {
     if (report.templateId) {
-      const template = templates.value.find((t) => t.id === report.templateId)
+      const template = templates.value.find((tpl) => tpl.id === report.templateId)
       if (template?.icon) return template.icon
     }
 
-    const type = report.type
-    if (type in REPORT_TYPE_CONFIG) {
-      return REPORT_TYPE_CONFIG[type].icon
-    }
-    return 'i-heroicons-document-text'
+    return REPORT_TYPE_CONFIG[report.type]?.icon ?? 'i-heroicons-document-text'
   }
 
   const getStatusBadgeClass = (status: string) => {

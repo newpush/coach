@@ -1,3 +1,4 @@
+import { createError } from 'h3'
 import { dailyBaseWindowKey } from '../../../shared/window-keys'
 import { prisma } from '../db'
 import { nutritionRepository } from '../repositories/nutritionRepository'
@@ -64,6 +65,29 @@ interface NutritionPlanSummary {
     fat: number
     calories: number
   }
+}
+
+/**
+ * Hard ceiling on the span `getWaveRange` will simulate, in days (inclusive of both ends).
+ *
+ * The wave simulation produces ~97 timeline points per day and issues per-day work, so the cost of
+ * a call is linear in the span. Without a bound, a single request asking for years of wave burns
+ * thousands of times the intended CPU/DB budget (CW-73).
+ *
+ * This is the *defensive* limit — the last line of defence for any caller, including ones that
+ * forget to validate. HTTP handlers apply their own, stricter limits (see
+ * `MAX_WAVE_RANGE_DAYS` in `server/api/nutrition/metabolic-wave.get.ts` and the `daysAhead`
+ * clamp in `extended-wave.get.ts`); this one only exists so that no caller can ever get past it.
+ */
+export const MAX_WAVE_RANGE_SPAN_DAYS = 92
+
+const MS_PER_DAY = 24 * 60 * 60 * 1000
+
+/**
+ * Inclusive span of a date range in whole days (same day => 1).
+ */
+export function waveRangeSpanDays(startDate: Date, endDate: Date) {
+  return Math.floor((endDate.getTime() - startDate.getTime()) / MS_PER_DAY) + 1
 }
 
 export const metabolicService = {
@@ -933,6 +957,15 @@ export const metabolicService = {
    * Generates a multi-day predictive wave (historical + current + future).
    */
   async generateExtendedWave(userId: string, daysAhead: number = 3) {
+    // Defensive (CW-73): a non-finite daysAhead would silently produce an Invalid Date end bound.
+    // The span itself is bounded by getWaveRange below.
+    if (!Number.isFinite(daysAhead) || daysAhead < 0) {
+      throw createError({
+        statusCode: 400,
+        message: 'daysAhead must be a non-negative number'
+      })
+    }
+
     const timezone = await getUserTimezone(userId)
     const today = getUserLocalDate(timezone)
     const startDate = new Date(today)
@@ -949,6 +982,35 @@ export const metabolicService = {
    * This is the single computation path for activity sparkline and extended wave charts.
    */
   async getWaveRange(userId: string, startDate: Date, endDate: Date) {
+    // Defensive bounds (CW-73). Every caller is expected to validate its own input, but this is the
+    // one place all wave computation funnels through, so an unbounded range must never get past it.
+    if (
+      !(startDate instanceof Date) ||
+      !(endDate instanceof Date) ||
+      Number.isNaN(startDate.getTime()) ||
+      Number.isNaN(endDate.getTime())
+    ) {
+      throw createError({
+        statusCode: 400,
+        message: 'getWaveRange requires valid start and end dates'
+      })
+    }
+
+    if (endDate.getTime() < startDate.getTime()) {
+      throw createError({
+        statusCode: 400,
+        message: 'getWaveRange requires endDate to be on or after startDate'
+      })
+    }
+
+    const spanDays = waveRangeSpanDays(startDate, endDate)
+    if (spanDays > MAX_WAVE_RANGE_SPAN_DAYS) {
+      throw createError({
+        statusCode: 400,
+        message: `Requested wave range of ${spanDays} days exceeds the maximum of ${MAX_WAVE_RANGE_SPAN_DAYS} days`
+      })
+    }
+
     const startTime = Date.now()
     const timezone = await getUserTimezone(userId)
     const settings = await getUserNutritionSettings(userId)

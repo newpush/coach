@@ -1,10 +1,16 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import {
-  buildWorkoutAnalysisData,
   convertWorkoutAnalysisToMarkdown,
-  runWorkoutAnalysis,
-  type StructuredAnalysis
+  runWorkoutAnalysis
 } from '../../../../../server/utils/services/workoutAnalysisService'
+// CW-392: the payload builder now lives in the shared prompt module, which both the
+// service and the Trigger.dev task consume. CW-403 moved the response schema, the
+// StructuredAnalysis type and the score clamp there too; the service imports them
+// without re-exporting (server/utils is Nitro auto-imported).
+import {
+  buildWorkoutAnalysisData,
+  type StructuredAnalysis
+} from '../../../../../server/utils/services/workout-analysis-prompt'
 import { prisma } from '../../../../../server/utils/db'
 import { workoutRepository } from '../../../../../server/utils/repositories/workoutRepository'
 import { hasTaskHandler, getTaskHandler } from '../../../../../server/utils/task-registry'
@@ -84,16 +90,17 @@ describe('Workout Analysis Service', () => {
       type: 'workout',
       title: 'Endurance Run Analysis',
       executive_summary: 'Solid steady-state run with excellent pacing.',
+      // CW-403: the unified schema is the 1-10 scale, matching the stored *Score columns.
       scores: {
-        overall: 88,
+        overall: 9,
         overall_explanation: 'Strong execution throughout.',
-        technical: 90,
+        technical: 9,
         technical_explanation: 'Cadence remained stable at 172 rpm.',
-        effort: 85,
+        effort: 8,
         effort_explanation: 'Heart rate stayed within Zone 2 targets.',
-        pacing: 87,
+        pacing: 9,
         pacing_explanation: 'Negative split in final 5km.',
-        execution: 90,
+        execution: 9,
         execution_explanation: 'Followed prescribed workout steps.'
       },
       sections: [

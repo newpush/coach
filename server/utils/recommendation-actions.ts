@@ -32,12 +32,24 @@ export async function acceptActivityRecommendation(userId: string, recommendatio
     return { error: 'No suggested modifications found' }
   }
 
+  // Recommendations created before the planned-workout relation was persisted
+  // can still carry an exact guardrail snapshot. Resolve that owned target and
+  // let the existing guardrails decide whether it remains safe to change.
+  const targetWorkout =
+    recommendation.plannedWorkout ||
+    (targetSnapshot?.id
+      ? await prisma.plannedWorkout.findFirst({
+          where: { id: targetSnapshot.id, userId },
+          include: { completedWorkouts: true }
+        })
+      : null)
+
   const newDescription = `${modifications.description || ''}${modifications.zone_adjustments ? `\n\nZone Adjustments: ${modifications.zone_adjustments}` : ''}`
   const type =
     modifications.new_type === 'Gym' ? 'WeightTraining' : modifications.new_type || 'Ride'
   const title =
     modifications.new_title?.trim() ||
-    (type === 'Rest' ? 'Rest Day' : recommendation.plannedWorkout?.title || 'Updated Workout')
+    (type === 'Rest' ? 'Rest Day' : targetWorkout?.title || 'Updated Workout')
   const durationSec =
     modifications.new_duration_min !== undefined && modifications.new_duration_min !== null
       ? Math.round(modifications.new_duration_min * 60)
@@ -58,7 +70,7 @@ export async function acceptActivityRecommendation(userId: string, recommendatio
   if (!canCreateWorkoutFromUntargetedRecommendation) {
     const validation = validateRecommendationAcceptanceTarget({
       recommendationDate: recommendation.date,
-      currentWorkout: recommendation.plannedWorkout,
+      currentWorkout: targetWorkout,
       targetSnapshot,
       activeWorkoutCountForDate
     })
@@ -68,7 +80,7 @@ export async function acceptActivityRecommendation(userId: string, recommendatio
     }
   }
 
-  let targetPlannedWorkoutId = recommendation.plannedWorkoutId
+  let targetPlannedWorkoutId = targetWorkout?.id || recommendation.plannedWorkoutId
   const nextSyncStatus = (syncStatus: string | null | undefined) =>
     syncStatus === 'LOCAL_ONLY' ? 'LOCAL_ONLY' : 'PENDING'
 
@@ -84,7 +96,7 @@ export async function acceptActivityRecommendation(userId: string, recommendatio
         tss: modifications.new_tss,
         description: newDescription,
         modifiedLocally: true,
-        syncStatus: nextSyncStatus(recommendation.plannedWorkout?.syncStatus),
+        syncStatus: nextSyncStatus(targetWorkout?.syncStatus),
         syncError: null
       }
     })

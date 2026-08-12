@@ -295,6 +295,9 @@ const intervalsDebugCommand = new Command('intervals')
         metric = 'heartrate'
         const maxHr = workout.maxHr || workout.user?.maxHr
         const threshold = maxHr ? maxHr * 0.7 : undefined
+        // Zone reference is the athlete's PROFILE LTHR/max HR, not the work bar
+        // above and not this session's own max HR (CW-400).
+        const hrRefs = { lthr: workout.user?.lthr, maxHr: workout.user?.maxHr }
         detected = detectIntervals(
           time,
           hr,
@@ -302,7 +305,8 @@ const intervalsDebugCommand = new Command('intervals')
           threshold,
           plannedSteps,
           undefined,
-          cadence
+          cadence,
+          hrRefs
         )
       }
 

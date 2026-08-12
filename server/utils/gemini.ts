@@ -15,6 +15,7 @@ import {
   normalizeStressScore
 } from './wellness'
 import { formatPromptDistance } from './ai-prompt-format'
+import { metresPerSecondToKmh } from '../../shared/units'
 
 import type { GeminiModel } from './ai-config'
 import { MODEL_NAMES, calculateLlmCost, resolveModelId } from './ai-config'
@@ -696,7 +697,8 @@ export function buildWorkoutSummary(
       if (w.distanceMeters)
         lines.push(`- **Distance**: ${formatPromptDistance(w.distanceMeters, distanceUnits)}`)
       if (w.elevationGain) lines.push(`- **Elevation**: ${w.elevationGain}m`)
-      if (w.averageSpeed) lines.push(`- **Avg Speed**: ${(w.averageSpeed * 3.6).toFixed(1)} km/h`)
+      if (w.averageSpeed)
+        lines.push(`- **Avg Speed**: ${metresPerSecondToKmh(w.averageSpeed).toFixed(1)} km/h`)
 
       // Performance metrics
       if (w.variabilityIndex)
