@@ -546,6 +546,13 @@ function isRateLimitError(error: any): boolean {
 
 /**
  * Wrapper function that retries API calls with exponential backoff and tracks usage
+ *
+ * DEAD CODE — unreferenced anywhere in the repo (CW-328). It is NOT a live retry path:
+ * the retry policy that actually applies to Gemini calls is `GEMINI_MAX_RETRIES` above
+ * (in-process, via the AI SDK) plus Trigger.dev's task-level retry in `trigger.config.ts`.
+ * Neither this function nor its helpers (`isRateLimitError`, `parseRetryDelay`,
+ * `MAX_RETRIES`, `BASE_DELAY_MS`, `MAX_DELAY_MS`) run. Kept only to keep the CW-328 diff
+ * reviewable; slated for deletion in a follow-up.
  */
 async function retryWithBackoff<T>(
   fn: () => Promise<T>,
