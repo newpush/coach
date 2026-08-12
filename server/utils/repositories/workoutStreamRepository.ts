@@ -116,6 +116,72 @@ export function splitLatlngPoints(latlng: readonly unknown[] | null | undefined)
   return { lat, lng }
 }
 
+/**
+ * Every array column written to WorkoutStreamV2, mapped to the sanitizer that
+ * makes it safe for Prisma to read back (CW-453 write-path guard).
+ *
+ * Building the upsert payload by iterating this table instead of listing the
+ * columns inline keeps "which columns are series" defined exactly once -- the
+ * same list the invariant check below walks, so a column can't be sanitized on
+ * write and then skipped by the guard (or vice versa).
+ */
+const V2_ARRAY_WRITE_SANITIZERS: Record<string, (values: any) => Array<number | boolean>> = {
+  lat: sanitizeFloatStreamArray,
+  lng: sanitizeFloatStreamArray,
+  time: sanitizeIntStreamArray,
+  distance: sanitizeFloatStreamArray,
+  velocity: sanitizeFloatStreamArray,
+  heartrate: sanitizeIntStreamArray,
+  cadence: sanitizeIntStreamArray,
+  watts: sanitizeIntStreamArray,
+  altitude: sanitizeFloatStreamArray,
+  grade: sanitizeFloatStreamArray,
+  moving: sanitizeBooleanStreamArray,
+  temp: sanitizeIntStreamArray,
+  torque: sanitizeIntStreamArray,
+  leftRightBalance: sanitizeIntStreamArray,
+  hrv: sanitizeFloatStreamArray,
+  respiration: sanitizeFloatStreamArray,
+  targetPower: sanitizeIntStreamArray
+}
+
+const BOOLEAN_WRITE_COLUMNS: ReadonlySet<string> = new Set(['moving'])
+
+function isUnwritableStreamElement(value: unknown): boolean {
+  return value == null || (typeof value === 'number' && !Number.isFinite(value))
+}
+
+/**
+ * Last line of defence before `upsert()`: no numeric/boolean series may contain
+ * a NULL (or non-finite) element, because Postgres accepts it happily and the
+ * Prisma client then cannot read the row back at all (CW-453).
+ *
+ * The sanitizers above already guarantee this, so a repair here means one of
+ * them regressed or a series bypassed them -- which is logged loudly rather
+ * than corrected in silence. Only the known series columns are inspected: JSON
+ * metadata such as `lapSplits` may legitimately contain nulls and is untouched.
+ */
+export function enforceNoNullStreamElements(
+  writeData: Record<string, unknown>,
+  workoutId: string
+): void {
+  for (const column of Object.keys(V2_ARRAY_WRITE_SANITIZERS)) {
+    const values = writeData[column]
+    if (!Array.isArray(values)) continue
+    const index = values.findIndex(isUnwritableStreamElement)
+    if (index === -1) continue
+
+    console.error('[workoutStreamRepository] blocked NULL element in stream write', {
+      operation: 'upsert',
+      workoutId,
+      column,
+      index
+    })
+    const fallback: number | boolean = BOOLEAN_WRITE_COLUMNS.has(column) ? false : 0
+    writeData[column] = values.map((value) => (isUnwritableStreamElement(value) ? fallback : value))
+  }
+}
+
 export async function attachStreamToWorkout<T extends { id: string }>(
   workout: T
 ): Promise<T & { streams: NormalizedStream | null }> {
@@ -241,6 +307,205 @@ function buildV1Select(
   const select: Record<string, true> = { ...REQUIRED_V1_SELECT }
   for (const field of fields) select[field] = true
   return select
+}
+
+/**
+ * CW-453: Postgres permits NULL *elements* inside `integer[]` / `double
+ * precision[]`, the Prisma client does not. Reading such a row throws
+ * `Expected an integer in column 'cadence[593]', got object: null` and used to
+ * be swallowed by a bare `.catch()`, so ~24% of production streams rendered as
+ * "no stream data at all".
+ *
+ * The columns below drive a raw-SQL fallback read that repairs those rows on
+ * the way out with `array_replace(col, NULL, 0)`.
+ *
+ * **NULL element -> 0, never dropped.** Every series in a WorkoutStreamV2 row
+ * is index-aligned with `time`; `array_remove()` would shorten one series and
+ * silently shift every later sample against the clock, corrupting the chart
+ * rather than patching it. Coercing to 0 keeps the alignment and matches what
+ * the write path already does (see sanitizeIntStreamArray/
+ * sanitizeFloatStreamArray), so a row read back after a repair looks exactly
+ * like a row written today. For `moving`, the boolean analogue is `false`.
+ */
+const V2_INT_ARRAY_COLUMNS = [
+  'time',
+  'heartrate',
+  'cadence',
+  'watts',
+  'temp',
+  'torque',
+  'leftRightBalance',
+  'targetPower'
+] as const
+
+const V2_FLOAT_ARRAY_COLUMNS = [
+  'distance',
+  'velocity',
+  'altitude',
+  'lat',
+  'lng',
+  'grade',
+  'hrv',
+  'respiration'
+] as const
+
+const V2_BOOLEAN_ARRAY_COLUMNS = ['moving'] as const
+
+/** Columns with no array elements to repair -- selected verbatim. */
+const V2_PLAIN_COLUMNS = [
+  'id',
+  'workoutId',
+  'avgPacePerKm',
+  'paceVariability',
+  'lapSplits',
+  'paceZones',
+  'pacingStrategy',
+  'surges',
+  'hrZoneTimes',
+  'powerZoneTimes',
+  'extrasMeta',
+  'createdAt',
+  'updatedAt'
+] as const
+
+const V2_INT_ARRAY_COLUMN_SET: ReadonlySet<string> = new Set(V2_INT_ARRAY_COLUMNS)
+const V2_FLOAT_ARRAY_COLUMN_SET: ReadonlySet<string> = new Set(V2_FLOAT_ARRAY_COLUMNS)
+const V2_BOOLEAN_ARRAY_COLUMN_SET: ReadonlySet<string> = new Set(V2_BOOLEAN_ARRAY_COLUMNS)
+
+const ALL_V2_COLUMNS: readonly string[] = [
+  ...V2_PLAIN_COLUMNS,
+  ...V2_INT_ARRAY_COLUMNS,
+  ...V2_FLOAT_ARRAY_COLUMNS,
+  ...V2_BOOLEAN_ARRAY_COLUMNS
+]
+
+const V2_COLUMN_SET: ReadonlySet<string> = new Set(ALL_V2_COLUMNS)
+
+/**
+ * Select expression for one WorkoutStreamV2 column in the repair read.
+ *
+ * `column` is only ever interpolated raw after being checked against
+ * V2_COLUMN_SET, so no caller-controlled string can reach the SQL text.
+ */
+function v2RepairColumnSql(column: string): Prisma.Sql {
+  if (!V2_COLUMN_SET.has(column)) {
+    throw new Error(`[workoutStreamRepository] unknown WorkoutStreamV2 column: ${column}`)
+  }
+  const ref = Prisma.raw(`"${column}"`)
+  if (V2_INT_ARRAY_COLUMN_SET.has(column)) {
+    return Prisma.sql`array_replace(${ref}, NULL::integer, 0) AS ${ref}`
+  }
+  if (V2_FLOAT_ARRAY_COLUMN_SET.has(column)) {
+    return Prisma.sql`array_replace(${ref}, NULL::double precision, 0::double precision) AS ${ref}`
+  }
+  if (V2_BOOLEAN_ARRAY_COLUMN_SET.has(column)) {
+    return Prisma.sql`array_replace(${ref}, NULL::boolean, false) AS ${ref}`
+  }
+  return Prisma.sql`${ref}`
+}
+
+/** `Expected an integer in column 'cadence[593]', got object: null` -> `cadence[593]`. */
+export function extractDecodeColumn(error: unknown): string | null {
+  const message = error instanceof Error ? error.message : String(error)
+  return /column '([^']+)'/.exec(message)?.[1] ?? null
+}
+
+/**
+ * Stream reads are best-effort by design -- a workout still renders without its
+ * series -- but they must never fail *silently*: a swallowed decode error is
+ * exactly how CW-453 stayed invisible for 90k rows. Every remaining `.catch()`
+ * in this file routes here.
+ */
+function logStreamReadFailure(
+  operation: string,
+  table: 'WorkoutStreamV2' | 'WorkoutStream',
+  workoutIds: readonly string[],
+  error: unknown
+): void {
+  console.error('[workoutStreamRepository] stream read failed', {
+    operation,
+    table,
+    column: extractDecodeColumn(error),
+    workoutIdCount: workoutIds.length,
+    // Bounded so a 200-id chunk can't blow up a log line; the column plus a
+    // handful of ids is enough to locate the offending rows.
+    workoutIds: workoutIds.slice(0, 10),
+    error: error instanceof Error ? error.message : String(error)
+  })
+}
+
+/**
+ * Raw read of WorkoutStreamV2 that repairs NULL array elements in Postgres, so
+ * the result can't trip the Prisma client's array decoder (CW-453).
+ *
+ * Only used as a fallback: the typed client path stays the hot path for the
+ * ~76% of rows that are clean, and this pays the extra round trip only for
+ * batches that actually contain a damaged row.
+ */
+async function readV2WithNullRepair(
+  workoutIds: readonly string[],
+  columns: readonly string[]
+): Promise<any[]> {
+  if (workoutIds.length === 0) return []
+  const selection = Prisma.join(
+    columns.map((column) => v2RepairColumnSql(column)),
+    ', '
+  )
+  return prisma.$queryRaw<any[]>(
+    Prisma.sql`
+      SELECT ${selection}
+      FROM "WorkoutStreamV2"
+      WHERE "workoutId" IN (${Prisma.join(workoutIds as string[])})
+    `
+  )
+}
+
+/**
+ * Read a chunk of WorkoutStreamV2 rows, degrading instead of returning nothing:
+ *
+ * 1. typed Prisma client (fast path, unchanged for clean rows);
+ * 2. on a decode error, the raw repair read for the whole chunk;
+ * 3. if even that fails, one typed read per id, so the batch loses only the
+ *    rows that genuinely cannot be decoded rather than all of them.
+ */
+async function readV2Chunk(
+  workoutIds: readonly string[],
+  select: Record<string, true> | undefined,
+  operation: string
+): Promise<any[]> {
+  if (workoutIds.length === 0) return []
+  const findManyArgs = {
+    where: { workoutId: { in: workoutIds as string[] } },
+    ...(select ? { select } : {})
+  }
+
+  try {
+    return await (prisma as any).workoutStreamV2.findMany(findManyArgs)
+  } catch (error) {
+    logStreamReadFailure(operation, 'WorkoutStreamV2', workoutIds, error)
+  }
+
+  const columns = select ? Object.keys(select) : ALL_V2_COLUMNS
+  try {
+    return await readV2WithNullRepair(workoutIds, columns)
+  } catch (error) {
+    logStreamReadFailure(`${operation}:null-repair`, 'WorkoutStreamV2', workoutIds, error)
+  }
+
+  const rows = await Promise.all(
+    workoutIds.map(async (workoutId) => {
+      try {
+        return await (prisma as any).workoutStreamV2.findUnique({
+          where: { workoutId },
+          ...(select ? { select } : {})
+        })
+      } catch (error) {
+        logStreamReadFailure(`${operation}:per-row`, 'WorkoutStreamV2', [workoutId], error)
+        return null
+      }
+    })
+  )
+  return rows.filter((row) => row != null)
 }
 
 /**
@@ -374,7 +639,10 @@ async function findStreamPresenceByWorkoutIds(
             WHERE "workoutId" IN (${Prisma.join(chunk)})
           `
         )
-        .catch(() => [] as StreamPresenceRow[])
+        .catch((error) => {
+          logStreamReadFailure('findStreamPresenceByWorkoutIds', 'WorkoutStreamV2', chunk, error)
+          return [] as StreamPresenceRow[]
+        })
     )
   )
 
@@ -404,7 +672,10 @@ async function findStreamPresenceByWorkoutIds(
             WHERE "workoutId" IN (${Prisma.join(chunk)})
           `
         )
-        .catch(() => [] as StreamPresenceRow[])
+        .catch((error) => {
+          logStreamReadFailure('findStreamPresenceByWorkoutIds', 'WorkoutStream', chunk, error)
+          return [] as StreamPresenceRow[]
+        })
     )
   )
 
@@ -417,15 +688,19 @@ async function findStreamPresenceByWorkoutIds(
 
 export const workoutStreamRepository = {
   async findByWorkoutId(workoutId: string): Promise<NormalizedStream | null> {
-    const v2 = await (prisma as any).workoutStreamV2
-      .findUnique({ where: { workoutId } })
-      .catch(() => null)
+    // readV2Chunk() falls back to the NULL-repairing raw read, so a row with
+    // NULL array elements yields usable series instead of dropping through to
+    // the (production-empty) V1 table and returning null. CW-453.
+    const [v2] = await readV2Chunk([workoutId], undefined, 'findByWorkoutId')
     if (v2) {
       const normalized = normalizeV2(v2)
       if (hasUsableStreamData(normalized)) return normalized
     }
 
-    const v1 = await prisma.workoutStream.findUnique({ where: { workoutId } }).catch(() => null)
+    const v1 = await prisma.workoutStream.findUnique({ where: { workoutId } }).catch((error) => {
+      logStreamReadFailure('findByWorkoutId', 'WorkoutStream', [workoutId], error)
+      return null
+    })
     if (!v1) return null
     const normalized = toNormalizedFromV1(v1)
     return hasUsableStreamData(normalized) ? normalized : null
@@ -456,12 +731,7 @@ export const workoutStreamRepository = {
 
     const v2Chunks = await Promise.all(
       chunkArray(workoutIds, WORKOUT_ID_CHUNK_SIZE).map((chunk) =>
-        (prisma as any).workoutStreamV2
-          .findMany({
-            where: { workoutId: { in: chunk } },
-            ...(v2Select ? { select: v2Select } : {})
-          })
-          .catch(() => [])
+        readV2Chunk(chunk, v2Select, 'findManyByWorkoutIds')
       )
     )
     const v2Records: any[] = v2Chunks.flat()
@@ -490,7 +760,10 @@ export const workoutStreamRepository = {
               where: { workoutId: { in: chunk } },
               ...(v1Select ? { select: v1Select } : {})
             })
-            .catch(() => [])
+            .catch((error) => {
+              logStreamReadFailure('findManyByWorkoutIds', 'WorkoutStream', chunk, error)
+              return []
+            })
         )
       )
       const v1Records = v1Chunks.flat()
@@ -525,12 +798,7 @@ export const workoutStreamRepository = {
 
     const v2Chunks = await Promise.all(
       chunks.map((chunk) =>
-        (prisma as any).workoutStreamV2
-          .findMany({
-            where: { workoutId: { in: chunk } },
-            select: { workoutId: true, watts: true }
-          })
-          .catch(() => [])
+        readV2Chunk(chunk, { workoutId: true, watts: true }, 'findWattsByWorkoutIds')
       )
     )
 
@@ -550,7 +818,10 @@ export const workoutStreamRepository = {
             where: { workoutId: { in: chunk } },
             select: { workoutId: true, watts: true }
           })
-          .catch(() => [])
+          .catch((error) => {
+            logStreamReadFailure('findWattsByWorkoutIds', 'WorkoutStream', chunk, error)
+            return []
+          })
       )
     )
 
@@ -567,9 +838,15 @@ export const workoutStreamRepository = {
     workoutId: string,
     data: { hrZoneTimes?: unknown; powerZoneTimes?: unknown }
   ): Promise<void> {
+    // `select: { id: true }` decodes no arrays, so this can only fail for
+    // infrastructure reasons -- but failing quietly here silently redirects the
+    // metadata write to the legacy V1 row, so it must be logged.
     const v2 = await (prisma as any).workoutStreamV2
       .findUnique({ where: { workoutId }, select: { id: true } })
-      .catch(() => null)
+      .catch((error: unknown) => {
+        logStreamReadFailure('updateMetadata', 'WorkoutStreamV2', [workoutId], error)
+        return null
+      })
 
     if (v2) {
       await (prisma as any).workoutStreamV2.update({
@@ -653,26 +930,33 @@ export const workoutStreamRepository = {
     } = data
     const { lat, lng } = splitLatlngPoints(latlng)
 
-    const writeData: any = {
-      ...meta,
-      lat: sanitizeFloatStreamArray(lat),
-      lng: sanitizeFloatStreamArray(lng),
-      time: sanitizeIntStreamArray(time),
-      distance: sanitizeFloatStreamArray(distance),
-      velocity: sanitizeFloatStreamArray(velocity),
-      heartrate: sanitizeIntStreamArray(heartrate),
-      cadence: sanitizeIntStreamArray(cadence),
-      watts: sanitizeIntStreamArray(watts),
-      altitude: sanitizeFloatStreamArray(altitude),
-      grade: sanitizeFloatStreamArray(grade),
-      moving: sanitizeBooleanStreamArray(moving),
-      temp: sanitizeIntStreamArray(temp),
-      torque: sanitizeIntStreamArray(torque),
-      leftRightBalance: sanitizeIntStreamArray(leftRightBalance),
-      hrv: sanitizeFloatStreamArray(hrv),
-      respiration: sanitizeFloatStreamArray(respiration),
-      targetPower: sanitizeIntStreamArray(targetPower)
+    const rawSeries: Record<string, unknown> = {
+      lat,
+      lng,
+      time,
+      distance,
+      velocity,
+      heartrate,
+      cadence,
+      watts,
+      altitude,
+      grade,
+      moving,
+      temp,
+      torque,
+      leftRightBalance,
+      hrv,
+      respiration,
+      targetPower
     }
+
+    const writeData: any = { ...meta }
+    for (const [column, sanitize] of Object.entries(V2_ARRAY_WRITE_SANITIZERS)) {
+      writeData[column] = sanitize(rawSeries[column])
+    }
+    // CW-453: nothing may reach Postgres with a NULL element in a numeric or
+    // boolean array -- that is what made 24% of stream rows unreadable.
+    enforceNoNullStreamElements(writeData, workoutId)
 
     return (prisma as any).workoutStreamV2.upsert({
       where: { workoutId },
