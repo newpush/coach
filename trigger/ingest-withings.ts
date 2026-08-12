@@ -11,8 +11,12 @@ import {
   normalizeWithingsActivity,
   normalizeWithingsSleep,
   normalizeWithingsWorkout,
+  buildWithingsRateLimitDeferral,
+  isWithingsRateLimitError,
+  WITHINGS_MAX_RATE_LIMIT_DEFERRALS,
   WITHINGS_MEASURE_TYPES
 } from '../server/utils/withings'
+import { dispatchTask } from '../server/utils/task-dispatcher'
 import { prisma } from '../server/utils/db'
 import { shouldIngestActivities, shouldIngestWellness } from '../server/utils/integration-settings'
 import { wellnessRepository } from '../server/utils/repositories/wellnessRepository'
@@ -36,13 +40,20 @@ export const ingestWithingsTask = task({
     userId: string
     startDate: string
     endDate: string
+    /**
+     * Set only by this task when it re-enqueues itself after a Withings 601. Counts how
+     * many times this window has already been deferred, so the backoff can escalate and
+     * the deferral chain stays bounded. See buildWithingsRateLimitDeferral.
+     */
+    deferralCount?: number
   }): Promise<IngestionResult> => {
-    const { userId, startDate, endDate } = payload
+    const { userId, startDate, endDate, deferralCount = 0 } = payload
 
     logger.log('[Withings Ingest] Starting ingestion', {
       userId,
       startDate,
       endDate,
+      deferralCount,
       daysToSync: Math.ceil(
         (new Date(endDate).getTime() - new Date(startDate).getTime()) / (24 * 60 * 60 * 1000)
       )
@@ -69,6 +80,13 @@ export const ingestWithingsTask = task({
     })
 
     const timezone = await getUserTimezone(userId)
+
+    // Declared outside the try so a rate-limit deferral can report the partial progress
+    // it made before Withings cut us off — the run is deferred, not rolled back.
+    let upsertedCount = 0
+    let skippedCount = 0
+    let sleepUpsertCount = 0
+    let workoutUpsertCount = 0
 
     try {
       const settings = (integration.settings as Record<string, any> | null) || {}
@@ -105,9 +123,6 @@ export const ingestWithingsTask = task({
       }
 
       // Upsert wellness data (Measures)
-      let upsertedCount = 0
-      let skippedCount = 0
-
       for (const group of measureGroups) {
         const wellness = normalizeWithingsMeasureGroup(group, userId)
 
@@ -223,7 +238,6 @@ export const ingestWithingsTask = task({
       }
 
       // 2. Fetch Sleep (Wellness)
-      let sleepUpsertCount = 0
       if (wellnessEnabled) {
         try {
           const sleepSummaries = await fetchWithingsSleep(
@@ -279,13 +293,15 @@ export const ingestWithingsTask = task({
             sleepUpsertCount++
           }
         } catch (error) {
+          // A 601 is not a "sleep didn't work, carry on" error — the whole application is
+          // rate-limited, so continuing would just burn more quota and, worse, let the run
+          // report SUCCESS while silently skipping data. Let it reach the deferral handler.
+          if (isWithingsRateLimitError(error)) throw error
           logger.error('[Withings Ingest] Error fetching sleep', { error })
         }
       }
 
       // 3. Fetch Workouts
-      let workoutUpsertCount = 0
-
       // Check if integration has activity scope before trying to fetch
       // But we requested both scopes in auth, so unless user unchecked it, we should have it.
       // We'll proceed and catch errors if scope is missing (API will return error).
@@ -373,6 +389,10 @@ export const ingestWithingsTask = task({
                 }
               }
             } catch (e) {
+              // Same reasoning as the sleep block: this catch runs once per workout, so
+              // swallowing a rate limit here would hammer Withings for every remaining
+              // workout in the run.
+              if (isWithingsRateLimitError(e)) throw e
               logger.warn(
                 `[Withings Ingest] Failed to fetch intraday data for workout ${wWorkout.id}`,
                 { error: e }
@@ -423,6 +443,7 @@ export const ingestWithingsTask = task({
             }
           }
         } catch (error) {
+          if (isWithingsRateLimitError(error)) throw error
           logger.error('[Withings Ingest] Error fetching workouts', { error })
         }
       } else {
@@ -460,6 +481,82 @@ export const ingestWithingsTask = task({
         endDate
       }
     } catch (error) {
+      // CW-334: a Withings 601 is backpressure, not a failure. Defer the run instead of
+      // letting it propagate — propagating would consume the task's retry budget on a wall
+      // that will not move for minutes, fail the run, and fire tasks.onFailure -> Sentry.
+      const deferral = buildWithingsRateLimitDeferral(
+        error,
+        { userId, startDate, endDate, deferralCount },
+        {
+          counts: {
+            wellness: upsertedCount,
+            sleep: sleepUpsertCount,
+            workouts: workoutUpsertCount
+          },
+          skipped: skippedCount
+        }
+      )
+
+      if (deferral) {
+        logger.warn('[Withings Ingest] Rate limited by Withings - deferring run', {
+          integrationId: integration.id,
+          delayMs: deferral.delayMs,
+          retryAfterSource: isWithingsRateLimitError(error) ? error.retryAfterSource : 'default',
+          deferralCount,
+          willReenqueue: deferral.shouldReenqueue,
+          partialCounts: deferral.result.counts
+        })
+
+        await prisma.integration.update({
+          where: { id: integration.id },
+          data: {
+            syncStatus: deferral.syncStatus,
+            errorMessage: deferral.message
+          }
+        })
+
+        if (deferral.shouldReenqueue) {
+          // Same window, later. Ingestion is idempotent upserts over a date range, so
+          // re-running it loses nothing and picks up whatever we could not read this time.
+          try {
+            await dispatchTask(
+              'ingest-withings',
+              {
+                userId,
+                startDate,
+                endDate,
+                deferralCount: deferral.nextDeferralCount
+              },
+              {
+                delay: deferral.delayMs,
+                concurrencyKey: userId,
+                tags: [`user:${userId}`]
+              }
+            )
+            logger.log('[Withings Ingest] Deferred run re-enqueued', {
+              delayMs: deferral.delayMs,
+              deferralCount: deferral.nextDeferralCount
+            })
+          } catch (dispatchError) {
+            // The window is not lost: the next webhook or scheduled sync covers it.
+            logger.error('[Withings Ingest] Failed to re-enqueue deferred run', {
+              error: dispatchError
+            })
+          }
+        } else {
+          logger.error('[Withings Ingest] Rate limit did not clear after max deferrals', {
+            integrationId: integration.id,
+            deferralCount,
+            maxDeferrals: WITHINGS_MAX_RATE_LIMIT_DEFERRALS
+          })
+        }
+
+        // Returning rather than throwing is the whole point: the run COMPLETES, no retry
+        // is consumed, and the result carries error.code === 'RATE_LIMITED' so a deferral
+        // stays distinguishable from a genuine ingest failure.
+        return deferral.result
+      }
+
       const authFailure = buildAuthFailureResult(error, { userId, startDate, endDate })
       if (authFailure) {
         logger.warn('[Withings Ingest] Authorization expired or revoked', {

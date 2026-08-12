@@ -38,7 +38,9 @@
       </div>
 
       <div v-else-if="!team" class="p-12 text-center">
-        <p class="text-neutral-500">Team not found or access denied.</p>
+        <p class="text-neutral-500">
+          {{ t('team_detail_not_found', 'Team not found or access denied.') }}
+        </p>
       </div>
 
       <div v-else class="p-0 sm:p-6 space-y-6">
@@ -48,8 +50,75 @@
             {{ team.name }}
           </h1>
           <p class="text-sm text-neutral-500 max-w-2xl mt-1">
-            {{ team.description || 'No description provided.' }}
+            {{ team.description || t('team_detail_no_description', 'No description provided.') }}
           </p>
+        </div>
+
+        <!-- Load failures for the roster/invites sub-requests. These must never be rendered as
+             an empty roster or an empty invite list — a coach has to be able to tell "nothing
+             pending" apart from "we could not load it". -->
+        <div v-if="rosterError || invitesError" class="px-4 sm:px-0 space-y-3">
+          <UAlert
+            v-if="rosterError"
+            color="error"
+            variant="soft"
+            icon="i-heroicons-exclamation-triangle"
+            :title="t('team_detail_roster_error_title', 'Could not load the team roster')"
+            :description="
+              t(
+                'team_detail_roster_error_desc',
+                'We could not reach the server, so this team\'s athletes are not shown. This is a loading error — the roster itself is unchanged.'
+              )
+            "
+          >
+            <template #actions>
+              <UButton
+                color="error"
+                variant="outline"
+                size="xs"
+                icon="i-heroicons-arrow-path"
+                class="font-bold"
+                :label="t('team_detail_retry', 'Retry')"
+                :loading="retryingRoster"
+                @click="
+                  () => {
+                    void retryRoster()
+                  }
+                "
+              />
+            </template>
+          </UAlert>
+
+          <UAlert
+            v-if="invitesError"
+            color="error"
+            variant="soft"
+            icon="i-heroicons-exclamation-triangle"
+            :title="t('team_detail_invites_error_title', 'Could not load pending invitations')"
+            :description="
+              t(
+                'team_detail_invites_error_desc',
+                'We could not reach the server, so this team\'s invite codes and share links are not shown. This is a loading error — any existing invites are still active.'
+              )
+            "
+          >
+            <template #actions>
+              <UButton
+                color="error"
+                variant="outline"
+                size="xs"
+                icon="i-heroicons-arrow-path"
+                class="font-bold"
+                :label="t('team_detail_retry', 'Retry')"
+                :loading="retryingInvites"
+                @click="
+                  () => {
+                    void retryInvites()
+                  }
+                "
+              />
+            </template>
+          </UAlert>
         </div>
 
         <!-- Dashboard Content -->
@@ -58,12 +127,14 @@
           <template #roster>
             <div class="space-y-6 pt-4">
               <div class="flex items-center justify-between px-4 sm:px-0">
-                <h3 class="text-lg font-bold">Team Roster</h3>
+                <h3 class="text-lg font-bold">
+                  {{ t('team_detail_roster_title', 'Team Roster') }}
+                </h3>
                 <UButton
                   v-if="['OWNER', 'ADMIN', 'COACH'].includes(myRole)"
                   color="neutral"
                   variant="outline"
-                  label="Add Athlete"
+                  :label="t('team_detail_add_athlete', 'Add Athlete')"
                   icon="i-heroicons-user-plus"
                   size="xs"
                   class="font-bold"
@@ -75,12 +146,26 @@
                 />
               </div>
 
+              <!-- On a roster load failure the alert above the tabs owns the message and the
+                   retry; this empty state must stay hidden so it cannot be read as "no athletes". -->
               <div
-                v-if="roster.length === 0"
+                v-if="rosterError"
+                class="text-center py-12 bg-neutral-50 dark:bg-neutral-800/20 rounded-xl border-2 border-dashed border-gray-200 dark:border-gray-800"
+              >
+                <p class="text-sm text-neutral-500 italic font-medium">
+                  {{
+                    t('team_detail_roster_unavailable', 'Roster unavailable — see the error above.')
+                  }}
+                </p>
+              </div>
+              <div
+                v-else-if="roster.length === 0"
                 class="text-center py-12 bg-neutral-50 dark:bg-neutral-800/20 rounded-xl border-2 border-dashed border-gray-200 dark:border-gray-800"
               >
                 <UIcon name="i-heroicons-users" class="w-12 h-12 text-neutral-300 mb-2" />
-                <p class="text-neutral-500">No athletes in this team roster yet.</p>
+                <p class="text-neutral-500">
+                  {{ t('team_detail_roster_empty', 'No athletes in this team roster yet.') }}
+                </p>
                 <div
                   v-if="['OWNER', 'ADMIN', 'COACH'].includes(myRole)"
                   class="flex items-center justify-center gap-2 mt-4"
@@ -88,18 +173,18 @@
                   <UButton
                     color="primary"
                     variant="link"
-                    label="Invite with Code"
+                    :label="t('team_detail_invite_with_code', 'Invite with Code')"
                     @click="
                       () => {
                         isInviteModalOpen = true
                       }
                     "
                   />
-                  <span class="text-neutral-400 text-xs">or</span>
+                  <span class="text-neutral-400 text-xs">{{ t('team_detail_or', 'or') }}</span>
                   <UButton
                     color="primary"
                     variant="link"
-                    label="Add Coached Athlete"
+                    :label="t('team_detail_add_coached_athlete', 'Add Coached Athlete')"
                     @click="
                       () => {
                         void openQuickAddModal()
@@ -123,6 +208,7 @@
                     icon="i-heroicons-trash"
                     size="xs"
                     class="absolute top-2 right-2 opacity-0 group-hover/roster:opacity-100 transition-opacity"
+                    :aria-label="t('team_detail_remove_member', 'Remove from team')"
                     :loading="removingMemberId === rel.athlete.id"
                     @click="
                       () => {
@@ -144,24 +230,36 @@
                       <p
                         class="text-[10px] font-black uppercase tracking-[0.2em] text-primary-700 dark:text-primary-300"
                       >
-                        Team Invite
+                        {{ t('team_detail_share_eyebrow', 'Team Invite') }}
                       </p>
                       <h3
                         class="text-xl font-black text-gray-900 dark:text-white uppercase tracking-tight"
                       >
-                        Invite Athletes to {{ team.name }}
+                        {{
+                          t('team_detail_share_title', 'Invite Athletes to {name}', {
+                            name: team.name
+                          })
+                        }}
                       </h3>
                       <p class="text-sm text-neutral-600 dark:text-neutral-400">
-                        Share one link or QR code so athletes can join the team directly. You can
-                        still add an existing coached athlete or use their personal coach code in
-                        the modal below.
+                        {{
+                          t(
+                            'team_detail_share_desc',
+                            'Share one link or QR code so athletes can join the team directly. You can still add an existing coached athlete or use their personal coach code in the modal below.'
+                          )
+                        }}
                       </p>
                     </div>
 
                     <div class="flex flex-col sm:flex-row gap-3">
                       <UFormField
-                        label="Auto-Assign Group"
-                        help="Optional: New athletes joining from this link will be added to the selected group."
+                        :label="t('team_detail_auto_assign_group', 'Auto-Assign Group')"
+                        :help="
+                          t(
+                            'team_detail_auto_assign_group_help',
+                            'Optional: New athletes joining from this link will be added to the selected group.'
+                          )
+                        "
                         class="w-full sm:max-w-xs"
                       >
                         <USelect
@@ -175,7 +273,15 @@
                         v-if="shareableAthleteInvite?.group"
                         class="self-end text-[10px] font-bold uppercase tracking-[0.15em] text-primary-700 dark:text-primary-300"
                       >
-                        Current link adds athletes to {{ shareableAthleteInvite.group.name }}
+                        {{
+                          t(
+                            'team_detail_share_current_group',
+                            'Current link adds athletes to {group}',
+                            {
+                              group: shareableAthleteInvite.group.name
+                            }
+                          )
+                        }}
                       </div>
                     </div>
                   </div>
@@ -188,12 +294,19 @@
                       v-else
                       class="h-14 w-full max-w-sm rounded-xl border-2 border-dashed border-primary-200 dark:border-primary-800 bg-white/80 dark:bg-gray-950/40 flex items-center justify-center px-4 text-center text-xs font-bold uppercase tracking-[0.15em] text-primary-700 dark:text-primary-300"
                     >
-                      Generate a link to start inviting athletes
+                      {{
+                        t(
+                          'team_detail_share_placeholder',
+                          'Generate a link to start inviting athletes'
+                        )
+                      }}
                     </div>
 
                     <UButton
                       :label="
-                        shareableAthleteInvite ? 'Generate New Invite Link' : 'Generate Invite Link'
+                        shareableAthleteInvite
+                          ? t('team_detail_generate_new_link', 'Generate New Invite Link')
+                          : t('team_detail_generate_link', 'Generate Invite Link')
                       "
                       color="primary"
                       icon="i-heroicons-link"
@@ -208,7 +321,11 @@
                       v-if="shareableAthleteInvite"
                       class="text-[10px] text-neutral-500 uppercase font-bold text-center"
                     >
-                      Expires {{ formatRelative(shareableAthleteInvite.expiresAt) }}
+                      {{
+                        t('team_detail_expires', 'Expires {when}', {
+                          when: formatRelative(shareableAthleteInvite.expiresAt)
+                        })
+                      }}
                     </p>
                   </div>
                 </div>
@@ -243,7 +360,7 @@
                 class="py-12 text-center bg-neutral-50 dark:bg-neutral-800/20 rounded-xl border border-gray-100 dark:border-gray-800"
               >
                 <p class="text-neutral-500 text-sm italic font-medium">
-                  No athletes assigned to this group yet.
+                  {{ t('athletes_no_group', 'No athletes assigned to this group yet.') }}
                 </p>
               </div>
             </div>
@@ -253,12 +370,12 @@
           <template #staff>
             <div class="space-y-4 pt-4">
               <div class="flex items-center justify-between px-4 sm:px-0">
-                <h3 class="text-lg font-bold">Team Staff</h3>
+                <h3 class="text-lg font-bold">{{ t('team_detail_staff_title', 'Team Staff') }}</h3>
                 <UButton
                   v-if="myRole && myRole !== 'OWNER'"
                   color="error"
                   variant="soft"
-                  label="Leave Team"
+                  :label="t('team_detail_leave_team', 'Leave Team')"
                   icon="i-heroicons-arrow-right-start-on-rectangle"
                   size="xs"
                   class="font-bold"
@@ -302,6 +419,7 @@
                         variant="ghost"
                         icon="i-heroicons-trash"
                         size="xs"
+                        :aria-label="t('team_detail_remove_member', 'Remove from team')"
                         :loading="removingMemberId === member.userId"
                         @click="
                           () => {
@@ -322,11 +440,13 @@
               <!-- Invites Section -->
               <div v-if="['OWNER', 'ADMIN'].includes(myRole)">
                 <div class="flex items-center justify-between mb-4">
-                  <h3 class="text-lg font-bold">Pending Invitations</h3>
+                  <h3 class="text-lg font-bold">
+                    {{ t('team_detail_invites_title', 'Pending Invitations') }}
+                  </h3>
                   <UButton
                     color="neutral"
                     variant="outline"
-                    label="Create Invite"
+                    :label="t('team_detail_create_invite', 'Create Invite')"
                     icon="i-heroicons-plus"
                     size="xs"
                     class="font-bold"
@@ -338,11 +458,28 @@
                   />
                 </div>
 
+                <!-- Same rule as the roster: the alert above the tabs owns the message and the
+                     retry, so "No active invites." can never stand in for a failed load. -->
                 <div
-                  v-if="invites.length === 0"
+                  v-if="invitesError"
                   class="text-center py-8 border-2 border-dashed border-gray-200 dark:border-gray-800 rounded-lg"
                 >
-                  <p class="text-sm text-neutral-500">No active invites.</p>
+                  <p class="text-sm text-neutral-500 italic font-medium">
+                    {{
+                      t(
+                        'team_detail_invites_unavailable',
+                        'Invitations unavailable — see the error above.'
+                      )
+                    }}
+                  </p>
+                </div>
+                <div
+                  v-else-if="invites.length === 0"
+                  class="text-center py-8 border-2 border-dashed border-gray-200 dark:border-gray-800 rounded-lg"
+                >
+                  <p class="text-sm text-neutral-500">
+                    {{ t('team_detail_invites_empty', 'No active invites.') }}
+                  </p>
                 </div>
                 <div v-else class="space-y-2">
                   <div
@@ -367,10 +504,18 @@
                         </UBadge>
                       </div>
                       <p v-if="inv.email" class="text-xs text-neutral-500 mt-1 pl-1">
-                        Restricted to: {{ inv.email }}
+                        {{
+                          t('team_detail_invite_restricted_to', 'Restricted to: {email}', {
+                            email: inv.email
+                          })
+                        }}
                       </p>
                       <p class="text-[10px] text-neutral-400 mt-1 pl-1">
-                        Expires {{ formatRelative(inv.expiresAt) }}
+                        {{
+                          t('team_detail_expires', 'Expires {when}', {
+                            when: formatRelative(inv.expiresAt)
+                          })
+                        }}
                       </p>
                     </div>
                     <UButton
@@ -378,6 +523,7 @@
                       variant="ghost"
                       icon="i-heroicons-trash"
                       size="xs"
+                      :aria-label="t('team_detail_revoke_invite', 'Revoke invite')"
                       @click="
                         () => {
                           void revokeInvite(inv.id)
@@ -393,22 +539,31 @@
                 v-if="myRole === 'OWNER'"
                 class="pt-8 border-t border-gray-100 dark:border-gray-800"
               >
-                <h3 class="text-lg font-bold text-error-600 mb-2">Danger Zone</h3>
+                <h3 class="text-lg font-bold text-error-600 mb-2">
+                  {{ t('team_detail_danger_zone', 'Danger Zone') }}
+                </h3>
                 <UCard
                   class="border-error-500/20 bg-error-50/10"
                   :ui="{ ...mobileListCardUi, body: 'p-4' }"
                 >
                   <div class="flex items-center justify-between">
                     <div>
-                      <p class="font-bold text-sm">Delete Team</p>
+                      <p class="font-bold text-sm">
+                        {{ t('team_detail_delete_team', 'Delete Team') }}
+                      </p>
                       <p class="text-xs text-neutral-500">
-                        Permanently delete this team and all its groups. This cannot be undone.
+                        {{
+                          t(
+                            'team_detail_delete_team_desc',
+                            'Permanently delete this team and all its groups. This cannot be undone.'
+                          )
+                        }}
                       </p>
                     </div>
                     <UButton
                       color="error"
                       variant="soft"
-                      label="Delete Team"
+                      :label="t('team_detail_delete_team', 'Delete Team')"
                       @click="
                         () => {
                           void confirmDeleteTeam()
@@ -419,19 +574,28 @@
                 </UCard>
               </div>
               <div v-else-if="myRole" class="pt-8 border-t border-gray-100 dark:border-gray-800">
-                <h3 class="text-lg font-bold mb-2">Membership</h3>
+                <h3 class="text-lg font-bold mb-2">
+                  {{ t('team_detail_membership', 'Membership') }}
+                </h3>
                 <UCard :ui="{ ...mobileListCardUi, body: 'p-4' }">
                   <div class="flex items-center justify-between gap-4">
                     <div>
-                      <p class="font-bold text-sm">Leave Team</p>
+                      <p class="font-bold text-sm">
+                        {{ t('team_detail_leave_team', 'Leave Team') }}
+                      </p>
                       <p class="text-xs text-neutral-500">
-                        Remove yourself from this team. You will lose access to the roster.
+                        {{
+                          t(
+                            'team_detail_leave_team_desc',
+                            'Remove yourself from this team. You will lose access to the roster.'
+                          )
+                        }}
                       </p>
                     </div>
                     <UButton
                       color="error"
                       variant="soft"
-                      label="Leave Team"
+                      :label="t('team_detail_leave_team', 'Leave Team')"
                       :loading="leavingTeam"
                       @click="
                         () => {
@@ -452,14 +616,24 @@
   <!-- Create Invite Modal -->
   <UModal
     v-model:open="isInviteModalOpen"
-    title="Invite Member to Team"
-    description="Generate a secure invitation code to add new staff or athletes to your team."
+    :title="t('team_invite_modal_title', 'Invite Member to Team')"
+    :description="
+      t(
+        'team_invite_modal_desc',
+        'Generate a secure invitation code to add new staff or athletes to your team.'
+      )
+    "
   >
     <template #body>
       <div class="space-y-4">
         <UFormField
-          label="Restricted to Email"
-          help="Optional: Restrict this invite to one email address. We'll email them the join link when provided."
+          :label="t('team_invite_modal_email_label', 'Restricted to Email')"
+          :help="
+            t(
+              'team_invite_modal_email_help',
+              'Optional: Restrict this invite to one email address. We\'ll email them the join link when provided.'
+            )
+          "
         >
           <UInput
             v-model="newInvite.email"
@@ -468,26 +642,28 @@
             class="w-full"
           />
         </UFormField>
-        <UFormField label="Assign Role" help="Determine the level of access for the new member.">
-          <USelect
-            v-model="newInvite.role"
-            :items="[
-              { label: 'Athlete', value: 'ATHLETE' },
-              { label: 'Coach', value: 'COACH' },
-              { label: 'Admin', value: 'ADMIN' }
-            ]"
-            class="w-full"
-          />
+        <UFormField
+          :label="t('team_invite_modal_role_label', 'Assign Role')"
+          :help="
+            t('team_invite_modal_role_help', 'Determine the level of access for the new member.')
+          "
+        >
+          <USelect v-model="newInvite.role" :items="inviteRoleOptions" class="w-full" />
         </UFormField>
         <UFormField
           v-if="newInvite.role === 'ATHLETE'"
-          label="Auto-Assign to Group"
-          help="Optional: The member will be automatically added to this group upon joining."
+          :label="t('team_invite_modal_group_label', 'Auto-Assign to Group')"
+          :help="
+            t(
+              'team_invite_modal_group_help',
+              'Optional: The member will be automatically added to this group upon joining.'
+            )
+          "
         >
           <USelect
             v-model="newInvite.groupId"
             :items="groupOptions"
-            placeholder="None (Team Roster only)"
+            :placeholder="t('team_invite_modal_group_placeholder', 'None (Team Roster only)')"
             class="w-full"
           />
         </UFormField>
@@ -495,7 +671,7 @@
     </template>
     <template #footer>
       <UButton
-        label="Cancel"
+        :label="t('team_action_cancel', 'Cancel')"
         color="neutral"
         variant="ghost"
         @click="
@@ -505,7 +681,7 @@
         "
       />
       <UButton
-        label="Generate Invite"
+        :label="t('team_invite_modal_submit', 'Generate Invite')"
         color="primary"
         :loading="creatingInvite"
         @click="
@@ -520,27 +696,30 @@
   <!-- Quick Add Athlete Modal -->
   <UModal
     v-model:open="isQuickAddModalOpen"
-    title="Add Athlete"
-    description="Onboard an athlete to your team workspace."
+    :title="t('team_quickadd_title', 'Add Athlete')"
+    :description="t('team_quickadd_desc', 'Onboard an athlete to your team workspace.')"
   >
     <template #body>
-      <UTabs
-        :items="[
-          { label: 'Share Invite', slot: 'share', icon: 'i-heroicons-link' },
-          { label: 'From My Athletes', slot: 'connected', icon: 'i-heroicons-user-group' },
-          { label: 'By Invite Code', slot: 'by-code', icon: 'i-heroicons-ticket' }
-        ]"
-        class="w-full"
-      >
+      <UTabs :items="quickAddTabs" class="w-full">
         <template #share>
           <div class="space-y-4 pt-4">
             <p class="text-sm text-neutral-500 text-center">
-              Send athletes a direct team join link, or let them scan the QR code from their phone.
+              {{
+                t(
+                  'team_quickadd_share_desc',
+                  'Send athletes a direct team join link, or let them scan the QR code from their phone.'
+                )
+              }}
             </p>
 
             <UFormField
-              label="Auto-Assign Group"
-              help="Optional: Anyone joining from this link will be added to this group automatically."
+              :label="t('team_detail_auto_assign_group', 'Auto-Assign Group')"
+              :help="
+                t(
+                  'team_quickadd_group_help',
+                  'Optional: Anyone joining from this link will be added to this group automatically.'
+                )
+              "
             >
               <USelect
                 v-model="shareInviteGroupId"
@@ -559,19 +738,30 @@
                 v-else
                 class="w-full rounded-xl border-2 border-dashed border-primary-200 dark:border-primary-800 bg-white/80 dark:bg-gray-950/30 px-4 py-5 text-center text-xs font-bold uppercase tracking-[0.15em] text-primary-700 dark:text-primary-300"
               >
-                Generate an athlete invite to unlock the share link and QR code
+                {{
+                  t(
+                    'team_quickadd_share_placeholder',
+                    'Generate an athlete invite to unlock the share link and QR code'
+                  )
+                }}
               </div>
 
               <p
                 v-if="shareableAthleteInvite?.group"
                 class="text-[10px] font-bold uppercase tracking-[0.15em] text-primary-700 dark:text-primary-300 text-center"
               >
-                Current invite adds athletes to {{ shareableAthleteInvite.group.name }}
+                {{
+                  t('team_quickadd_current_group', 'Current invite adds athletes to {group}', {
+                    group: shareableAthleteInvite.group.name
+                  })
+                }}
               </p>
 
               <UButton
                 :label="
-                  shareableAthleteInvite ? 'Generate New Invite Link' : 'Generate Invite Link'
+                  shareableAthleteInvite
+                    ? t('team_detail_generate_new_link', 'Generate New Invite Link')
+                    : t('team_detail_generate_link', 'Generate Invite Link')
                 "
                 color="primary"
                 block
@@ -590,18 +780,25 @@
         <template #connected>
           <div class="space-y-4 pt-4">
             <UFormField
-              label="Select Athlete"
-              help="Only athletes you currently have a direct coaching relationship with are listed here."
+              :label="t('team_quickadd_select_label', 'Select Athlete')"
+              :help="
+                t(
+                  'team_quickadd_select_help',
+                  'Only athletes you currently have a direct coaching relationship with are listed here.'
+                )
+              "
             >
               <USelect
                 v-model="selectedAthleteToQuickAdd"
                 :items="availableCoachedAthletes"
-                placeholder="Select from your coached athletes..."
+                :placeholder="
+                  t('team_quickadd_select_placeholder', 'Select from your coached athletes...')
+                "
                 class="w-full"
               />
             </UFormField>
             <UButton
-              label="Add to Team"
+              :label="t('team_quickadd_add_to_team', 'Add to Team')"
               color="primary"
               block
               :loading="quickAdding"
@@ -618,10 +815,22 @@
         <template #by-code>
           <div class="space-y-4 pt-4 text-center">
             <p class="text-sm text-neutral-500">
-              Enter the athlete's personal "Invite a Coach" code. They will be automatically
-              connected to you AND added to this team.
+              {{
+                t(
+                  'team_quickadd_by_code_desc',
+                  'Enter the athlete\'s personal "Invite a Coach" code. They will be automatically connected to you AND added to this team.'
+                )
+              }}
             </p>
-            <UFormField label="Athlete Code">
+            <UFormField
+              :label="t('team_quickadd_code_label', 'Athlete Code')"
+              :help="
+                t(
+                  'team_quickadd_code_help',
+                  'Invite codes are 10 characters long (for example AB12CD34EF).'
+                )
+              "
+            >
               <UInput
                 v-model="athleteCodeToJoin"
                 placeholder="INVITE-CODE"
@@ -630,7 +839,7 @@
               />
             </UFormField>
             <UButton
-              label="Add via Code"
+              :label="t('team_quickadd_add_by_code', 'Add via Code')"
               color="primary"
               block
               :loading="quickAdding"
@@ -647,7 +856,7 @@
     </template>
     <template #footer>
       <UButton
-        label="Cancel"
+        :label="t('team_action_cancel', 'Cancel')"
         color="neutral"
         variant="ghost"
         block
@@ -663,7 +872,10 @@
 
 <script setup lang="ts">
   import { formatDistanceToNow } from 'date-fns'
+  import { useTranslate } from '@tolgee/vue'
   import { mobileListCardUi } from '~/utils/mobile-surface-ui'
+
+  const { t } = useTranslate('coaching')
 
   definePageMeta({
     middleware: 'auth'
@@ -679,6 +891,10 @@
   const team = ref<any>(null)
   const roster = ref<any[]>([])
   const invites = ref<any[]>([])
+  const rosterError = ref(false)
+  const invitesError = ref(false)
+  const retryingRoster = ref(false)
+  const retryingInvites = ref(false)
   const myCoachedAthletes = ref<any[]>([])
   const loading = ref(true)
   const creatingInvite = ref(false)
@@ -694,11 +910,35 @@
   const leavingTeam = ref(false)
   const updatingRoleId = ref<string | null>(null)
 
-  const staffRoleOptions = [
-    { label: 'Coach', value: 'COACH' },
-    { label: 'Admin', value: 'ADMIN' },
-    { label: 'Owner', value: 'OWNER' }
-  ]
+  const staffRoleOptions = computed(() => [
+    { label: t.value('team_role_coach', 'Coach'), value: 'COACH' },
+    { label: t.value('team_role_admin', 'Admin'), value: 'ADMIN' },
+    { label: t.value('team_role_owner', 'Owner'), value: 'OWNER' }
+  ])
+
+  const inviteRoleOptions = computed(() => [
+    { label: t.value('team_role_athlete', 'Athlete'), value: 'ATHLETE' },
+    { label: t.value('team_role_coach', 'Coach'), value: 'COACH' },
+    { label: t.value('team_role_admin', 'Admin'), value: 'ADMIN' }
+  ])
+
+  const quickAddTabs = computed(() => [
+    {
+      label: t.value('team_quickadd_tab_share', 'Share Invite'),
+      slot: 'share',
+      icon: 'i-heroicons-link'
+    },
+    {
+      label: t.value('team_quickadd_tab_connected', 'From My Athletes'),
+      slot: 'connected',
+      icon: 'i-heroicons-user-group'
+    },
+    {
+      label: t.value('team_quickadd_tab_by_code', 'By Invite Code'),
+      slot: 'by-code',
+      icon: 'i-heroicons-ticket'
+    }
+  ])
 
   const newInvite = ref({
     email: '',
@@ -715,7 +955,7 @@
   })
 
   const shareInviteGroupOptions = computed(() => [
-    { label: 'No auto-assignment', value: undefined },
+    { label: t.value('team_detail_no_auto_assignment', 'No auto-assignment'), value: undefined },
     ...groupOptions.value
   ])
 
@@ -746,18 +986,38 @@
 
     const items = []
     // Roster is visible to all members, but content is masked for non-staff
-    items.push({ label: 'Roster', slot: 'roster', icon: 'i-heroicons-users' })
+    items.push({
+      label: t.value('team_detail_tab_roster', 'Roster'),
+      slot: 'roster',
+      icon: 'i-heroicons-users'
+    })
 
     if (isStaff) {
-      items.push({ label: 'Groups', slot: 'groups', icon: 'i-heroicons-rectangle-group' })
+      items.push({
+        label: t.value('team_detail_tab_groups', 'Groups'),
+        slot: 'groups',
+        icon: 'i-heroicons-rectangle-group'
+      })
     }
 
-    items.push({ label: 'Staff', slot: 'staff', icon: 'i-heroicons-academic-cap' })
+    items.push({
+      label: t.value('team_detail_tab_staff', 'Staff'),
+      slot: 'staff',
+      icon: 'i-heroicons-academic-cap'
+    })
 
     if (['OWNER', 'ADMIN'].includes(myRole.value)) {
-      items.push({ label: 'Management', slot: 'settings', icon: 'i-heroicons-cog-6-tooth' })
+      items.push({
+        label: t.value('team_detail_tab_management', 'Management'),
+        slot: 'settings',
+        icon: 'i-heroicons-cog-6-tooth'
+      })
     } else if (myRole.value) {
-      items.push({ label: 'Settings', slot: 'settings', icon: 'i-heroicons-cog-6-tooth' })
+      items.push({
+        label: t.value('team_detail_tab_settings', 'Settings'),
+        slot: 'settings',
+        icon: 'i-heroicons-cog-6-tooth'
+      })
     }
 
     return items
@@ -799,7 +1059,10 @@
       myCoachedAthletes.value = data as any[]
     } catch (e) {
       console.error(e)
-      toast.add({ title: 'Failed to load coached athletes', color: 'error' })
+      toast.add({
+        title: t.value('team_detail_toast_load_athletes_failed', 'Failed to load coached athletes'),
+        color: 'error'
+      })
     }
   }
 
@@ -811,12 +1074,18 @@
         method: 'POST',
         body: { athleteId: selectedAthleteToQuickAdd.value }
       })
-      toast.add({ title: 'Athlete added to team!', color: 'success' })
+      toast.add({
+        title: t.value('team_detail_toast_athlete_added', 'Athlete added to team!'),
+        color: 'success'
+      })
       isQuickAddModalOpen.value = false
       selectedAthleteToQuickAdd.value = ''
       await refreshTeam()
     } catch (e) {
-      toast.add({ title: 'Failed to add athlete', color: 'error' })
+      toast.add({
+        title: t.value('team_detail_toast_add_athlete_failed', 'Failed to add athlete'),
+        color: 'error'
+      })
     } finally {
       quickAdding.value = false
     }
@@ -830,17 +1099,91 @@
         method: 'POST',
         body: { code: athleteCodeToJoin.value.toUpperCase() }
       })
-      toast.add({ title: 'Athlete added via code!', color: 'success' })
+      toast.add({
+        title: t.value('team_detail_toast_athlete_added_code', 'Athlete added via code!'),
+        color: 'success'
+      })
       isQuickAddModalOpen.value = false
       athleteCodeToJoin.value = ''
       await refreshTeam()
     } catch (err: any) {
       toast.add({
-        title: 'Failed: ' + (err.data?.message || 'Invalid code'),
+        title: t.value('team_detail_toast_add_code_failed', 'Failed: {message}', {
+          message: err.data?.message || t.value('team_detail_toast_invalid_code', 'Invalid code')
+        }),
         color: 'error'
       })
     } finally {
       quickAdding.value = false
+    }
+  }
+
+  // Roster and invites load independently so one transient failure does not blank the whole
+  // page — but a failure is never rendered as "nothing here": the *Error flags drive an
+  // explicit error state with a retry, and a successful empty response clears them.
+  async function loadRoster() {
+    const teamId = route.params.id as string
+    try {
+      const data = await $fetch<any, string & {}>(`/api/coaching/teams/${teamId}/roster`)
+      roster.value = (data as any[]) || []
+      rosterError.value = false
+      return true
+    } catch (e) {
+      console.error(e)
+      roster.value = []
+      rosterError.value = true
+      return false
+    }
+  }
+
+  async function loadInvites() {
+    const teamId = route.params.id as string
+    try {
+      const data = await $fetch<any, string & {}>(`/api/coaching/teams/${teamId}/invites`)
+      invites.value = (data as any[]) || []
+      invitesError.value = false
+      return true
+    } catch (e) {
+      console.error(e)
+      invites.value = []
+      invitesError.value = true
+      return false
+    }
+  }
+
+  async function retryRoster() {
+    retryingRoster.value = true
+    try {
+      const ok = await loadRoster()
+      if (!ok) {
+        toast.add({
+          title: t.value(
+            'team_detail_toast_roster_retry_failed',
+            'Still unable to load the team roster'
+          ),
+          color: 'error'
+        })
+      }
+    } finally {
+      retryingRoster.value = false
+    }
+  }
+
+  async function retryInvites() {
+    retryingInvites.value = true
+    try {
+      const ok = await loadInvites()
+      if (!ok) {
+        toast.add({
+          title: t.value(
+            'team_detail_toast_invites_retry_failed',
+            'Still unable to load pending invitations'
+          ),
+          color: 'error'
+        })
+      }
+    } finally {
+      retryingInvites.value = false
     }
   }
 
@@ -849,16 +1192,13 @@
     try {
       team.value = await $fetch<any, string & {}>(`/api/coaching/teams/${teamId}`)
 
-      const [rosterData, invitesData] = await Promise.all([
-        $fetch<any, string & {}>(`/api/coaching/teams/${teamId}/roster`).catch(() => []),
-        $fetch<any, string & {}>(`/api/coaching/teams/${teamId}/invites`).catch(() => [])
-      ])
-
-      roster.value = rosterData as any[]
-      invites.value = invitesData as any[]
+      await Promise.all([loadRoster(), loadInvites()])
     } catch (e) {
       console.error(e)
-      toast.add({ title: 'Failed to load team data', color: 'error' })
+      toast.add({
+        title: t.value('team_detail_toast_team_load_failed', 'Failed to load team data'),
+        color: 'error'
+      })
     }
   }
 
@@ -875,12 +1215,18 @@
         method: 'POST',
         body: payload
       })
-      toast.add({ title: 'Invite code generated!', color: 'success' })
+      toast.add({
+        title: t.value('team_detail_toast_invite_created', 'Invite code generated!'),
+        color: 'success'
+      })
       isInviteModalOpen.value = false
       newInvite.value = { email: '', role: 'ATHLETE', groupId: undefined }
       await refreshTeam()
     } catch (e) {
-      toast.add({ title: 'Failed to create invite', color: 'error' })
+      toast.add({
+        title: t.value('team_detail_toast_invite_create_failed', 'Failed to create invite'),
+        color: 'error'
+      })
     } finally {
       creatingInvite.value = false
     }
@@ -896,11 +1242,16 @@
           groupId: shareInviteGroupId.value || undefined
         }
       })
-      toast.add({ title: 'Invite link generated!', color: 'success' })
+      toast.add({
+        title: t.value('team_detail_toast_invite_link_created', 'Invite link generated!'),
+        color: 'success'
+      })
       await refreshTeam()
     } catch (err: any) {
       toast.add({
-        title: err.data?.message || 'Failed to generate invite link',
+        title:
+          err.data?.message ||
+          t.value('team_detail_toast_invite_link_failed', 'Failed to generate invite link'),
         color: 'error'
       })
     } finally {
@@ -914,10 +1265,16 @@
         method: 'DELETE',
         body: { inviteId }
       })
-      toast.add({ title: 'Invite revoked', color: 'success' })
+      toast.add({
+        title: t.value('team_detail_toast_invite_revoked', 'Invite revoked'),
+        color: 'success'
+      })
       await refreshTeam()
     } catch (e) {
-      toast.add({ title: 'Failed to revoke invite', color: 'error' })
+      toast.add({
+        title: t.value('team_detail_toast_invite_revoke_failed', 'Failed to revoke invite'),
+        color: 'error'
+      })
     }
   }
 
@@ -928,21 +1285,31 @@
 
   function actAsAthlete(athlete: any) {
     if (!athlete?.id || athlete?.canViewDetails === false || athlete?.isMasked) return
-    const name = athlete.name || athlete.email || 'Athlete'
+    const name = athlete.name || athlete.email || t.value('team_role_athlete', 'Athlete')
     coachingStore.startActingAs(athlete.id, name)
   }
 
   async function removeMember(userId: string, displayName?: string) {
     if (!team.value?.id || !userId) return
-    const label = displayName || 'this member'
-    if (!confirm(`Remove ${label} from the team?`)) return
+    const label = displayName || t.value('team_detail_this_member', 'this member')
+    if (
+      !confirm(
+        t.value('team_detail_confirm_remove_member', 'Remove {name} from the team?', {
+          name: label
+        })
+      )
+    )
+      return
 
     removingMemberId.value = userId
     try {
       await $fetch<any, string & {}>(`/api/coaching/teams/${team.value.id}/members/${userId}`, {
         method: 'DELETE'
       })
-      toast.add({ title: 'Member removed', color: 'success' })
+      toast.add({
+        title: t.value('team_detail_toast_member_removed', 'Member removed'),
+        color: 'success'
+      })
       if (userId === currentUserId.value) {
         await router.push('/coaching/team')
         return
@@ -950,7 +1317,9 @@
       await refreshTeam()
     } catch (err: any) {
       toast.add({
-        title: err.data?.message || 'Failed to remove member',
+        title:
+          err.data?.message ||
+          t.value('team_detail_toast_member_remove_failed', 'Failed to remove member'),
         color: 'error'
       })
     } finally {
@@ -960,7 +1329,14 @@
 
   async function leaveTeam() {
     if (!team.value?.id || !currentUserId.value) return
-    if (!confirm(`Leave "${team.value.name}"? You will lose access to this team.`)) return
+    if (
+      !confirm(
+        t.value('team_detail_confirm_leave', 'Leave "{name}"? You will lose access to this team.', {
+          name: team.value.name
+        })
+      )
+    )
+      return
 
     leavingTeam.value = true
     try {
@@ -970,11 +1346,15 @@
           method: 'DELETE'
         }
       )
-      toast.add({ title: 'You left the team', color: 'success' })
+      toast.add({
+        title: t.value('team_detail_toast_left_team', 'You left the team'),
+        color: 'success'
+      })
       await router.push('/coaching/team')
     } catch (err: any) {
       toast.add({
-        title: err.data?.message || 'Failed to leave team',
+        title:
+          err.data?.message || t.value('team_detail_toast_leave_failed', 'Failed to leave team'),
         color: 'error'
       })
     } finally {
@@ -990,11 +1370,16 @@
         method: 'PATCH',
         body: { role }
       })
-      toast.add({ title: 'Role updated', color: 'success' })
+      toast.add({
+        title: t.value('team_detail_toast_role_updated', 'Role updated'),
+        color: 'success'
+      })
       await refreshTeam()
     } catch (err: any) {
       toast.add({
-        title: err.data?.message || 'Failed to update role',
+        title:
+          err.data?.message ||
+          t.value('team_detail_toast_role_update_failed', 'Failed to update role'),
         color: 'error'
       })
     } finally {
@@ -1003,16 +1388,29 @@
   }
 
   async function confirmDeleteTeam() {
-    if (!confirm(`Are you sure you want to delete "${team.value.name}"? This cannot be undone.`))
+    if (
+      !confirm(
+        t.value(
+          'team_detail_confirm_delete',
+          'Are you sure you want to delete "{name}"? This cannot be undone.',
+          { name: team.value.name }
+        )
+      )
+    )
       return
 
     try {
       await $fetch<any, string & {}>(`/api/coaching/teams/${team.value.id}`, { method: 'DELETE' })
-      toast.add({ title: 'Team deleted', color: 'success' })
+      toast.add({
+        title: t.value('team_detail_toast_team_deleted', 'Team deleted'),
+        color: 'success'
+      })
       await router.push('/coaching/team')
     } catch (err: any) {
       toast.add({
-        title: err.data?.message || 'Failed to delete team',
+        title:
+          err.data?.message ||
+          t.value('team_detail_toast_team_delete_failed', 'Failed to delete team'),
         color: 'error'
       })
     }

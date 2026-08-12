@@ -4,14 +4,22 @@ import {
   calculateStabilityMetrics,
   calculateWPrimeBalance,
   calculateEfficiencyFactorDecay,
-  calculateQuadrantAnalysis
+  calculateQuadrantAnalysis,
+  type StabilityInterval
 } from '../../../../server/utils/performance-metrics'
+import type { Interval } from '../../../../server/utils/interval-detection'
 
 describe('Performance Metrics Utils', () => {
   describe('calculateFatigueSensitivity', () => {
     it('should return null if streams mismatch or too short', () => {
       expect(calculateFatigueSensitivity([], [], [])).toBeNull()
-      expect(calculateFatigueSensitivity(new Array(500).fill(100), new Array(500).fill(100), new Array(500).fill(1))).toBeNull()
+      expect(
+        calculateFatigueSensitivity(
+          new Array(500).fill(100),
+          new Array(500).fill(100),
+          new Array(500).fill(1)
+        )
+      ).toBeNull()
     })
 
     it('should calculate decay correctly', () => {
@@ -69,6 +77,68 @@ describe('Performance Metrics Utils', () => {
       expect(result!.intervalStability).toHaveLength(1)
       expect(result!.intervalStability[0].cov).toBe(0)
     })
+
+    it('should select exactly the WORK and STEADY segments and skip everything else', () => {
+      // Index:      0    1    2  |  3   4  |   5    6   7  |   8    9
+      // Type:      <---WORK--->  | RECOV.  | <--STEADY-->  | <-COOLDOWN->
+      const stream = [100, 100, 100, 50, 50, 100, 110, 90, 300, 300]
+
+      const intervals: StabilityInterval[] = [
+        { type: 'WORK', start_index: 0, end_index: 2 },
+        { type: 'RECOVERY', start_index: 3, end_index: 4 },
+        { type: 'STEADY', start_index: 5, end_index: 7 },
+        { type: 'COOLDOWN', start_index: 8, end_index: 9 }
+      ]
+
+      const result = calculateStabilityMetrics(stream, intervals)
+
+      // Only WORK + STEADY survive the filter, and they are re-indexed from 0.
+      expect(result!.intervalStability).toEqual([
+        { index: 0, cov: 0, label: 'Interval 1' },
+        { index: 1, cov: expect.closeTo(8.16, 2), label: 'Interval 2' }
+      ])
+    })
+
+    it('should skip WARMUP, REST and untyped entries', () => {
+      const stream = [100, 110, 90, 100, 110, 90, 100, 110, 90]
+
+      const intervals: StabilityInterval[] = [
+        { type: 'WARMUP', start_index: 0, end_index: 2 },
+        { type: 'REST', start_index: 3, end_index: 5 },
+        // No `type` at all — `type` is optional on StabilityInterval, and an
+        // entry without one is not WORK/STEADY, so it must not be measured.
+        { start_index: 6, end_index: 8 }
+      ]
+
+      expect(calculateStabilityMetrics(stream, intervals)!.intervalStability).toEqual([])
+    })
+
+    it('should accept a full detected Interval without widening the parameter type', () => {
+      // Structural compatibility check: the real `Interval` shape from
+      // `interval-detection.ts` carries many more fields, and its `type` is a
+      // string union. It must still satisfy `StabilityInterval` so the eight
+      // existing call sites compile untouched.
+      const detected: Interval = {
+        type: 'WORK',
+        start_index: 0,
+        end_index: 2,
+        start_time: 0,
+        end_time: 2,
+        duration: 3,
+        avg_power: 100
+      }
+
+      const result = calculateStabilityMetrics([100, 100, 100], [detected])
+      expect(result!.intervalStability).toHaveLength(1)
+      expect(result!.intervalStability[0].cov).toBe(0)
+    })
+
+    // Compile-time contract (documentation — `tests/` is not part of the
+    // `tsconfig.server.json` project, so this is not enforced by
+    // `pnpm typecheck:server`; the enforcement lives in the type itself):
+    //
+    //   // @ts-expect-error — start_index is required
+    //   const bad: StabilityInterval = { type: 'WORK', end_index: 2 }
   })
 
   describe('calculateWPrimeBalance', () => {
@@ -155,13 +225,13 @@ describe('Performance Metrics Utils', () => {
         300, // Q1 (High P, High C)
         300, // Q2 (High P, Low C)
         100, // Q3 (Low P, Low C)
-        100  // Q4 (Low P, High C)
+        100 // Q4 (Low P, High C)
       ]
       const cadence = [
         100, // Q1
-        80,  // Q2
-        80,  // Q3
-        100  // Q4
+        80, // Q2
+        80, // Q3
+        100 // Q4
       ]
 
       const result = calculateQuadrantAnalysis(power, cadence, ftp, targetCadence)

@@ -180,6 +180,7 @@ export interface WorkoutAnalysisFactsV2 {
       executionStability: SignalApplicability
       repeatability: SignalApplicability
       cadenceDrift: SignalApplicability
+      cadenceStability: SignalApplicability
       pacingDrift: SignalApplicability
     }
     decoupling: {
@@ -619,10 +620,103 @@ function getAnalysisMode(params: {
 }) {
   if (params.family === 'run' && params.hasPace) return 'pace'
   if (params.powerSourceType === 'measured') return params.hrUsable ? 'mixed' : 'power'
-  if (params.powerSourceType === 'estimated') return params.hasPace ? 'pace' : 'mixed'
+  if (params.powerSourceType === 'estimated') {
+    /**
+     * Rides never lead on speed (CW-437).
+     *
+     * This branch predates CW-394, when `'estimated'` meant runs and ski — modalities
+     * where pace really is the primary effort metric. CW-394 made
+     * `inferPowerSourceType` classify a Strava ride whose `device_watts` is explicitly
+     * `false` as estimated, which routed real outdoor rides here for the first time.
+     *
+     * Cycling speed is a far weaker proxy for effort than running pace: wind, gradient
+     * and drafting move it independently of the work done, so the same 200 W produces
+     * wildly different speeds into a headwind and down a descent. Leading the analysis
+     * with speed would build pacing narratives on the wrong signal, so an
+     * estimated-power ride resolves to `'mixed'` — which already means "no single
+     * metric leads", the honest description of that session. Run and ski behaviour is
+     * deliberately untouched (runs are caught by the `family === 'run'` rule above).
+     */
+    if (params.family === 'ride') return 'mixed'
+    return params.hasPace ? 'pace' : 'mixed'
+  }
   if (params.hrUsable) return 'mixed'
   if (params.hasRpe) return 'rpe'
   return 'mixed'
+}
+
+/**
+ * Written out rather than inferred: an inferred object literal widens the string-literal
+ * unions to `string`, which would erase `AnalysisMode` and the workout family at the
+ * destructuring sites in both builders.
+ */
+type SharedAnalysisSignals = {
+  family: ReturnType<typeof getWorkoutFamily>
+  durationMinutes: number
+  rpe: number | null
+  hrStats: ReturnType<typeof getHrStats>
+  powerSourceType: PowerSourceType
+  powerAbsoluteUsable: boolean
+  powerRelativeUsable: boolean
+  hasPace: boolean
+  analysisMode: AnalysisMode
+}
+
+/**
+ * The derivations both facts builders need, computed once (CW-438).
+ *
+ * `buildWorkoutAnalysisFacts` (V1) and `buildWorkoutAnalysisFactsV2` used to derive HR
+ * usability, power provenance and the analysis mode independently, from expressions that
+ * happened to be identical. Nothing enforced that: the two builders could silently
+ * disagree about whether HR was usable or whether power was measured, and no test would
+ * fail. CW-394, CW-395 and CW-437 each had to land their fix in both copies and were only
+ * correct because the implementer noticed the duplication. Deriving these here makes
+ * agreement structural rather than a convention someone has to remember — and the
+ * `V1/V2 shared derivation agreement (CW-438)` suite fails if either builder drifts back
+ * to computing one of these itself.
+ *
+ * Only what both builders consume belongs here — anything a single builder needs
+ * (V1's `impactProfile`/`sessionRpeLoad`, V2's `refs`) stays in that builder.
+ */
+function deriveSharedAnalysisSignals(workout: any): SharedAnalysisSignals {
+  const family = getWorkoutFamily(workout?.type)
+  const durationMinutes = Math.round((workout?.durationSec || 0) / 60)
+  const rpe =
+    workout?.rpe ??
+    (workout?.sessionRpe && durationMinutes > 0
+      ? Math.round(workout.sessionRpe / durationMinutes)
+      : null) ??
+    null
+  const hrStats = getHrStats(workout)
+  const powerSourceType = inferPowerSourceType(workout, family)
+  const powerAbsoluteUsable = powerSourceType === 'measured'
+  const powerRelativeUsable =
+    powerSourceType !== 'unknown' ||
+    Boolean(workout?.averageWatts) ||
+    Boolean(workout?.normalizedPower) ||
+    asNumberArray(workout?.streams?.watts).length > 0 ||
+    asNumberArray(workout?.streams?.powerZoneTimes).some((value) => value > 0)
+  const hasPace =
+    Boolean(workout?.averageSpeed) || asNumberArray(workout?.streams?.velocity).length > 0
+  const analysisMode = getAnalysisMode({
+    family,
+    powerSourceType,
+    hrUsable: hrStats.usable,
+    hasPace,
+    hasRpe: Boolean(rpe)
+  })
+
+  return {
+    family,
+    durationMinutes,
+    rpe,
+    hrStats,
+    powerSourceType,
+    powerAbsoluteUsable,
+    powerRelativeUsable,
+    hasPace,
+    analysisMode
+  }
 }
 
 function deriveSubjectiveObjectiveGap(
@@ -984,15 +1078,17 @@ export function buildWorkoutAnalysisFacts({
   if (userProfile) computedFrom.push('userProfile')
   else unavailableInputs.push('userProfile')
 
-  const family = getWorkoutFamily(workout?.type)
+  const {
+    family,
+    durationMinutes,
+    rpe,
+    hrStats,
+    powerSourceType,
+    powerAbsoluteUsable,
+    powerRelativeUsable,
+    analysisMode
+  } = deriveSharedAnalysisSignals(workout)
   const impactProfile = inferImpactProfile(family)
-  const durationMinutes = Math.round((workout?.durationSec || 0) / 60)
-  const rpe =
-    workout?.rpe ??
-    (workout?.sessionRpe && durationMinutes > 0
-      ? Math.round(workout.sessionRpe / durationMinutes)
-      : null) ??
-    null
   const sessionRpeLoad = workout?.sessionRpe ?? (rpe ? rpe * durationMinutes : null)
   const objectiveLoad =
     workout?.trainingLoad ?? workout?.tss ?? (workout?.kilojoules ? workout.kilojoules / 4 : null)
@@ -1003,36 +1099,18 @@ export function buildWorkoutAnalysisFacts({
     objectiveLoad
   })
 
-  const hrStats = getHrStats(workout)
   if (!hrStats.usable) {
     disabledInterpretations.push(
       'Heart-rate-derived analysis disabled because HR telemetry is missing or artifact-prone.'
     )
   }
 
-  const powerSourceType = inferPowerSourceType(workout, family)
-  const powerAbsoluteUsable = powerSourceType === 'measured'
-  const powerRelativeUsable =
-    powerSourceType !== 'unknown' ||
-    Boolean(workout?.averageWatts) ||
-    Boolean(workout?.normalizedPower) ||
-    asNumberArray(workout?.streams?.watts).length > 0 ||
-    asNumberArray(workout?.streams?.powerZoneTimes).some((value) => value > 0)
   if (!powerAbsoluteUsable && powerRelativeUsable) {
     disabledInterpretations.push(
       'Absolute power benchmarking disabled because available power is estimated or uncertain.'
     )
   }
 
-  const hasPace =
-    Boolean(workout?.averageSpeed) || asNumberArray(workout?.streams?.velocity).length > 0
-  const analysisMode = getAnalysisMode({
-    family,
-    powerSourceType,
-    hrUsable: hrStats.usable,
-    hasPace,
-    hasRpe: Boolean(rpe)
-  })
   const motionPattern = deriveMotionPattern(workout)
 
   const warmupExcludedMinutes = clamp(Number(sportSettings?.warmupTime || 10), 10, 15)
@@ -1717,9 +1795,28 @@ function mapProviderIntervalsToActual(intervals: any[]): ActualInterval[] {
  *
  * Engine-detected intervals (`detectIntervals`) carry no intensity field at
  * all, so they stay `null` — there is no second unit to reconcile.
+ *
+ * Non-numeric input is rejected BEFORE coercion rather than after, because
+ * `Number(null)`, `Number('')` and `Number(false)` are all a perfectly finite
+ * `0` that `Number.isFinite` waves through (the same trap `medianOf` guards
+ * against, CW-396). A fabricated `0` is not merely a wrong number here: it is
+ * an intensity signal where the provider stated there is none, and
+ * `getActualHardRepeats` reads `intensity !== null` as "this lap has a usable
+ * intensity" before falling back to average power. So a lap the provider sent
+ * as an explicit `intensity: null` could never be a hard repeat no matter how
+ * many watts it carried, while an ABSENT field (`Number(undefined)` is `NaN`)
+ * behaved correctly — an asymmetry with no defensible meaning (CW-439).
  */
 export function toIntervalIntensityFactor(value: unknown): number | null {
-  const numeric = Number(value)
+  // A numeric string is accepted because fixtures and looser providers send
+  // one; everything else (null, undefined, '', booleans, objects) is "no
+  // intensity", not zero intensity.
+  const numeric =
+    typeof value === 'number'
+      ? value
+      : typeof value === 'string' && value.trim() !== ''
+        ? Number(value)
+        : Number.NaN
   if (!Number.isFinite(numeric)) return null
   return numeric > 5 ? numeric / 100 : numeric
 }
@@ -3422,6 +3519,11 @@ type DurabilityGates = {
   repeatability: SignalGate
 }
 
+type SportSpecificGates = {
+  cadenceDrift: SignalGate
+  cadenceStability: SignalGate
+}
+
 function deriveDurabilitySignals(params: {
   workout: any
   family: ReturnType<typeof getWorkoutFamily>
@@ -3584,7 +3686,7 @@ function deriveSportSpecificSignals(params: {
   repScope: RepScope
 }): {
   sportSpecific: WorkoutAnalysisFactsV2['performanceSignals']['sportSpecific']
-  gates: { cadenceDrift: SignalGate }
+  gates: SportSpecificGates
 } {
   const { workout, family, archetype, motionPattern, repScope } = params
   const cadence = asNumberArray(workout?.streams?.cadence)
@@ -3593,6 +3695,7 @@ function deriveSportSpecificSignals(params: {
   let cadenceStabilityScore: number | null = null
   let pacingDriftPct: number | null = null
   let cadenceDriftGate: SignalGate = OPEN_GATE
+  let cadenceStabilityGate: SignalGate = OPEN_GATE
   let torqueProfile: WorkoutAnalysisFactsV2['performanceSignals']['sportSpecific']['torqueProfile'] =
     'unknown'
 
@@ -3619,9 +3722,27 @@ function deriveSportSpecificSignals(params: {
     if (first && last && first > 0) cadenceDriftPct = round(((first - last) / first) * 100, 1)
   }
 
-  // Session-wide cadence stability is untouched by CW-393: it has no
-  // applicability gate and is out of that ticket's scope.
-  if (cadence.length >= 120) {
+  // Cadence stability follows the same rule as every other structure-scoped
+  // signal (CW-427): when the session has a comparable rep set, the CoV is
+  // measured WITHIN each work rep. Session-wide, the number is dominated by the
+  // gap between rep cadence and recovery-jog cadence — which is the prescribed
+  // shape of the session, not a flaw in how it was ridden. A steady session has
+  // no rep structure to scope to, so it keeps the session-wide CoV.
+  if (repScope.active) {
+    const repCoV = cadence.length >= 120 ? repScopedStabilityCoV(repScope.reps, cadence) : null
+    if (repCoV !== null) {
+      cadenceStabilityScore = round(clamp(100 - repCoV * 5, 0, 100), 1)
+    } else {
+      cadenceStabilityGate = {
+        applicable: false,
+        reason:
+          cadence.length < 120
+            ? 'Cadence stability is unavailable because cadence telemetry is missing or too sparse.'
+            : (repScope.reason ??
+              'Cadence stability is measured within each work rep for this session shape, and the rep boundaries could not be located in the cadence stream.')
+      }
+    }
+  } else if (cadence.length >= 120) {
     const stability = calculateStabilityMetrics(cadence, [])
     if (stability) cadenceStabilityScore = round(clamp(100 - stability.overallCoV * 5, 0, 100), 1)
   }
@@ -3658,7 +3779,7 @@ function deriveSportSpecificSignals(params: {
       torqueProfile,
       pacingDriftPct
     },
-    gates: { cadenceDrift: cadenceDriftGate }
+    gates: { cadenceDrift: cadenceDriftGate, cadenceStability: cadenceStabilityGate }
   }
 }
 
@@ -3669,7 +3790,7 @@ function deriveSignalApplicability(params: {
   motionPattern: MotionPattern
   durability: WorkoutAnalysisFactsV2['performanceSignals']['durability']
   sportSpecific: WorkoutAnalysisFactsV2['performanceSignals']['sportSpecific']
-  gates: DurabilityGates & { cadenceDrift: SignalGate }
+  gates: DurabilityGates & SportSpecificGates
 }): WorkoutAnalysisFactsV2['performanceSignals']['applicability'] {
   const { workout, family, archetype, motionPattern, durability, sportSpecific, gates } = params
   const durationSec = Number(workout?.durationSec || 0)
@@ -3720,6 +3841,11 @@ function deriveSignalApplicability(params: {
       gates.cadenceDrift,
       sportSpecific.cadenceDriftPct,
       'Cadence drift is unavailable because cadence telemetry is missing or too sparse.'
+    ),
+    cadenceStability: resolve(
+      gates.cadenceStability,
+      sportSpecific.cadenceStabilityScore,
+      'Cadence stability is unavailable because cadence telemetry is missing or too sparse.'
     ),
     pacingDrift:
       sportSpecific.pacingDriftPct !== null
@@ -3903,6 +4029,24 @@ function deriveAdherence(params: {
   ) => actual !== null && planned.metric === 'rpe' && !result.comparable
 
   /**
+   * The same rule for cadence targets (CW-419). A cadence-prescribed step can
+   * only be scored when its aligned segment actually carries a cadence
+   * measurement: riding a cadence-targeted plan on a bike with no cadence
+   * sensor says nothing about whether the athlete respected the prescription.
+   * Those steps leave the denominator instead of scoring as misses, so a
+   * session with no cadence stream reports `cadenceHitRate: null` /
+   * `cadenceAssessable: false` rather than a hard zero the AI would read as
+   * total non-compliance.
+   *
+   * `actual !== null` is load-bearing: a planned step the alignment could not
+   * pair at all is execution evidence (see the note below) and keeps counting
+   * as a miss, exactly as CW-386 established.
+   */
+  const isUnmeasurableCadenceStep = (actual: ActualInterval | null) =>
+    actual !== null &&
+    (actual.avgCadence === null || !Number.isFinite(actual.avgCadence) || actual.avgCadence <= 0)
+
+  /**
    * A planned step the alignment could not pair at all is a different case from
    * CW-385's unmeasurable RPE step, and is treated differently on purpose.
    *
@@ -3920,10 +4064,12 @@ function deriveAdherence(params: {
   let workHits = 0
   let recoveryHits = 0
   let cadenceHits = 0
-  // Denominators start at every planned step and shrink only when an RPE step
-  // turns out to be unmeasurable (see `isUnmeasurableRpeStep`).
+  // Denominators start at every planned step and shrink only when the step
+  // turns out to be unmeasurable (see `isUnmeasurableRpeStep` /
+  // `isUnmeasurableCadenceStep`).
   let scorableWorkSteps = plannedWork.length
   let scorableRecoverySteps = plannedRecovery.length
+  let scorableCadenceSteps = cadencePlanned.length
   const overshoots: number[] = []
   const undershoots: number[] = []
 
@@ -3955,9 +4101,16 @@ function deriveAdherence(params: {
   // athlete's warmup lap (CW-386).
   for (const { planned, actual } of alignment.pairs) {
     if (planned.cadence === null) continue
-    if (!actual || actual.avgCadence === null || actual.avgCadence <= 0) continue
+    if (isUnmeasurableCadenceStep(actual)) {
+      scorableCadenceSteps--
+      continue
+    }
+    const measuredCadence = actual?.avgCadence ?? null
+    // No aligned segment at all: the work was not executed, so this stays in
+    // the denominator as a miss (CW-386).
+    if (measuredCadence === null) continue
     const tolerance = planned.ramp ? 8 : 5
-    if (Math.abs(actual.avgCadence - planned.cadence) <= tolerance) cadenceHits++
+    if (Math.abs(measuredCadence - planned.cadence) <= tolerance) cadenceHits++
   }
 
   const workIntervalHitRate =
@@ -3965,7 +4118,7 @@ function deriveAdherence(params: {
   const recoveryHitRate =
     scorableRecoverySteps > 0 ? round((recoveryHits / scorableRecoverySteps) * 100, 1) : null
   const cadenceHitRate =
-    cadencePlanned.length > 0 ? round((cadenceHits / cadencePlanned.length) * 100, 1) : null
+    scorableCadenceSteps > 0 ? round((cadenceHits / scorableCadenceSteps) * 100, 1) : null
   const structureMatched =
     plannedWork.length > 0 &&
     actualWork.length > 0 &&
@@ -3996,7 +4149,9 @@ function deriveAdherence(params: {
     workIntervalHitRate,
     recoveryHitRate,
     cadenceHitRate,
-    cadenceAssessable: cadencePlanned.length > 0,
+    // Assessable means cadence was prescribed AND at least one prescribed step
+    // could actually be measured — not merely that cadence was planned (CW-419).
+    cadenceAssessable: scorableCadenceSteps > 0,
     targetOvershootPct,
     targetUndershootPct,
     structureMatched,
@@ -4134,8 +4289,12 @@ function buildPromptDecisionsV2(facts: WorkoutAnalysisFactsV2): Record<string, P
   )
   set(
     'adherence.cadenceAssessable',
-    facts.adherence.cadenceAssessable,
-    'The model should know whether cadence prescriptions were present and assessable.'
+    true,
+    // Always surfaced, including when false: a cadence-targeted plan ridden
+    // without a cadence sensor now yields `cadenceHitRate: null`, and the
+    // narrative must be able to say "cadence was not assessable" instead of
+    // silently dropping cadence or implying zero compliance (CW-419).
+    'The model must know whether cadence prescriptions could be assessed at all; false means cadence was not prescribed or not measured, never that the athlete ignored it.'
   )
   set(
     'adherence.targetOvershootPct',
@@ -4206,6 +4365,17 @@ function buildPromptDecisionsV2(facts: WorkoutAnalysisFactsV2): Record<string, P
     !facts.performanceSignals.applicability.cadenceDrift.applicable &&
       Boolean(facts.performanceSignals.applicability.cadenceDrift.reason),
     'A reason is useful when cadence drift is unavailable or inapplicable.'
+  )
+  set(
+    'performanceSignals.applicability.cadenceStability.applicable',
+    !facts.performanceSignals.applicability.cadenceStability.applicable,
+    'Show non-applicability when cadence stability cannot be trusted.'
+  )
+  set(
+    'performanceSignals.applicability.cadenceStability.reason',
+    !facts.performanceSignals.applicability.cadenceStability.applicable &&
+      Boolean(facts.performanceSignals.applicability.cadenceStability.reason),
+    'A reason is useful when cadence stability is unavailable or inapplicable.'
   )
   set(
     'performanceSignals.applicability.pacingDrift.applicable',
@@ -4345,32 +4515,15 @@ export function buildWorkoutAnalysisFactsV2({
   if (userProfile) computedFrom.push('userProfile')
   else unavailableInputs.push('userProfile')
 
-  const family = getWorkoutFamily(workout?.type)
-  const durationMinutes = Math.round((workout?.durationSec || 0) / 60)
-  const rpe =
-    workout?.rpe ??
-    (workout?.sessionRpe && durationMinutes > 0
-      ? Math.round(workout.sessionRpe / durationMinutes)
-      : null) ??
-    null
-  const hrStats = getHrStats(workout)
-  const powerSourceType = inferPowerSourceType(workout, family)
-  const powerAbsoluteUsable = powerSourceType === 'measured'
-  const powerRelativeUsable =
-    powerSourceType !== 'unknown' ||
-    Boolean(workout?.averageWatts) ||
-    Boolean(workout?.normalizedPower) ||
-    asNumberArray(workout?.streams?.watts).length > 0 ||
-    asNumberArray(workout?.streams?.powerZoneTimes).some((value) => value > 0)
-  const hasPace =
-    Boolean(workout?.averageSpeed) || asNumberArray(workout?.streams?.velocity).length > 0
-  const analysisMode = getAnalysisMode({
+  const {
     family,
+    hrStats,
     powerSourceType,
-    hrUsable: hrStats.usable,
+    powerAbsoluteUsable,
+    powerRelativeUsable,
     hasPace,
-    hasRpe: Boolean(rpe)
-  })
+    analysisMode
+  } = deriveSharedAnalysisSignals(workout)
   // Reference values come from the athlete's sport settings (profile-level), not from the
   // session row. They are resolved before archetype/interval work so every downstream
   // consumer — including interval detection and raw-vs-detected arbitration — sees the

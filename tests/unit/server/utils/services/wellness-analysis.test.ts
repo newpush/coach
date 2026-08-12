@@ -14,7 +14,7 @@ const {
   generateStructuredAnalysisMock: vi.fn()
 }))
 
-vi.mock('../../../../../../server/utils/db', () => ({
+vi.mock('../../../../../server/utils/db', () => ({
   prisma: {
     wellness: {
       findUnique: prismaWellnessFindUnique,

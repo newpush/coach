@@ -1646,6 +1646,132 @@ describe('planned-to-actual alignment (CW-386)', () => {
     expect(facts.adherence.executionClassification).toBe('as_prescribed')
   })
 
+  describe('cadence hit-rate denominator (CW-419)', () => {
+    // A four-step cadence-targeted plan: two reps at 95 rpm with 85 rpm
+    // recoveries. Every variation below only changes what the executed laps
+    // recorded, so the denominator behaviour is the only moving part.
+    const cadencePlan = {
+      durationSec: 1200,
+      structuredWorkout: {
+        steps: [
+          {
+            type: 'Interval',
+            durationSeconds: 300,
+            power: { value: 100, units: '%' },
+            cadence: 95
+          },
+          { type: 'Rest', durationSeconds: 300, power: { value: 50, units: '%' }, cadence: 85 },
+          {
+            type: 'Interval',
+            durationSeconds: 300,
+            power: { value: 100, units: '%' },
+            cadence: 95
+          },
+          { type: 'Rest', durationSeconds: 300, power: { value: 50, units: '%' }, cadence: 85 }
+        ]
+      }
+    }
+
+    const factsFor = (icuIntervals: Record<string, unknown>[]) =>
+      buildWorkoutAnalysisFactsV2({
+        workout: makeWorkout({
+          title: 'Cadence Denominator Session',
+          type: 'Ride',
+          durationSec: 1200,
+          rawJson: { icu_intervals: icuIntervals }
+        }),
+        sportSettings: { ftp: 250 },
+        plannedWorkout: cadencePlan
+      })
+
+    it('excludes aligned steps whose segment carries no cadence measurement', () => {
+      // Every planned step is paired, the reps were executed on target power,
+      // but the head unit had no cadence sensor. Before CW-419 this reported
+      // `cadenceHitRate: 0` with `cadenceAssessable: true` — an explicit
+      // "assessable" hard zero the AI could only read as total non-compliance.
+      const facts = factsFor([
+        { type: 'WORK', moving_time: 300, average_watts: 250, intensity: 100 },
+        { type: 'REST', moving_time: 300, average_watts: 125, intensity: 50 },
+        { type: 'WORK', moving_time: 300, average_watts: 250, intensity: 100 },
+        { type: 'REST', moving_time: 300, average_watts: 125, intensity: 50 }
+      ])
+
+      expect(facts.adherence.cadenceHitRate).toBeNull()
+      expect(facts.adherence.cadenceAssessable).toBe(false)
+    })
+
+    it('treats a zero cadence average as unmeasured rather than a miss', () => {
+      const facts = factsFor([
+        { type: 'WORK', moving_time: 300, average_watts: 250, average_cadence: 0, intensity: 100 },
+        { type: 'REST', moving_time: 300, average_watts: 125, average_cadence: 0, intensity: 50 },
+        { type: 'WORK', moving_time: 300, average_watts: 250, average_cadence: 0, intensity: 100 },
+        { type: 'REST', moving_time: 300, average_watts: 125, average_cadence: 0, intensity: 50 }
+      ])
+
+      expect(facts.adherence.cadenceHitRate).toBeNull()
+      expect(facts.adherence.cadenceAssessable).toBe(false)
+    })
+
+    it('still counts a planned cadence step with no aligned segment as a miss', () => {
+      // Only the first rep and its recovery were executed. The two unpaired
+      // planned steps are execution evidence, not missing measurement, so they
+      // stay in the denominator (CW-386).
+      const facts = factsFor([
+        { type: 'WORK', moving_time: 300, average_watts: 250, average_cadence: 95, intensity: 100 },
+        { type: 'REST', moving_time: 300, average_watts: 125, average_cadence: 85, intensity: 50 }
+      ])
+
+      expect(facts.adherence.cadenceAssessable).toBe(true)
+      expect(facts.adherence.cadenceHitRate).toBe(50)
+    })
+
+    it('reports a real miss rate when cadence was recorded and missed', () => {
+      const facts = factsFor([
+        { type: 'WORK', moving_time: 300, average_watts: 250, average_cadence: 70, intensity: 100 },
+        { type: 'REST', moving_time: 300, average_watts: 125, average_cadence: 70, intensity: 50 },
+        { type: 'WORK', moving_time: 300, average_watts: 250, average_cadence: 70, intensity: 100 },
+        { type: 'REST', moving_time: 300, average_watts: 125, average_cadence: 70, intensity: 50 }
+      ])
+
+      expect(facts.adherence.cadenceAssessable).toBe(true)
+      expect(facts.adherence.cadenceHitRate).toBe(0)
+    })
+
+    it('scores only the measured steps when cadence coverage is partial', () => {
+      // Rep 1 recorded cadence and hit it; rep 2's lap has no cadence at all.
+      // Denominator drops to the two measured steps rather than diluting the
+      // athlete's real compliance with unmeasurable ones.
+      const facts = factsFor([
+        { type: 'WORK', moving_time: 300, average_watts: 250, average_cadence: 95, intensity: 100 },
+        { type: 'REST', moving_time: 300, average_watts: 125, average_cadence: 85, intensity: 50 },
+        { type: 'WORK', moving_time: 300, average_watts: 250, intensity: 100 },
+        { type: 'REST', moving_time: 300, average_watts: 125, intensity: 50 }
+      ])
+
+      expect(facts.adherence.cadenceAssessable).toBe(true)
+      expect(facts.adherence.cadenceHitRate).toBe(100)
+    })
+
+    it('always surfaces the cadence assessability flag to the prompt', () => {
+      // The narrative must be able to say "cadence was not assessable"; gating
+      // the flag on its own truth value hid exactly the case that matters.
+      const facts = factsFor([
+        { type: 'WORK', moving_time: 300, average_watts: 250, intensity: 100 },
+        { type: 'REST', moving_time: 300, average_watts: 125, intensity: 50 },
+        { type: 'WORK', moving_time: 300, average_watts: 250, intensity: 100 },
+        { type: 'REST', moving_time: 300, average_watts: 125, intensity: 50 }
+      ])
+
+      expect(facts.adherence.cadenceAssessable).toBe(false)
+      expect(
+        facts.confidence.debugMeta.promptDecisions['adherence.cadenceAssessable']!.include
+      ).toBe(true)
+      expect(facts.confidence.debugMeta.promptDecisions['adherence.cadenceHitRate']!.include).toBe(
+        false
+      )
+    })
+  })
+
   it('does not let a mid-session stub lap consume a planned rep', () => {
     const facts = buildWorkoutAnalysisFactsV2({
       workout: makeWorkout({
@@ -1867,6 +1993,142 @@ describe('rep-scoped durability and stability signals', () => {
     expect(facts.performanceSignals.sportSpecific.cadenceDriftPct).toBeCloseTo(0, 5)
   })
 
+  it('scores cadence stability within the reps rather than across the whole session (CW-427)', () => {
+    const facts = buildWorkoutAnalysisFactsV2({
+      workout: buildThresholdWorkout(),
+      plannedWorkout: thresholdPlan,
+      sportSettings: { ftp: THRESHOLD_FIXTURE_FTP }
+    })
+
+    // Session-wide, this fixture's cadence CoV is 7.43% — the 85 rpm warmup,
+    // the 80 rpm jogs, the 88 rpm buffer and the 70 rpm cooldown all averaged
+    // together — and scored 62.9/100 as if the athlete's cadence had wandered.
+    // The reps themselves were all ridden at a flat 92 rpm.
+    expect(facts.performanceSignals.sportSpecific.cadenceStabilityScore).toBe(100)
+    expect(facts.performanceSignals.applicability.cadenceStability).toEqual({
+      applicable: true,
+      reason: null
+    })
+  })
+
+  it('withholds cadence stability with a reason when the reps cannot be scoped (CW-427)', () => {
+    // Same premise as the mixed-ride case below: an intervalled session whose
+    // work efforts are not repetitions of one another. A session-wide cadence
+    // CoV here would be presented as execution quality, which is the
+    // substitution CW-393 forbade and CW-427 extends to this signal.
+    const facts = buildWorkoutAnalysisFactsV2({
+      workout: makeWorkout({
+        title: 'Unstructured Mixed Ride',
+        type: 'Ride',
+        durationSec: 2160,
+        averageWatts: 200,
+        variabilityIndex: 1.16,
+        rawJson: {
+          icu_intervals: [
+            {
+              type: 'WORK',
+              moving_time: 60,
+              average_watts: 350,
+              average_cadence: 95,
+              intensity: 1.25,
+              start_index: 0,
+              end_index: 59
+            },
+            {
+              type: 'REST',
+              moving_time: 300,
+              average_watts: 120,
+              average_cadence: 78,
+              intensity: 0.43,
+              start_index: 60,
+              end_index: 359
+            },
+            {
+              type: 'WORK',
+              moving_time: 300,
+              average_watts: 260,
+              average_cadence: 90,
+              intensity: 0.93,
+              start_index: 360,
+              end_index: 659
+            },
+            {
+              type: 'REST',
+              moving_time: 300,
+              average_watts: 120,
+              average_cadence: 78,
+              intensity: 0.43,
+              start_index: 660,
+              end_index: 959
+            },
+            {
+              type: 'WORK',
+              moving_time: 900,
+              average_watts: 205,
+              average_cadence: 86,
+              intensity: 0.73,
+              start_index: 960,
+              end_index: 1859
+            },
+            {
+              type: 'WORK',
+              moving_time: 300,
+              average_watts: 110,
+              average_cadence: 70,
+              intensity: 0.4,
+              start_index: 1860,
+              end_index: 2159
+            }
+          ]
+        },
+        streams: {
+          time: Array.from({ length: 2160 }, (_, index) => index),
+          watts: Array.from({ length: 2160 }, (_, index) =>
+            index < 60
+              ? 350
+              : index < 360
+                ? 120
+                : index < 660
+                  ? 260
+                  : index < 960
+                    ? 120
+                    : index < 1860
+                      ? 205
+                      : 110
+          ),
+          cadence: Array.from({ length: 2160 }, (_, index) => (index < 60 ? 95 : 86))
+        }
+      }),
+      sportSettings: { ftp: 280 }
+    })
+
+    expect(facts.guardrails.archetype.sessionSteadiness).toBe('intervalled')
+    // Withheld, not quietly replaced by the session-wide figure.
+    expect(facts.performanceSignals.sportSpecific.cadenceStabilityScore).toBeNull()
+    expect(facts.performanceSignals.applicability.cadenceStability.applicable).toBe(false)
+    expect(facts.performanceSignals.applicability.cadenceStability.reason).toContain(
+      'comparable work reps'
+    )
+  })
+
+  it('withholds cadence stability when an interval session carries no cadence (CW-427)', () => {
+    const workout = buildThresholdWorkout()
+    delete (workout as any).streams.cadence
+
+    const facts = buildWorkoutAnalysisFactsV2({
+      workout,
+      plannedWorkout: thresholdPlan,
+      sportSettings: { ftp: THRESHOLD_FIXTURE_FTP }
+    })
+
+    expect(facts.guardrails.archetype.sessionSteadiness).toBe('intervalled')
+    expect(facts.performanceSignals.sportSpecific.cadenceStabilityScore).toBeNull()
+    expect(facts.performanceSignals.applicability.cadenceStability).toEqual({
+      applicable: false,
+      reason: 'Cadence stability is unavailable because cadence telemetry is missing or too sparse.'
+    })
+  })
+
   it('reads late-session fade as first rep versus last rep for an interval session', () => {
     const facts = buildWorkoutAnalysisFactsV2({
       workout: buildThresholdWorkout(),
@@ -2039,6 +2301,13 @@ describe('rep-scoped durability and stability signals', () => {
     // A steady ride has no repeated efforts, so repeatability stays withheld.
     expect(facts.performanceSignals.durability.repeatabilityScore).toBeNull()
     expect(facts.performanceSignals.applicability.repeatability.applicable).toBe(false)
+    // CW-427: no rep structure to scope to, so cadence stability keeps the
+    // session-wide CoV (1.61%) and the value it produced before the change.
+    expect(facts.performanceSignals.sportSpecific.cadenceStabilityScore).toBe(92)
+    expect(facts.performanceSignals.applicability.cadenceStability).toEqual({
+      applicable: true,
+      reason: null
+    })
   })
 })
 
@@ -2312,6 +2581,240 @@ describe('Strava estimated ride power provenance (CW-394)', () => {
     })
 
     expect(facts.guardrails.telemetry.powerSourceType).toBe('unknown')
+  })
+})
+
+describe('analysis mode for estimated-power rides (CW-437)', () => {
+  // CW-394 started routing power-meter-less Strava rides through the 'estimated' branch of
+  // getAnalysisMode, which used to mean run/ski and therefore led on pace. Cycling speed is
+  // confounded by wind, gradient and drafting far more than running pace is, so an
+  // estimated-power ride must resolve to 'mixed' — no single metric leads. Every case here
+  // drops averageHr so hrUsable is false: that isolates the estimated branch from the
+  // `if (hrUsable) return 'mixed'` fallback further down, and makes 'mixed' load-bearing.
+  function modes(workout: Record<string, unknown>) {
+    return {
+      v1: buildWorkoutAnalysisFacts({ workout }).telemetry.analysisMode,
+      v2: buildWorkoutAnalysisFactsV2({ workout }).guardrails.analysisMode
+    }
+  }
+
+  function outdoorRide(overrides: Record<string, unknown> = {}) {
+    return makeWorkout({
+      type: 'Ride',
+      title: 'Outdoor Ride',
+      durationSec: 3600,
+      averageWatts: 198,
+      normalizedPower: 214,
+      averageHr: null,
+      averageSpeed: 8.1,
+      ...overrides
+    })
+  }
+
+  it('routes an estimated-power ride with a speed signal to mixed rather than pace', () => {
+    const workout = outdoorRide({ rawJson: { device_watts: false } })
+    const facts = buildWorkoutAnalysisFactsV2({ workout })
+
+    expect(facts.guardrails.telemetry.powerSourceType).toBe('estimated')
+    expect(facts.guardrails.telemetry.paceUsable).toBe(true)
+    expect(modes(workout)).toEqual({ v1: 'mixed', v2: 'mixed' })
+  })
+
+  it('routes an estimated-power ride carrying a velocity stream to mixed as well', () => {
+    const workout = outdoorRide({
+      averageSpeed: null,
+      rawJson: { device_watts: false },
+      streams: { velocity: [7.8, 8.2, 8.6, 9.1, 8.4, 7.9] }
+    })
+    const facts = buildWorkoutAnalysisFactsV2({ workout })
+
+    expect(facts.guardrails.telemetry.powerSourceType).toBe('estimated')
+    expect(facts.guardrails.telemetry.paceUsable).toBe(true)
+    expect(modes(workout)).toEqual({ v1: 'mixed', v2: 'mixed' })
+  })
+
+  it('leaves measured-power rides on their existing modes', () => {
+    const withoutHr = outdoorRide({ rawJson: { device_watts: true } })
+    const withHr = outdoorRide({ averageHr: 145, rawJson: { device_watts: true } })
+
+    expect(
+      buildWorkoutAnalysisFactsV2({ workout: withoutHr }).guardrails.telemetry.powerSourceType
+    ).toBe('measured')
+    expect(modes(withoutHr)).toEqual({ v1: 'power', v2: 'power' })
+    expect(modes(withHr)).toEqual({ v1: 'mixed', v2: 'mixed' })
+  })
+
+  it('leaves a run with pace on pace mode', () => {
+    const workout = makeWorkout({
+      type: 'Run',
+      durationSec: 3600,
+      averageWatts: 290,
+      averageHr: null,
+      averageSpeed: 3.3
+    })
+
+    expect(buildWorkoutAnalysisFactsV2({ workout }).guardrails.telemetry.powerSourceType).toBe(
+      'estimated'
+    )
+    expect(modes(workout)).toEqual({ v1: 'pace', v2: 'pace' })
+  })
+
+  it('leaves estimated-power ski sessions on pace mode', () => {
+    const withPace = makeWorkout({
+      type: 'NordicSki',
+      durationSec: 3600,
+      averageWatts: 180,
+      averageHr: null,
+      averageSpeed: 4.2
+    })
+    const withoutPace = makeWorkout({
+      type: 'NordicSki',
+      durationSec: 3600,
+      averageWatts: 180,
+      averageHr: null,
+      averageSpeed: null
+    })
+
+    expect(
+      buildWorkoutAnalysisFactsV2({ workout: withPace }).guardrails.telemetry.powerSourceType
+    ).toBe('estimated')
+    expect(modes(withPace)).toEqual({ v1: 'pace', v2: 'pace' })
+    expect(modes(withoutPace)).toEqual({ v1: 'mixed', v2: 'mixed' })
+  })
+})
+
+describe('V1/V2 shared derivation agreement (CW-438)', () => {
+  // HR usability, power provenance and the analysis mode are derived once, in
+  // `deriveSharedAnalysisSignals`, and consumed by both builders. Before CW-438 each builder
+  // re-implemented them from expressions that merely happened to match, so the two could
+  // silently disagree — a workout could be `hrUsable` in V1 and not in V2 — and no test
+  // would fail. CW-394, CW-395 and CW-437 each had to land their fix twice for that reason.
+  //
+  // This block is the guarantee, not the extraction: if either builder ever starts deriving
+  // one of these itself and the copies drift, one of the cases below breaks. The cases are
+  // chosen to hit every branch of `inferPowerSourceType` and `getAnalysisMode` — measured,
+  // estimated and unknown power; usable, artifact-ruined and absent HR; pace present and
+  // absent; and the RPE-only fallback.
+  function sharedSignals(workout: Record<string, unknown>) {
+    const v1 = buildWorkoutAnalysisFacts({ workout })
+    const v2 = buildWorkoutAnalysisFactsV2({ workout })
+
+    return {
+      v1: {
+        analysisMode: v1.telemetry.analysisMode,
+        hrUsable: v1.telemetry.hrUsable,
+        hrZeroRatio: v1.telemetry.hrZeroRatio,
+        hrMissingRatio: v1.telemetry.hrMissingRatio,
+        powerSourceType: v1.telemetry.powerSourceType,
+        powerAbsoluteUsable: v1.telemetry.powerAbsoluteUsable,
+        powerRelativeUsable: v1.telemetry.powerRelativeUsable
+      },
+      v2: {
+        analysisMode: v2.guardrails.analysisMode,
+        hrUsable: v2.guardrails.telemetry.hrUsable,
+        hrZeroRatio: v2.guardrails.telemetry.hrZeroRatio,
+        hrMissingRatio: v2.guardrails.telemetry.hrMissingRatio,
+        powerSourceType: v2.guardrails.telemetry.powerSourceType,
+        powerAbsoluteUsable: v2.guardrails.telemetry.powerAbsoluteUsable,
+        powerRelativeUsable: v2.guardrails.telemetry.powerRelativeUsable
+      }
+    }
+  }
+
+  const cases: Array<[string, Record<string, unknown>]> = [
+    ['a measured-power indoor ride with usable HR', makeWorkout({ trainer: true })],
+    [
+      'a measured-power outdoor ride flagged by Strava device_watts',
+      makeWorkout({ averageSpeed: 8.1, rawJson: { device_watts: true } })
+    ],
+    [
+      'an estimated-power outdoor ride (device_watts false)',
+      makeWorkout({ averageSpeed: 8.1, averageHr: null, rawJson: { device_watts: false } })
+    ],
+    [
+      'a run with pace and estimated running power',
+      makeWorkout({ type: 'Run', averageSpeed: 3.3, averageWatts: 290 })
+    ],
+    [
+      'an estimated-power ski session without a pace signal',
+      makeWorkout({ type: 'NordicSki', averageWatts: 180, averageHr: null, averageSpeed: null })
+    ],
+    [
+      'a zero-heavy heart-rate stream that ruins HR usability',
+      makeWorkout({
+        streams: {
+          heartrate: [0, 0, 0, 120, 122, 0, 0, 0],
+          watts: [100, 120, 140, 160, 170, 150, 130, 110]
+        }
+      })
+    ],
+    [
+      'power present only as a watts stream',
+      makeWorkout({ averageWatts: null, streams: { watts: [180, 195, 210, 205, 190] } })
+    ],
+    [
+      'power present only as power-zone times',
+      makeWorkout({ averageWatts: null, streams: { powerZoneTimes: [0, 600, 1200, 300, 0] } })
+    ],
+    [
+      'a strength session with no power, no pace and no HR but an RPE',
+      makeWorkout({
+        type: 'WeightTraining',
+        averageWatts: null,
+        averageHr: null,
+        trainingLoad: null,
+        tss: null,
+        rpe: 7
+      })
+    ],
+    [
+      'a bare session with no telemetry at all',
+      makeWorkout({ averageWatts: null, averageHr: null, trainingLoad: null, tss: null })
+    ],
+    [
+      // The only shape where powerRelativeUsable's extra clauses are load-bearing:
+      // an unknown-provenance family (neither ride, run nor ski) that still has power.
+      // Everywhere else powerRelativeUsable happens to equal powerSourceType !== 'unknown',
+      // so without this case a builder could re-inline that simpler expression and the
+      // whole agreement block would still pass.
+      'a strength session carrying power, where provenance stays unknown',
+      makeWorkout({
+        type: 'WeightTraining',
+        averageWatts: 150,
+        averageHr: 130,
+        averageSpeed: null
+      })
+    ]
+  ]
+
+  it.each(cases)('derives identical shared signals for %s', (_label, workout) => {
+    const { v1, v2 } = sharedSignals(workout)
+
+    expect(v2).toEqual(v1)
+  })
+
+  it('keeps the shared signals meaningful rather than trivially equal everywhere', () => {
+    const observed = cases.map(([, workout]) => sharedSignals(workout).v1)
+
+    // Guards the block above against decaying into a tautology: if every case collapsed to
+    // the same telemetry, agreement would prove nothing about the branches it claims to
+    // cover. All three power provenances and more than one analysis mode must be present.
+    expect(new Set(observed.map((signals) => signals.powerSourceType))).toEqual(
+      new Set(['measured', 'estimated', 'unknown'])
+    )
+    expect(new Set(observed.map((signals) => signals.analysisMode)).size).toBeGreaterThan(1)
+    expect(new Set(observed.map((signals) => signals.hrUsable))).toEqual(new Set([true, false]))
+
+    // powerRelativeUsable is the one derivation whose extra clauses (averageWatts /
+    // normalizedPower / watts stream / zone times) are invisible unless provenance is
+    // unknown while power is present. Assert the corpus actually reaches that branch,
+    // otherwise `powerRelativeUsable = powerSourceType !== 'unknown'` would be an
+    // undetectable re-inlining.
+    expect(
+      observed.some(
+        (signals) => signals.powerSourceType === 'unknown' && signals.powerRelativeUsable === true
+      )
+    ).toBe(true)
   })
 })
 
@@ -2695,5 +3198,148 @@ describe('actual-interval source arbitration and hard-repeat scale (CW-408)', ()
         arbitrationPlan
       )
     ).toBe('raw')
+  })
+
+  /**
+   * Nested inside the CW-408 suite to reuse its stream, plan and FTP: this is
+   * the same physical session and the same arbitration, asked one further
+   * question. Nothing above is modified — CW-408 deliberately left the `null`
+   * case unpinned, and these tests are what pin it.
+   *
+   * A provider that cannot compute a lap's intensity sends `intensity: null`.
+   * `Number(null)` is `0` and `0` is finite, so that lap used to arrive
+   * downstream claiming an intensity factor of zero. `getActualHardRepeats`
+   * reads `intensity !== null` as "this lap has a usable intensity signal" and
+   * only falls back to average power when it does not, so the fabricated `0`
+   * short-circuited the fallback and made the lap permanently un-hard — at any
+   * wattage. An ABSENT field never had the problem (`Number(undefined)` is
+   * `NaN`), which is the asymmetry these tests exist to document (CW-439).
+   */
+  describe('provider laps with an explicit null intensity (CW-439)', () => {
+    /**
+     * The same laps as `ACCURATE_PROVIDER_LAPS`, except the provider could not
+     * compute an intensity for the five reps and sent `null` for them.
+     *
+     * Types are stated explicitly rather than left as the provider's blanket
+     * `WORK`, so lap classification here comes from the labels alone and this
+     * test is measuring the hard-repeat predicate rather than the type
+     * re-derivation heuristic.
+     */
+    const NULL_INTENSITY_LAPS: Array<{
+      type: string
+      seconds: number
+      watts: number
+      intensity: number | null
+    }> = [
+      { type: 'WARMUP', seconds: 600, watts: 143, intensity: 55 },
+      { type: 'WORK', seconds: 240, watts: 276, intensity: null },
+      { type: 'RECOVERY', seconds: 180, watts: 135, intensity: 52 },
+      { type: 'WORK', seconds: 240, watts: 273, intensity: null },
+      { type: 'RECOVERY', seconds: 180, watts: 135, intensity: 52 },
+      { type: 'WORK', seconds: 240, watts: 271, intensity: null },
+      { type: 'RECOVERY', seconds: 180, watts: 133, intensity: 51 },
+      { type: 'WORK', seconds: 240, watts: 273, intensity: null },
+      { type: 'RECOVERY', seconds: 180, watts: 135, intensity: 52 },
+      { type: 'WORK', seconds: 240, watts: 268, intensity: null },
+      { type: 'RECOVERY', seconds: 180, watts: 133, intensity: 51 },
+      { type: 'WORK', seconds: 900, watts: 221, intensity: 85 },
+      { type: 'COOLDOWN', seconds: 300, watts: 117, intensity: 45 }
+    ]
+
+    function buildNullIntensityWorkout() {
+      const time: number[] = []
+      const watts: number[] = []
+      let cursor = 0
+      for (const block of ARBITRATION_STREAM_BLOCKS) {
+        for (let index = 0; index < block.seconds; index++) {
+          time.push(cursor)
+          watts.push(block.watts + ((index % 5) - 2))
+          cursor++
+        }
+      }
+
+      return makeWorkout({
+        title: 'VO2 5x4min',
+        type: 'Ride',
+        durationSec: time.length,
+        ftp: ARBITRATION_FIXTURE_FTP,
+        rawJson: {
+          icu_intervals: NULL_INTENSITY_LAPS.map((lap) => ({
+            type: lap.type,
+            moving_time: lap.seconds,
+            average_watts: lap.watts,
+            intensity: lap.intensity
+          }))
+        },
+        streams: { time, watts }
+      })
+    }
+
+    it('keeps a null intensity null instead of coercing it to a zero it never sent', () => {
+      // The unit boundary. `null` is "no intensity signal", exactly as an
+      // absent field already was; it is not an intensity factor of zero.
+      expect(toIntervalIntensityFactor(null)).toBeNull()
+      expect(toIntervalIntensityFactor(undefined)).toBeNull()
+
+      // Every other falsy non-number `Number()` would silently turn into 0.
+      expect(toIntervalIntensityFactor('')).toBeNull()
+      expect(toIntervalIntensityFactor('   ')).toBeNull()
+      expect(toIntervalIntensityFactor(false)).toBeNull()
+      expect(toIntervalIntensityFactor(true)).toBeNull()
+      expect(toIntervalIntensityFactor([])).toBeNull()
+      expect(toIntervalIntensityFactor({})).toBeNull()
+
+      // A real zero on the wire is still a real zero, and numeric strings from
+      // looser providers and older fixtures still convert.
+      expect(toIntervalIntensityFactor(0)).toBe(0)
+      expect(toIntervalIntensityFactor('101')).toBe(1.01)
+      expect(toIntervalIntensityFactor('0.52')).toBe(0.52)
+    })
+
+    it('carries the null through mapping instead of fabricating an intensity factor', () => {
+      const actual = getActualIntervalsForAnalysis(buildNullIntensityWorkout())
+
+      // The five reps and the endurance block are the work laps; the reps
+      // report no intensity, which is the truth the provider sent.
+      expect(workLapsOf(actual).map((interval) => interval.durationSeconds)).toEqual([
+        240, 240, 240, 240, 240, 900
+      ])
+      expect(
+        workLapsOf(actual)
+          .filter((interval) => interval.durationSeconds === 240)
+          .map((interval) => interval.intensity)
+      ).toEqual([null, null, null, null, null])
+
+      // The laps that did carry an intensity are untouched by the guard.
+      expect(actual.find((interval) => interval.durationSeconds === 900)?.intensity).toBe(0.85)
+    })
+
+    it('counts a null-intensity lap as a hard repeat on average power alone', () => {
+      const workout = buildNullIntensityWorkout()
+
+      // `getActualHardRepeats` is private; the arbitration is where its verdict
+      // becomes observable. Accurately lapped reps only beat the engine's
+      // ragged segmentation through `scoreHardRepeatDurationAccuracy`, and that
+      // discriminator needs the raw side to have hard repeats at all. With the
+      // reps' intensity fabricated as `0`, the `avgPower` fallback never ran,
+      // the raw side had zero hard repeats, and this session — whose laps are
+      // timed to the second — lost the arbitration to the detection engine.
+      expect(getActualIntervalsSourceForAnalysis(workout, arbitrationPlan)).toBe('raw')
+
+      // 'raw' means the provider's own laps are what every downstream fact,
+      // the prompt and the athlete's interval chart are built from.
+      const chosen = getActualIntervalsForAnalysis(workout, arbitrationPlan)
+      expect(chosen.map((interval) => interval.durationSeconds)).toEqual(
+        NULL_INTENSITY_LAPS.map((lap) => lap.seconds)
+      )
+
+      // Each rep is well above 0.95 x FTP (247W), which is the whole reason the
+      // power fallback is the right answer for these laps.
+      expect(
+        workLapsOf(chosen)
+          .filter((interval) => interval.durationSeconds === 240)
+          .every((interval) => (interval.avgPower ?? 0) >= ARBITRATION_FIXTURE_FTP * 0.95)
+      ).toBe(true)
+    })
   })
 })

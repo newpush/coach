@@ -1,11 +1,11 @@
 <template>
   <UDashboardPanel id="upload">
     <template #header>
-      <UDashboardNavbar title="Upload Workouts">
+      <UDashboardNavbar :title="t('upload_nav_title', 'Upload Workouts')">
         <template #leading>
           <UDashboardSidebarCollapse />
           <UButton to="/data" color="neutral" variant="ghost" icon="i-heroicons-arrow-left">
-            Back to Data
+            {{ t('upload_back_to_data', 'Back to Data') }}
           </UButton>
         </template>
         <template #right>
@@ -26,17 +26,21 @@
           </div>
           <div class="space-y-1">
             <h1 class="text-3xl font-black text-gray-900 dark:text-white uppercase tracking-tight">
-              Manual Ingestion
+              {{ t('upload_title', 'Manual Ingestion') }}
             </h1>
             <p
               class="text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest"
             >
-              Integrity Center • FIT File Upload
+              {{ t('upload_eyebrow', 'Integrity Center • FIT File Upload') }}
             </p>
           </div>
           <p class="text-sm text-gray-600 dark:text-gray-400 max-w-md mx-auto leading-relaxed">
-            Directly upload .FIT files from your device. We'll analyze the biometric streams and
-            sync them to your performance history.
+            {{
+              t(
+                'upload_intro',
+                "Directly upload .FIT files from your device. We'll analyze the biometric streams and sync them to your performance history."
+              )
+            }}
           </p>
         </div>
 
@@ -80,17 +84,17 @@
                   }
                 "
               >
-                Select Files
+                {{ t('upload_select_files', 'Select Files') }}
               </UButton>
               <p class="text-xs text-gray-400 mt-4 font-bold uppercase tracking-tighter">
-                or drag and drop here
+                {{ t('upload_drag_hint', 'or drag and drop here') }}
               </p>
             </div>
 
             <div v-else class="w-full p-6">
               <div class="mb-4">
                 <h3 class="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-3">
-                  Pending Upload Queue
+                  {{ t('upload_queue_title', 'Pending Upload Queue') }}
                 </h3>
                 <div class="max-h-60 overflow-y-auto space-y-2 pr-2 custom-scrollbar">
                   <div
@@ -137,11 +141,11 @@
                 <div class="flex flex-col">
                   <span
                     class="text-[10px] font-black uppercase tracking-widest text-gray-400 leading-none"
-                    >Ready to Process</span
+                    >{{ t('upload_ready_label', 'Ready to Process') }}</span
                   >
-                  <span class="text-xl font-black text-primary-600 leading-tight"
-                    >{{ selectedFiles.length }} Sessions</span
-                  >
+                  <span class="text-xl font-black text-primary-600 leading-tight">{{
+                    sessionCountLabel
+                  }}</span>
                 </div>
                 <div class="flex gap-3">
                   <UButton
@@ -153,7 +157,7 @@
                         void clearFiles()
                       }
                     "
-                    >Reset</UButton
+                    >{{ t('upload_reset', 'Reset') }}</UButton
                   >
                   <UButton
                     :loading="uploading"
@@ -166,7 +170,11 @@
                       }
                     "
                   >
-                    {{ uploading ? 'Uploading...' : 'Commence Ingestion' }}
+                    {{
+                      uploading
+                        ? t('upload_submitting', 'Uploading...')
+                        : t('upload_submit', 'Commence Ingestion')
+                    }}
                   </UButton>
                 </div>
               </div>
@@ -232,8 +240,12 @@
                 v-if="uploadResult.success"
                 class="mt-3 text-xs font-medium text-green-700 dark:text-green-300 leading-relaxed"
               >
-                Ingestion pipelines have been initialized. Workouts will appear on your dashboard as
-                analysis completes.
+                {{
+                  t(
+                    'upload_success_hint',
+                    'Ingestion pipelines have been initialized. Workouts will appear on your dashboard as analysis completes.'
+                  )
+                }}
               </div>
             </div>
           </div>
@@ -244,6 +256,10 @@
 </template>
 
 <script setup lang="ts">
+  import { useTranslate } from '@tolgee/vue'
+
+  const { t } = useTranslate('workout')
+
   definePageMeta({
     middleware: 'auth'
   })
@@ -253,6 +269,14 @@
   const selectedFiles = ref<File[]>([])
   const uploading = ref(false)
   const uploadResult = ref<{ success: boolean; message: string; results?: any } | null>(null)
+
+  // Built in script rather than the template: the ICU plural default contains `}}`,
+  // which Vue's template compiler would read as the end of the interpolation.
+  const sessionCountLabel = computed(() =>
+    t.value('upload_session_count', '{count, plural, one {# Session} other {# Sessions}}', {
+      count: selectedFiles.value.length
+    })
+  )
 
   function handleDrop(e: DragEvent) {
     isDragging.value = false
@@ -274,8 +298,8 @@
 
     if (validFiles.length < files.length) {
       useToast().add({
-        title: 'Invalid Files Skipped',
-        description: 'Only .fit files are allowed.',
+        title: t.value('upload_invalid_title', 'Invalid Files Skipped'),
+        description: t.value('upload_invalid_description', 'Only .fit files are allowed.'),
         color: 'warning'
       })
     }
@@ -315,8 +339,11 @@
   // Listen for completion
   onTaskCompleted('ingest-fit-file', async (run) => {
     useToast().add({
-      title: 'Processing Complete',
-      description: 'A workout file has been analyzed and added to your history.',
+      title: t.value('upload_complete_title', 'Processing Complete'),
+      description: t.value(
+        'upload_complete_description',
+        'A workout file has been analyzed and added to your history.'
+      ),
       color: 'success',
       icon: 'i-heroicons-check-circle'
     })
@@ -353,15 +380,25 @@
     } catch (error: any) {
       uploadResult.value = {
         success: false,
-        message: error.data?.message || 'Upload failed'
+        message: error.data?.message || t.value('upload_failed', 'Upload failed')
       }
     } finally {
       uploading.value = false
     }
   }
 
-  useHead({
-    title: 'Upload Workouts',
-    meta: [{ name: 'description', content: 'Manually upload FIT files to your training history.' }]
-  })
+  useHead(
+    computed(() => ({
+      title: t.value('upload_nav_title', 'Upload Workouts'),
+      meta: [
+        {
+          name: 'description',
+          content: t.value(
+            'upload_meta_description',
+            'Manually upload FIT files to your training history.'
+          )
+        }
+      ]
+    }))
+  )
 </script>

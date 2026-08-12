@@ -1,5 +1,16 @@
 import { describe, expect, it, vi } from 'vitest'
-import { registerScheduledTasks } from '../../../cli/worker/start'
+import type { Prisma } from '@prisma/client'
+import {
+  buildWebhookJob,
+  claimPendingWebhookLogs,
+  createWebhookClaimFailureTracker,
+  drainClaimedWebhookLogs,
+  registerScheduledTasks,
+  releaseClaimedWebhookLog,
+  WEBHOOK_CLAIM_ESCALATION_THRESHOLD,
+  WEBHOOK_POLL_BATCH_SIZE,
+  type ClaimedWebhookLog
+} from '../../../cli/worker/start'
 import {
   ensureTaskHandlersRegistered,
   getLoadedTaskDefinitions,
@@ -127,5 +138,310 @@ describe('Worker schedule registration', () => {
 
     expect(count).toBe(scheduledDefinitions.length)
     expect(upserted).toEqual(scheduledDefinitions.map((d) => `task-schedule:${d.id}`))
+  })
+})
+
+describe('Webhook poller atomic claim', () => {
+  const makeClient = (rows: ClaimedWebhookLog[] = []) => {
+    const queries: Prisma.Sql[] = []
+    return {
+      queries,
+      client: {
+        $queryRaw: vi.fn(async (query: Prisma.Sql) => {
+          queries.push(query)
+          return rows as any
+        }),
+        $executeRaw: vi.fn(async (query: Prisma.Sql) => {
+          queries.push(query)
+          return 1
+        })
+      }
+    }
+  }
+
+  it('selects and marks PENDING rows QUEUED in a single locking statement', async () => {
+    const { client, queries } = makeClient([
+      {
+        id: 'log-1',
+        provider: 'strava',
+        eventType: 'activity',
+        payload: { a: 1 },
+        headers: null,
+        query: null,
+        error: null
+      }
+    ])
+
+    const claimed = await claimPendingWebhookLogs(client)
+
+    expect(claimed).toHaveLength(1)
+    expect(claimed[0]!.id).toBe('log-1')
+    expect(client.$queryRaw).toHaveBeenCalledTimes(1)
+
+    const sql = queries[0]!.sql.replace(/\s+/g, ' ')
+    // One statement does both the selection and the status transition, so a
+    // concurrently polling worker can never claim the same row twice.
+    expect(sql).toContain('UPDATE "WebhookLog"')
+    expect(sql).toContain(`SET "status" = 'QUEUED'`)
+    expect(sql).toContain(`WHERE "status" = 'PENDING'`)
+    expect(sql).toContain('ORDER BY "createdAt" ASC')
+    expect(sql).toContain('FOR UPDATE SKIP LOCKED')
+    expect(sql).toContain('RETURNING')
+    expect(queries[0]!.values).toEqual([WEBHOOK_POLL_BATCH_SIZE])
+  })
+
+  // CW-502: the batch size reaches Postgres as `LIMIT $1`. Postgres rejects a
+  // non-integer there, and a rejected claim halts webhook ingestion entirely.
+  // Verified against real Postgres (Prisma 7.8.0 / @prisma/adapter-pg 7.8.0):
+  // the driver wire-encodes a JS integer as pg `integer`, so the query is fine.
+  // This guards the remaining way to break it — feeding LIMIT a non-integer.
+  it('binds LIMIT as an integer, never a float or string', async () => {
+    for (const limit of [WEBHOOK_POLL_BATCH_SIZE, 1, 2, 250]) {
+      const { client, queries } = makeClient([])
+      await claimPendingWebhookLogs(client, limit)
+
+      const bound = queries[0]!.values[0]
+      expect(typeof bound).toBe('number')
+      expect(Number.isInteger(bound)).toBe(true)
+      expect(bound as number).toBeGreaterThan(0)
+    }
+  })
+
+  it('declares a batch size that is itself a positive integer', () => {
+    expect(Number.isInteger(WEBHOOK_POLL_BATCH_SIZE)).toBe(true)
+    expect(WEBHOOK_POLL_BATCH_SIZE).toBeGreaterThan(0)
+  })
+
+  it('returns an empty batch when nothing is pending', async () => {
+    const { client } = makeClient([])
+    await expect(claimPendingWebhookLogs(client, 10)).resolves.toEqual([])
+  })
+
+  it('releases a claimed row back to PENDING only while it is still QUEUED', async () => {
+    const { client, queries } = makeClient()
+
+    await releaseClaimedWebhookLog(client, 'log-9')
+
+    const sql = queries[0]!.sql.replace(/\s+/g, ' ')
+    expect(sql).toContain(`SET "status" = 'PENDING'`)
+    expect(sql).toContain(`"status" = 'QUEUED'`)
+    expect(queries[0]!.values).toEqual(['log-9'])
+  })
+
+  it('maps claimed logs onto the queue job name and payload', () => {
+    expect(
+      buildWebhookJob({
+        id: 'log-1',
+        provider: 'intervals',
+        eventType: 'wellness',
+        payload: { x: 1 },
+        headers: { h: 1 },
+        query: { q: 1 },
+        error: null
+      })
+    ).toEqual({
+      queueJobName: 'intervals-webhook-bulk',
+      jobData: {
+        provider: 'intervals-bulk',
+        type: 'wellness',
+        payload: { x: 1 },
+        headers: { h: 1 },
+        query: { q: 1 },
+        logId: 'log-1',
+        appName: 'unknown',
+        secretMatched: false
+      }
+    })
+
+    expect(
+      buildWebhookJob({
+        id: 'log-2',
+        provider: 'oauth-generic',
+        eventType: 'oauth:withings',
+        payload: null,
+        headers: null,
+        query: null,
+        error: 'SECRET_MATCHED'
+      })
+    ).toEqual({
+      queueJobName: 'oauth-webhook',
+      jobData: {
+        provider: 'oauth-generic',
+        type: 'oauth:withings',
+        payload: null,
+        headers: null,
+        query: null,
+        logId: 'log-2',
+        appName: 'withings',
+        secretMatched: true
+      }
+    })
+
+    expect(
+      buildWebhookJob({
+        id: 'log-3',
+        provider: 'resend',
+        eventType: null,
+        payload: { type: 'email.delivered', data: { id: 'e1' }, created_at: '2026-01-01' },
+        headers: null,
+        query: null,
+        error: null
+      })
+    ).toEqual({
+      queueJobName: 'resend-webhook',
+      jobData: {
+        provider: 'resend',
+        type: 'email.delivered',
+        data: { id: 'e1' },
+        createdAt: '2026-01-01',
+        logId: 'log-3'
+      }
+    })
+  })
+})
+
+describe('Webhook claim failure escalation', () => {
+  // CW-502: a permanently broken claim query halts every webhook while the
+  // poller's only escalation path (isRedisConnectionError) stays silent about
+  // it. A failure streak must become loud instead of looping on console.error.
+  it('does not escalate a transient failure that recovers', () => {
+    const onEscalate = vi.fn()
+    const tracker = createWebhookClaimFailureTracker({ onEscalate })
+
+    tracker.recordFailure(new Error('blip'))
+    tracker.recordSuccess()
+    tracker.recordFailure(new Error('blip'))
+    tracker.recordSuccess()
+
+    expect(onEscalate).not.toHaveBeenCalled()
+    expect(tracker.consecutiveFailures).toBe(0)
+    expect(tracker.hasEscalated).toBe(false)
+  })
+
+  it('escalates once the failure streak reaches the threshold', () => {
+    const onEscalate = vi.fn()
+    const tracker = createWebhookClaimFailureTracker({ onEscalate })
+    const err = new Error('could not determine data type of parameter $1')
+
+    for (let i = 1; i < WEBHOOK_CLAIM_ESCALATION_THRESHOLD; i++) {
+      expect(tracker.recordFailure(err)).toBe(i)
+      expect(onEscalate).not.toHaveBeenCalled()
+    }
+
+    expect(tracker.recordFailure(err)).toBe(WEBHOOK_CLAIM_ESCALATION_THRESHOLD)
+    expect(onEscalate).toHaveBeenCalledTimes(1)
+    expect(onEscalate).toHaveBeenCalledWith(err, WEBHOOK_CLAIM_ESCALATION_THRESHOLD)
+    expect(tracker.hasEscalated).toBe(true)
+  })
+
+  it('escalates only once per streak, so a permanent failure does not spam', () => {
+    const onEscalate = vi.fn()
+    const tracker = createWebhookClaimFailureTracker({ onEscalate, threshold: 2 })
+
+    // Simulate the 5s poll loop failing for a long time.
+    for (let i = 0; i < 100; i++) tracker.recordFailure(new Error('broken'))
+
+    expect(onEscalate).toHaveBeenCalledTimes(1)
+    expect(tracker.consecutiveFailures).toBe(100)
+  })
+
+  it('re-arms after a recovery so a second outage escalates again', () => {
+    const onEscalate = vi.fn()
+    const tracker = createWebhookClaimFailureTracker({ onEscalate, threshold: 2 })
+
+    tracker.recordFailure(new Error('a'))
+    tracker.recordFailure(new Error('a'))
+    expect(onEscalate).toHaveBeenCalledTimes(1)
+
+    tracker.recordSuccess()
+    expect(tracker.hasEscalated).toBe(false)
+
+    tracker.recordFailure(new Error('b'))
+    tracker.recordFailure(new Error('b'))
+    expect(onEscalate).toHaveBeenCalledTimes(2)
+  })
+
+  it('uses a threshold that keeps the halt window short', () => {
+    expect(WEBHOOK_CLAIM_ESCALATION_THRESHOLD).toBeGreaterThan(1)
+    expect(WEBHOOK_CLAIM_ESCALATION_THRESHOLD).toBeLessThanOrEqual(5)
+  })
+})
+
+describe('Webhook poller batch drain', () => {
+  function makeLogs(n: number): ClaimedWebhookLog[] {
+    return Array.from({ length: n }, (_, i) => ({
+      id: `log-${i}`,
+      provider: 'strava',
+      eventType: 'activity',
+      payload: { i },
+      headers: null,
+      query: null,
+      error: null
+    }))
+  }
+
+  function makeReleaseClient() {
+    const released: string[] = []
+    return {
+      released,
+      client: {
+        $queryRaw: vi.fn(async () => []),
+        $executeRaw: vi.fn(async (query: Prisma.Sql) => {
+          released.push(query.values[0] as string)
+          return 1
+        })
+      }
+    }
+  }
+
+  it('enqueues every claimed log when the queue is healthy', async () => {
+    const { client, released } = makeReleaseClient()
+    const queue = { add: vi.fn(async () => ({}) as never) }
+
+    await drainClaimedWebhookLogs(client, queue, makeLogs(3))
+
+    expect(queue.add).toHaveBeenCalledTimes(3)
+    expect(released).toEqual([])
+  })
+
+  it('releases the failing row AND the whole unenqueued remainder', async () => {
+    // Regression: the batch is already flipped to QUEUED by the claim, and we
+    // abandon the loop on error. Releasing only the row that threw stranded
+    // every later row in QUEUED with no job and no reaper to recover it.
+    const { client, released } = makeReleaseClient()
+    const queue = {
+      add: vi.fn(async () => {
+        if (queue.add.mock.calls.length === 3) throw new Error('redis down')
+        return {} as never
+      })
+    }
+
+    await expect(drainClaimedWebhookLogs(client, queue, makeLogs(6))).rejects.toThrow('redis down')
+
+    // log-0..log-1 enqueued; log-2 threw; log-2..log-5 all handed back.
+    expect(released).toEqual(['log-2', 'log-3', 'log-4', 'log-5'])
+  })
+
+  it('still releases the remainder when an individual release throws', async () => {
+    const released: string[] = []
+    const client = {
+      $queryRaw: vi.fn(async () => []),
+      $executeRaw: vi.fn(async (query: Prisma.Sql) => {
+        const id = query.values[0] as string
+        if (id === 'log-1') throw new Error('db blip')
+        released.push(id)
+        return 1
+      })
+    }
+    const queue = {
+      add: vi.fn(async () => {
+        throw new Error('redis down')
+      })
+    }
+
+    await expect(drainClaimedWebhookLogs(client, queue, makeLogs(3))).rejects.toThrow('redis down')
+
+    // log-1's release failed but must not abort the rest of the drain.
+    expect(released).toEqual(['log-0', 'log-2'])
   })
 })

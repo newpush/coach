@@ -91,12 +91,28 @@ export function calculateFatigueSensitivity(
 }
 
 /**
+ * Minimal structural shape `calculateStabilityMetrics` needs from an interval.
+ *
+ * Deliberately NOT the full `Interval` from `./interval-detection`: callers pass
+ * a mix of detected `Interval` objects and ad-hoc rep bounds built inline (see
+ * `repScopedStabilityCoV` in `workout-analysis-facts.ts`), whose `type` widens to
+ * `string`. Keeping this a structural subset means every existing caller
+ * type-checks unchanged while a missing `start_index` / `end_index` — the fields
+ * actually read below — becomes a compile error instead of a silent `NaN`.
+ */
+export interface StabilityInterval {
+  type?: string
+  start_index: number
+  end_index: number
+}
+
+/**
  * Calculate Stability Metrics (Consistency)
  * Uses Coefficient of Variation (StdDev / Mean)
  */
 export function calculateStabilityMetrics(
   stream: number[],
-  intervals: any[] = []
+  intervals: StabilityInterval[] = []
 ): StabilityMetrics | null {
   if (!stream || stream.length === 0) return null
 
