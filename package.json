@@ -176,7 +176,7 @@
     "e2e:tunnel:stop": "bash e2e/scripts/tunnel-to-mini.sh stop",
     "build": "prisma generate && nuxt build",
     "dev": "NODE_OPTIONS='--max-old-space-size=8192' nuxt dev",
-    "dev:worker": "NODE_OPTIONS='--max-old-space-size=8192' tsx watch cli/worker/index.ts start",
+    "dev:worker": "NODE_ENV=development NODE_OPTIONS='--max-old-space-size=8192' tsx watch cli/worker/index.ts start",
     "dev:trigger": "pnpm prisma:generate && npx trigger.dev@latest dev",
     "generate": "nuxt generate",
     "lint": "eslint .",
