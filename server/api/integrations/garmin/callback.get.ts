@@ -1,4 +1,4 @@
-import { timingSafeEqual } from 'crypto'
+import { createHash, timingSafeEqual } from 'crypto'
 import { dispatchTask } from '../../../utils/task-dispatcher'
 import { getServerSession } from '../../../utils/session'
 import { prisma } from '../../../utils/db'
@@ -196,6 +196,31 @@ export default defineEventHandler(async (event) => {
   // Best-effort: merge export permissions (HEALTH_EXPORT, WORKOUT_IMPORT, …) into scope.
   await refreshGarminIntegrationPermissions(integration)
 
+  // CW-513: scope the backfill's idempotency key to *this* connect, not to the user.
+  //
+  // The key is there to stop a single connect from queueing several expensive
+  // backfills when the callback is delivered more than once (double submit, two
+  // tabs, a proxy/browser retry). Keyed on the user alone with a 1h TTL it also
+  // swallowed the *next* connect: since CW-95 this task can end FAILED, and
+  // neither Trigger.dev nor the BullMQ `deduplication` fallback in
+  // server/utils/task-dispatcher.ts releases a key early when the run behind it
+  // fails. A user whose backfill failed was therefore deduplicated against that
+  // dead run for the rest of the hour - and disconnect/reconnect, the one remedy
+  // available to them, is exactly what the key suppressed.
+  //
+  // The OAuth authorization code is the right discriminator: every trip through
+  // /authorize mints a fresh one, while a re-delivery of a single connect carries
+  // the code we already exchanged. So any deliberate reconnect (with or without a
+  // disconnect first, and regardless of whether the Integration row is recreated)
+  // gets a new key and a new run, while duplicate deliveries of one connect still
+  // collapse into one run. It is hashed rather than embedded verbatim because the
+  // code is a single-use credential and idempotency keys are persisted and shown
+  // by the task backend.
+  const connectFingerprint = createHash('sha256')
+    .update(code as string)
+    .digest('hex')
+    .slice(0, 16)
+
   // Start historical backfill after a short delay via Trigger.dev
   // We use a delay to ensure Garmin's Push API registration is fully propagated
   // to avoid "User not registered with consumer" (403) errors.
@@ -206,11 +231,13 @@ export default defineEventHandler(async (event) => {
       {
         concurrencyKey: session.user.id,
         tags: [`user:${session.user.id}`],
-        idempotencyKey: `garmin-backfill:${session.user.id}`,
+        idempotencyKey: `garmin-backfill:${session.user.id}:${connectFingerprint}`,
         idempotencyKeyTTL: '1h'
       }
     )
-    console.log(`[GarminCallback] Queued garmin-backfill for user ${session.user.id}`)
+    console.log(
+      `[GarminCallback] Queued garmin-backfill for user ${session.user.id} (connect ${connectFingerprint})`
+    )
   } catch (e) {
     console.error('[GarminCallback] Failed to trigger backfill task', e)
   }
