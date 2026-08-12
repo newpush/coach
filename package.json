@@ -228,26 +228,6 @@
     "prisma",
     "unrs-resolver"
   ],
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "@parcel/watcher",
-      "@prisma/client",
-      "@prisma/engines",
-      "@sentry/cli",
-      "bcrypt",
-      "better-sqlite3",
-      "esbuild",
-      "msgpackr-extract",
-      "prisma",
-      "unrs-resolver"
-    ],
-    "overrides": {
-      "ai": "$ai",
-      "@vercel/nft": "^0.27.4",
-      "@vueuse/core": "^14.3.0",
-      "@vueuse/shared": "^14.3.0"
-    }
-  },
   "overrides": {
     "ai": "$ai",
     "@vercel/nft": "^0.27.4",
