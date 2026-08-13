@@ -11,7 +11,9 @@ import {
   isGarminDownloadTokenError,
   mergeGarminScopes,
   parseGarminScope,
-  refreshGarminToken
+  reconcileGarminScopes,
+  refreshGarminToken,
+  serializeGarminScopes
 } from '../../../../server/utils/garmin'
 
 const { prismaIntegrationFindUnique, prismaIntegrationUpdate, prismaQueryRaw, prismaTransaction } =
@@ -121,6 +123,274 @@ describe('Garmin permission helpers', () => {
         scope: expect.stringContaining('HEALTH_EXPORT')
       }
     })
+  })
+
+  it('adds newly granted user permissions while keeping OAuth scopes', () => {
+    expect(reconcileGarminScopes('PARTNER_WRITE CONNECT_READ', ['health_export'])).toEqual(
+      new Set(['PARTNER_WRITE', 'CONNECT_READ', 'HEALTH_EXPORT'])
+    )
+  })
+
+  it('prunes user permissions absent from the live response but keeps OAuth scopes', () => {
+    expect(
+      reconcileGarminScopes('PARTNER_WRITE CONNECT_READ HEALTH_EXPORT ACTIVITY_EXPORT', [
+        'ACTIVITY_EXPORT'
+      ])
+    ).toEqual(new Set(['PARTNER_WRITE', 'CONNECT_READ', 'ACTIVITY_EXPORT']))
+  })
+
+  it('drops every user permission when the live response is empty', () => {
+    expect(reconcileGarminScopes('PARTNER_WRITE HEALTH_EXPORT WORKOUT_IMPORT', [])).toEqual(
+      new Set(['PARTNER_WRITE'])
+    )
+  })
+
+  it('throws rather than pruning when a 200 array holds non-string entries', async () => {
+    // A future shape like [{ permission: 'HEALTH_EXPORT' }] passes Array.isArray
+    // but filters to [], which reconcileGarminScopes would faithfully apply as a
+    // full revoke for every user.
+    const { fetchGarminUserPermissions } = await import('../../../../server/utils/garmin')
+
+    const integration = {
+      id: 'integration-shape',
+      accessToken: 'token',
+      refreshToken: 'refresh',
+      expiresAt: new Date(Date.now() + 3600_000),
+      scope: 'PARTNER_WRITE HEALTH_EXPORT'
+    } as any
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => [{ permission: 'HEALTH_EXPORT' }, { permission: 'ACTIVITY_EXPORT' }],
+        headers: new Headers()
+      }) as any
+    )
+
+    await expect(fetchGarminUserPermissions(integration)).rejects.toThrow(/unrecognized payload/i)
+  })
+
+  it('throws when a 200 permissions object holds non-string entries', async () => {
+    const { fetchGarminUserPermissions } = await import('../../../../server/utils/garmin')
+
+    const integration = {
+      id: 'integration-shape-2',
+      accessToken: 'token',
+      refreshToken: 'refresh',
+      expiresAt: new Date(Date.now() + 3600_000),
+      scope: 'PARTNER_WRITE HEALTH_EXPORT'
+    } as any
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({ permissions: [{ permission: 'HEALTH_EXPORT' }] }),
+        headers: new Headers()
+      }) as any
+    )
+
+    await expect(fetchGarminUserPermissions(integration)).rejects.toThrow(/unrecognized payload/i)
+  })
+
+  it('leaves the stored scope untouched when the payload shape is unrecognized', async () => {
+    const { refreshGarminIntegrationPermissions } = await import('../../../../server/utils/garmin')
+
+    const integration = {
+      id: 'integration-shape-3',
+      accessToken: 'token',
+      refreshToken: 'refresh',
+      expiresAt: new Date(Date.now() + 3600_000),
+      scope: 'PARTNER_WRITE HEALTH_EXPORT ACTIVITY_EXPORT'
+    } as any
+
+    prismaIntegrationFindUnique.mockResolvedValue(integration)
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => [{ permission: 'HEALTH_EXPORT' }],
+        headers: new Headers()
+      }) as any
+    )
+
+    const result = await refreshGarminIntegrationPermissions(integration)
+
+    expect(result.scope).toBe('PARTNER_WRITE HEALTH_EXPORT ACTIVITY_EXPORT')
+    expect(prismaIntegrationUpdate).not.toHaveBeenCalled()
+  })
+
+  it('keeps unknown permissions reported by Garmin', () => {
+    expect(reconcileGarminScopes('PARTNER_WRITE', ['MCT_EXPORT'])).toEqual(
+      new Set(['PARTNER_WRITE', 'MCT_EXPORT'])
+    )
+  })
+
+  it('serializes an empty scope set as null', () => {
+    expect(serializeGarminScopes(new Set())).toBeNull()
+    expect(serializeGarminScopes(new Set(['PARTNER_WRITE']))).toBe('PARTNER_WRITE')
+  })
+
+  it('refreshGarminIntegrationPermissions prunes a partially revoked permission', async () => {
+    const { refreshGarminIntegrationPermissions } = await import('../../../../server/utils/garmin')
+
+    const integration = {
+      id: 'integration-partial-revoke',
+      accessToken: 'token',
+      refreshToken: 'refresh',
+      expiresAt: new Date(Date.now() + 3600_000),
+      scope: 'PARTNER_WRITE HEALTH_EXPORT ACTIVITY_EXPORT'
+    } as any
+
+    prismaIntegrationFindUnique.mockResolvedValue(integration)
+    prismaIntegrationUpdate.mockImplementation(async ({ data }: any) => ({
+      ...integration,
+      ...data
+    }))
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ['ACTIVITY_EXPORT'],
+        headers: new Headers()
+      }) as any
+    )
+
+    const updated = await refreshGarminIntegrationPermissions(integration)
+
+    expect(prismaIntegrationUpdate).toHaveBeenCalledWith({
+      where: { id: 'integration-partial-revoke' },
+      data: { scope: 'PARTNER_WRITE ACTIVITY_EXPORT' }
+    })
+    expect(updated.scope).toBe('PARTNER_WRITE ACTIVITY_EXPORT')
+    expect(hasGarminPermission(updated.scope, 'HEALTH_EXPORT')).toBe(false)
+  })
+
+  it('refreshGarminIntegrationPermissions clears every user permission on a full revoke', async () => {
+    const { refreshGarminIntegrationPermissions } = await import('../../../../server/utils/garmin')
+
+    const integration = {
+      id: 'integration-full-revoke',
+      accessToken: 'token',
+      refreshToken: 'refresh',
+      expiresAt: new Date(Date.now() + 3600_000),
+      scope: 'HEALTH_EXPORT ACTIVITY_EXPORT WORKOUT_IMPORT'
+    } as any
+
+    prismaIntegrationFindUnique.mockResolvedValue(integration)
+    prismaIntegrationUpdate.mockImplementation(async ({ data }: any) => ({
+      ...integration,
+      ...data
+    }))
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => [],
+        headers: new Headers()
+      }) as any
+    )
+
+    const updated = await refreshGarminIntegrationPermissions(integration)
+
+    expect(prismaIntegrationUpdate).toHaveBeenCalledWith({
+      where: { id: 'integration-full-revoke' },
+      data: { scope: null }
+    })
+    expect(updated.scope).toBeNull()
+  })
+
+  it('refreshGarminIntegrationPermissions skips the write when nothing changed', async () => {
+    const { refreshGarminIntegrationPermissions } = await import('../../../../server/utils/garmin')
+
+    const integration = {
+      id: 'integration-unchanged',
+      accessToken: 'token',
+      refreshToken: 'refresh',
+      expiresAt: new Date(Date.now() + 3600_000),
+      scope: 'PARTNER_WRITE HEALTH_EXPORT'
+    } as any
+
+    prismaIntegrationFindUnique.mockResolvedValue(integration)
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ['HEALTH_EXPORT'],
+        headers: new Headers()
+      }) as any
+    )
+
+    const result = await refreshGarminIntegrationPermissions(integration)
+
+    expect(result).toBe(integration)
+    expect(prismaIntegrationUpdate).not.toHaveBeenCalled()
+  })
+
+  it('refreshGarminIntegrationPermissions keeps stored permissions when the network fails', async () => {
+    const { refreshGarminIntegrationPermissions } = await import('../../../../server/utils/garmin')
+
+    const integration = {
+      id: 'integration-network-error',
+      accessToken: 'token',
+      refreshToken: 'refresh',
+      expiresAt: new Date(Date.now() + 3600_000),
+      scope: 'PARTNER_WRITE HEALTH_EXPORT WORKOUT_IMPORT'
+    } as any
+
+    prismaIntegrationFindUnique.mockResolvedValue(integration)
+
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('ECONNRESET')) as any)
+
+    // The permissions fetch retries with exponential backoff; drive its timers instead of waiting.
+    vi.useFakeTimers()
+    let result: any
+    try {
+      const pending = refreshGarminIntegrationPermissions(integration)
+      await vi.runAllTimersAsync()
+      result = await pending
+    } finally {
+      vi.useRealTimers()
+    }
+
+    expect(result).toBe(integration)
+    expect(result.scope).toBe('PARTNER_WRITE HEALTH_EXPORT WORKOUT_IMPORT')
+    expect(prismaIntegrationUpdate).not.toHaveBeenCalled()
+  })
+
+  it('refreshGarminIntegrationPermissions does not prune on an unrecognized 200 payload', async () => {
+    const { refreshGarminIntegrationPermissions } = await import('../../../../server/utils/garmin')
+
+    const integration = {
+      id: 'integration-bad-payload',
+      accessToken: 'token',
+      refreshToken: 'refresh',
+      expiresAt: new Date(Date.now() + 3600_000),
+      scope: 'PARTNER_WRITE HEALTH_EXPORT'
+    } as any
+
+    prismaIntegrationFindUnique.mockResolvedValue(integration)
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ unexpected: true }),
+        headers: new Headers()
+      }) as any
+    )
+
+    const result = await refreshGarminIntegrationPermissions(integration)
+
+    expect(result).toBe(integration)
+    expect(prismaIntegrationUpdate).not.toHaveBeenCalled()
   })
 
   it('refreshGarminIntegrationPermissions returns the original integration on API failure', async () => {

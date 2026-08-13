@@ -17,6 +17,25 @@ interface GarminApiErrorPayload {
 
 const GARMIN_WRITE_SCOPE = 'PARTNER_WRITE'
 const GARMIN_IMPORT_PERMISSIONS = new Set(['WORKOUT_IMPORT', 'COURSE_IMPORT'])
+
+/**
+ * User-level grants that `GET /wellness-api/rest/user/permissions` is authoritative for.
+ * A successful live response therefore *replaces* this subset of `Integration.scope`:
+ * anything here that the response omits has been revoked in Garmin Connect.
+ *
+ * - `ACTIVITY_EXPORT` / `HEALTH_EXPORT` — wellness + activity export consents, toggled per user.
+ * - `WORKOUT_IMPORT` / `COURSE_IMPORT`  — Training/Courses push consents, toggled per user.
+ *
+ * Everything else stored in `Integration.scope` (notably `PARTNER_WRITE` and any OAuth/API scope
+ * returned by the token endpoint at connect time) is *not* reported by that endpoint and must be
+ * preserved untouched — pruning it would silently break publishing for correctly connected users.
+ */
+export const GARMIN_USER_PERMISSIONS = new Set([
+  'ACTIVITY_EXPORT',
+  'HEALTH_EXPORT',
+  'WORKOUT_IMPORT',
+  'COURSE_IMPORT'
+])
 const GARMIN_TOKEN_REFRESH_BUFFER_MS = 10 * 60 * 1000
 const GARMIN_TOKEN_REQUEST_TIMEOUT_MS = 10_000
 const GARMIN_TOKEN_TRANSACTION_TIMEOUT_MS = 20_000
@@ -69,6 +88,58 @@ export function mergeGarminScopes(
   }
 
   return merged
+}
+
+/**
+ * Reconcile stored `Integration.scope` against a *successful* live Garmin user-permissions
+ * response.
+ *
+ * Unlike {@link mergeGarminScopes} (a pure union, still correct for merging OAuth scopes at
+ * connect time), this applies replacement semantics to the subset the permissions endpoint owns:
+ *
+ * - values in {@link GARMIN_USER_PERMISSIONS} are kept only when the live response still lists them
+ *   (so a revoked grant is dropped instead of surviving forever),
+ * - every other stored value (OAuth/API scopes such as `PARTNER_WRITE`) is preserved as-is,
+ * - anything the live response reports is added, including permissions we do not yet know about.
+ *
+ * Only call this with a parsed response from a successful request — an API failure must never be
+ * treated as "zero permissions", or a transient blip would revoke the user's integration.
+ */
+export function reconcileGarminScopes(
+  storedScope: string | string[] | Set<string> | null | undefined,
+  livePermissions: string[] | Set<string> | null | undefined
+): Set<string> {
+  const stored = mergeGarminScopes(storedScope)
+  const live = mergeGarminScopes(livePermissions)
+
+  const reconciled = new Set<string>()
+
+  for (const value of stored) {
+    // Dynamic user permissions are authoritative in the live response; keep the rest untouched.
+    if (GARMIN_USER_PERMISSIONS.has(value)) continue
+    reconciled.add(value)
+  }
+
+  for (const value of live) reconciled.add(value)
+
+  return reconciled
+}
+
+/**
+ * Serialize a scope set for storage. An empty set is stored as `null` rather than an empty string
+ * so "no permissions" reads the same as a never-populated scope column.
+ */
+export function serializeGarminScopes(scopes: Set<string> | string[]): string | null {
+  const values = Array.from(scopes)
+  return values.length > 0 ? values.join(' ') : null
+}
+
+function garminScopeSetsEqual(a: Set<string>, b: Set<string>): boolean {
+  if (a.size !== b.size) return false
+  for (const value of a) {
+    if (!b.has(value)) return false
+  }
+  return true
 }
 
 export function hasGarminPermission(
@@ -636,7 +707,26 @@ export async function deRegisterGarminUser(integration: Integration) {
 }
 
 /**
+ * Narrow a permissions array to the strings we understand.
+ *
+ * Throws if the array had entries but none of them were strings: that is a payload shape we do
+ * not recognize, and returning the empty result would be indistinguishable from a genuine
+ * "user granted nothing" — which prunes every user permission for every user.
+ */
+function filterGarminPermissionStrings(values: unknown[]): string[] {
+  const strings = values.filter((value): value is string => typeof value === 'string')
+  if (values.length > 0 && strings.length === 0) {
+    throw new Error('Garmin permissions API returned an unrecognized payload')
+  }
+  return strings
+}
+
+/**
  * Fetch current user permissions granted to this app.
+ *
+ * Resolves only for a successful, well-formed response — an empty array then genuinely means
+ * "the user granted nothing". Request failures and unrecognized payloads throw, so callers can
+ * never mistake a broken request for a full revocation.
  */
 export async function fetchGarminUserPermissions(integration: Integration): Promise<string[]> {
   const url = 'https://apis.garmin.com/wellness-api/rest/user/permissions'
@@ -651,14 +741,19 @@ export async function fetchGarminUserPermissions(integration: Integration): Prom
     })
 
     if (response.ok) {
-      const data = await response.json()
+      const data = await response.json().catch(() => undefined)
+      // A 200 we cannot parse is not evidence that every permission was
+      // revoked. That includes an array we *can* iterate but whose entries are
+      // not strings (e.g. a future `[{ permission: 'HEALTH_EXPORT' }]` shape):
+      // filtering it to strings would yield [], which reconcileGarminScopes
+      // would faithfully apply as a full revoke for every user.
       if (Array.isArray(data)) {
-        return data.filter((x) => typeof x === 'string')
+        return filterGarminPermissionStrings(data)
       }
       if (Array.isArray(data?.permissions)) {
-        return data.permissions.filter((x: unknown) => typeof x === 'string')
+        return filterGarminPermissionStrings(data.permissions)
       }
-      return []
+      throw new Error('Garmin permissions API returned an unrecognized payload')
     }
 
     const errorBody = await response.json().catch(() => ({}))
@@ -676,26 +771,38 @@ export async function fetchGarminUserPermissions(integration: Integration): Prom
 }
 
 /**
- * Best-effort merge of live Garmin export permissions into Integration.scope.
- * Never throws — ingest/callback must keep working if permissions are unreachable.
+ * Best-effort reconciliation of live Garmin export permissions into Integration.scope.
+ *
+ * Grants are added and revoked permissions are pruned (see {@link reconcileGarminScopes}), while
+ * OAuth/API scopes are preserved. Never throws — ingest/callback must keep working if permissions
+ * are unreachable, and in that case the stored scope is left exactly as it was.
  */
 export async function refreshGarminIntegrationPermissions(
   integration: Integration
 ): Promise<Integration> {
+  let permissions: string[]
+
   try {
-    const permissions = await fetchGarminUserPermissions(integration)
-    const merged = mergeGarminScopes(integration.scope, permissions)
-    if (merged.size === 0) return integration
+    permissions = await fetchGarminUserPermissions(integration)
+  } catch (error) {
+    // Network failure, 5xx, auth failure, unparseable body: not a revocation. Leave scope alone.
+    console.warn('[Garmin] Failed to refresh user permissions', {
+      integrationId: integration.id,
+      error
+    })
+    return integration
+  }
 
-    const scope = Array.from(merged).join(' ')
-    if (scope === (integration.scope || '').trim()) return integration
+  const reconciled = reconcileGarminScopes(integration.scope, permissions)
+  if (garminScopeSetsEqual(reconciled, parseGarminScope(integration.scope))) return integration
 
+  try {
     return await prisma.integration.update({
       where: { id: integration.id },
-      data: { scope }
+      data: { scope: serializeGarminScopes(reconciled) }
     })
   } catch (error) {
-    console.warn('[Garmin] Failed to refresh user permissions', {
+    console.warn('[Garmin] Failed to persist refreshed user permissions', {
       integrationId: integration.id,
       error
     })
