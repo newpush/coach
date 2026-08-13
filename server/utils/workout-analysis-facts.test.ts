@@ -4,10 +4,12 @@ import {
   buildIntervalGroupSummaries,
   buildWorkoutAnalysisFacts,
   buildWorkoutAnalysisFactsV2,
+  deriveMetricUsabilitySignals,
   formatActualIntervalsForPrompt,
   formatCadenceWithUnit,
   getActualIntervalsForAnalysis,
   getActualIntervalsSourceForAnalysis,
+  resolveAdherenceMetricOrder,
   resolveCadenceUnit,
   toCanonicalCadence,
   toIntervalIntensityFactor
@@ -3559,5 +3561,224 @@ describe('buildIntervalGroupSummaries', () => {
     expect(summaries.recovery?.totalDurationSeconds).toBe(360)
     expectNoNaN(summaries.work)
     expectNoNaN(summaries.recovery)
+  })
+})
+
+/**
+ * CW-397. `deriveAdherence` picks which planned target a step is scored against
+ * from the athlete's `loadPreference`. At the seeded `HR_PACE_POWER` default that
+ * meant a step carrying *both* a power and an HR target was judged on HR -- even
+ * on a power-meter ride whose HR trace the same facts object had already marked
+ * unusable. The order now runs through the same demotion the prompt uses.
+ */
+describe('adherence metric demotion (CW-397)', () => {
+  // 10% zero samples trips the dropout flag, so `getHrStats().usable` is false --
+  // the same shape a chest strap that kept losing contact produces.
+  const DROPOUT_HR_STREAM = Array.from({ length: 200 }, (_, index) => (index % 10 === 0 ? 0 : 150))
+  const CLEAN_HR_STREAM = Array.from({ length: 200 }, () => 150)
+
+  const INTERVALS = [
+    { type: 'WORK', moving_time: 480, average_watts: 260, average_heartrate: 168 },
+    { type: 'REST', moving_time: 120, average_watts: 180, average_heartrate: 132 },
+    { type: 'WORK', moving_time: 480, average_watts: 260, average_heartrate: 168 },
+    { type: 'REST', moving_time: 120, average_watts: 180, average_heartrate: 132 }
+  ]
+
+  // Power targets are hit exactly; HR targets are ~30-40% off. Whichever metric
+  // adherence chose is legible straight off the hit rate.
+  //
+  // `primaryTarget: 'heartRate'` is the production shape, not decoration: every
+  // structured workout the app persists goes through
+  // `normalizeStructuredWorkoutForPersistence`, which stamps `primaryTarget` from
+  // the athlete's `loadPreference` -- HR-first at the seeded default. A fixture
+  // without it exercises only legacy plans written before that field existed.
+  const step = (
+    type: string,
+    durationSeconds: number,
+    watts: number,
+    bpm: number,
+    primaryTarget: string | null = 'heartRate'
+  ) => ({
+    type,
+    durationSeconds,
+    ...(primaryTarget ? { primaryTarget } : {}),
+    power: { value: watts, units: 'watts' },
+    heartRate: { value: bpm, units: 'bpm' }
+  })
+
+  const plan = (primaryTarget: string | null) => ({
+    durationSec: 1200,
+    structuredWorkout: {
+      steps: [
+        step('Active', 480, 260, 120, primaryTarget),
+        step('Rest', 120, 180, 95, primaryTarget),
+        step('Active', 480, 260, 120, primaryTarget),
+        step('Rest', 120, 180, 95, primaryTarget)
+      ]
+    }
+  })
+
+  const buildFacts = (heartrate: number[], primaryTarget: string | null = 'heartRate') =>
+    buildWorkoutAnalysisFactsV2({
+      workout: makeWorkout({
+        title: 'Sweet Spot Intervals',
+        type: 'Ride',
+        durationSec: 1200,
+        averageWatts: 231,
+        averageHr: 150,
+        trainer: true,
+        streams: { heartrate },
+        rawJson: { icu_intervals: INTERVALS }
+      }),
+      // The seeded default, verbatim. Nothing about the athlete's settings changes.
+      sportSettings: { loadPreference: 'HR_PACE_POWER', ftp: 275 },
+      plannedWorkout: plan(primaryTarget)
+    })
+
+  it('scores a power+HR step on power when the facts mark HR unusable', () => {
+    // The production shape: `primaryTarget: 'heartRate'` stamped on every step.
+    const facts = buildFacts(DROPOUT_HR_STREAM)
+
+    expect(facts.guardrails.telemetry.hrUsable).toBe(false)
+    expect(facts.adherence.workIntervalHitRate).toBe(100)
+    expect(facts.adherence.recoveryHitRate).toBe(100)
+  })
+
+  it('scores a legacy plan without primaryTarget on power too', () => {
+    const facts = buildFacts(DROPOUT_HR_STREAM, null)
+
+    expect(facts.adherence.workIntervalHitRate).toBe(100)
+    expect(facts.adherence.recoveryHitRate).toBe(100)
+  })
+
+  it('still honours primaryTarget when the metric it names is not demoted', () => {
+    // The discriminating case. With a clean HR trace, `primaryTarget: 'power'`
+    // must still win even though the resolved metric order is HR-first -- which
+    // is only true if the short-circuit is alive. Under an unconditional skip
+    // this scores 0 (HR-scored), so the assertion distinguishes the two
+    // implementations rather than merely passing.
+    //
+    // `primaryTarget: 'heartRate'` + clean HR would NOT discriminate: the order
+    // head and the stamp are both `heartRate`, so both paths agree.
+    const facts = buildFacts(CLEAN_HR_STREAM, 'power')
+
+    expect(facts.guardrails.telemetry.hrUsable).toBe(true)
+    expect(facts.adherence.workIntervalHitRate).toBe(100)
+  })
+
+  it('still scores a legacy plan on HR when the HR trace is clean', () => {
+    // The control, on the legacy shape. Without it the demotion tests would also
+    // pass if adherence had simply stopped looking at HR altogether.
+    const facts = buildFacts(CLEAN_HR_STREAM, null)
+
+    expect(facts.guardrails.telemetry.hrUsable).toBe(true)
+    expect(facts.adherence.workIntervalHitRate).toBe(0)
+  })
+
+  it('leaves rpe last so a demotion never promotes it over a real target', () => {
+    expect(
+      resolveAdherenceMetricOrder('HR_PACE_POWER', { hr: false, pace: true, power: true }, 'power')
+    ).toEqual(['power', 'pace', 'heartRate', 'rpe'])
+  })
+
+  it('returns the preference order untouched when the preferred primary is usable', () => {
+    expect(
+      resolveAdherenceMetricOrder('HR_PACE_POWER', { hr: true, pace: true, power: true }, 'mixed')
+    ).toEqual(['heartRate', 'pace', 'power', 'rpe'])
+  })
+
+  it('exposes the facts usability signals the prompt resolver consumes', () => {
+    const facts = buildFacts(DROPOUT_HR_STREAM)
+    const signals = deriveMetricUsabilitySignals(facts)
+
+    expect(signals).toMatchObject({
+      hrUsable: false,
+      powerUsable: true,
+      factsPrimaryMetric: facts.guardrails.archetype.primaryMetric
+    })
+    expect(deriveMetricUsabilitySignals(undefined)).toBeUndefined()
+  })
+
+  it('refuses to let pace lead a ride even when the session has speed data (CW-437)', () => {
+    // The regression the first cut of CW-397 introduced: an outdoor ride with no
+    // power meter and a dropout-riddled HR trace demoted HR and promoted PACE.
+    // `getAnalysisMode` resolves this session to `mixed` precisely so speed cannot
+    // lead it, and the demotion path must respect that.
+    const facts = buildWorkoutAnalysisFactsV2({
+      workout: makeWorkout({
+        title: 'Outdoor Ride',
+        type: 'Ride',
+        durationSec: 5400,
+        distanceMeters: 48000,
+        averageSpeed: 8.9,
+        averageWatts: null,
+        averageHr: 150,
+        trainer: false,
+        streams: { heartrate: DROPOUT_HR_STREAM }
+      }),
+      sportSettings: { loadPreference: 'HR_PACE_POWER' }
+    } as any)
+
+    expect(facts.guardrails.telemetry.paceUsable).toBe(true)
+    expect(facts.guardrails.analysisMode).not.toBe('pace')
+
+    // Data quality and permission-to-lead are reported separately: the telemetry
+    // is fine and the facts block says so, but speed may not lead a ride.
+    const signals = deriveMetricUsabilitySignals(facts, 'Ride')
+    expect(signals?.paceUsable).toBe(true)
+    expect(signals?.paceMayLead).toBe(false)
+  })
+
+  it('lets pace lead a run, where it is the primary effort metric', () => {
+    const facts = buildWorkoutAnalysisFactsV2({
+      workout: makeWorkout({
+        title: 'Easy Endurance',
+        type: 'Run',
+        durationSec: 3300,
+        distanceMeters: 10000,
+        averageSpeed: 3.03,
+        averageWatts: null,
+        averageHr: 148,
+        streams: { heartrate: DROPOUT_HR_STREAM }
+      }),
+      sportSettings: { loadPreference: 'HR_PACE_POWER' }
+    } as any)
+
+    expect(facts.guardrails.analysisMode).toBe('pace')
+    expect(deriveMetricUsabilitySignals(facts, 'Run')?.paceMayLead).toBe(true)
+  })
+
+  it('leaves pace leading for swim, row, ski and walk (CW-437 is about bikes)', () => {
+    // `analysisMode === 'pace'` is far too narrow to use as the gate:
+    // `getAnalysisMode` only returns it for runs and power-carrying ski, so every
+    // one of these sports resolves to `mixed`. Gating on that alone silently
+    // demoted `PACE_*` -- a first-class, user-selectable preference -- onto HR for
+    // four sports where pace IS the effort metric. The gate is the ride family.
+    const sports: Array<[string, number]> = [
+      ['Swim', 1.2],
+      ['Rowing', 3.5],
+      ['NordicSki', 4.0],
+      ['Walk', 1.4]
+    ]
+
+    for (const [type, averageSpeed] of sports) {
+      const facts = buildWorkoutAnalysisFactsV2({
+        workout: makeWorkout({
+          title: type,
+          type,
+          durationSec: 3600,
+          distanceMeters: Math.round(averageSpeed * 3600),
+          averageSpeed,
+          averageWatts: null,
+          averageHr: 150,
+          streams: { heartrate: CLEAN_HR_STREAM }
+        }),
+        sportSettings: { loadPreference: 'PACE_HR_POWER' }
+      } as any)
+
+      // Every one of these is `mixed` -- which is exactly why the narrow gate broke them.
+      expect(facts.guardrails.analysisMode).not.toBe('pace')
+      expect(deriveMetricUsabilitySignals(facts, type)?.paceMayLead).toBe(true)
+    }
   })
 })

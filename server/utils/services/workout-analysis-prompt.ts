@@ -25,6 +25,7 @@ import {
 import { formatStructuredPlanForPrompt } from '../../../trigger/utils/planned-workout-targets'
 import {
   buildIntervalGroupSummaries,
+  deriveMetricUsabilitySignals,
   formatCadenceWithUnit,
   getActualIntervalsForAnalysis,
   getActualIntervalsSourceForAnalysis,
@@ -1205,9 +1206,15 @@ export function buildWorkoutAnalysisPrompt(
   const isCadenceRelevant = ['run', 'ride', 'bike', 'cycle'].some((t) =>
     workoutType.toLowerCase().includes(t)
   )
+  // The V2 facts get a vote here so the "## Metric Priority Rules" block cannot
+  // name a primary metric the facts block in this same prompt reports as unusable
+  // or absent (CW-397).
   const metricPriorityContext = resolveMetricPriorityContext(
     sportSettings?.loadPreference,
-    workoutData
+    workoutData,
+    // `workoutType` because the facts carry no sport family, and whether pace may
+    // lead is a question about the sport (CW-437 is about bikes specifically).
+    deriveMetricUsabilitySignals(analysisFactsV2, workoutType)
   )
   const condensedHrSection = shouldCondenseHeartRateSection(metricPriorityContext)
 
@@ -1368,7 +1375,7 @@ When analyzing "Execution" and "Effort", specifically reference how well the ath
 
   if (
     metricPriorityContext.primaryMetric === 'PACE' &&
-    metricPriorityContext.availability.hasPace
+    metricPriorityContext.primaryMetricAvailable
   ) {
     prompt += '\n## Pace & Speed (Primary Metric)\n'
     const avgPaceSecPerKm =
