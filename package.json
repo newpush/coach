@@ -94,7 +94,7 @@
   "devDependencies": {
     "@iconify-json/heroicons": "^1.2.3",
     "@iconify-json/lucide": "^1.2.116",
-    "@iconify-json/material-symbols": "^1.2.87",
+    "@iconify-json/material-symbols": "^1.2.88",
     "@iconify-json/simple-icons": "^1.2.89",
     "@iconify-json/tabler": "^1.2.37",
     "@lhci/cli": "^0.15.1",
