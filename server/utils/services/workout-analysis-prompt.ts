@@ -1375,7 +1375,7 @@ When analyzing "Execution" and "Effort", specifically reference how well the ath
 
   if (
     metricPriorityContext.primaryMetric === 'PACE' &&
-    metricPriorityContext.availability.hasPace
+    metricPriorityContext.primaryMetricAvailable
   ) {
     prompt += '\n## Pace & Speed (Primary Metric)\n'
     const avgPaceSecPerKm =

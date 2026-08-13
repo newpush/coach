@@ -334,6 +334,48 @@ describe('buildWorkoutAnalysisPrompt', () => {
     expect(prompt).toContain('- Average Speed: 3.00 m/s')
   })
 
+  it('does not call ride speed a primary pace section when no metric may lead (CW-397)', () => {
+    const workout = {
+      ...RIDE_WORKOUT,
+      averageWatts: null,
+      maxWatts: null,
+      normalizedPower: null,
+      weightedAvgWatts: null,
+      averageHr: 150,
+      maxHr: 170
+    }
+    const baseFacts = buildWorkoutAnalysisFactsV2({ workout })
+    const facts = {
+      ...baseFacts,
+      guardrails: {
+        ...baseFacts.guardrails,
+        archetype: { ...baseFacts.guardrails.archetype, primaryMetric: 'mixed' as const },
+        telemetry: {
+          ...baseFacts.guardrails.telemetry,
+          hrUsable: false,
+          hrArtifactSeverity: 'high' as const,
+          powerAbsoluteUsable: false,
+          powerRelativeUsable: false,
+          paceUsable: true
+        }
+      }
+    }
+
+    const prompt = buildWorkoutAnalysisPrompt(
+      buildWorkoutAnalysisData(workout),
+      'Europe/Budapest',
+      'Supportive',
+      { loadPreference: 'PACE_HR_POWER' },
+      USER_PROFILE,
+      undefined,
+      undefined,
+      facts
+    )
+
+    expect(prompt).toContain('**Fallback Rule**: No preferred metric')
+    expect(prompt).not.toContain('## Pace & Speed (Primary Metric)')
+  })
+
   it('uses one cadence convention across the session line and the interval rows for a run (CW-387)', () => {
     // Same physical legs, three places in one prompt. Before CW-387 the session line
     // said "176 spm", the Interval Breakdown said "180 rpm" for an equally doubled
