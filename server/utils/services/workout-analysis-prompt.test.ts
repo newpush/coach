@@ -334,6 +334,48 @@ describe('buildWorkoutAnalysisPrompt', () => {
     expect(prompt).toContain('- Average Speed: 3.00 m/s')
   })
 
+  it('does not call ride speed a primary pace section when no metric may lead (CW-397)', () => {
+    const workout = {
+      ...RIDE_WORKOUT,
+      averageWatts: null,
+      maxWatts: null,
+      normalizedPower: null,
+      weightedAvgWatts: null,
+      averageHr: 150,
+      maxHr: 170
+    }
+    const baseFacts = buildWorkoutAnalysisFactsV2({ workout })
+    const facts = {
+      ...baseFacts,
+      guardrails: {
+        ...baseFacts.guardrails,
+        archetype: { ...baseFacts.guardrails.archetype, primaryMetric: 'mixed' as const },
+        telemetry: {
+          ...baseFacts.guardrails.telemetry,
+          hrUsable: false,
+          hrArtifactSeverity: 'high' as const,
+          powerAbsoluteUsable: false,
+          powerRelativeUsable: false,
+          paceUsable: true
+        }
+      }
+    }
+
+    const prompt = buildWorkoutAnalysisPrompt(
+      buildWorkoutAnalysisData(workout),
+      'Europe/Budapest',
+      'Supportive',
+      { loadPreference: 'PACE_HR_POWER' },
+      USER_PROFILE,
+      undefined,
+      undefined,
+      facts
+    )
+
+    expect(prompt).toContain('**Fallback Rule**: No preferred metric')
+    expect(prompt).not.toContain('## Pace & Speed (Primary Metric)')
+  })
+
   it('uses one cadence convention across the session line and the interval rows for a run (CW-387)', () => {
     // Same physical legs, three places in one prompt. Before CW-387 the session line
     // said "176 spm", the Interval Breakdown said "180 rpm" for an equally doubled
@@ -1346,5 +1388,482 @@ describe('report analysis schemas match the prompts they are handed with (CW-425
     expect(
       Object.keys(byFile.get('generate-weekly-report.ts').properties.metrics_summary.properties)
     ).not.toContain('avg_protein_g')
+  })
+})
+
+/**
+ * CW-381: the payload carried per-lap rows and session means with nothing in
+ * between, so the model reached for the session mean whenever it wanted an
+ * interval number. A live 4x4min threshold run was told "your average cadence
+ * of 162 spm is somewhat low for threshold work" -- 162 being the whole-session
+ * mean, dragged down by warmup, recovery jogs and cooldown, while the four reps
+ * averaged 177 spm. The advice was inverted, not merely imprecise.
+ */
+describe('work-only interval aggregates', () => {
+  /** The reference session from the ticket, lapped the way Intervals.icu sends it. */
+  const THRESHOLD_RUN_LAPS = [
+    { seconds: 600, speed: 2.6, cadence: 76, hr: 130 },
+    { seconds: 240, speed: 4.1, cadence: 89, hr: 168 },
+    { seconds: 120, speed: 2.8, cadence: 78, hr: 140 },
+    { seconds: 240, speed: 4.1, cadence: 88, hr: 172 },
+    { seconds: 120, speed: 2.8, cadence: 78, hr: 142 },
+    { seconds: 240, speed: 4.0, cadence: 89, hr: 174 },
+    { seconds: 120, speed: 2.8, cadence: 77, hr: 143 },
+    { seconds: 240, speed: 4.0, cadence: 88, hr: 175 },
+    { seconds: 600, speed: 2.5, cadence: 74, hr: 128 }
+  ]
+
+  function buildThresholdRun(overrides: Record<string, unknown> = {}) {
+    return {
+      id: 'workout-fixture-cw381',
+      date: new Date('2026-03-22T06:00:00Z'),
+      title: '4 x 4min Threshold',
+      type: 'Run',
+      durationSec: 2520,
+      distanceMeters: 8000,
+      averageSpeed: 3.17,
+      averageHr: 149,
+      maxHr: 178,
+      // One-legged, as every provider stores run cadence: 81 doubles to the
+      // 162 spm the model quoted as if it were a threshold figure.
+      averageCadence: 81,
+      rawJson: {
+        // Every lap labelled WORK, exactly as the provider sends it. The
+        // aggregate must be built from the labels CW-376 re-derives, not these.
+        icu_intervals: THRESHOLD_RUN_LAPS.map((lap) => ({
+          type: 'WORK',
+          moving_time: lap.seconds,
+          average_speed: lap.speed,
+          average_cadence: lap.cadence,
+          average_heartrate: lap.hr
+        }))
+      },
+      ...overrides
+    }
+  }
+
+  it('puts a duration-weighted work-only aggregate in the payload', () => {
+    const data = buildWorkoutAnalysisData(buildThresholdRun())
+
+    // Four reps of 240s. Cadence is normalised here and only here: the weighted
+    // one-legged mean is 88.5, i.e. the 177 spm the athlete actually ran, and
+    // NOT the 162 spm session mean sitting in `avg_cadence`.
+    expect(data.avg_cadence).toBe(162)
+    expect(data.work_interval_summary).toMatchObject({
+      rep_count: 4,
+      total_duration_s: 960,
+      avg_duration_s: 240,
+      avg_cadence: 177
+    })
+    expect(Math.round(data.work_interval_summary.avg_hr)).toBe(172)
+
+    // Recovery jogs only -- warmup and cooldown are not recoveries between reps.
+    expect(data.recovery_interval_summary).toMatchObject({
+      rep_count: 3,
+      total_duration_s: 360
+    })
+    expect(Math.round(data.recovery_interval_summary.avg_cadence)).toBe(155)
+
+    // Nothing an aggregate emits may be NaN, whatever the metric coverage.
+    for (const summary of [data.work_interval_summary, data.recovery_interval_summary]) {
+      for (const value of Object.values(summary)) {
+        expect(Number.isNaN(value as number)).toBe(false)
+      }
+    }
+  })
+
+  it('prints the work-only figures in the prompt and forbids quoting the session means', () => {
+    const prompt = buildWorkoutAnalysisPrompt(
+      buildWorkoutAnalysisData(buildThresholdRun()),
+      'Europe/Budapest',
+      'Supportive',
+      { loadPreference: 'PACE' },
+      USER_PROFILE
+    )
+
+    expect(prompt).toContain('## Work vs Recovery Aggregates')
+    expect(prompt).toContain('### Work Intervals')
+    expect(prompt).toContain('- Segments: 4')
+    expect(prompt).toContain('- Total Time: 16m 0s')
+    expect(prompt).toContain('- Average Segment Length: 4m 0s')
+    // The number the model should have quoted, in the same canonical unit as
+    // the session line and the per-rep rows (CW-387).
+    expect(prompt).toContain('- Average Cadence (duration-weighted): 177 spm')
+    expect(prompt).toContain('- Average HR (duration-weighted): 172 bpm')
+    // 4.05 m/s duration-weighted over the four reps is 247 s/km.
+    expect(prompt).toContain('- Average Pace (duration-weighted): 4:07/km')
+
+    // The session mean is still printed -- it is a true session fact -- but it
+    // is now unmistakably the session's, not the reps'.
+    expect(prompt).toContain('- Average Cadence: 162 spm')
+
+    expect(prompt).toContain('### Recovery Between Work')
+    expect(prompt).toContain('- Segments: 3')
+
+    // The instruction, both at the section and next to the hard rules.
+    expect(prompt).toContain(
+      'Any claim about interval, rep, or threshold execution MUST quote these figures, never the session averages above.'
+    )
+    expect(prompt).toContain('must never be described as interval, rep or threshold values')
+  })
+
+  it('does not derive the aggregate from lap_splits (CW-389)', () => {
+    // Automatic per-distance splits are present and deliberately disagree with
+    // the laps: they cut across warmup, reps, recoveries and cooldown, so an
+    // aggregate built from them would be another session-wide average wearing
+    // an interval label.
+    const data = buildWorkoutAnalysisData(
+      buildThresholdRun({
+        rawJson: {
+          icu_intervals: THRESHOLD_RUN_LAPS.map((lap) => ({
+            type: 'WORK',
+            moving_time: lap.seconds,
+            average_speed: lap.speed,
+            average_cadence: lap.cadence,
+            average_heartrate: lap.hr
+          })),
+          splits_metric: [
+            { distance: 1000, moving_time: 315, average_speed: 3.17, average_heartrate: 150 },
+            { distance: 1000, moving_time: 315, average_speed: 3.17, average_heartrate: 151 },
+            { distance: 1000, moving_time: 315, average_speed: 3.17, average_heartrate: 152 }
+          ]
+        }
+      })
+    )
+
+    expect(data.lap_splits).toHaveLength(3)
+    // Three splits, four reps: the aggregate followed the resolved laps.
+    expect(data.work_interval_summary.rep_count).toBe(4)
+    expect(data.work_interval_summary.total_duration_s).toBe(960)
+    expect(data.work_interval_summary.avg_cadence).toBe(177)
+  })
+
+  it('states the absence rather than printing a fabricated zero when a session has no reps', () => {
+    // A steady ride: one lap, no recoveries. `resolveProviderIntervalTypes`
+    // leaves a sub-3-lap session alone, so this is work-only by construction.
+    const data = buildWorkoutAnalysisData({
+      id: 'workout-fixture-cw381-steady',
+      date: new Date('2026-03-23T06:00:00Z'),
+      title: 'Endurance',
+      type: 'Ride',
+      durationSec: 3600,
+      averageWatts: 180,
+      averageCadence: 86,
+      rawJson: {
+        icu_intervals: [
+          {
+            type: 'WORK',
+            moving_time: 3600,
+            average_watts: 180,
+            average_cadence: 86,
+            average_heartrate: 132
+          }
+        ]
+      }
+    })
+
+    expect(data.work_interval_summary).toMatchObject({ rep_count: 1, avg_power: 180 })
+    expect(data.recovery_interval_summary).toBeUndefined()
+
+    const prompt = buildWorkoutAnalysisPrompt(
+      data,
+      'Europe/Budapest',
+      'Supportive',
+      { loadPreference: 'POWER' },
+      USER_PROFILE
+    )
+
+    expect(prompt).toContain('### Recovery Between Work')
+    expect(prompt).toContain('- None: no recovery segments between work')
+    expect(prompt).toContain('- Average Cadence (duration-weighted): 86 rpm')
+    expect(prompt).not.toContain('spm')
+  })
+
+  it('omits the section entirely for a session with no resolved intervals', () => {
+    const data = buildWorkoutAnalysisData({
+      id: 'workout-fixture-cw381-no-intervals',
+      date: new Date('2026-03-24T06:00:00Z'),
+      title: 'Easy spin',
+      type: 'Ride',
+      durationSec: 1800,
+      averageWatts: 140
+    })
+
+    expect(data.work_interval_summary).toBeUndefined()
+    expect(data.recovery_interval_summary).toBeUndefined()
+
+    const prompt = buildWorkoutAnalysisPrompt(
+      data,
+      'Europe/Budapest',
+      'Supportive',
+      { loadPreference: 'POWER' },
+      USER_PROFILE
+    )
+
+    expect(prompt).not.toContain('## Work vs Recovery Aggregates')
+  })
+})
+
+/**
+ * CW-397. The sport profile is seeded `loadPreference: 'HR_PACE_POWER'` -- HR-first
+ * on purpose, so it works for athletes without a power meter. The bug was never the
+ * default: it was the prompt asserting `**Hard Rule**: Base most conclusions on HR
+ * evidence` while the V2 facts block a few sections further down in the *same* prompt
+ * reported `HR Usable: No`. "Hard Rule" phrasing wins that argument, so a power-meter
+ * ride got an HR-led analysis.
+ */
+describe('metric priority agrees with the facts block (CW-397)', () => {
+  // 10% dropouts: `getHrStats` marks the stream unusable, exactly as a chest strap
+  // that kept losing contact would.
+  const DROPOUT_HR_STREAM = Array.from({ length: 200 }, (_, index) => (index % 10 === 0 ? 0 : 148))
+
+  // Verbatim what `sportSettingsRepository.createDefault()` seeds. Unchanged by
+  // this ticket -- the fix is at prompt-assembly time.
+  const DEFAULT_SPORT_SETTINGS = { ftp: 275, lthr: 168, loadPreference: 'HR_PACE_POWER' }
+
+  const POWER_METER_RIDE = {
+    id: 'workout-cw397-power-ride',
+    date: new Date('2026-03-20T10:00:00Z'),
+    title: 'Sweet Spot Intervals',
+    type: 'Ride',
+    durationSec: 5400,
+    distanceMeters: 48000,
+    averageSpeed: 8.9,
+    averageWatts: 231,
+    normalizedPower: 248,
+    maxWatts: 640,
+    ftp: 275,
+    averageHr: 148,
+    maxHr: 176,
+    trainer: false,
+    streams: { heartrate: DROPOUT_HR_STREAM }
+  }
+
+  const HR_ONLY_RUN = {
+    id: 'workout-cw397-hr-run',
+    date: new Date('2026-03-21T06:00:00Z'),
+    title: 'Easy Endurance',
+    type: 'Run',
+    durationSec: 3300,
+    distanceMeters: 10000,
+    averageSpeed: 3.03,
+    averageHr: 148,
+    maxHr: 166,
+    streams: { heartrate: Array.from({ length: 200 }, () => 148) }
+  }
+
+  it('leads a default-settings power ride with power once the facts disown HR', () => {
+    const facts = buildWorkoutAnalysisFactsV2({
+      workout: POWER_METER_RIDE,
+      sportSettings: DEFAULT_SPORT_SETTINGS
+    } as any)
+
+    expect(facts.guardrails.telemetry.hrUsable).toBe(false)
+    expect(facts.guardrails.archetype.primaryMetric).toBe('power')
+
+    const prompt = buildWorkoutAnalysisPrompt(
+      buildWorkoutAnalysisData(POWER_METER_RIDE),
+      'Europe/Budapest',
+      'Supportive',
+      DEFAULT_SPORT_SETTINGS,
+      USER_PROFILE,
+      null,
+      undefined,
+      facts
+    )
+
+    // The facts block and the metric priority block now name the same metric.
+    expect(prompt).toContain('- HR Usable: No')
+    expect(prompt).toContain('- Primary Metric: power')
+    expect(prompt).toContain('- **Primary Metric for this analysis**: POWER (available)')
+    expect(prompt).toContain(
+      '- **Hard Rule**: Base most conclusions on POWER evidence. Use other metrics mainly for corroboration.'
+    )
+
+    // And the contradiction is gone: nothing in the prompt orders the model to
+    // base its conclusions on the metric the facts just disowned.
+    expect(prompt).not.toContain('Base most conclusions on HR evidence')
+    expect(prompt).toContain("**Demoted Metric**: HR is the athlete's preferred primary")
+  })
+
+  it('leaves an HR-only athlete on the HR-first default untouched', () => {
+    // The case the seeded default exists to serve: no power meter, clean HR.
+    // A regression here would be worse than the bug being fixed.
+    const facts = buildWorkoutAnalysisFactsV2({
+      workout: HR_ONLY_RUN,
+      sportSettings: { loadPreference: 'HR_PACE_POWER', lthr: 160 }
+    } as any)
+
+    expect(facts.guardrails.telemetry.hrUsable).toBe(true)
+
+    const prompt = buildWorkoutAnalysisPrompt(
+      buildWorkoutAnalysisData(HR_ONLY_RUN),
+      'Europe/Budapest',
+      'Supportive',
+      { loadPreference: 'HR_PACE_POWER', lthr: 160 },
+      USER_PROFILE,
+      null,
+      undefined,
+      facts
+    )
+
+    expect(prompt).toContain('- **Primary Metric for this analysis**: HR (available)')
+    expect(prompt).toContain(
+      '- **Hard Rule**: Base most conclusions on HR evidence. Use other metrics mainly for corroboration.'
+    )
+    expect(prompt).not.toContain('**Demoted Metric**')
+  })
+
+  it('leaves the no-facts legacy path exactly as it was', () => {
+    // Without a facts block there is nothing to contradict, so raw availability
+    // still decides and the HR-first default still leads.
+    const prompt = buildWorkoutAnalysisPrompt(
+      buildWorkoutAnalysisData(POWER_METER_RIDE),
+      'Europe/Budapest',
+      'Supportive',
+      DEFAULT_SPORT_SETTINGS,
+      USER_PROFILE
+    )
+
+    expect(prompt).toContain('- **Primary Metric for this analysis**: HR (available)')
+    expect(prompt).not.toContain('**Demoted Metric**')
+  })
+
+  it('never hands an outdoor ride a pace-led hard rule when HR drops out (CW-437)', () => {
+    // The most likely real trigger of the demotion path, and the case that made
+    // the first cut of this fix a CW-437 regression: outdoor ride, no power
+    // meter, dropout-riddled HR. Demoting HR leaves pace as the next metric the
+    // session has data for -- but cycling speed moves with wind, gradient and
+    // drafting, so the facts resolve this session to `mixed` and decline to name
+    // a leading metric. The prompt must decline too.
+    const OUTDOOR_RIDE_NO_POWER = {
+      id: 'workout-cw397-outdoor-ride',
+      date: new Date('2026-03-22T09:00:00Z'),
+      title: 'Sunday Loop',
+      type: 'Ride',
+      durationSec: 5400,
+      distanceMeters: 48000,
+      averageSpeed: 8.9,
+      averageHr: 150,
+      maxHr: 172,
+      trainer: false,
+      streams: { heartrate: DROPOUT_HR_STREAM }
+    }
+
+    const facts = buildWorkoutAnalysisFactsV2({
+      workout: OUTDOOR_RIDE_NO_POWER,
+      sportSettings: DEFAULT_SPORT_SETTINGS
+    } as any)
+
+    expect(facts.guardrails.telemetry.hrUsable).toBe(false)
+    expect(facts.guardrails.analysisMode).not.toBe('pace')
+
+    const prompt = buildWorkoutAnalysisPrompt(
+      buildWorkoutAnalysisData(OUTDOOR_RIDE_NO_POWER),
+      'Europe/Budapest',
+      'Supportive',
+      DEFAULT_SPORT_SETTINGS,
+      USER_PROFILE,
+      null,
+      undefined,
+      facts
+    )
+
+    expect(prompt).not.toContain('Base most conclusions on PACE evidence')
+    expect(prompt).not.toContain('Base most conclusions on HR evidence')
+    expect(prompt).not.toContain('Do not make heart-rate zones the primary narrative')
+    expect(prompt).toContain('**Fallback Rule**')
+    // The pace-primary section header must not appear either.
+    expect(prompt).not.toContain('## Pace & Speed (Primary Metric)')
+  })
+
+  it('leaves a pace-preference swim leading on pace (CW-437 is about bikes)', () => {
+    // The over-correction guard. `analysisMode` is `mixed` for a swim -- as it is
+    // for row, ski and walk -- so gating pace on `analysisMode === 'pace'` alone
+    // silently demoted a first-class, user-selectable `PACE_*` preference onto HR
+    // for four sports where pace IS the effort metric.
+    const SWIM = {
+      id: 'workout-cw397-swim',
+      date: new Date('2026-03-23T07:00:00Z'),
+      title: 'Endurance Swim',
+      type: 'Swim',
+      durationSec: 3600,
+      distanceMeters: 3000,
+      averageSpeed: 0.83,
+      averageHr: 140,
+      maxHr: 158,
+      streams: { heartrate: Array.from({ length: 200 }, () => 140) }
+    }
+    const PACE_FIRST = { loadPreference: 'PACE_HR_POWER' }
+
+    const facts = buildWorkoutAnalysisFactsV2({
+      workout: SWIM,
+      sportSettings: PACE_FIRST
+    } as any)
+
+    expect(facts.guardrails.analysisMode).not.toBe('pace')
+
+    const prompt = buildWorkoutAnalysisPrompt(
+      buildWorkoutAnalysisData(SWIM),
+      'Europe/Budapest',
+      'Supportive',
+      PACE_FIRST,
+      USER_PROFILE,
+      null,
+      undefined,
+      facts
+    )
+
+    expect(prompt).toContain('- **Primary Metric for this analysis**: PACE (available)')
+    expect(prompt).toContain('**Hard Rule**: Base most conclusions on PACE evidence')
+    expect(prompt).not.toContain('**Demoted Metric**')
+  })
+
+  it('tells a pace-preference ride the truth about why pace stepped aside', () => {
+    // Clean HR, real speed data. The facts block says `Pace Usable: Yes` in this
+    // same prompt, so the demotion line must not claim the telemetry is bad --
+    // that contradiction is the whole point of CW-397.
+    const OUTDOOR_RIDE_CLEAN_HR = {
+      id: 'workout-cw397-ride-pace-pref',
+      date: new Date('2026-03-24T09:00:00Z'),
+      title: 'Endurance Loop',
+      type: 'Ride',
+      durationSec: 5400,
+      distanceMeters: 48000,
+      averageSpeed: 8.9,
+      averageHr: 145,
+      maxHr: 168,
+      trainer: false,
+      streams: { heartrate: Array.from({ length: 200 }, () => 145) }
+    }
+    const PACE_FIRST = { loadPreference: 'PACE_HR_POWER' }
+
+    const facts = buildWorkoutAnalysisFactsV2({
+      workout: OUTDOOR_RIDE_CLEAN_HR,
+      sportSettings: PACE_FIRST
+    } as any)
+
+    expect(facts.guardrails.telemetry.paceUsable).toBe(true)
+
+    const prompt = buildWorkoutAnalysisPrompt(
+      buildWorkoutAnalysisData(OUTDOOR_RIDE_CLEAN_HR),
+      'Europe/Budapest',
+      'Supportive',
+      PACE_FIRST,
+      USER_PROFILE,
+      null,
+      undefined,
+      facts
+    )
+
+    // Both statements about pace appear in one document and agree.
+    expect(prompt).toContain('- Pace Usable: Yes')
+    expect(prompt).toContain(
+      '- **Secondary Metric for corroboration**: PACE (present_but_not_leading)'
+    )
+    expect(prompt).toContain('speed is not a valid proxy for cycling effort')
+    expect(prompt).not.toContain("PACE is the athlete's preferred primary, but this session's")
+    expect(prompt).not.toContain('PACE (missing_or_not_set)')
+    expect(prompt).toContain('**Hard Rule**: Base most conclusions on HR evidence')
   })
 })

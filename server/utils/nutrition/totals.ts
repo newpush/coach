@@ -134,7 +134,28 @@ function inferHydrationFactor(item: Record<string, any>): number {
   return 1
 }
 
-export function normalizeFluidFields(item: Record<string, any>): Record<string, any> {
+/**
+ * Coerce a logged item into an object carrying derived hydration fields.
+ *
+ * The guard matters because of the spread below. Spreading a string explodes it
+ * into an object keyed by character index — `{...'pasta'}` becomes
+ * `{0:'p',1:'a',2:'s',3:'t',4:'a'}` — which then persists as an item with no
+ * name and no macros. An athlete reported exactly that shape: nutrition entries
+ * displayed with no description and zero calories, whose stored items were
+ * "strings split into objects with numeric keys". Every nutrition write path
+ * calls this function, so a single caller passing a bare string was enough to
+ * corrupt a day's log.
+ */
+export function normalizeFluidFields(rawItem: Record<string, any>): Record<string, any> {
+  // Coerce rather than throw. Several callers run this over items already stored
+  // in the database (e.g. the remove-hydration tool iterating a day's meals), and
+  // corrupt rows from before this guard exist in production - throwing there
+  // would turn a read into a hard failure for precisely the affected athletes.
+  // A string yields an item with no name and no macros, which the caller can see
+  // and skip, instead of one keyed 0,1,2,3.
+  const item: Record<string, any> =
+    rawItem && typeof rawItem === 'object' && !Array.isArray(rawItem) ? rawItem : {}
+
   const fluidMl = Math.max(0, Math.round(inferFluidMl(item)))
   const hydrationFactor = inferHydrationFactor(item)
   const hydrationContributionMl = Math.max(0, Math.round(fluidMl * hydrationFactor))

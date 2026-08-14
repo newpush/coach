@@ -24,9 +24,17 @@ jobs:
   build-and-deploy:
     name: Build and Deploy
     needs: ci
-    # Pin to Linux self-hosted runner pool. Bare `self-hosted` can also match
-    # `mac-mini`, which fails GHCR push with anonymous-token 403.
-    runs-on: [self-hosted, Linux]
+    # Pin to the `shadow` build pool (`watt-mind-shadow-1..4`) — NOT the generic
+    # `[self-hosted, Linux]`, which also matches `watt-mind-lab-smoke-1..6`. Those
+    # are 4 vCPU / 15 GB smoke-check boxes with no swap and no Docker cleanup; a
+    # `nuxt build` there starves the host and hangs (CW-608, 2026-08-12: a ~5-min
+    # build ran 45+ min on `lab-smoke-4` and never finished). Combined with the
+    # `cancel-in-progress: false` concurrency group above, one such hang blocks
+    # every subsequent deploy on the branch until someone cancels it by hand.
+    # `docker` is not a sufficient label either — it matches lab-1/lab-2/web-1.
+    # `shadow` matches the build pool exactly. Bare `self-hosted` would also match
+    # `mac-mini`, which fails GHCR push with an anonymous-token 403.
+    runs-on: [self-hosted, shadow]
     timeout-minutes: 60
     # NOTE (CW-129): this must be the environment that actually has
     # DOKPLOY_WEBHOOK_URL configured (Settings > Environments). Environment

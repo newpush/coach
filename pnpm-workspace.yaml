@@ -1,5 +1,6 @@
 allowBuilds:
   '@parcel/watcher': true
+  '@prisma/client': true
   '@prisma/engines': true
   '@sentry/cli': true
   bcrypt: true
@@ -9,6 +10,8 @@ allowBuilds:
   prisma: true
   unrs-resolver: true
   vue-demi: true
+overrides:
+  ai: $ai
 minimumReleaseAgeExclude:
   - '@tiptap/extension-placeholder@3.29.1'
   - '@tiptap/extensions@3.29.1'

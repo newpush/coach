@@ -19,6 +19,12 @@ export interface FoodItem {
   categories?: string[]
   serving_size_g?: number
   serving_description?: string
+  /**
+   * False when the source carried no energy and no macros for this item, i.e.
+   * its `nutrients_per_100g` zeros are placeholders rather than measurements.
+   * Such an item cannot be logged meaningfully and is excluded from search.
+   */
+  has_nutrition_data?: boolean
   nutrients_per_100g: NutrientsPer100g
   ingredients_text?: string
   source_url?: string
@@ -114,20 +120,21 @@ export function normalizeFoodItem(item: any): FoodItem {
     return undefined
   }
 
-  const protein =
-    findVal(['protein_g', 'protein', 'proteins', 'proteins_100g', 'protein_100g']) ?? 0
-  const carbs =
-    findVal([
-      'carbs_g',
-      'carbs',
-      'carbohydrates',
-      'carbohydrates_100g',
-      'carbs_100g',
-      'carbohydrate'
-    ]) ?? 0
-  const fat = findVal(['fat_g', 'fat', 'fats', 'fat_100g', 'fats_100g']) ?? 0
-
-  let calories = findVal([
+  // Keep the raw lookups before defaulting. `findVal` returns 0 for a value the
+  // source explicitly states as zero and undefined when the source has no such
+  // field at all, and that difference is the whole point here: "0 kcal" and
+  // "we have no idea" must not collapse into the same number.
+  const rawProtein = findVal(['protein_g', 'protein', 'proteins', 'proteins_100g', 'protein_100g'])
+  const rawCarbs = findVal([
+    'carbs_g',
+    'carbs',
+    'carbohydrates',
+    'carbohydrates_100g',
+    'carbs_100g',
+    'carbohydrate'
+  ])
+  const rawFat = findVal(['fat_g', 'fat', 'fats', 'fat_100g', 'fats_100g'])
+  const rawCalories = findVal([
     'calories_kcal',
     'calories',
     'energy_kcal',
@@ -138,6 +145,25 @@ export function normalizeFoodItem(item: any): FoodItem {
     'energy',
     'kcal'
   ])
+
+  const protein = rawProtein ?? 0
+  const carbs = rawCarbs ?? 0
+  const fat = rawFat ?? 0
+
+  /**
+   * Whether the source told us anything at all about this item's energy.
+   *
+   * False only when energy AND all three macros are absent — a data gap, not a
+   * zero-calorie food. Water and black coffee state 0 explicitly, so they come
+   * back as known and stay searchable.
+   */
+  const hasNutritionData =
+    rawCalories !== undefined ||
+    rawProtein !== undefined ||
+    rawCarbs !== undefined ||
+    rawFat !== undefined
+
+  let calories = rawCalories
 
   if ((calories === undefined || calories === 0) && (protein > 0 || carbs > 0 || fat > 0)) {
     calories = Math.round(carbs * 4 + protein * 4 + fat * 9)
@@ -179,6 +205,7 @@ export function normalizeFoodItem(item: any): FoodItem {
     barcode: item.barcode || item.code || undefined,
     serving_size_g: servingSizeG,
     serving_description: servingDescription,
+    has_nutrition_data: hasNutritionData,
     nutrients_per_100g: {
       calories_kcal: calories,
       protein_g: protein,

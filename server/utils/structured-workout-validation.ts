@@ -13,11 +13,101 @@ function hasRenderableStrengthBlocks(blocks: unknown): boolean {
   )
 }
 
+const RECOVERY_TYPES = new Set(['rest', 'cooldown'])
+const RECOVERY_INTENTS = new Set(['recovery', 'rest', 'easy'])
+const NON_WORK_TYPES = new Set(['rest', 'cooldown', 'warmup'])
+
+function isRecoveryStep(step: any): boolean {
+  if (!step || typeof step !== 'object') return false
+  const type = String(step.type || '').toLowerCase()
+  const intent = String(step.intent || '').toLowerCase()
+  if (RECOVERY_TYPES.has(type) || RECOVERY_INTENTS.has(intent)) return true
+  return (Number(step.restSeconds) || 0) > 0
+}
+
+/**
+ * A leaf work step: an effort the athlete actually performs, not a rest,
+ * cooldown, warmup, or a repeat/container block.
+ */
+function isLeafWorkStep(step: any): boolean {
+  if (!step || typeof step !== 'object') return false
+  if (Array.isArray(step.steps) && step.steps.length > 0) return false
+  if (Number(step.reps ?? step.repeat ?? step.intervals ?? 1) > 1) return false
+  if (isRecoveryStep(step)) return false
+  return !NON_WORK_TYPES.has(String(step.type || '').toLowerCase())
+}
+
+/**
+ * Canonical description of a work step's prescription. Two steps sharing this
+ * key are the same effort repeated, not a progression or an over-under.
+ */
+function workStepSignature(step: any): string {
+  const duration = Number(step.durationSeconds) || Number(step.duration) || 0
+  const distance = Number(step.distanceMeters) || Number(step.distance) || 0
+  const power = step.power
+  let powerKey = 'none'
+  if (power && typeof power === 'object') {
+    powerKey = power.range ? `r:${power.range.start}-${power.range.end}` : `v:${power.value ?? ''}`
+  } else if (power != null) {
+    powerKey = `v:${power}`
+  }
+  return `${duration}|${distance}|${powerKey}`
+}
+
+/**
+ * Catches repeat sets the model emitted *flattened* — e.g. "3 x 8min at
+ * threshold" written as three consecutive identical Active steps with no
+ * recovery between them, and no repeat wrapper.
+ *
+ * `hasValidRepeatBlockRecovery` only inspects steps with `reps > 1`, so a
+ * flattened set has no step it examines and passes untouched. The athlete then
+ * receives what is effectively one continuous 24-minute threshold block.
+ *
+ * Only *identical* consecutive efforts are rejected: differing power or
+ * duration means a progression, ramp, or over-under, which is legitimately
+ * continuous.
+ */
+function findFlattenedRepeatWithoutRecovery(steps: any[]): string | null {
+  let runSignature: string | null = null
+  let runLength = 0
+  let runName = 'Interval'
+
+  const violation = () =>
+    `${runLength} consecutive "${runName}" work steps appear with no recovery between them (flattened repeat set)`
+
+  for (const step of steps) {
+    const signature = isLeafWorkStep(step) ? workStepSignature(step) : null
+
+    // A step with neither duration nor distance carries no prescription to
+    // compare, so it breaks the run rather than matching everything.
+    if (!signature || signature.startsWith('0|0|')) {
+      if (runLength > 1) return violation()
+      runSignature = null
+      runLength = 0
+      continue
+    }
+
+    if (signature === runSignature) {
+      runLength += 1
+    } else {
+      if (runLength > 1) return violation()
+      runSignature = signature
+      runLength = 1
+      runName = step.name || step.text || 'Interval'
+    }
+  }
+
+  return runLength > 1 ? violation() : null
+}
+
 export function hasValidRepeatBlockRecovery(steps: unknown): {
   valid: boolean
   reason: string | null
 } {
   if (!Array.isArray(steps)) return { valid: true, reason: null }
+
+  const flattened = findFlattenedRepeatWithoutRecovery(steps)
+  if (flattened) return { valid: false, reason: flattened }
 
   for (const step of steps) {
     if (!step || typeof step !== 'object') continue

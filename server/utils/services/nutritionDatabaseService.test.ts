@@ -119,7 +119,11 @@ describe('nutritionDatabaseService', () => {
       mockFetch.mockResolvedValueOnce(item)
 
       const result = await nutritionDatabaseService.lookupFoodBarcode('3017620422003')
-      expect(result).toEqual(item)
+      // toMatchObject rather than toEqual: normalization enriches the item with
+      // derived fields (CW-591 added has_nutrition_data), and this test is about
+      // getting the right item back, not pinning the full normalized shape.
+      expect(result).toMatchObject(item)
+      expect(result?.has_nutrition_data).toBe(true)
     })
 
     it('returns null on 404', async () => {
@@ -139,7 +143,8 @@ describe('nutritionDatabaseService', () => {
       mockFetch.mockResolvedValueOnce(item)
 
       const result = await nutritionDatabaseService.getFoodItemByKey('usda:12345')
-      expect(result).toEqual(item)
+      expect(result).toMatchObject(item)
+      expect(result?.has_nutrition_data).toBe(true)
     })
   })
 

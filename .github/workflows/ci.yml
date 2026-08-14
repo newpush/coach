@@ -26,7 +26,7 @@ concurrency:
 jobs:
   typecheck:
     name: Typecheck
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, shadow]
     timeout-minutes: 20
     steps:
       - name: Checkout code
@@ -34,6 +34,17 @@ jobs:
 
       - name: Setup pnpm
         uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6
+        with:
+          # Install into the job's own RUNNER_TEMP, never the action's default
+          # `~/setup-pnpm`. On the self-hosted shadow host, several runner
+          # registrations share one `$HOME`, so the default path is shared state:
+          # two of this workflow's four jobs landing on the same host raced to
+          # self-update pnpm into it and both died before running anything
+          # (`ENOTEMPTY: rmdir '/home/hdkiller/setup-pnpm'` and
+          # `self-installer exits with code 1`). RUNNER_TEMP is allocated per job
+          # and cleaned between jobs, so two jobs cannot collide here regardless
+          # of how the runners are registered. See CW-630.
+          dest: ${{ runner.temp }}/setup-pnpm
 
       - name: Setup Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
@@ -49,7 +60,7 @@ jobs:
 
   lint:
     name: Lint
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, shadow]
     timeout-minutes: 15
     steps:
       - name: Checkout code
@@ -57,6 +68,17 @@ jobs:
 
       - name: Setup pnpm
         uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6
+        with:
+          # Install into the job's own RUNNER_TEMP, never the action's default
+          # `~/setup-pnpm`. On the self-hosted shadow host, several runner
+          # registrations share one `$HOME`, so the default path is shared state:
+          # two of this workflow's four jobs landing on the same host raced to
+          # self-update pnpm into it and both died before running anything
+          # (`ENOTEMPTY: rmdir '/home/hdkiller/setup-pnpm'` and
+          # `self-installer exits with code 1`). RUNNER_TEMP is allocated per job
+          # and cleaned between jobs, so two jobs cannot collide here regardless
+          # of how the runners are registered. See CW-630.
+          dest: ${{ runner.temp }}/setup-pnpm
 
       - name: Setup Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
@@ -75,7 +97,7 @@ jobs:
 
   unit-tests:
     name: Unit tests
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, shadow]
     timeout-minutes: 20
     steps:
       - name: Checkout code
@@ -83,6 +105,17 @@ jobs:
 
       - name: Setup pnpm
         uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6
+        with:
+          # Install into the job's own RUNNER_TEMP, never the action's default
+          # `~/setup-pnpm`. On the self-hosted shadow host, several runner
+          # registrations share one `$HOME`, so the default path is shared state:
+          # two of this workflow's four jobs landing on the same host raced to
+          # self-update pnpm into it and both died before running anything
+          # (`ENOTEMPTY: rmdir '/home/hdkiller/setup-pnpm'` and
+          # `self-installer exits with code 1`). RUNNER_TEMP is allocated per job
+          # and cleaned between jobs, so two jobs cannot collide here regardless
+          # of how the runners are registered. See CW-630.
+          dest: ${{ runner.temp }}/setup-pnpm
 
       - name: Setup Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
@@ -101,7 +134,7 @@ jobs:
 
   mcp-tests:
     name: MCP tests
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, shadow]
     timeout-minutes: 20
     steps:
       - name: Checkout code
@@ -109,6 +142,17 @@ jobs:
 
       - name: Setup pnpm
         uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6
+        with:
+          # Install into the job's own RUNNER_TEMP, never the action's default
+          # `~/setup-pnpm`. On the self-hosted shadow host, several runner
+          # registrations share one `$HOME`, so the default path is shared state:
+          # two of this workflow's four jobs landing on the same host raced to
+          # self-update pnpm into it and both died before running anything
+          # (`ENOTEMPTY: rmdir '/home/hdkiller/setup-pnpm'` and
+          # `self-installer exits with code 1`). RUNNER_TEMP is allocated per job
+          # and cleaned between jobs, so two jobs cannot collide here regardless
+          # of how the runners are registered. See CW-630.
+          dest: ${{ runner.temp }}/setup-pnpm
 
       - name: Setup Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7

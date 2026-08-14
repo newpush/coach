@@ -10,6 +10,12 @@ import {
   type Interval
 } from './interval-detection'
 import { parseLegacyLoadPreference, type MetricTarget } from './workout-target-policy'
+import {
+  parseLoadPreference,
+  resolveMetricPriorityOrder,
+  type MetricUsability,
+  type MetricUsabilitySignals
+} from '../../trigger/utils/workout-metric-priority'
 import { formatPromptPace } from './ai-prompt-format'
 
 type FactConfidence = 'low' | 'medium' | 'high'
@@ -1558,6 +1564,95 @@ function inferHrArtifactSeverity(stats: ReturnType<typeof getHrStats>): HrArtifa
   return 'none'
 }
 
+/**
+ * Adapter from the V2 facts to the metric-priority resolver (CW-397).
+ *
+ * The prompt used to state a `**Hard Rule**` naming the athlete's preferred
+ * primary metric while the facts block a few sections away reported that same
+ * metric as unusable. Feeding the facts back into the resolver is what makes the
+ * two sections agree by construction rather than by luck.
+ */
+export function deriveMetricUsabilitySignals(
+  facts?: WorkoutAnalysisFactsV2 | null,
+  workoutType?: string | null
+): MetricUsabilitySignals | undefined {
+  if (!facts?.guardrails) return undefined
+  const { telemetry, archetype, analysisMode } = facts.guardrails
+  return {
+    hrUsable: telemetry.hrUsable,
+    hrArtifactSeverity: telemetry.hrArtifactSeverity,
+    // Relative usability is enough to lead an analysis: an estimated-power ride
+    // can still be judged on its own power trace, just not benchmarked absolutely.
+    powerUsable: telemetry.powerAbsoluteUsable || telemetry.powerRelativeUsable,
+    // Reported as the facts report it. Whether pace may *lead* is a separate
+    // question, answered below, so the prompt never claims a ride's perfectly
+    // good speed telemetry is unusable.
+    paceUsable: telemetry.paceUsable,
+    paceMayLead: mayPaceLeadTheAnalysis(analysisMode, getWorkoutFamily(workoutType)),
+    factsPrimaryMetric: archetype?.primaryMetric ?? null
+  }
+}
+
+/**
+ * Whether pace is allowed to *lead* the analysis -- a question about the sport,
+ * not about the data.
+ *
+ * CW-437's rule is specifically about cycling: speed moves with wind, gradient
+ * and drafting independently of the work done, so it is a poor effort proxy on a
+ * bike. It says nothing about swimming, rowing, skiing or walking, where pace is
+ * the effort metric and `PACE_*` is a first-class, user-selectable preference.
+ *
+ * So the gate is the ride family, with one widening: `analysisMode === 'pace'` is
+ * honoured wherever it appears. Note that `analysisMode` alone is far too narrow
+ * to use as the test -- `getAnalysisMode` only ever returns `'pace'` for runs and
+ * for power-carrying ski, so swim, row, walk and most ski sessions resolve to
+ * `'mixed'` and would have been silently demoted off pace onto HR.
+ */
+function mayPaceLeadTheAnalysis(
+  analysisMode: AnalysisMode,
+  family: ReturnType<typeof getWorkoutFamily>
+): boolean {
+  return analysisMode === 'pace' || family !== 'ride'
+}
+
+const METRIC_KEY_TO_TARGET: Record<string, MetricTarget> = {
+  HR: 'heartRate',
+  PACE: 'pace',
+  POWER: 'power'
+}
+
+/**
+ * Adherence target order after unusable metrics are demoted (CW-397).
+ *
+ * `deriveAdherence` picks which target a planned step is scored against, so a
+ * step carrying both a power and an HR target used to be judged on HR at the
+ * seeded `HR_PACE_POWER` default even when the HR trace was unusable. Reordering
+ * here routes adherence through the same demotion the prompt uses. `rpe` is not
+ * part of the preference order and stays last: it is a fallback, never a promotion.
+ */
+export function resolveAdherenceMetricOrder(
+  loadPreference: string | null | undefined,
+  usability: MetricUsability,
+  factsPrimaryMetric?: MetricUsabilitySignals['factsPrimaryMetric']
+): MetricTarget[] {
+  const legacyOrder = parseLegacyLoadPreference(loadPreference)
+  const resolved = resolveMetricPriorityOrder(
+    parseLoadPreference(loadPreference),
+    usability,
+    factsPrimaryMetric
+  )
+
+  const order: MetricTarget[] = []
+  for (const key of resolved) {
+    const metric = METRIC_KEY_TO_TARGET[key]
+    if (metric && legacyOrder.includes(metric) && !order.includes(metric)) order.push(metric)
+  }
+  for (const metric of legacyOrder) {
+    if (!order.includes(metric)) order.push(metric)
+  }
+  return order
+}
+
 function inferPaceConfidence(
   workout: any,
   family: ReturnType<typeof getWorkoutFamily>
@@ -1628,12 +1723,29 @@ function normalizePlannedMetricOrder(
   return ordered
 }
 
+/**
+ * `demotedMetrics` names the metrics this session's telemetry cannot support
+ * (CW-397). It exists because `primaryTarget` short-circuits everything below it:
+ * `normalizeStructuredWorkoutForPersistence` stamps that field onto every
+ * structured workout the app writes, derived from the athlete's `loadPreference`,
+ * so at the HR-first seeded default a step is labelled `heartRate` and scored on
+ * HR no matter what the metric order says. Reordering alone therefore fixed
+ * nothing for any plan the product actually produces -- only for legacy plans
+ * written before `primaryTarget` existed.
+ *
+ * A demoted `primaryTarget` is skipped and the (already demoted) `metricOrder`
+ * decides instead. A step whose only target is the demoted metric still resolves
+ * to it via the loop, which is no worse than before. Callers that pass no
+ * `demotedMetrics` keep the original short-circuit exactly.
+ */
 function resolvePlannedStepMetric(
   step: any,
-  metricOrder?: PlannedStepMetric[] | null
+  metricOrder?: PlannedStepMetric[] | null,
+  demotedMetrics?: PlannedStepMetric[] | null
 ): FlattenedPlannedStep['metric'] {
   const currentPrimary = String(step?.primaryTarget || '')
   if (
+    !demotedMetrics?.includes(currentPrimary as PlannedStepMetric) &&
     (['power', 'heartRate', 'pace', 'rpe'] as string[]).includes(currentPrimary) &&
     hasPlannedMetricTarget(step, currentPrimary as PlannedStepMetric)
   ) {
@@ -1650,7 +1762,8 @@ function resolvePlannedStepMetric(
 function flattenPlannedSteps(
   steps: any[],
   refs: AnalysisRefs,
-  metricOrder?: PlannedStepMetric[] | null
+  metricOrder?: PlannedStepMetric[] | null,
+  demotedMetrics?: PlannedStepMetric[] | null
 ): FlattenedPlannedStep[] {
   const flattened: FlattenedPlannedStep[] = []
 
@@ -1680,7 +1793,7 @@ function flattenPlannedSteps(
         'recuperación',
         'enfriamiento'
       ]
-      const metric = resolvePlannedStepMetric(step, metricOrder)
+      const metric = resolvePlannedStepMetric(step, metricOrder, demotedMetrics)
       const targetValue =
         metric === 'power'
           ? getTargetValue(step.power)
@@ -2730,6 +2843,156 @@ export function formatActualIntervalsForPrompt(
       return `Int ${idx + 1}: ${duration} | ${interval.type} | ${avgPower} | ${avgHr} | ${avgCadence}${avgPace}${confidence}${note}`
     })
     .join('\n      ')
+}
+
+/**
+ * A duration-weighted aggregate over ONE group of resolved intervals.
+ *
+ * Every average is weighted by each segment's duration, not by segment count:
+ * a mean-of-lap-means lets a 30-second stub count as much as a 4-minute rep,
+ * which is the same class of error as quoting the session mean for an interval
+ * metric. Cadence stays on whatever scale the caller's intervals carry (the
+ * facts module never re-scales running cadence; `buildWorkoutAnalysisData` is
+ * the single conversion point) — the weighting is linear, so normalising before
+ * or after aggregation gives the same number.
+ */
+export type IntervalGroupSummary = {
+  /** How many segments went into this aggregate. Never zero — the summary is `null` instead. */
+  repCount: number
+  totalDurationSeconds: number
+  /** Mean segment length, i.e. `totalDurationSeconds / repCount`. */
+  avgDurationSeconds: number
+  avgPower: number | null
+  avgHr: number | null
+  avgCadence: number | null
+  /** Duration-weighted mean speed in m/s, which is total distance over total time. */
+  avgSpeed: number | null
+  /** `1000 / avgSpeed`, i.e. seconds per kilometre; `null` when there is no usable speed. */
+  avgPaceSecondsPerKm: number | null
+}
+
+export type IntervalGroupSummaries = {
+  work: IntervalGroupSummary | null
+  recovery: IntervalGroupSummary | null
+}
+
+/**
+ * Warmup/cooldown markers, in the same languages `mapIntervalsToActual`
+ * recognises when it splits `classification` into work/recovery.
+ *
+ * These segments are classified `recovery`, but they are not the *recoveries*
+ * between reps: a warmup jog and a cooldown spin say nothing about how well the
+ * athlete recovered mid-session, and folding them in is precisely what drags a
+ * "recovery" figure toward the session mean. They are therefore excluded from
+ * the recovery aggregate and, being non-work, never reach the work aggregate.
+ */
+const WARMUP_COOLDOWN_TOKENS = ['warm', 'cool', 'calentamiento', 'enfriamiento']
+
+function isWarmupOrCooldownInterval(interval: ActualInterval): boolean {
+  const lower = String(interval.type || '').toLowerCase()
+  return WARMUP_COOLDOWN_TOKENS.some((token) => lower.includes(token))
+}
+
+/**
+ * Duration-weighted mean of one metric over `intervals`.
+ *
+ * Segments whose metric is absent are skipped entirely rather than counted as
+ * zero — a rep with no cadence sensor must not pull the cadence average down.
+ * When every contributing segment has a non-positive duration (fixtures, or a
+ * source that carries no timing at all) the weights are all zero, so the
+ * function falls back to the unweighted mean rather than dividing by zero and
+ * returning `NaN`.
+ */
+function durationWeightedMean(
+  intervals: ActualInterval[],
+  pick: (interval: ActualInterval) => number | null
+): number | null {
+  let weightedSum = 0
+  let weight = 0
+  let plainSum = 0
+  let count = 0
+
+  for (const interval of intervals) {
+    const value = pick(interval)
+    if (value === null || !Number.isFinite(value)) continue
+    const duration = Number(interval.durationSeconds)
+    plainSum += value
+    count += 1
+    if (Number.isFinite(duration) && duration > 0) {
+      weightedSum += value * duration
+      weight += duration
+    }
+  }
+
+  if (count === 0) return null
+  if (weight > 0) return weightedSum / weight
+  return plainSum / count
+}
+
+/**
+ * Aggregate one already-selected group of intervals.
+ *
+ * Returns `null` for an empty group rather than a zero-filled record: "there
+ * were no work intervals" and "the work intervals averaged nothing" are
+ * different statements, and only the first one is true of, say, a steady
+ * endurance ride. Every metric is independently `null` when no segment in the
+ * group carried it, so a run without a power meter reports no work power
+ * instead of `0W`.
+ */
+export function summarizeIntervalGroup(intervals: ActualInterval[]): IntervalGroupSummary | null {
+  if (!Array.isArray(intervals) || intervals.length === 0) return null
+
+  const totalDurationSeconds = intervals.reduce((sum, interval) => {
+    const duration = Number(interval.durationSeconds)
+    return sum + (Number.isFinite(duration) && duration > 0 ? duration : 0)
+  }, 0)
+
+  const avgSpeed = durationWeightedMean(intervals, (interval) =>
+    interval.avgSpeed !== null && Number(interval.avgSpeed) > 0 ? Number(interval.avgSpeed) : null
+  )
+
+  return {
+    repCount: intervals.length,
+    totalDurationSeconds,
+    avgDurationSeconds: totalDurationSeconds / intervals.length,
+    avgPower: durationWeightedMean(intervals, (interval) => interval.avgPower),
+    avgHr: durationWeightedMean(intervals, (interval) => interval.avgHr),
+    avgCadence: durationWeightedMean(intervals, (interval) => interval.avgCadence),
+    avgSpeed,
+    avgPaceSecondsPerKm: avgSpeed !== null && avgSpeed > 0 ? 1000 / avgSpeed : null
+  }
+}
+
+/**
+ * Split the arbitrated interval set into work-only and recovery-only aggregates
+ * (CW-381).
+ *
+ * The grouping reads the RESOLVED interval type — `classification`, which
+ * `mapIntervalsToActual` derives from the label `resolveProviderIntervalTypes`
+ * re-derived (CW-376) — and never `lap_splits`, which are the provider's
+ * automatic per-distance splits and straddle warmup, reps, recoveries and
+ * cooldown arbitrarily (CW-389).
+ *
+ * Why this exists: the payload gave the model per-lap rows plus session means
+ * and nothing in between, so interval-level claims were made from the session
+ * mean. A 4x4min threshold run was told its "average cadence of 162 spm is
+ * somewhat low for threshold work" — 162 spm being the whole-session mean,
+ * dragged down by warmup, recovery jogs and cooldown, while the four reps
+ * themselves averaged 177 spm. The advice was inverted, not merely imprecise.
+ */
+export function buildIntervalGroupSummaries(
+  intervals: ActualIntervalForAnalysis[]
+): IntervalGroupSummaries {
+  const all = Array.isArray(intervals) ? intervals : []
+  const work = all.filter((interval) => interval.classification === 'work')
+  const recovery = all.filter(
+    (interval) => interval.classification === 'recovery' && !isWarmupOrCooldownInterval(interval)
+  )
+
+  return {
+    work: summarizeIntervalGroup(work),
+    recovery: summarizeIntervalGroup(recovery)
+  }
 }
 
 function rateConfidence(score: number): FactConfidence {
@@ -3868,8 +4131,9 @@ function deriveAdherence(params: {
   family: ReturnType<typeof getWorkoutFamily>
   refs: AnalysisRefs
   metricOrder?: PlannedStepMetric[] | null
+  demotedMetrics?: PlannedStepMetric[] | null
 }): WorkoutAnalysisFactsV2['adherence'] {
-  const { workout, plannedWorkout, family, refs, metricOrder } = params
+  const { workout, plannedWorkout, family, refs, metricOrder, demotedMetrics } = params
   if (!plannedWorkout) {
     return {
       planLinked: false,
@@ -3898,7 +4162,8 @@ function deriveAdherence(params: {
   const plannedSteps = flattenPlannedSteps(
     getStructuredSteps(plannedWorkout?.structuredWorkout),
     refs,
-    metricOrder
+    metricOrder,
+    demotedMetrics
   )
   const actualIntervals = extractActualIntervals(workout, plannedWorkout, refs)
   // One alignment for every comparison below: work steps, recovery steps and
@@ -4584,12 +4849,38 @@ export function buildWorkoutAnalysisFactsV2({
       'Stop-and-go motion pattern detected; do not criticize lack of constant pace or invent steady-state drift narratives.'
     )
 
+  // Same usability verdicts the guardrail telemetry below publishes, so adherence
+  // scores a planned step on the metric the prompt is told to lead with (CW-397).
+  const metricUsability: MetricUsability = {
+    hr: hrStats.usable && inferHrArtifactSeverity(hrStats) !== 'high',
+    power: powerAbsoluteUsable || powerRelativeUsable,
+    // Same CW-437 gate the prompt side applies, through the same helper, so
+    // adherence and the prompt cannot disagree about whether pace may lead.
+    pace: hasPace && mayPaceLeadTheAnalysis(analysisMode, family)
+  }
   const adherence = deriveAdherence({
     workout,
     plannedWorkout,
     family,
     refs,
-    metricOrder: parseLegacyLoadPreference(sportSettings?.loadPreference)
+    metricOrder: resolveAdherenceMetricOrder(
+      sportSettings?.loadPreference,
+      metricUsability,
+      archetype.primaryMetric
+    ),
+    // `primaryTarget` is stamped onto every persisted structured workout by
+    // `normalizeStructuredWorkoutForPersistence`, from the athlete's HR-first
+    // `loadPreference`. Without this list `resolvePlannedStepMetric` would honour
+    // that stamp and score on a demoted metric anyway, which is how the CW-397
+    // adherence fix originally missed every plan the app actually writes.
+    demotedMetrics: (['heartRate', 'pace', 'power'] as MetricTarget[]).filter(
+      (metric) =>
+        !(metric === 'heartRate'
+          ? metricUsability.hr
+          : metric === 'pace'
+            ? metricUsability.pace
+            : metricUsability.power)
+    )
   })
   // One comparable-rep resolution, shared by every rep-scoped signal, so the
   // durability and sport-specific blocks cannot disagree about which segments

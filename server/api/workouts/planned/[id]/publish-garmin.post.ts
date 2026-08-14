@@ -13,8 +13,9 @@ import {
 import {
   fetchGarminUserPermissions,
   hasGarminPermission,
-  mergeGarminScopes,
-  parseGarminScope
+  parseGarminScope,
+  reconcileGarminScopes,
+  serializeGarminScopes
 } from '../../../../utils/garmin'
 import { plannedWorkoutPublishRepository } from '../../../../utils/repositories/plannedWorkoutPublishRepository'
 import { serializeCanonicalForGarmin } from '../../../../utils/canonical-workout-serializer'
@@ -99,18 +100,17 @@ export default defineEventHandler(async (event) => {
 
   if (!hasGarminPermission(scopes, requiredPermission)) {
     try {
+      // Only a successful permissions response drives this: on failure the catch below leaves the
+      // stored scope untouched rather than pruning it.
       const permissions = await fetchGarminUserPermissions(integration as any)
-      const mergedScopes = mergeGarminScopes(scopes, permissions)
-      if (mergedScopes.size > 0) {
-        scopes = mergedScopes
-        await prisma.integration.update({
-          where: { id: integration.id },
-          data: {
-            scope: Array.from(mergedScopes).join(' '),
-            errorMessage: null
-          }
-        })
-      }
+      scopes = reconcileGarminScopes(scopes, permissions)
+      await prisma.integration.update({
+        where: { id: integration.id },
+        data: {
+          scope: serializeGarminScopes(scopes),
+          errorMessage: null
+        }
+      })
     } catch (error) {
       console.warn('[GarminPublish] Failed to fetch permissions from Garmin API', error)
     }

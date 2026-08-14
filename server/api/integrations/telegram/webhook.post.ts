@@ -6,6 +6,7 @@ import { generateText, isStepCount } from 'ai'
 import { buildPersistedToolCalls, expandStoredChatMessages } from '../../../utils/chat/history'
 import { transformHistoryToCoreMessages } from '../../../utils/ai-history'
 import { normalizeCoreMessagesForGemini } from '../../../utils/chat/core-message-normalizer'
+import { sanitizeCoreMessagesForToolApprovals } from '../../chat/sanitize-tool-approval'
 
 export default defineEventHandler(async (event) => {
   const secretToken = getHeader(event, 'x-telegram-bot-api-secret-token')
@@ -209,7 +210,19 @@ export default defineEventHandler(async (event) => {
     })
 
     const expandedHistory = expandStoredChatMessages(history.reverse())
-    const coreMessages = await transformHistoryToCoreMessages(expandedHistory)
+    // Parity with the main chat turn executor, which applies this same guard in this same
+    // position. Malformed `tool-approval-response` parts crash `standardizePrompt` with
+    // AI_TypeValidationError (CW-209 / CW-293); no history shape this handler can build
+    // today produces one, so this is defensive — it matters if the Telegram path ever
+    // accepts client-submitted messages or `expandStoredChatMessage` learns to emit
+    // `approval-responded` parts. It is a no-op for valid history. (CW-294)
+    //
+    // The main path's *other* guard, `sanitizeChatMessagesForToolApprovals` (via
+    // `normalizeMessagesForSdk`), covers client-submitted UI messages. Telegram has no
+    // such input — messages come only from the DB — so its absence here is deliberate.
+    const coreMessages = sanitizeCoreMessagesForToolApprovals(
+      await transformHistoryToCoreMessages(expandedHistory)
+    )
     const normalizedMessages = normalizeCoreMessagesForGemini(coreMessages)
 
     // Generate Response
