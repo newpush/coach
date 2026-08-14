@@ -26,9 +26,17 @@
  *                            skipped: they are erased at runtime and have nothing to check.
  *   3. TASKS ARE EXPORTED  — every `task({ id: '...' })` declared in the source is reachable as a
  *                            runtime export. A task that is defined but not exported never
- *                            registers with Trigger.dev. This also keeps check 2's discovery
- *                            honest: the expectation comes from the source, so if export
- *                            detection ever breaks, this fails loudly instead of passing vacuously.
+ *                            registers with Trigger.dev. Because that expectation is source-derived
+ *                            and non-empty, it also keeps the *runtime-export detector* honest.
+ *                            It says nothing about check 2, though: `readNamedBindings` and
+ *                            `readDeclaredTaskIds` are independent parsers, so a regression in the
+ *                            former is completely invisible here.
+ *
+ * The source parsers themselves are guarded by the discovery tripwire ('discovery itself found
+ * something to check'), which asserts all three discovery outputs are non-trivial. Every per-module
+ * check iterates over data produced at collection time, so a parser that silently returned nothing
+ * would leave all 75 module tests green while asserting nothing — the exact failure this file
+ * exists to eliminate, reproduced one level up. The tripwire is what makes that impossible.
  *
  * MAINTENANCE
  * -----------
@@ -214,11 +222,29 @@ function describeAvailable(name: string, available: string[]): string {
 }
 
 describe('trigger/ module guard', () => {
-  test('finds the trigger modules on disk', () => {
-    // A tripwire for the discovery itself: an empty or obviously truncated list would make every
-    // other test in this file pass while checking nothing.
+  test('discovery itself found something to check', () => {
+    // Tripwire over all three discovery outputs — the file list AND both source parsers. Every
+    // per-module check below iterates over data produced at collection time, so a detector that
+    // silently returned nothing (a TypeScript API change, or a future "simplification" of the
+    // isTypeOnly filters) would leave all 75 module tests green while asserting nothing at all.
+    //
+    // Thresholds sit well below the current actuals — 75 modules, 913 named bindings, 66 task ids
+    // — so ordinary churn never trips them, but a collapsed detector does.
     expect(modules.length).toBeGreaterThan(50)
     expect(modules.map((m) => m.rel)).toContain('trigger/garmin-backfill.ts')
+
+    const namedBindingCount = modules.reduce(
+      (total, module) =>
+        total + module.namedBindings.reduce((count, use) => count + use.names.length, 0),
+      0
+    )
+    expect(namedBindingCount).toBeGreaterThan(500)
+
+    const declaredTaskIdCount = modules.reduce(
+      (total, module) => total + module.declaredTaskIds.length,
+      0
+    )
+    expect(declaredTaskIdCount).toBeGreaterThan(40)
   })
 
   test.each(modules.map((module) => [module.rel, module] as const))(
