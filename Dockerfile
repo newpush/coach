@@ -104,6 +104,21 @@ else
   export npm_config_node_gyp PATH
 fi
 
+# --- Layer 0: assert the side-effect cache really is off ---------------------
+# PNPM_CONFIG_SIDE_EFFECTS_CACHE is an env-var spelling of pnpm's
+# `side-effects-cache` setting. If a future pnpm renames or drops it, the ENV
+# above becomes a silent no-op and the shared /pnpm/store cache mount quietly
+# turns back into a way for a bad built artifact to outlive a `--no-cache`
+# rebuild. Silent is the failure mode this whole file exists to remove, so check
+# it. (`undefined` here means "not set" -- i.e. the env var did not take.)
+side_effects_cache="$(pnpm config get side-effects-cache 2>/dev/null | tail -n 1)"
+if [ "$side_effects_cache" != "false" ]; then
+  echo "ERROR (CW-618): expected pnpm side-effects-cache=false, got '${side_effects_cache}'." >&2
+  echo "PNPM_CONFIG_SIDE_EFFECTS_CACHE no longer maps to that setting. Find its current" >&2
+  echo "name and update the ENV, or a bad native binary can survive a --no-cache build." >&2
+  exit 1
+fi
+
 pnpm install --frozen-lockfile --ignore-scripts
 
 # --- Layer 2: retry the prebuilt fetch before giving up ----------------------
