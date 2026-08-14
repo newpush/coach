@@ -246,11 +246,27 @@ class PrismaRecordNotFoundError extends Error {
 }
 
 /**
+ * `WorkoutStream.workoutId` and `WorkoutExercise.workoutId` are foreign keys to
+ * `Workout.id`, so a transfer that points them at a deleted primary is rejected
+ * by the constraint rather than by a missing target row — a different code, and
+ * one the service must keep surfacing.
+ */
+class PrismaForeignKeyError extends Error {
+  code = 'P2003'
+
+  constructor(subject: string) {
+    super(`Foreign key constraint violated on the constraint: \`${subject}\``)
+    this.name = 'PrismaClientKnownRequestError'
+  }
+}
+
+/**
  * Minimal stand-in for the interactive transaction client, backed by a set of
- * workout ids that still exist. Any `workout.update` aimed at an id outside that
- * set fails the way Prisma does. Rollback is not modelled: the assertions are
- * about what the service does with the error, and the real transaction discards
- * every write in the block regardless.
+ * workout ids that still exist. Writes aimed at an id outside that set fail the
+ * way Prisma does: `P2025` when the row being *updated* is gone, `P2003` when
+ * the row being *referenced* is gone. Rollback is not modelled: the assertions
+ * are about what the service does with the error, and the real transaction
+ * discards every write in the block regardless.
  */
 function createTransactionDouble(liveWorkoutIds: string[]) {
   const live = new Set(liveWorkoutIds)
@@ -263,12 +279,29 @@ function createTransactionDouble(liveWorkoutIds: string[]) {
   const tx = {
     plannedWorkout: { update: vi.fn(async () => ({})) },
     workoutStream: {
+      // Null either way in these fixtures: the primary has no stream of its own,
+      // and when the primary is deleted its stream row cascades away with it
+      // (`onDelete: Cascade`). Both answers open the transfer path below.
       findUnique: vi.fn(async () => null),
-      update: vi.fn(async () => ({}))
+      update: vi.fn(async ({ where, data }: any) => {
+        if (!live.has(where.workoutId)) {
+          throw new PrismaRecordNotFoundError(`stream of workout ${where.workoutId}`)
+        }
+        if (!live.has(data.workoutId)) {
+          throw new PrismaForeignKeyError('WorkoutStream_workoutId_fkey')
+        }
+        return { workoutId: data.workoutId }
+      })
     },
     workoutExercise: {
+      // Zero either way, for the same cascade reason as the stream lookup.
       count: vi.fn(async () => 0),
-      updateMany: vi.fn(async () => ({ count: 0 }))
+      updateMany: vi.fn(async ({ data }: any) => {
+        if (!live.has(data.workoutId)) {
+          throw new PrismaForeignKeyError('WorkoutExercise_workoutId_fkey')
+        }
+        return { count: 1 }
+      })
     },
     workout: { update: workoutUpdate }
   }
@@ -276,15 +309,22 @@ function createTransactionDouble(liveWorkoutIds: string[]) {
   return { live, tx, workoutUpdate }
 }
 
-function installTransactionDouble(liveWorkoutIds: string[]) {
-  const double = createTransactionDouble(liveWorkoutIds)
+function installTransactionDouble(options: {
+  liveWorkoutIds: string[]
+  duplicateHasStreams?: boolean
+}) {
+  const double = createTransactionDouble(options.liveWorkoutIds)
 
   // `mergeDuplicateGroup` re-reads the duplicates just before the transaction;
   // rows deleted in the meantime are simply absent from the result.
   vi.mocked(prisma.workout.findMany).mockImplementation((async ({ where }: any) =>
     (where.id.in as string[])
       .filter((id) => double.live.has(id))
-      .map((id) => ({ id, plannedWorkoutId: null, streams: null }))) as any)
+      .map((id) => ({
+        id,
+        plannedWorkoutId: null,
+        streams: options.duplicateHasStreams ? { id: `stream-of-${id}` } : null
+      }))) as any)
 
   vi.mocked(prisma.$transaction as any).mockImplementation(async (callback: any) =>
     callback(double.tx)
@@ -293,7 +333,11 @@ function installTransactionDouble(liveWorkoutIds: string[]) {
   return double
 }
 
-function buildGroup(primaryId: string, duplicateId: string) {
+function buildGroup(
+  primaryId: string,
+  duplicateId: string,
+  duplicateOverrides: Record<string, unknown> = {}
+) {
   return {
     workouts: [
       {
@@ -312,7 +356,8 @@ function buildGroup(primaryId: string, duplicateId: string) {
         date: new Date('2026-03-09T10:01:00Z'),
         durationSec: 3610,
         plannedWorkoutId: null,
-        averageHr: 150
+        averageHr: 150,
+        ...duplicateOverrides
       }
     ],
     bestWorkoutId: primaryId,
@@ -328,7 +373,7 @@ describe('deduplicationService.mergeDuplicateGroup concurrent deletion', () => {
   it('skips the group when the primary workout is deleted before the merge transaction', async () => {
     const group = buildGroup('best-gone', 'duplicate-1')
     // Primary already deleted; the duplicate is still there.
-    const { workoutUpdate } = installTransactionDouble(['duplicate-1'])
+    const { workoutUpdate } = installTransactionDouble({ liveWorkoutIds: ['duplicate-1'] })
 
     const result = await deduplicationService.mergeDuplicateGroup(group)
 
@@ -346,7 +391,7 @@ describe('deduplicationService.mergeDuplicateGroup concurrent deletion', () => {
   it('skips the group when a non-primary member is deleted before the merge transaction', async () => {
     const group = buildGroup('best-1', 'duplicate-gone')
     // Primary survives; the duplicate is gone, so it only fails at step 5.
-    const { workoutUpdate } = installTransactionDouble(['best-1'])
+    const { workoutUpdate } = installTransactionDouble({ liveWorkoutIds: ['best-1'] })
 
     const result = await deduplicationService.mergeDuplicateGroup(group)
 
@@ -360,11 +405,9 @@ describe('deduplicationService.mergeDuplicateGroup concurrent deletion', () => {
     const staleGroup = buildGroup('stale-best', 'stale-duplicate')
     const healthyGroup = buildGroup('healthy-best', 'healthy-duplicate')
 
-    const { workoutUpdate } = installTransactionDouble([
-      'stale-duplicate',
-      'healthy-best',
-      'healthy-duplicate'
-    ])
+    const { workoutUpdate } = installTransactionDouble({
+      liveWorkoutIds: ['stale-duplicate', 'healthy-best', 'healthy-duplicate']
+    })
 
     // Mirrors the per-group loop in `trigger/deduplicate-workouts.ts`: it has no
     // error handling of its own, so a throw from any group aborts the batch.
@@ -388,9 +431,39 @@ describe('deduplicationService.mergeDuplicateGroup concurrent deletion', () => {
     })
   })
 
+  it('skips the group when the primary is deleted and a surviving duplicate has streams', async () => {
+    const group = buildGroup('best-gone', 'duplicate-1')
+    // The primary is gone, so its own stream row has cascaded away and the
+    // "does the primary already have streams?" guard opens the transfer path.
+    // Transferring the duplicate's stream would point an FK at a deleted
+    // workout, which is a P2003 — not the P2025 that identifies a stale group.
+    const { tx } = installTransactionDouble({
+      liveWorkoutIds: ['duplicate-1'],
+      duplicateHasStreams: true
+    })
+
+    const result = await deduplicationService.mergeDuplicateGroup(group)
+
+    expect(result).toEqual({ deletedCount: 0, keptCount: 0, skipped: true })
+    // The group is abandoned before the transfer is ever attempted.
+    expect(tx.workoutStream.update).not.toHaveBeenCalled()
+  })
+
+  it('skips the group when the primary is deleted and a surviving duplicate has exercises', async () => {
+    const group = buildGroup('best-gone', 'duplicate-1', {
+      exercises: [{ id: 'exercise-1' }]
+    })
+    const { tx } = installTransactionDouble({ liveWorkoutIds: ['duplicate-1'] })
+
+    const result = await deduplicationService.mergeDuplicateGroup(group)
+
+    expect(result).toEqual({ deletedCount: 0, keptCount: 0, skipped: true })
+    expect(tx.workoutExercise.updateMany).not.toHaveBeenCalled()
+  })
+
   it('still surfaces database failures that are not a missing target row', async () => {
     const group = buildGroup('best-1', 'duplicate-1')
-    const { tx } = installTransactionDouble(['best-1', 'duplicate-1'])
+    const { tx } = installTransactionDouble({ liveWorkoutIds: ['best-1', 'duplicate-1'] })
 
     const constraintViolation = Object.assign(new Error('Unique constraint failed'), {
       code: 'P2002'

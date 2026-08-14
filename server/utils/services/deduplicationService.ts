@@ -470,18 +470,37 @@ export const deduplicationService = {
 
     // Execute all database updates in a transaction.
     //
-    // Every write below targets a single row by id, and all of them write plain
-    // scalar columns (`completed`/`completionStatus`, `workoutId`,
-    // `completenessScore` and the merged metric fields, `isDuplicate`/
-    // `duplicateOf`) — there is no nested relation `connect` anywhere in the
-    // block. That is what makes the `P2025` catch below safe to keep narrow:
+    // No write below uses a nested relation `connect`; they set plain scalar
+    // columns (`completed`/`completionStatus`, `workoutId`, `completenessScore`
+    // and the merged metric fields, `isDuplicate`/`duplicateOf`) on rows selected
+    // by a unique `where` — by `id`, or by the unique `workoutId` on
+    // `WorkoutStream`. The one `updateMany` reports a `count` instead of raising
+    // when it matches nothing. That is what keeps the `P2025` catch below narrow:
     // with no `connect`, "required record not found" can only mean the row named
-    // in the `where` is gone, i.e. the group we were handed is stale. A missing
-    // *referenced* row (e.g. a `plannedWorkoutId` whose planned workout was
-    // deleted) surfaces as a foreign-key violation, `P2003`, and still throws.
+    // in the `where` is gone, i.e. the group we were handed is stale.
+    //
+    // Ordering matters. Steps 2-4 write `bestWorkout.id` into a foreign key, so
+    // if the primary workout has been deleted concurrently they fail with a
+    // foreign-key violation (`P2003`) — which this catch deliberately does not
+    // swallow — rather than the `P2025` that identifies the stale group. Worse,
+    // the "does the primary already have streams/exercises?" guards in steps 3
+    // and 4 *open* those transfer paths when the primary is gone, because its own
+    // `WorkoutStream`/`WorkoutExercise` rows cascade away with it. Step 1
+    // therefore runs first and makes the primary's existence a precondition
+    // enforced by the `P2025` catch, before anything depends on it. This is free
+    // inside an atomic block: `completenessScore` is derived from the in-memory
+    // `{ ...bestWorkout, ...updates }` and reads nothing the later steps write.
     try {
       await prisma.$transaction(async (tx) => {
-        // 1. Update planned workout status if linked
+        // 1. Update primary workout with merged fields and completeness score.
+        //    Kept first so a deleted primary surfaces as P2025 here — see above.
+        updates.completenessScore = this.calculateCompletenessScore({ ...bestWorkout, ...updates })
+        await tx.workout.update({
+          where: { id: group.bestWorkoutId },
+          data: updates
+        })
+
+        // 2. Update planned workout status if linked
         if (plannedWorkoutToUpdateId) {
           await tx.plannedWorkout.update({
             where: { id: plannedWorkoutToUpdateId },
@@ -492,7 +511,7 @@ export const deduplicationService = {
           })
         }
 
-        // 2. Stream Transfer Logic
+        // 3. Stream Transfer Logic
         // Check if bestWorkout already has streams in DB to avoid collision
         const existingBestStream = await tx.workoutStream.findUnique({
           where: { workoutId: bestWorkout.id },
@@ -513,7 +532,7 @@ export const deduplicationService = {
           }
         }
 
-        // 3. Exercise Transfer Logic
+        // 4. Exercise Transfer Logic
         // Move exercise records if primary has none
         const existingBestExercises = await tx.workoutExercise.count({
           where: { workoutId: bestWorkout.id }
@@ -534,13 +553,6 @@ export const deduplicationService = {
           }
         }
 
-        // 4. Update primary workout with merged fields and completeness score
-        updates.completenessScore = this.calculateCompletenessScore({ ...bestWorkout, ...updates })
-        await tx.workout.update({
-          where: { id: group.bestWorkoutId },
-          data: updates
-        })
-
         // 5. Mark duplicates with both boolean and explicit link
         for (const id of group.toDelete) {
           await tx.workout.update({
@@ -554,17 +566,20 @@ export const deduplicationService = {
       })
     } catch (error) {
       if (isRecordNotFoundError(error)) {
-        // A workout named by this group was deleted between group computation
-        // and now. The transaction rolled back in full, so there is nothing
-        // half-merged to repair: skip the group and let the caller carry on with
-        // the rest of the batch. Retrying here would fail identically — the
-        // group itself is stale — so recovery is left to the next run, which
-        // recomputes groups from live rows.
+        // A record named by this group was deleted between group computation and
+        // now: the primary workout, one of the duplicates, or the planned workout
+        // being linked (`Workout.plannedWorkout` is optional and nullable, so its
+        // target can disappear on its own). The transaction rolled back in full,
+        // so there is nothing half-merged to repair: skip the group and let the
+        // caller carry on with the rest of the batch. Retrying here would fail
+        // identically — the group itself is stale — so recovery is left to the
+        // next run, which recomputes groups from live rows.
         logger.warn(
-          'Skipping duplicate group: a workout in it was deleted while the merge was running',
+          'Skipping duplicate group: a record it names was deleted while the merge was running',
           {
             bestWorkoutId: group.bestWorkoutId,
-            duplicateIds: group.toDelete
+            duplicateIds: group.toDelete,
+            plannedWorkoutId: plannedWorkoutToUpdateId
           }
         )
         return { deletedCount: 0, keptCount: 0, skipped: true }
