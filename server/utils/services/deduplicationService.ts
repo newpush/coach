@@ -9,6 +9,26 @@ export interface DuplicateGroup {
   toDelete: string[]
 }
 
+export interface MergeDuplicateGroupResult {
+  deletedCount: number
+  keptCount: number
+  /** True when the group was abandoned because it no longer describes the database. */
+  skipped?: boolean
+}
+
+/**
+ * Prisma raises `P2025` ("An operation failed because it depends on one or more
+ * records that were required but not found") when a `where`-targeted row no
+ * longer exists. Matched by `code` rather than `instanceof` because the concrete
+ * error class differs between the query engines and is re-wrapped by the driver
+ * adapter — same duck-typing the rest of the codebase uses (see
+ * `server/api/auth/[...].ts`, `server/api/webhooks/revenuecat.post.ts`,
+ * `trigger/ingest-intervals.ts`).
+ */
+function isRecordNotFoundError(error: unknown): boolean {
+  return (error as { code?: string } | null)?.code === 'P2025'
+}
+
 export const deduplicationService = {
   /**
    * Identifies duplicate groups from a list of workouts.
@@ -344,8 +364,16 @@ export const deduplicationService = {
 
   /**
    * Executes the merge logic for a duplicate group.
+   *
+   * The group is computed *before* this call (see `findDuplicateGroups`, invoked
+   * once per run from `trigger/deduplicate-workouts.ts`), so by the time the
+   * merge transaction runs, any workout it names may already have been deleted —
+   * by the user, or by a concurrent dedup/ingest path working the same workouts.
+   * That is an expected concurrent-modification outcome, not a failure: the
+   * group is skipped so the rest of the batch still merges, and the next run
+   * recomputes the group from live rows without the deleted workout.
    */
-  async mergeDuplicateGroup(group: DuplicateGroup) {
+  async mergeDuplicateGroup(group: DuplicateGroup): Promise<MergeDuplicateGroupResult> {
     if (group.toDelete.length === 0) return { deletedCount: 0, keptCount: 1 }
 
     const duplicatesToDelete = await prisma.workout.findMany({
@@ -440,77 +468,110 @@ export const deduplicationService = {
       }
     }
 
-    // Execute all database updates in a transaction
-    await prisma.$transaction(async (tx) => {
-      // 1. Update planned workout status if linked
-      if (plannedWorkoutToUpdateId) {
-        await tx.plannedWorkout.update({
-          where: { id: plannedWorkoutToUpdateId },
-          data: {
-            completed: true,
-            completionStatus: 'COMPLETED'
-          }
+    // Execute all database updates in a transaction.
+    //
+    // Every write below targets a single row by id, and all of them write plain
+    // scalar columns (`completed`/`completionStatus`, `workoutId`,
+    // `completenessScore` and the merged metric fields, `isDuplicate`/
+    // `duplicateOf`) — there is no nested relation `connect` anywhere in the
+    // block. That is what makes the `P2025` catch below safe to keep narrow:
+    // with no `connect`, "required record not found" can only mean the row named
+    // in the `where` is gone, i.e. the group we were handed is stale. A missing
+    // *referenced* row (e.g. a `plannedWorkoutId` whose planned workout was
+    // deleted) surfaces as a foreign-key violation, `P2003`, and still throws.
+    try {
+      await prisma.$transaction(async (tx) => {
+        // 1. Update planned workout status if linked
+        if (plannedWorkoutToUpdateId) {
+          await tx.plannedWorkout.update({
+            where: { id: plannedWorkoutToUpdateId },
+            data: {
+              completed: true,
+              completionStatus: 'COMPLETED'
+            }
+          })
+        }
+
+        // 2. Stream Transfer Logic
+        // Check if bestWorkout already has streams in DB to avoid collision
+        const existingBestStream = await tx.workoutStream.findUnique({
+          where: { workoutId: bestWorkout.id },
+          select: { id: true }
         })
-      }
 
-      // 2. Stream Transfer Logic
-      // Check if bestWorkout already has streams in DB to avoid collision
-      const existingBestStream = await tx.workoutStream.findUnique({
-        where: { workoutId: bestWorkout.id },
-        select: { id: true }
-      })
-
-      if (!existingBestStream) {
-        // Find a donor that has streams
-        const donorWithStreams = duplicatesToDelete.find((w) => w.streams)
-        if (donorWithStreams) {
-          logger.log(
-            `Transferring streams from duplicate ${donorWithStreams.id} to best workout ${bestWorkout.id}`
-          )
-          await tx.workoutStream.update({
-            where: { workoutId: donorWithStreams.id },
-            data: { workoutId: bestWorkout.id }
-          })
+        if (!existingBestStream) {
+          // Find a donor that has streams
+          const donorWithStreams = duplicatesToDelete.find((w) => w.streams)
+          if (donorWithStreams) {
+            logger.log(
+              `Transferring streams from duplicate ${donorWithStreams.id} to best workout ${bestWorkout.id}`
+            )
+            await tx.workoutStream.update({
+              where: { workoutId: donorWithStreams.id },
+              data: { workoutId: bestWorkout.id }
+            })
+          }
         }
-      }
 
-      // 3. Exercise Transfer Logic
-      // Move exercise records if primary has none
-      const existingBestExercises = await tx.workoutExercise.count({
-        where: { workoutId: bestWorkout.id }
-      })
+        // 3. Exercise Transfer Logic
+        // Move exercise records if primary has none
+        const existingBestExercises = await tx.workoutExercise.count({
+          where: { workoutId: bestWorkout.id }
+        })
 
-      if (existingBestExercises === 0) {
-        const donorWithExercises = duplicatesList.find((w) => w.exercises && w.exercises.length > 0)
-        if (donorWithExercises) {
-          logger.log(
-            `Transferring exercises from duplicate ${donorWithExercises.id} to best workout ${bestWorkout.id}`
+        if (existingBestExercises === 0) {
+          const donorWithExercises = duplicatesList.find(
+            (w) => w.exercises && w.exercises.length > 0
           )
-          await tx.workoutExercise.updateMany({
-            where: { workoutId: donorWithExercises.id },
-            data: { workoutId: bestWorkout.id }
-          })
+          if (donorWithExercises) {
+            logger.log(
+              `Transferring exercises from duplicate ${donorWithExercises.id} to best workout ${bestWorkout.id}`
+            )
+            await tx.workoutExercise.updateMany({
+              where: { workoutId: donorWithExercises.id },
+              data: { workoutId: bestWorkout.id }
+            })
+          }
         }
-      }
 
-      // 4. Update primary workout with merged fields and completeness score
-      updates.completenessScore = this.calculateCompletenessScore({ ...bestWorkout, ...updates })
-      await tx.workout.update({
-        where: { id: group.bestWorkoutId },
-        data: updates
-      })
-
-      // 5. Mark duplicates with both boolean and explicit link
-      for (const id of group.toDelete) {
+        // 4. Update primary workout with merged fields and completeness score
+        updates.completenessScore = this.calculateCompletenessScore({ ...bestWorkout, ...updates })
         await tx.workout.update({
-          where: { id },
-          data: {
-            isDuplicate: true,
-            duplicateOf: group.bestWorkoutId
-          }
+          where: { id: group.bestWorkoutId },
+          data: updates
         })
+
+        // 5. Mark duplicates with both boolean and explicit link
+        for (const id of group.toDelete) {
+          await tx.workout.update({
+            where: { id },
+            data: {
+              isDuplicate: true,
+              duplicateOf: group.bestWorkoutId
+            }
+          })
+        }
+      })
+    } catch (error) {
+      if (isRecordNotFoundError(error)) {
+        // A workout named by this group was deleted between group computation
+        // and now. The transaction rolled back in full, so there is nothing
+        // half-merged to repair: skip the group and let the caller carry on with
+        // the rest of the batch. Retrying here would fail identically — the
+        // group itself is stale — so recovery is left to the next run, which
+        // recomputes groups from live rows.
+        logger.warn(
+          'Skipping duplicate group: a workout in it was deleted while the merge was running',
+          {
+            bestWorkoutId: group.bestWorkoutId,
+            duplicateIds: group.toDelete
+          }
+        )
+        return { deletedCount: 0, keptCount: 0, skipped: true }
       }
-    })
+
+      throw error
+    }
 
     // Update local bestWorkout object for consistency if needed by caller
     Object.assign(bestWorkout, updates)
