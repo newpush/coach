@@ -395,7 +395,12 @@ JSON object with 'new_recommendations', 'updated_recommendations', 'completed_re
         reason: update.reason_for_update
       }
 
-      const currentHistory = (existing.history as any) || []
+      // `history` is a Json column, so it can hold any JSON value. Only spread it
+      // when it is actually an array — a stored object/string/number is truthy and
+      // would either throw ("not iterable") or be exploded into bogus entries.
+      const currentHistory: RecommendationHistoryItem[] = Array.isArray(existing.history)
+        ? (existing.history as unknown as RecommendationHistoryItem[])
+        : []
       const newHistory = [...currentHistory, historyItem]
 
       await recommendationRepository.update(update.id, userId, {
