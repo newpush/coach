@@ -151,7 +151,7 @@ async function runUpdateWithHistory(history: unknown) {
   const [id, userId, data] = update.mock.calls[0]!
   expect(id).toBe(REC_ID)
   expect(userId).toBe(USER_ID)
-  return data.history
+  return data
 }
 
 const APPENDED_ENTRY = {
@@ -167,7 +167,7 @@ describe('runGenerateRecommendations — history column handling (CW-369)', () =
   })
 
   it('starts a fresh history when the stored value is null', async () => {
-    const history = await runUpdateWithHistory(null)
+    const history = (await runUpdateWithHistory(null)).history
 
     expect(Array.isArray(history)).toBe(true)
     expect(history).toHaveLength(1)
@@ -182,7 +182,7 @@ describe('runGenerateRecommendations — history column handling (CW-369)', () =
       reason: 'Previous update'
     }
 
-    const history = await runUpdateWithHistory([previous])
+    const history = (await runUpdateWithHistory([previous])).history
 
     expect(Array.isArray(history)).toBe(true)
     expect(history).toHaveLength(2)
@@ -190,39 +190,51 @@ describe('runGenerateRecommendations — history column handling (CW-369)', () =
     expect(history[1]).toMatchObject(APPENDED_ENTRY)
   })
 
-  it('falls back to a fresh history when the stored value is a plain object', async () => {
-    // Regression: `(existing.history as any) || []` leaves an object in place and
-    // the subsequent spread throws "currentHistory is not iterable".
-    const history = await runUpdateWithHistory({})
+  // CW-369 review finding: a non-array `history` is NOT corruption. It is a
+  // second schema written by `thresholdDetectionService` for ACTIVE
+  // `sourceType: 'workout'` recommendations:
+  //   { oldValue, newValue, workoutId, sportName, workoutDate }
+  // `athleteMetricsService` reads `Number(history?.newValue)` from it to promote
+  // a detected FTP/LTHR/MAX_HR/THRESHOLD_PACE into the athlete's profile.
+  // Overwriting it with our array yields NaN, so the value is silently never
+  // promoted while the recommendation is still marked COMPLETED. So the
+  // requirement is to LEAVE IT ALONE, not to replace it with a fresh array.
+  const THRESHOLD_HISTORY = {
+    oldValue: 250,
+    newValue: 268,
+    workoutId: 'workout-1',
+    sportName: 'Ride',
+    workoutDate: '2026-08-01T00:00:00.000Z'
+  }
 
-    expect(Array.isArray(history)).toBe(true)
-    expect(history).toHaveLength(1)
-    expect(history[0]).toMatchObject(APPENDED_ENTRY)
+  it('never writes history when the stored value is a threshold-detection object', async () => {
+    const data = await runUpdateWithHistory(THRESHOLD_HISTORY)
+
+    // The key must be absent entirely — writing `undefined` or `[]` would both
+    // destroy the threshold payload just as surely as writing our array.
+    expect(Object.hasOwn(data, 'history')).toBe(false)
+    // The rest of the update still applies.
+    expect(data.title).toBeDefined()
+    expect(data.priority).toBeDefined()
   })
 
-  it('falls back to a fresh history when the stored value is a non-empty object', async () => {
-    const history = await runUpdateWithHistory({ date: '2026-08-01', reason: 'legacy shape' })
+  it('never writes history when the stored value is an empty object', async () => {
+    const data = await runUpdateWithHistory({})
 
-    expect(Array.isArray(history)).toBe(true)
-    expect(history).toHaveLength(1)
-    expect(history[0]).toMatchObject(APPENDED_ENTRY)
+    expect(Object.hasOwn(data, 'history')).toBe(false)
   })
 
-  it('falls back to a fresh history when the stored value is a JSON string', async () => {
-    // Regression: strings are iterable, so the old spread silently exploded the
-    // string into one history entry per character instead of throwing.
-    const history = await runUpdateWithHistory('[{"reason":"legacy"}]')
+  it('never writes history when the stored value is a JSON string', async () => {
+    // Strings are iterable, so the original spread silently exploded the string
+    // into one history entry per character rather than throwing.
+    const data = await runUpdateWithHistory('[{"reason":"legacy"}]')
 
-    expect(Array.isArray(history)).toBe(true)
-    expect(history).toHaveLength(1)
-    expect(history[0]).toMatchObject(APPENDED_ENTRY)
+    expect(Object.hasOwn(data, 'history')).toBe(false)
   })
 
-  it('falls back to a fresh history when the stored value is a number', async () => {
-    const history = await runUpdateWithHistory(42)
+  it('never writes history when the stored value is a number', async () => {
+    const data = await runUpdateWithHistory(42)
 
-    expect(Array.isArray(history)).toBe(true)
-    expect(history).toHaveLength(1)
-    expect(history[0]).toMatchObject(APPENDED_ENTRY)
+    expect(Object.hasOwn(data, 'history')).toBe(false)
   })
 })

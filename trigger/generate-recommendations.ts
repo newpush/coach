@@ -395,19 +395,47 @@ JSON object with 'new_recommendations', 'updated_recommendations', 'completed_re
         reason: update.reason_for_update
       }
 
-      // `history` is a Json column, so it can hold any JSON value. Only spread it
-      // when it is actually an array — a stored object/string/number is truthy and
-      // would either throw ("not iterable") or be exploded into bogus entries.
-      const currentHistory: RecommendationHistoryItem[] = Array.isArray(existing.history)
-        ? (existing.history as unknown as RecommendationHistoryItem[])
+      // `history` is a Json column carrying TWO different schemas, which is the
+      // whole hazard here:
+      //
+      //  - this path writes an append-only array of RecommendationHistoryItem
+      //  - `thresholdDetectionService` writes a single OBJECT
+      //    ({ oldValue, newValue, workoutId, sportName, workoutDate }) for
+      //    ACTIVE `sourceType: 'workout'` recommendations
+      //
+      // `recommendationRepository.getActive()` applies no sourceType/metric
+      // filter, so those threshold rows reach `existingRecsContext` and the LLM
+      // can name their id in `updated_recommendations` — which is exactly how
+      // the "not iterable" crash was reached.
+      //
+      // So a non-array value is NOT corruption to be discarded. Overwriting it
+      // with our array would make `athleteMetricsService` read
+      // `Number(history?.newValue)` as NaN, `applyThresholdRecommendation`
+      // return false, and the athlete's detected FTP/LTHR/MAX_HR/THRESHOLD_PACE
+      // never reach their profile — while the recommendation is still marked
+      // COMPLETED. That trades a loud crash for silent, irreversible data loss
+      // on the very rows that triggered it.
+      //
+      // Read defensively, and only WRITE `history` when the stored value is
+      // something we can legitimately append to.
+      const storedHistory = existing.history
+      const historyIsAppendable = storedHistory == null || Array.isArray(storedHistory)
+      const currentHistory: RecommendationHistoryItem[] = Array.isArray(storedHistory)
+        ? (storedHistory as unknown as RecommendationHistoryItem[])
         : []
-      const newHistory = [...currentHistory, historyItem]
+
+      if (!historyIsAppendable) {
+        logger.warn('Skipping history append: stored history is not an array', {
+          recommendationId: update.id,
+          storedHistoryType: typeof storedHistory
+        })
+      }
 
       await recommendationRepository.update(update.id, userId, {
         title: update.new_title,
         description: update.new_description,
         priority: update.new_priority,
-        history: newHistory as any,
+        ...(historyIsAppendable ? { history: [...currentHistory, historyItem] as any } : {}),
         generatedAt: new Date(),
         llmUsageId: usageId
       })
