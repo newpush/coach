@@ -1,5 +1,5 @@
 import { getServerSession } from '../../../utils/session'
-import { attachStreamsToWorkouts } from '../../../utils/repositories/workoutStreamRepository'
+import { workoutStreamRepository } from '../../../utils/repositories/workoutStreamRepository'
 
 function normalizeMetricKey(metricKey: string) {
   return metricKey.trim().toLowerCase()
@@ -144,9 +144,20 @@ export default defineEventHandler(async (event) => {
   // which reads the legacy V1 table only -- every FIT session-summary metric
   // (elapsed/timer time, total ascent/descent, calories, TSS) charted as an
   // empty history for athletes whose streams are in WorkoutStreamV2.
-  // `extrasMeta` is an optional column, so it must be requested explicitly.
-  const candidates = await attachStreamsToWorkouts(candidateRecords, {
-    fields: ['extrasMeta']
+  //
+  // The dedicated single-column read matters here: the only consumer is
+  // getSessionSummaryValue(), which reads `streams.extrasMeta.sessionSummary`
+  // and no series at all, while this query takes `limit * 3` rows (up to 90).
+  // attachStreamsToWorkouts() would drag the mandatory V2 baseline -- six
+  // parallel per-second series per workout -- across all of them for one JSON
+  // blob. Same reasoning as findWattsByWorkoutIds().
+  const extrasMetaByWorkoutId = await workoutStreamRepository.findExtrasMetaByWorkoutIds(
+    candidateRecords.map((candidate) => candidate.id)
+  )
+
+  const candidates = candidateRecords.map((candidate) => {
+    const extrasMeta = extrasMetaByWorkoutId.get(candidate.id)
+    return { ...candidate, streams: extrasMeta == null ? null : { extrasMeta } }
   })
 
   const points = candidates

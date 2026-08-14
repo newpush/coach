@@ -188,8 +188,9 @@ export default defineEventHandler(async (event) => {
   // above, which only ever saw the legacy V1 table -- so the "Detailed Streams"
   // badge in the workout list never appeared for athletes whose series live in
   // WorkoutStreamV2. The repository's presence probe answers "does this workout
-  // have usable stream data?" across both tables in SQL, transferring no series
-  // data at all. The response keeps its `{ id } | null` shape.
+  // have usable stream data?" across both tables in SQL: Postgres still reads
+  // the series to evaluate the predicate, but only a boolean crosses the wire.
+  // The response keeps its `{ id } | null` shape.
   const streamPresence = await workoutStreamRepository.findManyByWorkoutIds(workoutIds, {
     fields: []
   })

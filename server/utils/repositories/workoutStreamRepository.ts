@@ -874,6 +874,66 @@ export const workoutStreamRepository = {
     return result
   },
 
+  /**
+   * `extrasMeta`-only bulk read, for the same reason findWattsByWorkoutIds()
+   * exists.
+   *
+   * findManyByWorkoutIds() always fetches the REQUIRED_V2_SELECT baseline so
+   * hasUsableStreamData() can decide V2-vs-V1, which means ~6 parallel series
+   * per workout even when the caller wants a single JSON blob. The FIT
+   * session-summary metric history asks for `extrasMeta` across up to 90
+   * workouts at once and reads no series at all, so the baseline would be the
+   * entire cost -- roughly two million decoded numbers per modal open for a
+   * rider with 1 Hz hour-long files.
+   *
+   * This reads one JSON column and decides the V1 fallback from the presence
+   * of a non-null `extrasMeta`, which is the only signal that matters here.
+   * Workouts with no extras metadata are simply absent from the returned map.
+   */
+  async findExtrasMetaByWorkoutIds(workoutIds: string[]): Promise<Map<string, unknown>> {
+    const result = new Map<string, unknown>()
+    if (workoutIds.length === 0) return result
+
+    const chunks = chunkArray(workoutIds, WORKOUT_ID_CHUNK_SIZE)
+
+    const v2Chunks = await Promise.all(
+      chunks.map((chunk) =>
+        readV2Chunk(chunk, { workoutId: true, extrasMeta: true }, 'findExtrasMetaByWorkoutIds')
+      )
+    )
+
+    for (const record of v2Chunks.flat() as Array<{ workoutId: string; extrasMeta: unknown }>) {
+      if (record.extrasMeta != null) {
+        result.set(record.workoutId, record.extrasMeta)
+      }
+    }
+
+    const missingIds = workoutIds.filter((id) => !result.has(id))
+    if (missingIds.length === 0) return result
+
+    const v1Chunks = await Promise.all(
+      chunkArray(missingIds, WORKOUT_ID_CHUNK_SIZE).map((chunk) =>
+        prisma.workoutStream
+          .findMany({
+            where: { workoutId: { in: chunk } },
+            select: { workoutId: true, extrasMeta: true }
+          })
+          .catch((error) => {
+            logStreamReadFailure('findExtrasMetaByWorkoutIds', 'WorkoutStream', chunk, error)
+            return []
+          })
+      )
+    )
+
+    for (const record of v1Chunks.flat() as Array<{ workoutId: string; extrasMeta: unknown }>) {
+      if (record.extrasMeta != null) {
+        result.set(record.workoutId, record.extrasMeta)
+      }
+    }
+
+    return result
+  },
+
   async updateMetadata(
     workoutId: string,
     data: { hrZoneTimes?: unknown; powerZoneTimes?: unknown }

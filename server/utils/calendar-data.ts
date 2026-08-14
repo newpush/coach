@@ -173,8 +173,8 @@ export async function getCalendarDataForUser(
   // above purely to drive the `hasStreams` flag below, but it only ever saw the
   // legacy V1 table -- so the calendar showed no stream indicator at all for
   // athletes whose series live in WorkoutStreamV2. The repository's presence
-  // probe evaluates "has usable stream data" over both tables in SQL and
-  // transfers no series data.
+  // probe evaluates "has usable stream data" over both tables in SQL: Postgres
+  // still reads the series to answer it, but only a boolean crosses the wire.
   const workoutsWithStreams = await workoutStreamRepository.findManyByWorkoutIds(
     workouts.map((w) => w.id),
     { fields: [] }
