@@ -1,8 +1,8 @@
-import { createHash, timingSafeEqual } from 'node:crypto'
+import { timingSafeEqual } from 'node:crypto'
 
 /**
  * Shared resolver + diagnostics for `INTERNAL_API_TOKEN`, the shared secret the
- * worker (Trigger.dev) uses to call the web service's `/api/internal/*` routes.
+ * worker uses to call the web service's `/api/internal/*` routes.
  *
  * The web and worker containers run the *same image* but get their environment
  * from *separate* service definitions, so it is entirely possible for one of
@@ -10,22 +10,17 @@ import { createHash, timingSafeEqual } from 'node:crypto'
  * value). When that happens every internal call 401s and outbound email stops,
  * with the only symptom being a background task error (CW-290).
  *
- * Everything in this module is built so that mismatch is diagnosable from logs
- * alone, **without ever writing the token value anywhere**: both sides log a
- * salted, truncated fingerprint at boot, and an operator can compare the two
- * log lines to tell "absent on one side" from "different on each side".
+ * **Nothing derived from the token value ever reaches a log sink.** Not the
+ * value, not a hash of it, not its length. Everything below is either a fixed
+ * enum, a boolean, or a service name — so an operator gets an unambiguous
+ * diagnosis while a log scrape gets nothing to attack. (An earlier revision
+ * logged a truncated hash "fingerprint" for cross-service comparison; CodeQL
+ * correctly pointed out that it taints every log sink the resulting error
+ * reaches, so it is gone. Comparing the two services' tokens is instead handled
+ * by CW-635, which exposes status on an authenticated health endpoint.)
  */
 
 const DEV_FALLBACK_TOKEN = 'dev-internal-token'
-
-/**
- * Domain-separation salt for the fingerprint. It is deliberately a constant
- * (not a secret and not random): every process must derive the *same*
- * fingerprint for the same token, otherwise cross-service comparison is
- * impossible. The salt only stops the fingerprint from being a plain,
- * rainbow-table-able hash of the raw secret.
- */
-const FINGERPRINT_SALT = 'coachwatts:internal-api-token:v1'
 
 export type InternalApiTokenSource = 'env' | 'dev-fallback' | 'missing'
 
@@ -33,15 +28,13 @@ export interface InternalApiTokenStatus {
   /** True when a token was resolved by any means (env var or dev fallback). */
   configured: boolean
   source: InternalApiTokenSource
-  /** Salted, truncated hash. Safe to log. `null` when no token is configured. */
-  fingerprint: string | null
   /**
-   * Character length of the resolved token, `0` when absent. Not the value —
-   * but it is what catches the classic deploy mistakes (a value that kept its
-   * surrounding quotes, or picked up a trailing newline) that a fingerprint
-   * mismatch alone cannot explain.
+   * True when the resolved value has leading or trailing whitespace — the
+   * signature of an env var that picked up a stray newline when it was pasted
+   * into a deploy UI, which is otherwise invisible and produces a mismatch that
+   * looks impossible ("but I copied the same value!").
    */
-  length: number
+  hasSurroundingWhitespace: boolean
 }
 
 export type InternalAuthFailureReason =
@@ -52,13 +45,19 @@ export type InternalAuthFailureReason =
   /** Both sides have a token, but they are not the same value. */
   | 'token_mismatch'
 
+/**
+ * Safe-to-log description of a rejected internal request. Every field is a
+ * fixed enum, a boolean, or an environment name — none of it is derived from
+ * either token's value.
+ */
 export interface InternalAuthDiagnostics {
   reason: InternalAuthFailureReason
-  receiverFingerprint: string | null
-  callerFingerprint: string | null
-  receiverTokenLength: number
-  callerTokenLength: number
+  receiverTokenPresent: boolean
+  callerTokenPresent: boolean
   receiverTokenSource: InternalApiTokenSource
+  /** See `InternalApiTokenStatus.hasSurroundingWhitespace`. */
+  receiverTokenHasSurroundingWhitespace: boolean
+  callerTokenHasSurroundingWhitespace: boolean
   nodeEnv: string
 }
 
@@ -80,15 +79,15 @@ export function getInternalApiToken(): string | null {
 }
 
 /**
- * One-way, salted, truncated fingerprint of a token — safe to write to logs.
+ * Whether a value carries leading/trailing whitespace.
  *
- * Two services that resolved the same token produce the same fingerprint, so
- * comparing the boot log lines of the web and worker containers is enough to
- * prove they agree, without either value ever being printed.
+ * The result is a comparison outcome, not a projection of the value, so it is
+ * safe to log and carries no information about the secret beyond "somebody
+ * pasted it badly".
  */
-export function fingerprintInternalApiToken(token: string | null | undefined): string | null {
-  if (!token) return null
-  return createHash('sha256').update(`${FINGERPRINT_SALT}:${token}`).digest('hex').slice(0, 12)
+function hasSurroundingWhitespace(value: string | null | undefined): boolean {
+  if (!value) return false
+  return value !== value.trim()
 }
 
 /** Describe how (and whether) this process resolved the internal API token. */
@@ -101,19 +100,23 @@ export function getInternalApiTokenStatus(): InternalApiTokenStatus {
   return {
     configured: token !== null,
     source,
-    fingerprint: fingerprintInternalApiToken(token),
-    length: token?.length ?? 0
+    hasSurroundingWhitespace: hasSurroundingWhitespace(token)
   }
 }
 
-/** Constant-time string comparison that does not leak length via early exit. */
+/**
+ * Constant-time comparison of two secrets.
+ *
+ * Length is compared first because `timingSafeEqual` throws on differing
+ * lengths. That leaks only the length relationship, which is the standard
+ * trade-off for this construction — and strictly less than the previous
+ * implementation, which hashed both sides to equalise them.
+ */
 function tokensMatch(a: string, b: string): boolean {
   const bufA = Buffer.from(a, 'utf8')
   const bufB = Buffer.from(b, 'utf8')
-  // timingSafeEqual throws on differing lengths, so hash first to equalise them.
-  const digestA = createHash('sha256').update(bufA).digest()
-  const digestB = createHash('sha256').update(bufB).digest()
-  return timingSafeEqual(digestA, digestB)
+  if (bufA.length !== bufB.length) return false
+  return timingSafeEqual(bufA, bufB)
 }
 
 /**
@@ -121,8 +124,8 @@ function tokensMatch(a: string, b: string): boolean {
  *
  * On failure the result carries a `reason` that distinguishes the three
  * genuinely different operational faults — the receiver has no token, the
- * caller sent none, or the two disagree — plus fingerprints for both sides.
- * All of it is safe to log; none of it contains a token value.
+ * caller sent none, or the two disagree. That is what turns a bare 401 into an
+ * actionable instruction about which service to fix.
  */
 export function authorizeInternalApiRequest(
   incomingToken: string | null | undefined
@@ -135,11 +138,11 @@ export function authorizeInternalApiRequest(
     reason,
     diagnostics: {
       reason,
-      receiverFingerprint: status.fingerprint,
-      callerFingerprint: fingerprintInternalApiToken(incomingToken),
-      receiverTokenLength: status.length,
-      callerTokenLength: incomingToken?.length ?? 0,
+      receiverTokenPresent: status.configured,
+      callerTokenPresent: Boolean(incomingToken),
       receiverTokenSource: status.source,
+      receiverTokenHasSurroundingWhitespace: status.hasSurroundingWhitespace,
+      callerTokenHasSurroundingWhitespace: hasSurroundingWhitespace(incomingToken),
       nodeEnv: process.env.NODE_ENV || 'development'
     }
   })
@@ -208,10 +211,7 @@ export interface AssertInternalApiTokenOptions {
  *
  * Deliberately does **not** throw. A hard crash here would turn an email outage
  * into a full site outage plus a container restart loop, which is strictly
- * worse. Instead it emits one loud, greppable `console.error` banner — and, on
- * every successful boot, an info line carrying the token fingerprint so the web
- * and worker log lines can be compared to catch a *mismatch* (which no single
- * process can detect on its own).
+ * worse. Instead it emits one loud, greppable `console.error` banner.
  */
 export function assertInternalApiTokenConfigured(
   options: AssertInternalApiTokenOptions = {}
@@ -236,6 +236,15 @@ export function assertInternalApiTokenConfigured(
     return status
   }
 
+  if (status.hasSurroundingWhitespace) {
+    logger.error(
+      `[InternalApiToken] service=${service} resolved a token with leading/trailing whitespace. ` +
+        'It will not match the other service unless that one was pasted identically. ' +
+        'Re-enter INTERNAL_API_TOKEN without surrounding quotes or a trailing newline.'
+    )
+    return status
+  }
+
   if (status.source === 'dev-fallback') {
     logger.warn(
       `[InternalApiToken] service=${service} is using the built-in development fallback token. ` +
@@ -245,9 +254,7 @@ export function assertInternalApiTokenConfigured(
   }
 
   logger.info(
-    `[InternalApiToken] service=${service} token configured ` +
-      `(fingerprint=${status.fingerprint}, length=${status.length}, NODE_ENV=${nodeEnv}). ` +
-      'The web and worker services must report an identical fingerprint.'
+    `[InternalApiToken] service=${service} token configured (source=${status.source}, NODE_ENV=${nodeEnv}).`
   )
 
   return status
@@ -267,10 +274,10 @@ export function assertInternalApiTokenConfigured(
  */
 function runBootCheck() {
   if (process.env.VITEST || process.env.NODE_ENV === 'test') return
-  if (process.env.INTERNAL_API_TOKEN_BOOT_CHECK === 'false') return
+  if (process.env.INTERNAL_API_BOOT_CHECK === 'false') return
 
   const service =
-    process.env.INTERNAL_API_TOKEN_SERVICE_NAME ||
+    process.env.INTERNAL_API_SERVICE_NAME ||
     (process.env.TRIGGER_API_URL || process.env.TRIGGER_SECRET_KEY ? 'worker' : 'web')
 
   try {

@@ -15,9 +15,10 @@ export default defineEventHandler(async (event) => {
   const auth = authorizeInternalApiRequest(incomingToken)
 
   if (!auth.ok) {
-    // Log enough to tell "no token on this side" from "the two sides disagree"
-    // without ever writing a token value: fingerprints are salted one-way
-    // hashes, and lengths are what expose a quoted/newline-mangled env value.
+    // Log enough to tell "no token on this side" from "the two sides disagree".
+    // Every field of `diagnostics` is a fixed enum, a boolean, or the
+    // environment name — nothing derived from either token's value, so this
+    // cannot leak the secret into a log scrape.
     console.error(
       `[InternalRender] 401 Unauthorized — ${describeInternalAuthFailure(auth.reason)}.`,
       auth.diagnostics

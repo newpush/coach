@@ -105,9 +105,8 @@ describe('Internal Render API', () => {
       const [message, diagnostics] = calls[0] as [string, any]
       expect(message).toContain('different INTERNAL_API_TOKEN values')
       expect(diagnostics.reason).toBe('token_mismatch')
-      expect(diagnostics.receiverFingerprint).toBeTruthy()
-      expect(diagnostics.callerFingerprint).toBeTruthy()
-      expect(diagnostics.receiverFingerprint).not.toBe(diagnostics.callerFingerprint)
+      expect(diagnostics.receiverTokenPresent).toBe(true)
+      expect(diagnostics.callerTokenPresent).toBe(true)
     })
 
     it('reports an absent token on the receiver', async () => {
@@ -125,7 +124,7 @@ describe('Internal Render API', () => {
       expect(thrown.data).toEqual({ reason: 'receiver_token_missing' })
       const [message, diagnostics] = calls[0] as [string, any]
       expect(message).toContain('no INTERNAL_API_TOKEN configured')
-      expect(diagnostics.receiverFingerprint).toBeNull()
+      expect(diagnostics.receiverTokenPresent).toBe(false)
       expect(diagnostics.receiverTokenSource).toBe('missing')
     })
 

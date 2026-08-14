@@ -3,7 +3,6 @@ import {
   assertInternalApiTokenConfigured,
   authorizeInternalApiRequest,
   describeInternalAuthFailure,
-  fingerprintInternalApiToken,
   getInternalApiToken,
   getInternalApiTokenStatus,
   parseInternalAuthFailureReason
@@ -46,33 +45,6 @@ describe('getInternalApiToken', () => {
   })
 })
 
-describe('fingerprintInternalApiToken', () => {
-  it('is deterministic across calls, so two services can compare log lines', () => {
-    expect(fingerprintInternalApiToken('shared-token')).toBe(
-      fingerprintInternalApiToken('shared-token')
-    )
-  })
-
-  it('differs for different tokens', () => {
-    expect(fingerprintInternalApiToken('token-a')).not.toBe(fingerprintInternalApiToken('token-b'))
-  })
-
-  it('never contains the token itself', () => {
-    const token = 'a-very-secret-value'
-    const fingerprint = fingerprintInternalApiToken(token)
-
-    expect(fingerprint).not.toBeNull()
-    expect(fingerprint).not.toContain(token)
-    expect(fingerprint).toHaveLength(12)
-  })
-
-  it('returns null for an absent token', () => {
-    expect(fingerprintInternalApiToken(null)).toBeNull()
-    expect(fingerprintInternalApiToken(undefined)).toBeNull()
-    expect(fingerprintInternalApiToken('')).toBeNull()
-  })
-})
-
 describe('getInternalApiTokenStatus', () => {
   it('reports an env-sourced token', () => {
     vi.stubEnv('INTERNAL_API_TOKEN', 'env-token')
@@ -81,8 +53,7 @@ describe('getInternalApiTokenStatus', () => {
     expect(getInternalApiTokenStatus()).toEqual({
       configured: true,
       source: 'env',
-      fingerprint: fingerprintInternalApiToken('env-token'),
-      length: 'env-token'.length
+      hasSurroundingWhitespace: false
     })
   })
 
@@ -100,9 +71,25 @@ describe('getInternalApiTokenStatus', () => {
     expect(getInternalApiTokenStatus()).toEqual({
       configured: false,
       source: 'missing',
-      fingerprint: null,
-      length: 0
+      hasSurroundingWhitespace: false
     })
+  })
+
+  it('flags a token that picked up a trailing newline', () => {
+    vi.stubEnv('INTERNAL_API_TOKEN', 'pasted-badly\n')
+    vi.stubEnv('NODE_ENV', 'production')
+
+    expect(getInternalApiTokenStatus().hasSurroundingWhitespace).toBe(true)
+  })
+
+  it('never exposes the token value or its length', () => {
+    vi.stubEnv('INTERNAL_API_TOKEN', 'a-secret-of-known-length')
+    vi.stubEnv('NODE_ENV', 'production')
+
+    const serialised = JSON.stringify(getInternalApiTokenStatus())
+
+    expect(serialised).not.toContain('a-secret-of-known-length')
+    expect(serialised).not.toContain(String('a-secret-of-known-length'.length))
   })
 })
 
@@ -123,9 +110,9 @@ describe('authorizeInternalApiRequest', () => {
     expect(result.ok).toBe(false)
     if (result.ok) return
     expect(result.reason).toBe('receiver_token_missing')
-    expect(result.diagnostics.receiverFingerprint).toBeNull()
+    expect(result.diagnostics.receiverTokenPresent).toBe(false)
+    expect(result.diagnostics.callerTokenPresent).toBe(true)
     expect(result.diagnostics.receiverTokenSource).toBe('missing')
-    expect(result.diagnostics.callerFingerprint).toBe(fingerprintInternalApiToken('caller-token'))
   })
 
   it('distinguishes a caller that sent no header', () => {
@@ -137,8 +124,8 @@ describe('authorizeInternalApiRequest', () => {
     expect(result.ok).toBe(false)
     if (result.ok) return
     expect(result.reason).toBe('caller_token_missing')
-    expect(result.diagnostics.callerFingerprint).toBeNull()
-    expect(result.diagnostics.callerTokenLength).toBe(0)
+    expect(result.diagnostics.callerTokenPresent).toBe(false)
+    expect(result.diagnostics.receiverTokenPresent).toBe(true)
   })
 
   it('distinguishes two services holding different tokens', () => {
@@ -150,11 +137,8 @@ describe('authorizeInternalApiRequest', () => {
     expect(result.ok).toBe(false)
     if (result.ok) return
     expect(result.reason).toBe('token_mismatch')
-    expect(result.diagnostics.receiverFingerprint).toBe(
-      fingerprintInternalApiToken('receiver-token')
-    )
-    expect(result.diagnostics.callerFingerprint).toBe(fingerprintInternalApiToken('worker-token'))
-    expect(result.diagnostics.receiverFingerprint).not.toBe(result.diagnostics.callerFingerprint)
+    expect(result.diagnostics.receiverTokenPresent).toBe(true)
+    expect(result.diagnostics.callerTokenPresent).toBe(true)
   })
 
   it('flags same-length-different-value tokens as a mismatch', () => {
@@ -168,7 +152,7 @@ describe('authorizeInternalApiRequest', () => {
     expect(result.reason).toBe('token_mismatch')
   })
 
-  it('treats a whitespace-mangled token as a mismatch and exposes the length gap', () => {
+  it('surfaces a whitespace-mangled caller token as the likely cause', () => {
     vi.stubEnv('INTERNAL_API_TOKEN', 'good-token')
     vi.stubEnv('NODE_ENV', 'production')
 
@@ -177,11 +161,11 @@ describe('authorizeInternalApiRequest', () => {
     expect(result.ok).toBe(false)
     if (result.ok) return
     expect(result.reason).toBe('token_mismatch')
-    expect(result.diagnostics.callerTokenLength).toBe(11)
-    expect(result.diagnostics.receiverTokenLength).toBe(10)
+    expect(result.diagnostics.callerTokenHasSurroundingWhitespace).toBe(true)
+    expect(result.diagnostics.receiverTokenHasSurroundingWhitespace).toBe(false)
   })
 
-  it('never puts a token value in the diagnostics', () => {
+  it('never puts a token value, hash, or length in the diagnostics', () => {
     vi.stubEnv('INTERNAL_API_TOKEN', 'receiver-secret-value')
     vi.stubEnv('NODE_ENV', 'production')
 
@@ -192,6 +176,11 @@ describe('authorizeInternalApiRequest', () => {
     const serialised = JSON.stringify(result.diagnostics)
     expect(serialised).not.toContain('receiver-secret-value')
     expect(serialised).not.toContain('caller-secret-value')
+    // Every value must be a fixed enum, a boolean, or the environment name.
+    for (const value of Object.values(result.diagnostics)) {
+      expect(['boolean', 'string']).toContain(typeof value)
+    }
+    expect(serialised).not.toContain(String('receiver-secret-value'.length))
   })
 })
 
@@ -261,7 +250,18 @@ describe('assertInternalApiTokenConfigured', () => {
     ).not.toThrow()
   })
 
-  it('warns when a non-development service is on the dev fallback token', () => {
+  it('errors on a token with surrounding whitespace', () => {
+    vi.stubEnv('INTERNAL_API_TOKEN', ' padded-token ')
+    vi.stubEnv('NODE_ENV', 'production')
+    const logger = makeLogger()
+
+    assertInternalApiTokenConfigured({ service: 'worker', logger })
+
+    expect(logger.error).toHaveBeenCalledTimes(1)
+    expect(String(logger.error.mock.calls[0]?.[0])).toContain('whitespace')
+  })
+
+  it('warns when a service is on the dev fallback token', () => {
     vi.stubEnv('INTERNAL_API_TOKEN', '')
     vi.stubEnv('NODE_ENV', 'development')
     const logger = makeLogger()
@@ -272,7 +272,7 @@ describe('assertInternalApiTokenConfigured', () => {
     expect(logger.error).not.toHaveBeenCalled()
   })
 
-  it('logs a comparable fingerprint on a healthy boot', () => {
+  it('confirms a healthy boot without disclosing anything about the token', () => {
     vi.stubEnv('INTERNAL_API_TOKEN', 'production-token')
     vi.stubEnv('NODE_ENV', 'production')
     const logger = makeLogger()
@@ -281,29 +281,20 @@ describe('assertInternalApiTokenConfigured', () => {
 
     expect(logger.error).not.toHaveBeenCalled()
     const line = String(logger.info.mock.calls[0]?.[0])
-    expect(line).toContain(`fingerprint=${fingerprintInternalApiToken('production-token')}`)
     expect(line).toContain('service=worker')
+    expect(line).toContain('token configured')
   })
 
-  it('emits the same fingerprint from both services when the token matches', () => {
-    vi.stubEnv('INTERNAL_API_TOKEN', 'shared-deploy-token')
-    vi.stubEnv('NODE_ENV', 'production')
-    const web = makeLogger()
-    const worker = makeLogger()
-
-    const webStatus = assertInternalApiTokenConfigured({ service: 'web', logger: web })
-    const workerStatus = assertInternalApiTokenConfigured({ service: 'worker', logger: worker })
-
-    expect(webStatus.fingerprint).toBe(workerStatus.fingerprint)
-  })
-
-  it('never logs the token value', () => {
-    vi.stubEnv('INTERNAL_API_TOKEN', 'do-not-log-this-value')
+  it('never logs the token value, a hash of it, or its length', () => {
+    const token = 'do-not-log-this-value'
+    vi.stubEnv('INTERNAL_API_TOKEN', token)
     vi.stubEnv('NODE_ENV', 'production')
     const logger = makeLogger()
 
     assertInternalApiTokenConfigured({ service: 'web', logger })
 
-    expect(collectLoggedText(logger)).not.toContain('do-not-log-this-value')
+    const logged = collectLoggedText(logger)
+    expect(logged).not.toContain(token)
+    expect(logged).not.toContain(String(token.length))
   })
 })

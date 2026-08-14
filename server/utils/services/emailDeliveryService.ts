@@ -5,7 +5,6 @@ import { generateUnsubscribeToken } from '../unsubscribe-token'
 import { EMAIL_TEMPLATE_REGISTRY, getEmailTemplateDefinition } from '../email-template-registry'
 import {
   describeInternalAuthFailure,
-  fingerprintInternalApiToken,
   getInternalApiToken,
   parseInternalAuthFailureReason
 } from '../internal-api-token'
@@ -362,21 +361,19 @@ export const EmailDeliveryService = {
 
       if (response.status === 401) {
         // CW-290: a 401 here is always an environment fault between two
-        // services of the same app, never a logic bug. Say which fault it is
-        // and which side to fix, and carry this side's fingerprint so it can be
-        // compared against the web service's boot log. Never log the token.
+        // services of the same app, never a logic bug. Name the specific fault
+        // so the error says which service to fix. Nothing derived from the
+        // token value goes into this message — it propagates into every log
+        // sink that logs an email failure.
         const reason = parseInternalAuthFailureReason(errorText)
         const explanation = reason
           ? describeInternalAuthFailure(reason)
           : "the web service rejected this service's x-internal-api-token"
-        const callerFingerprint = fingerprintInternalApiToken(internalApiToken)
 
         throw new Error(
           `Render API rejected the internal API token (401 from ${renderUrl}): ${explanation}. ` +
-            `This service's token fingerprint=${callerFingerprint} (length=${internalApiToken.length}). ` +
-            'Compare it against the "[InternalApiToken] service=web token configured" line in the web ' +
-            'service log: INTERNAL_API_TOKEN must be set, and identical, on both services. ' +
-            `Response: ${errorText}`
+            'INTERNAL_API_TOKEN must be set, and identical, on both the web service and the ' +
+            'worker service of this deployment.'
         )
       }
 
