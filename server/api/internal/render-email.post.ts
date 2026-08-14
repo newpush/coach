@@ -2,19 +2,34 @@ import { z } from 'zod'
 import { config } from '@vue-email/compiler'
 import { resolve } from 'path'
 import fs from 'fs'
-import { getInternalApiToken } from '../../utils/internal-api-token'
+import {
+  authorizeInternalApiRequest,
+  describeInternalAuthFailure
+} from '../../utils/internal-api-token'
 
 /**
  * Internal API to render Vue email templates to HTML/Text.
  */
 export default defineEventHandler(async (event) => {
-  const internalToken = getInternalApiToken()
   const incomingToken = getRequestHeader(event, 'x-internal-api-token')
+  const auth = authorizeInternalApiRequest(incomingToken)
 
-  if (!internalToken || incomingToken !== internalToken) {
+  if (!auth.ok) {
+    // Log enough to tell "no token on this side" from "the two sides disagree"
+    // without ever writing a token value: fingerprints are salted one-way
+    // hashes, and lengths are what expose a quoted/newline-mangled env value.
+    console.error(
+      `[InternalRender] 401 Unauthorized — ${describeInternalAuthFailure(auth.reason)}.`,
+      auth.diagnostics
+    )
+
     throw createError({
       statusCode: 401,
-      statusMessage: 'Unauthorized'
+      statusMessage: 'Unauthorized',
+      // Surfaced to the caller (and therefore into the worker's Sentry event)
+      // so the failure is diagnosable from the worker side too. The reason is a
+      // fixed enum — it carries no token material.
+      data: { reason: auth.reason }
     })
   }
 

@@ -3,7 +3,12 @@ import { getResend } from '../email'
 import { registerTaskHandler } from '../task-registry'
 import { generateUnsubscribeToken } from '../unsubscribe-token'
 import { EMAIL_TEMPLATE_REGISTRY, getEmailTemplateDefinition } from '../email-template-registry'
-import { getInternalApiToken } from '../internal-api-token'
+import {
+  describeInternalAuthFailure,
+  fingerprintInternalApiToken,
+  getInternalApiToken,
+  parseInternalAuthFailureReason
+} from '../internal-api-token'
 import { resolveEmailSubject } from '../email-i18n'
 import type { EmailAudience, EmailDeliveryStatus } from '@prisma/client'
 
@@ -336,7 +341,11 @@ export const EmailDeliveryService = {
     const renderUrl = `${baseUrl}/api/internal/render-email`
     const internalApiToken = getInternalApiToken()
     if (!internalApiToken) {
-      throw new Error('INTERNAL_API_TOKEN is not configured')
+      throw new Error(
+        'INTERNAL_API_TOKEN is not configured on this service, so ' +
+          `${renderUrl} cannot be called. Set INTERNAL_API_TOKEN to the same value ` +
+          'on the web service and the worker service of this deployment.'
+      )
     }
 
     const response = await fetch(renderUrl, {
@@ -350,6 +359,27 @@ export const EmailDeliveryService = {
 
     if (!response.ok) {
       const errorText = await response.text()
+
+      if (response.status === 401) {
+        // CW-290: a 401 here is always an environment fault between two
+        // services of the same app, never a logic bug. Say which fault it is
+        // and which side to fix, and carry this side's fingerprint so it can be
+        // compared against the web service's boot log. Never log the token.
+        const reason = parseInternalAuthFailureReason(errorText)
+        const explanation = reason
+          ? describeInternalAuthFailure(reason)
+          : "the web service rejected this service's x-internal-api-token"
+        const callerFingerprint = fingerprintInternalApiToken(internalApiToken)
+
+        throw new Error(
+          `Render API rejected the internal API token (401 from ${renderUrl}): ${explanation}. ` +
+            `This service's token fingerprint=${callerFingerprint} (length=${internalApiToken.length}). ` +
+            'Compare it against the "[InternalApiToken] service=web token configured" line in the web ' +
+            'service log: INTERNAL_API_TOKEN must be set, and identical, on both services. ' +
+            `Response: ${errorText}`
+        )
+      }
+
       throw new Error(`Render API failed (${response.status}): ${errorText}`)
     }
 

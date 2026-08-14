@@ -8,6 +8,8 @@ vi.stubGlobal('createError', (err: any) => {
   const error = new Error(err.statusMessage)
   // @ts-expect-error: mocking internal h3 event
   error.statusCode = err.statusCode
+  // @ts-expect-error: mocking internal h3 event
+  error.data = err.data
   return error
 })
 
@@ -72,5 +74,81 @@ describe('Internal Render API', () => {
     }
 
     await expect(handler(event)).rejects.toThrow('Unauthorized')
+  })
+
+  describe('401 diagnostics (CW-290)', () => {
+    const captureRejection = async (event: any) => {
+      const handler = await getHandler()
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+      let thrown: any
+      try {
+        await handler(event)
+      } catch (err) {
+        thrown = err
+      }
+
+      const calls = errorSpy.mock.calls
+      errorSpy.mockRestore()
+      return { thrown, calls }
+    }
+
+    it('reports a mismatch when both sides hold different tokens', async () => {
+      const { thrown, calls } = await captureRejection({
+        headers: { 'x-internal-api-token': 'worker-side-token' },
+        body: { templateKey: 'Welcome', props: {} }
+      })
+
+      expect(thrown.statusCode).toBe(401)
+      expect(thrown.data).toEqual({ reason: 'token_mismatch' })
+
+      const [message, diagnostics] = calls[0] as [string, any]
+      expect(message).toContain('different INTERNAL_API_TOKEN values')
+      expect(diagnostics.reason).toBe('token_mismatch')
+      expect(diagnostics.receiverFingerprint).toBeTruthy()
+      expect(diagnostics.callerFingerprint).toBeTruthy()
+      expect(diagnostics.receiverFingerprint).not.toBe(diagnostics.callerFingerprint)
+    })
+
+    it('reports an absent token on the receiver', async () => {
+      process.env.INTERNAL_API_TOKEN = ''
+      const previousNodeEnv = process.env.NODE_ENV
+      process.env.NODE_ENV = 'production'
+
+      const { thrown, calls } = await captureRejection({
+        headers: { 'x-internal-api-token': 'worker-side-token' },
+        body: { templateKey: 'Welcome', props: {} }
+      })
+
+      process.env.NODE_ENV = previousNodeEnv
+
+      expect(thrown.data).toEqual({ reason: 'receiver_token_missing' })
+      const [message, diagnostics] = calls[0] as [string, any]
+      expect(message).toContain('no INTERNAL_API_TOKEN configured')
+      expect(diagnostics.receiverFingerprint).toBeNull()
+      expect(diagnostics.receiverTokenSource).toBe('missing')
+    })
+
+    it('reports a caller that sent no header', async () => {
+      const { thrown } = await captureRejection({
+        headers: {},
+        body: { templateKey: 'Welcome', props: {} }
+      })
+
+      expect(thrown.data).toEqual({ reason: 'caller_token_missing' })
+    })
+
+    it('never logs either token value', async () => {
+      process.env.INTERNAL_API_TOKEN = 'receiver-plaintext-secret'
+
+      const { calls } = await captureRejection({
+        headers: { 'x-internal-api-token': 'caller-plaintext-secret' },
+        body: { templateKey: 'Welcome', props: {} }
+      })
+
+      const logged = JSON.stringify(calls)
+      expect(logged).not.toContain('receiver-plaintext-secret')
+      expect(logged).not.toContain('caller-plaintext-secret')
+    })
   })
 })
