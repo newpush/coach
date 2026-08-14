@@ -226,12 +226,15 @@
             @click.stop="$emit('message', athlete)"
           />
         </UTooltip>
-        <UTooltip v-if="canInteract" text="Act As Athlete">
+        <UTooltip v-if="canInteract" :text="actAsLabel">
           <UButton
             color="neutral"
             variant="ghost"
             icon="i-heroicons-eye"
             size="sm"
+            :label="t('athlete_card_act_as')"
+            :aria-label="actAsLabel"
+            :title="actAsLabel"
             @click.stop="$emit('act-as', athlete)"
           />
         </UTooltip>
@@ -258,6 +261,7 @@
     Filler
   } from 'chart.js'
   import { formatDistanceToNow } from 'date-fns'
+  import { useTranslate } from '@tolgee/vue'
   import { mobileListCardUi } from '~/utils/mobile-surface-ui'
 
   ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Filler)
@@ -267,6 +271,14 @@
   }>()
 
   defineEmits(['view', 'message', 'act-as'])
+
+  const { t } = useTranslate('coaching')
+
+  // Named for screen readers and on hover/long-press: the bare eye icon gave no
+  // hint that it switches the whole app to the athlete's identity (CW-541).
+  const actAsLabel = computed(() =>
+    t.value('athlete_card_act_as_aria', { name: props.athlete?.name ?? '' })
+  )
 
   const currentWellness = computed(() => props.athlete.wellness?.[0] || null)
   const canInteract = computed(
