@@ -249,6 +249,23 @@ export interface FindManyByWorkoutIdsOptions {
    * `fields: []` if you intend to read anything off the returned stream.
    */
   fields?: readonly WorkoutStreamOptionalField[]
+
+  /**
+   * Fetch exactly the mandatory baseline (REQUIRED_V2_SELECT/REQUIRED_V1_SELECT)
+   * and nothing else.
+   *
+   * `fields` alone cannot express this: `undefined` means "every column" and
+   * `[]` is already taken by the presence-only path, so a caller that reads
+   * only baseline series -- `time`/`heartrate`/`watts`/`velocity`/`latlng` and
+   * the two zone-time blobs -- previously had to either haul every column or
+   * name a throwaway optional field to get a lean select. Several CW-379 call
+   * sites (weekly zone aggregation, FTP/LTHR autodetection, the team
+   * power-duration preset) are exactly that shape, over hundreds of workouts.
+   *
+   * Takes precedence over `fields`, and never routes to the presence path --
+   * the returned streams carry real series data.
+   */
+  baselineOnly?: boolean
 }
 
 /**
@@ -737,12 +754,16 @@ export const workoutStreamRepository = {
     const result = new Map<string, NormalizedStream>()
     if (workoutIds.length === 0) return result
 
-    const fields = options?.fields
+    // `baselineOnly` wins over `fields`: it means "the mandatory baseline and
+    // nothing else", which is an empty optional-field list that must *not* be
+    // read as the presence-only sentinel below.
+    const baselineOnly = options?.baselineOnly === true
+    const fields = baselineOnly ? [] : options?.fields
 
     // `fields: []` == "does this workout have usable streams at all?". Answer
     // it in SQL instead of hauling six per-second arrays per workout across
     // the wire (CW-296).
-    if (fields !== undefined && fields.length === 0) {
+    if (!baselineOnly && fields !== undefined && fields.length === 0) {
       return findStreamPresenceByWorkoutIds(workoutIds)
     }
 

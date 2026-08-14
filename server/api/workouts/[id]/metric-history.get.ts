@@ -1,4 +1,5 @@
 import { getServerSession } from '../../../utils/session'
+import { attachStreamsToWorkouts } from '../../../utils/repositories/workoutStreamRepository'
 
 function normalizeMetricKey(metricKey: string) {
   return metricKey.trim().toLowerCase()
@@ -127,7 +128,7 @@ export default defineEventHandler(async (event) => {
     return { metricKey, activityType: null, points: [] }
   }
 
-  const candidates = await prisma.workout.findMany({
+  const candidateRecords = await prisma.workout.findMany({
     where: {
       userId: workout.userId,
       isDuplicate: false,
@@ -136,14 +137,16 @@ export default defineEventHandler(async (event) => {
       date: { lt: workout.date }
     },
     orderBy: { date: 'desc' },
-    take: limit * 3,
-    include: {
-      streams: {
-        select: {
-          extrasMeta: true
-        }
-      }
-    }
+    take: limit * 3
+  })
+
+  // CW-379: this used to `include: { streams: { select: { extrasMeta: true } } }`,
+  // which reads the legacy V1 table only -- every FIT session-summary metric
+  // (elapsed/timer time, total ascent/descent, calories, TSS) charted as an
+  // empty history for athletes whose streams are in WorkoutStreamV2.
+  // `extrasMeta` is an optional column, so it must be requested explicitly.
+  const candidates = await attachStreamsToWorkouts(candidateRecords, {
+    fields: ['extrasMeta']
   })
 
   const points = candidates
