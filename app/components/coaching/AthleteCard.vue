@@ -276,8 +276,14 @@
 
   // Named for screen readers and on hover/long-press: the bare eye icon gave no
   // hint that it switches the whole app to the athlete's identity (CW-541).
+  // Same fallback chain the three trigger sites use. `?? ''` produced the
+  // accessible name "View the app as " — with a trailing space and no subject —
+  // for an athlete with no name set, which is exactly the case a screen-reader
+  // user cannot recover from.
   const actAsLabel = computed(() =>
-    t.value('athlete_card_act_as_aria', { name: props.athlete?.name ?? '' })
+    t.value('athlete_card_act_as_aria', {
+      name: props.athlete?.name || props.athlete?.email || 'Athlete'
+    })
   )
 
   const currentWellness = computed(() => props.athlete.wellness?.[0] || null)

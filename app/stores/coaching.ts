@@ -1,4 +1,4 @@
-import { defineStore } from 'pinia'
+import { defineStore, skipHydrate } from 'pinia'
 
 const ACT_AS_COOKIE_NAME = 'coach_wattz_act_as_user'
 const ACT_AS_DASHBOARD_PATH = '/dashboard'
@@ -35,8 +35,25 @@ export interface PendingActAsRequest {
 }
 
 export const useCoachingStore = defineStore('coaching', () => {
-  const actingAsUserId = ref<string | null>(null)
-  const actingAsUserName = ref<string | null>(null)
+  // `skipHydrate` is load-bearing, not decoration (CW-637).
+  //
+  // `app/plugins/coaching-interceptor.ts` has no `.client` suffix, so it is
+  // universal and instantiates this store during SSR. The localStorage restore
+  // below is inside `if (import.meta.client)`, so the value Pinia serialises
+  // into the SSR payload is always `null`. On the client, @pinia/nuxt assigns
+  // `pinia.state.value = nuxtApp.payload.pinia`, and pinia's `createSetupStore`
+  // then walks every writable ref and applies `prop.value = initialState[key]`
+  // *after* the setup body has run — clobbering the restore with that `null`.
+  //
+  // The visible result was that `isCoachingMode` was false on the client after
+  // every full page load, so `CoachingBanner` never rendered, while the
+  // `coach_wattz_act_as_user` cookie kept the *server* impersonating. That
+  // combination — server impersonating, no client exit affordance — is what
+  // "no way out" actually was; the duplicate banner mounts were a red herring.
+  //
+  // Opting these two refs out of hydration lets the localStorage restore stand.
+  const actingAsUserId = skipHydrate(ref<string | null>(null))
+  const actingAsUserName = skipHydrate(ref<string | null>(null))
 
   /**
    * Act-as switches identity for the whole app and survives reloads, so it is
@@ -98,9 +115,19 @@ export const useCoachingStore = defineStore('coaching', () => {
     actingAsUserName.value = null
     pendingActAs.value = null
     if (import.meta.client) {
-      localStorage.removeItem('coaching_act_as_id')
-      localStorage.removeItem('coaching_act_as_name')
-      persistActAsCookie(null)
+      // Clear the cookie FIRST, and in a `finally` so a storage exception cannot
+      // skip it. The cookie is the only one of the three the *server* reads, so
+      // if a `removeItem` throws (storage disabled or over quota) with the
+      // cookie still set, the server keeps impersonating while the client
+      // believes it exited — and, with no client state left, renders no exit
+      // affordance. That is the half-impersonating state this ticket exists to
+      // eliminate, so it must not be reachable through the exit path itself.
+      try {
+        persistActAsCookie(null)
+      } finally {
+        localStorage.removeItem('coaching_act_as_id')
+        localStorage.removeItem('coaching_act_as_name')
+      }
     }
   }
 
