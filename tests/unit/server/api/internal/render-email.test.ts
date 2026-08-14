@@ -128,13 +128,27 @@ describe('Internal Render API', () => {
       expect(diagnostics.receiverTokenSource).toBe('missing')
     })
 
-    it('reports a caller that sent no header', async () => {
-      const { thrown } = await captureRejection({
+    it('withholds the reason from a caller that sent no token, but still logs it', async () => {
+      // This route has no middleware or route rule in front of it, so it is
+      // reachable anonymously, and nitro's production error handler emits
+      // `error.data` for a non-fatal 401. Returning the reason to a caller that
+      // presented no token at all would tell an unauthenticated stranger whether
+      // this service has INTERNAL_API_TOKEN configured. It grants no access, but
+      // it is free to withhold. The worker always sends a token, so it keeps its
+      // reason (covered by the two cases above).
+      const { thrown, calls } = await captureRejection({
         headers: {},
         body: { templateKey: 'Welcome', props: {} }
       })
 
-      expect(thrown.data).toEqual({ reason: 'caller_token_missing' })
+      expect(thrown.statusCode).toBe(401)
+      expect(thrown.data).toBeUndefined()
+
+      // The operator-facing signal must survive on the server side.
+      const [message, diagnostics] = calls[0] as [string, any]
+      expect(message).toContain('401 Unauthorized')
+      expect(diagnostics.reason).toBe('caller_token_missing')
+      expect(diagnostics.callerTokenPresent).toBe(false)
     })
 
     it('never logs either token value', async () => {

@@ -276,9 +276,16 @@ function runBootCheck() {
   if (process.env.VITEST || process.env.NODE_ENV === 'test') return
   if (process.env.INTERNAL_API_BOOT_CHECK === 'false') return
 
-  const service =
-    process.env.INTERNAL_API_SERVICE_NAME ||
-    (process.env.TRIGGER_API_URL || process.env.TRIGGER_SECRET_KEY ? 'worker' : 'web')
+  // Only ever label the service from an explicit env var. An earlier revision
+  // inferred it from TRIGGER_API_URL/TRIGGER_SECRET_KEY, which is inverted in
+  // practice: `getTaskDriver()` in server/utils/task-dispatcher.ts reads
+  // TRIGGER_SECRET_KEY on the *web* service to pick its dispatch backend, so web
+  // would announce itself as `worker`, while the BullMQ worker (gated on
+  // REDIS_URL / CW_WORKER_HEALTH_PORT) may not set it at all and would announce
+  // itself as `web`. The banner exists to tell an operator *which* service to
+  // fix, and a confidently wrong label is worse than no label. Set
+  // INTERNAL_API_SERVICE_NAME per Dokploy service to get a real name (CW-633).
+  const service = process.env.INTERNAL_API_SERVICE_NAME || 'unknown'
 
   try {
     assertInternalApiTokenConfigured({ service })

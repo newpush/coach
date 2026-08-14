@@ -176,11 +176,42 @@ describe('authorizeInternalApiRequest', () => {
     const serialised = JSON.stringify(result.diagnostics)
     expect(serialised).not.toContain('receiver-secret-value')
     expect(serialised).not.toContain('caller-secret-value')
-    // Every value must be a fixed enum, a boolean, or the environment name.
-    for (const value of Object.values(result.diagnostics)) {
-      expect(['boolean', 'string']).toContain(typeof value)
-    }
     expect(serialised).not.toContain(String('receiver-secret-value'.length))
+
+    // Pin the diagnostics SHAPE exhaustively, not just the absence of the two
+    // literal secrets above. The earlier `typeof value is boolean|string` loop
+    // was too weak to catch the regression this test exists to prevent: the
+    // first revision of this change logged a salted, truncated SHA-256
+    // "fingerprint" of the token, which CodeQL rejected as a high-severity leak
+    // — and a hex digest is a string, so it would have sailed through that loop
+    // and through the `not.toContain` assertions too. Asserting the exact key
+    // set means any new or repurposed field fails here instead of relying on
+    // CodeQL as the only backstop.
+    expect(Object.keys(result.diagnostics).sort()).toEqual([
+      'callerTokenHasSurroundingWhitespace',
+      'callerTokenPresent',
+      'nodeEnv',
+      'reason',
+      'receiverTokenHasSurroundingWhitespace',
+      'receiverTokenPresent',
+      'receiverTokenSource'
+    ])
+
+    // And pin the free-form-string fields to their enums, so a field cannot be
+    // quietly repurposed to carry token-derived material while keeping its name.
+    expect(['receiver_token_missing', 'caller_token_missing', 'token_mismatch']).toContain(
+      result.diagnostics.reason
+    )
+    expect(['env', 'dev-fallback', 'missing']).toContain(result.diagnostics.receiverTokenSource)
+    expect(typeof result.diagnostics.nodeEnv).toBe('string')
+    for (const key of [
+      'receiverTokenPresent',
+      'callerTokenPresent',
+      'receiverTokenHasSurroundingWhitespace',
+      'callerTokenHasSurroundingWhitespace'
+    ] as const) {
+      expect(typeof result.diagnostics[key]).toBe('boolean')
+    }
   })
 })
 
