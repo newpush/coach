@@ -36,17 +36,43 @@ import { registerTaskHandler } from '../server/utils/task-registry'
 
 // Athlete Profile schema for structured JSON output.
 //
-// Every free-text string field declares an explicit `maxLength` and states the
-// expected length in its `description`. Without those bounds a single runaway
-// field (in production: `current_fitness_explanation_json.sections[].title`,
-// which came back as several hundred KB of repetitive prose) exhausts the output
-// token budget, the response is cut off mid-string, and `generateObject` throws
-// `AI_JSONParseError: Unterminated string in JSON` — discarding the entire
-// otherwise-complete analysis. See CW-368.
+// Why the length wording exists (CW-368): a single runaway field — in
+// production `current_fitness_explanation_json.sections[].title`, which came
+// back as several hundred KB of repetitive prose — exhausts the output token
+// budget, the response is cut off mid-string, and `generateObject` throws
+// `AI_JSONParseError: Unterminated string in JSON`, discarding the entire
+// otherwise-complete analysis. Sentry COACH-WATTS-WEB-12.
 //
-// `maxLength` is guidance the model is asked to honour, not a hard guarantee, so
-// keep the limits generous enough that a well-behaved response never bumps into
-// them while still ruling out paragraph-length output in a label field.
+// READ THIS BEFORE TRUSTING `maxLength` HERE.
+//
+// The `maxLength` keys below are **declarative intent only — nothing enforces
+// them at either end**:
+//
+//   1. `@ai-sdk/google` strips them before the request is sent.
+//      `convertJSONSchemaToOpenAPISchema` destructures a strict allowlist
+//      (`type, description, required, properties, items, allOf, anyOf, oneOf,
+//      format, const, minLength, enum`). Note `minLength` is forwarded and
+//      `maxLength` is not; `grep -c maxLength` over the provider's `dist/`
+//      returns 0. Gemini never sees these numbers.
+//   2. Nothing validates the response locally either. `generateStructuredAnalysis`
+//      (`server/utils/gemini.ts`) calls `generateObject` with
+//      `schema: jsonSchema(schema)` and no `validate` option, so there is no
+//      post-parse length check.
+//
+// **The `description` text is the entire working mitigation.** The provider
+// *does* forward `description`, so wording like "a heading, not a sentence or a
+// paragraph (max 80 characters)" is what actually steers the model. Treat those
+// strings as load-bearing prompt content: if you shorten or genericise them you
+// remove the only thing standing between this task and the crash above.
+//
+// The `maxLength` keys are kept deliberately, as machine-readable intent, as the
+// thing the schema-walk regression test pins, and so the bounds are already
+// correct if/when real enforcement lands (post-parse truncation or a `validate`
+// fn — tracked separately, since `generateStructuredAnalysis` is shared by ~45
+// call sites). Keep them accurate; just do not mistake them for a guarantee.
+//
+// Limits are generous enough that a well-behaved response never bumps into them
+// while still ruling out paragraph-length output in a label field.
 export const athleteProfileSchema = {
   type: 'object',
   properties: {

@@ -11,9 +11,20 @@ import { athleteProfileSchema } from '../../../trigger/generate-athlete-profile'
  * `AI_JSONParseError: Unterminated string in JSON` and the entire otherwise
  * complete analysis was discarded.
  *
- * `maxLength` is what the model is *asked* to honour, not a hard guarantee — a
- * generative model can still overrun it. These tests pin the constraint being
- * declared at all, which is what was missing.
+ * SCOPE — THIS FILE TESTS DECLARATION, NOT ENFORCEMENT.
+ *
+ * Nothing enforces `maxLength` at runtime: `@ai-sdk/google` strips it from the
+ * request (its schema converter allowlists `minLength` but not `maxLength`), and
+ * `generateStructuredAnalysis` calls `generateObject` without a `validate`
+ * option, so responses are never length-checked. A green run here does **not**
+ * mean an over-long value is impossible — only that the schema still declares
+ * the intent and still carries the conciseness wording.
+ *
+ * That wording is the part that actually works. The provider does forward
+ * `description`, so the description assertions below cover the real mitigation;
+ * the `maxLength` assertions cover machine-readable intent and forward-compat
+ * for whenever real enforcement lands. See the header comment on
+ * `athleteProfileSchema` for the full detail.
  */
 
 type JsonSchemaNode = {
@@ -38,7 +49,15 @@ function at(path: string): JsonSchemaNode {
   return node
 }
 
-/** Every free-text string node in the schema, keyed by its path. */
+/**
+ * Every free-text string node in the schema, keyed by its path.
+ *
+ * Traverses `properties` and single-schema `items` only. It does **not** descend
+ * into `anyOf` / `oneOf` / `allOf` / `$ref` / `additionalProperties` / tuple-form
+ * (array) `items`. None of those appear in `athleteProfileSchema` today, so the
+ * walk is currently exhaustive — but a future field added under any of them
+ * would escape this guard silently. Extend the walker if you introduce one.
+ */
 function freeTextStrings(
   node: JsonSchemaNode,
   path = '',
@@ -59,8 +78,8 @@ const explanationJsonBlocks = [
   'athlete_scores/recovery_capacity_explanation_json'
 ]
 
-describe('athleteProfileSchema — free-text length bounds (CW-368)', () => {
-  it('bounds every free-text string field, so no field can run away unbounded', () => {
+describe('athleteProfileSchema — declared free-text length intent (CW-368)', () => {
+  it('declares a maxLength on every free-text string field, leaving none unbounded', () => {
     const unbounded = freeTextStrings(schema)
       .filter(([, node]) => typeof node.maxLength !== 'number')
       .map(([path]) => path)
@@ -68,32 +87,39 @@ describe('athleteProfileSchema — free-text length bounds (CW-368)', () => {
     expect(unbounded, `free-text fields missing maxLength:\n${unbounded.join('\n')}`).toEqual([])
   })
 
-  it.each(explanationJsonBlocks)('%s bounds its section titles well under 100 chars', (block) => {
-    const title = at(`${block}/sections/[]/title`)
+  it.each(explanationJsonBlocks)(
+    '%s declares a section-title maxLength well under 100 chars',
+    (block) => {
+      const title = at(`${block}/sections/[]/title`)
 
-    expect(title.maxLength).toBeTypeOf('number')
-    expect(title.maxLength).toBeLessThan(100)
-    expect(title.maxLength).toBeGreaterThan(0)
-  })
+      expect(title.maxLength).toBeTypeOf('number')
+      expect(title.maxLength).toBeLessThan(100)
+      expect(title.maxLength).toBeGreaterThan(0)
+    }
+  )
 
   it.each(explanationJsonBlocks)(
     '%s tells the model a section title is a heading, not a paragraph',
     (block) => {
       const description = at(`${block}/sections/[]/title`).description ?? ''
 
-      // The field that actually failed in production must carry explicit
-      // conciseness guidance, not just a machine-readable bound.
+      // This is the assertion that covers the *working* mitigation: the provider
+      // forwards `description` but strips `maxLength`, so this wording is what
+      // actually reaches Gemini and steers the field that failed in production.
       expect(description).toMatch(/not a sentence or a paragraph/i)
       expect(description).toMatch(/max 80 characters/i)
     }
   )
 
-  it.each(explanationJsonBlocks)('%s bounds the remaining free-text fields', (block) => {
-    expect(at(`${block}/executive_summary`).maxLength).toBe(500)
-    expect(at(`${block}/sections/[]/analysis_points/[]`).maxLength).toBe(400)
-    expect(at(`${block}/recommendations/[]/title`).maxLength).toBe(80)
-    expect(at(`${block}/recommendations/[]/description`).maxLength).toBe(500)
-  })
+  it.each(explanationJsonBlocks)(
+    '%s declares a maxLength on its other free-text fields',
+    (block) => {
+      expect(at(`${block}/executive_summary`).maxLength).toBe(500)
+      expect(at(`${block}/sections/[]/analysis_points/[]`).maxLength).toBe(400)
+      expect(at(`${block}/recommendations/[]/title`).maxLength).toBe(80)
+      expect(at(`${block}/recommendations/[]/description`).maxLength).toBe(500)
+    }
+  )
 
   it('keeps short-label fields shorter than prose fields', () => {
     const sectionTitle = at('athlete_scores/current_fitness_explanation_json/sections/[]/title')
@@ -102,14 +128,14 @@ describe('athleteProfileSchema — free-text length bounds (CW-368)', () => {
     expect(sectionTitle.maxLength!).toBeLessThan(summary.maxLength!)
   })
 
-  it('bounds the top-level narrative fields too', () => {
+  it('declares a maxLength on the top-level narrative fields too', () => {
     expect(at('title').maxLength).toBe(120)
     expect(at('executive_summary').maxLength).toBe(600)
     expect(at('current_fitness/status_label').maxLength).toBe(60)
     expect(at('current_fitness/key_points/[]').maxLength).toBe(300)
   })
 
-  it('bounds the flat score explanation strings', () => {
+  it('declares a maxLength on the flat score explanation strings', () => {
     for (const field of [
       'current_fitness_explanation',
       'recovery_capacity_explanation',
