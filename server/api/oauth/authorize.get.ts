@@ -33,6 +33,7 @@ export default defineEventHandler(async (event) => {
   const scope = query.scope as string
   const state = query.state as string
   const prompt = query.prompt as string
+  const action = query.action as string
   const codeChallenge = query.code_challenge as string
   const codeChallengeMethod = query.code_challenge_method as string
   const resource = query.resource as string
@@ -66,6 +67,17 @@ export default defineEventHandler(async (event) => {
       message:
         'The redirect_uri provided does not match any registered redirect URIs for this application.'
     })
+  }
+
+  // `/oauth/login` uses this branch to complete a user cancellation without
+  // requiring a web session. The app and redirect have already been validated
+  // above, so the browser never gets to choose an arbitrary destination.
+  if (action === 'deny') {
+    const errorUrl = new URL(redirectUri)
+    errorUrl.searchParams.set('error', 'access_denied')
+    errorUrl.searchParams.set('error_description', 'The user cancelled sign-in.')
+    if (state) errorUrl.searchParams.set('state', state)
+    return sendRedirect(event, errorUrl.toString(), 303)
   }
 
   const isMcpFlow = isMcpResourceRequest(resource, siteUrl)

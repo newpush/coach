@@ -143,4 +143,36 @@ describe('GET /api/oauth/authorize', () => {
     expect(result.location).toContain('/oauth/authorize?')
     expect(result.location).toContain('prompt=consent')
   })
+
+  it('returns hosted-login cancellation to the registered callback with state', async () => {
+    queryState.action = 'deny'
+    findUnique.mockResolvedValue({
+      id: 'app-1',
+      clientId: 'client-1',
+      redirectUris: ['coachwatts://oauth/callback'],
+      isOfficial: true
+    })
+
+    const handler = await getHandler()
+    const result = await handler({})
+
+    expect(getServerSession).not.toHaveBeenCalled()
+    expect(result.location).toBe(
+      'coachwatts://oauth/callback?error=access_denied&error_description=The+user+cancelled+sign-in.&state=state-123'
+    )
+  })
+
+  it('refuses a hosted-login cancellation with an unregistered callback', async () => {
+    queryState.action = 'deny'
+    queryState.redirect_uri = 'https://attacker.example/callback'
+
+    const handler = await getHandler()
+
+    await expect(handler({})).rejects.toMatchObject({ statusCode: 400 })
+    expect(sendRedirect).not.toHaveBeenCalledWith(
+      expect.anything(),
+      expect.stringContaining('attacker.example'),
+      expect.anything()
+    )
+  })
 })
