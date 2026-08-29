@@ -107,6 +107,29 @@ describe('GET /api/oauth/authorize', () => {
     expect(result.location).toBe('coachwatts://oauth/callback?code=auth-code-123&state=state-123')
   })
 
+  it('shows account choices for official apps with a session when prompt=login', async () => {
+    queryState.prompt = 'login'
+    findUnique.mockResolvedValue({
+      id: 'app-1',
+      clientId: 'client-1',
+      redirectUris: ['coachwatts://oauth/callback'],
+      isOfficial: true
+    })
+    getServerSession.mockResolvedValue({ user: { id: 'user-1' } })
+
+    const handler = await getHandler()
+    const result = await handler({})
+
+    expect(createAuthCode).not.toHaveBeenCalled()
+    expect(result.location).toContain('/oauth/login?')
+    const url = new URL(result.location)
+    const callbackUrl = url.searchParams.get('callbackUrl')
+    expect(callbackUrl).toContain('/api/oauth/authorize?')
+    expect(callbackUrl).toContain('state=state-123')
+    expect(callbackUrl).toContain('code_challenge=challenge')
+    expect(callbackUrl).not.toContain('prompt=login')
+  })
+
   it('redirects official apps without a session to oauth login', async () => {
     findUnique.mockResolvedValue({
       id: 'app-1',
