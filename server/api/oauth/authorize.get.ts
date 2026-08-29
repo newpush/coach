@@ -110,9 +110,13 @@ export default defineEventHandler(async (event) => {
     }
   }
 
-  // First-party official apps: skip consent when signed in (unless prompt=consent).
+  // First-party official apps normally skip consent when already signed in.
+  // `prompt=login` is sent by native clients when the athlete explicitly starts
+  // a new login. Preserve that interaction request so the hosted login page can
+  // offer the current account alongside alternate providers instead of silently
+  // issuing another code for the browser cookie's account.
   if (app.isOfficial && prompt !== 'consent') {
-    const session = await getServerSession(event)
+    const session = prompt === 'login' ? null : await getServerSession(event)
 
     if (session?.user?.id) {
       const location = await issueAuthorizationCodeRedirect({
@@ -135,7 +139,9 @@ export default defineEventHandler(async (event) => {
       redirect_uri: redirectUri,
       scope: scope || (isMcpFlow ? '' : 'profile:read'),
       state,
-      prompt,
+      // `prompt=login` has been fulfilled by sending the athlete to this page.
+      // Keeping it in the post-provider callback would route back here forever.
+      prompt: prompt === 'login' ? undefined : prompt,
       resource,
       code_challenge: codeChallenge,
       code_challenge_method: codeChallenge
