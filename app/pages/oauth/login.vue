@@ -81,7 +81,7 @@
               class="font-bold"
               @click="
                 () => {
-                  void navigateTo(callbackUrl)
+                  void navigateTo(callbackUrl, { external: true })
                 }
               "
             />
