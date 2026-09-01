@@ -28,7 +28,13 @@ test.describe('Nutrition fueling plan', () => {
     return startOfWeek(new Date(), { weekStartsOn: 1 })
   }
 
-  const dayOffset = (offset: number) => new Date(getWeekStart().getTime() + offset * 86400000)
+  const dayOffset = (offset: number) => {
+    const date = new Date(getWeekStart().getTime() + offset * 86400000)
+    // The API queries UTC calendar days while the calendar renders local date parts.
+    // Noon keeps the fixture on the same day in both representations.
+    date.setHours(12, 0, 0, 0)
+    return date
+  }
   const dateKey = (date: Date) =>
     [
       date.getFullYear(),
