@@ -29,7 +29,12 @@ test.describe('Nutrition fueling plan', () => {
   }
 
   const dayOffset = (offset: number) => new Date(getWeekStart().getTime() + offset * 86400000)
-  const dateKey = (date: Date) => date.toISOString().slice(0, 10)
+  const dateKey = (date: Date) =>
+    [
+      date.getFullYear(),
+      String(date.getMonth() + 1).padStart(2, '0'),
+      String(date.getDate()).padStart(2, '0')
+    ].join('-')
 
   // Keep this suite away from the current and next day. Other parallel E2E specs create
   // workouts there, which would otherwise change the number of generated fueling windows.
